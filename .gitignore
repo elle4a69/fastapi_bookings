@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+fastapi_bookings.db
+.remote-code-express/
+.vscode/
+.antigravity/

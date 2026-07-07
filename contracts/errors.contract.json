@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "errorEnvelope": {
+    "ok": false,
+    "error": {
+      "code": "string",
+      "message": "string",
+      "field": "string | null",
+      "details": "object | null"
+    }
+  },
+  "currentBackendNote": "Some routes currently raise FastAPI HTTPException with detail string. Front-end should normalize both structured envelopes and {detail: string} responses into a single UI error shape.",
+  "normalizationRule": {
+    "ifResponseHasError": "use response.error",
+    "ifResponseHasDetailString": {
+      "code": "HTTP_<status>",
+      "message": "response.detail",
+      "field": null,
+      "details": null
+    },
+    "ifValidationError": {
+      "code": "VALIDATION_ERROR",
+      "message": "First validation error message",
+      "field": "loc joined by dot",
+      "details": "full validation array"
+    }
+  },
+  "recommendedCodes": [
+    "INVALID_CREDENTIALS",
+    "UNAUTHENTICATED",
+    "FORBIDDEN",
+    "NOT_FOUND",
+    "VALIDATION_ERROR",
+    "BOOKING_SLOT_UNAVAILABLE",
+    "RESOURCE_UNAVAILABLE",
+    "PROVIDER_NOT_ELIGIBLE",
+    "INVALID_STATUS_TRANSITION",
+    "MODULE_DISABLED",
+    "CLIENT_REQUIRED",
+    "SERVER_ERROR"
+  ]
+}

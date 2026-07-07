@@ -1,0 +1,69 @@
+{
+  "version": "1.0",
+  "headers": {
+    "authenticated": {
+      "X-Token": "JWT access token returned by auth endpoint"
+    },
+    "contentType": {
+      "Content-Type": "application/json"
+    }
+  },
+  "endpoints": [
+    {
+      "operationId": "adminLogin",
+      "method": "POST",
+      "path": "/api/admin/auth",
+      "auth": "none",
+      "body": {
+        "company": "string",
+        "login": "string",
+        "password": "string"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "access_token": "string",
+          "token_type": "bearer"
+        }
+      }
+    },
+    {
+      "operationId": "publicLogin",
+      "method": "POST",
+      "path": "/api/public/auth/token",
+      "auth": "none",
+      "body": {
+        "company": "string",
+        "key": "string"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "access_token": "string",
+          "token_type": "bearer"
+        }
+      }
+    },
+    {
+      "operationId": "createAdminUser",
+      "method": "POST",
+      "path": "/api/admin/users",
+      "auth": "admin X-Token",
+      "body": {
+        "company": "string",
+        "login": "string",
+        "password": "string",
+        "role": "owner | admin | staff | viewer"
+      },
+      "response": {
+        "ok": true,
+        "data": "User"
+      }
+    }
+  ],
+  "notes": [
+    "Admin/staff routes use the admin token returned by /api/admin/auth.",
+    "Public routes that require auth use the public token returned by /api/public/auth/token.",
+    "Do not store JWT tokens in long-lived localStorage for production unless the security model explicitly allows it."
+  ]
+}

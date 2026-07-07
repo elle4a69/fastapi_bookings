@@ -1,0 +1,30 @@
+"""Webhook registration model.
+
+Stores outbound webhook subscriptions.  When a booking event fires,
+the outbox worker dispatches an HTTP POST to each active webhook
+matching that event type.  The optional secret is used to sign the
+payload via HMAC-SHA256 so the receiver can verify authenticity.
+"""
+
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy.orm import relationship
+
+from ..db.database import Base
+
+
+class WebhookRegistration(Base):
+    """Registered outbound webhook endpoint."""
+
+    __tablename__ = "webhooks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event = Column(String, nullable=False, index=True)   # e.g. "booking.created"
+    target_url = Column(String, nullable=False)
+    secret = Column(String, nullable=True)               # HMAC-SHA256 signing secret
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<WebhookRegistration id={self.id} event={self.event}>"

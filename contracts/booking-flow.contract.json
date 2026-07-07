@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "publicFlow": [
+    {
+      "step": 1,
+      "name": "Auth/bootstrap",
+      "calls": [
+        "POST /api/public/auth/token",
+        "GET /api/public/ui-config",
+        "GET /api/public/bootstrap"
+      ]
+    },
+    {
+      "step": 2,
+      "name": "Choose entry point",
+      "allowedEntryPoints": [
+        "location",
+        "provider",
+        "category",
+        "service",
+        "date_time"
+      ],
+      "rule": "The selected entry point only affects filtering. The final booking still needs service_id, provider_id, start_time, end_time and client_id."
+    },
+    {
+      "step": 3,
+      "name": "Search slots",
+      "preferredCall": "POST /api/public/search-availability",
+      "fallbackCall": "GET /api/public/availability"
+    },
+    {
+      "step": 4,
+      "name": "Create hold",
+      "call": "POST /api/public/holds",
+      "rule": "Use holds when the user spends time filling forms after selecting a slot."
+    },
+    {
+      "step": 5,
+      "name": "Collect client",
+      "requiredFields": [
+        "name or email or phone"
+      ],
+      "rule": "Confirming a hold without existing client_id requires client_details."
+    },
+    {
+      "step": 6,
+      "name": "Confirm hold or create booking",
+      "calls": [
+        "POST /api/public/holds/{hold_id}/confirm",
+        "POST /api/public/bookings"
+      ],
+      "result": "Booking status pending"
+    },
+    {
+      "step": 7,
+      "name": "Approval",
+      "adminCalls": [
+        "POST /api/admin/bookings/{id}/confirm",
+        "POST /api/admin/bookings/{id}/cancel"
+      ],
+      "publicMessage": "Awaiting confirmation"
+    }
+  ],
+  "adminApprovalFlow": [
+    "Admin opens pending bookings from /api/admin/dashboard/bootstrap or /api/admin/bookings?status_filter=pending.",
+    "Admin reviews booking details.",
+    "Admin confirms with POST /api/admin/bookings/{booking_id}/confirm or cancels with POST /api/admin/bookings/{booking_id}/cancel.",
+    "UI updates booking status and optionally sends notification when notifications are implemented."
+  ],
+  "stateMachine": {
+    "pending": [
+      "confirmed",
+      "cancelled",
+      "rescheduled"
+    ],
+    "confirmed": [
+      "cancelled",
+      "completed",
+      "no_show",
+      "rescheduled"
+    ],
+    "rescheduled": [
+      "confirmed",
+      "cancelled"
+    ],
+    "cancelled": [],
+    "completed": [],
+    "no_show": []
+  }
+}

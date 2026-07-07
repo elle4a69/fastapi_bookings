@@ -1,0 +1,196 @@
+{
+  "version": "1.0",
+  "purpose": "Public customer booking portal contract.",
+  "recommendedFlow": [
+    "Obtain public token with POST /api/public/auth/token.",
+    "Load public config with GET /api/public/ui-config.",
+    "Load selectable data with GET /api/public/bootstrap.",
+    "Search availability with POST /api/public/search-availability or GET /api/public/availability.",
+    "Optionally create a temporary hold with POST /api/public/holds.",
+    "Collect client details.",
+    "Confirm hold with POST /api/public/holds/{hold_id}/confirm, or create pending booking directly with POST /api/public/bookings.",
+    "Show confirmation screen explaining that booking is pending provider/admin approval."
+  ],
+  "endpoints": [
+    {
+      "operationId": "getPublicUiConfig",
+      "method": "GET",
+      "path": "/api/public/ui-config",
+      "auth": "public token optional/currently none",
+      "response": {
+        "modules": {
+          "locations": "boolean",
+          "categories": "boolean",
+          "resources": "boolean",
+          "products": "boolean",
+          "add_ons": "boolean"
+        },
+        "bookingFlow": {
+          "allowedEntryPoints": "string[]",
+          "defaultEntryPoint": "string"
+        }
+      }
+    },
+    {
+      "operationId": "getPublicBootstrap",
+      "method": "GET",
+      "path": "/api/public/bootstrap",
+      "auth": "public token if enforced by backend",
+      "response": {
+        "ok": true,
+        "data": {
+          "company": "string",
+          "services": "Service[]",
+          "providers": "Provider[]",
+          "locations": "Location[]",
+          "categories": "Category[]",
+          "bookingRules": "object",
+          "timezone": "string | null"
+        }
+      }
+    },
+    {
+      "operationId": "getAvailability",
+      "method": "GET",
+      "path": "/api/public/availability",
+      "auth": "public token if enforced by backend",
+      "query": {
+        "service_id": "integer",
+        "provider_id": "integer | optional",
+        "date": "YYYY-MM-DD"
+      },
+      "response": {
+        "ok": true,
+        "data": "AvailableSlot[]"
+      }
+    },
+    {
+      "operationId": "searchAvailability",
+      "method": "POST",
+      "path": "/api/public/search-availability",
+      "auth": "public token if enforced by backend",
+      "body": {
+        "location_id": "integer | null",
+        "provider_id": "integer | null",
+        "category_id": "integer | null",
+        "service_id": "integer | null",
+        "desired_time": "morning | afternoon | evening | ISO datetime | null",
+        "date_from": "datetime | null",
+        "date_to": "datetime | null"
+      },
+      "response": {
+        "ok": true,
+        "data": [
+          {
+            "start_time": "datetime",
+            "end_time": "datetime",
+            "provider": {
+              "id": "integer",
+              "name": "string"
+            },
+            "resources": [
+              {
+                "id": "integer",
+                "name": "string",
+                "quantity": "integer"
+              }
+            ]
+          }
+        ],
+        "meta": {
+          "count": "integer"
+        }
+      }
+    },
+    {
+      "operationId": "createHold",
+      "method": "POST",
+      "path": "/api/public/holds",
+      "auth": "public token if enforced by backend",
+      "body": {
+        "service_id": "integer",
+        "start_time": "datetime",
+        "end_time": "datetime",
+        "provider_id": "integer | null",
+        "location_id": "integer | null",
+        "client_id": "integer | null",
+        "expires_at": "datetime"
+      },
+      "response": "Hold"
+    },
+    {
+      "operationId": "confirmHold",
+      "method": "POST",
+      "path": "/api/public/holds/{hold_id}/confirm",
+      "auth": "public token if enforced by backend",
+      "body": {
+        "client_details": {
+          "name": "string | null",
+          "email": "string | null",
+          "phone": "string | null"
+        }
+      },
+      "response": {
+        "ok": true,
+        "data": "Booking pending approval"
+      }
+    },
+    {
+      "operationId": "cancelHold",
+      "method": "DELETE",
+      "path": "/api/public/holds/{hold_id}",
+      "auth": "public token if enforced by backend",
+      "response": "Hold"
+    },
+    {
+      "operationId": "createPublicBooking",
+      "method": "POST",
+      "path": "/api/public/bookings",
+      "auth": "public X-Token",
+      "body": {
+        "client_id": "integer",
+        "provider_id": "integer",
+        "service_id": "integer",
+        "location_id": "integer | null",
+        "start_time": "datetime",
+        "end_time": "datetime",
+        "notes": "string | null"
+      },
+      "response": {
+        "ok": true,
+        "data": "Booking with status pending"
+      }
+    },
+    {
+      "operationId": "addToWaitlist",
+      "method": "POST",
+      "path": "/api/public/waitlist",
+      "auth": "public token if enforced by backend",
+      "body": {
+        "service_id": "integer",
+        "provider_id": "integer | null",
+        "location_id": "integer | null",
+        "desired_date_from": "datetime | null",
+        "desired_date_to": "datetime | null",
+        "client_id": "integer | null"
+      },
+      "response": "WaitlistEntry"
+    },
+    {
+      "operationId": "listWaitlistForService",
+      "method": "GET",
+      "path": "/api/public/waitlist",
+      "auth": "public/admin depending frontend use",
+      "query": {
+        "service_id": "integer"
+      },
+      "response": "WaitlistEntry[]"
+    }
+  ],
+  "approvalBehaviour": {
+    "publicBookingDefaultStatus": "pending",
+    "adminApprovesWith": "POST /api/admin/bookings/{booking_id}/confirm",
+    "adminRejectsWith": "POST /api/admin/bookings/{booking_id}/cancel",
+    "frontendMessage": "Your booking request has been received and is awaiting confirmation."
+  }
+}

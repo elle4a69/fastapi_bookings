@@ -1,0 +1,40 @@
+@baseUrl = http://127.0.0.1:8000
+@adminToken = REPLACE_WITH_ADMIN_TOKEN
+@publicToken = REPLACE_WITH_PUBLIC_TOKEN
+
+### Health
+GET {{baseUrl}}/health
+
+### Public auth
+POST {{baseUrl}}/api/public/auth/token
+Content-Type: application/json
+
+{
+  "company": "simplydemo",
+  "key": "local-public-key-change-me"
+}
+
+### Admin auth
+POST {{baseUrl}}/api/admin/auth
+Content-Type: application/json
+
+{
+  "company": "simplydemo",
+  "login": "admin",
+  "password": "admin123"
+}
+
+### Public UI config
+GET {{baseUrl}}/api/public/ui-config
+
+### Public bootstrap
+GET {{baseUrl}}/api/public/bootstrap
+X-Token: {{publicToken}}
+
+### Admin dashboard
+GET {{baseUrl}}/api/admin/dashboard/bootstrap
+X-Token: {{adminToken}}
+
+### List bookings
+GET {{baseUrl}}/api/admin/bookings
+X-Token: {{adminToken}}

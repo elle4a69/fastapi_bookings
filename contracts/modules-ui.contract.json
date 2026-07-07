@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "purpose": "Module and dynamic UI configuration contract.",
+  "publicUiConfigEndpoint": {
+    "method": "GET",
+    "path": "/api/public/ui-config"
+  },
+  "adminUiConfigEndpoint": {
+    "method": "GET",
+    "path": "/api/public/ui-config/admin"
+  },
+  "modules": {
+    "locations": {
+      "controls": [
+        "location picker",
+        "location admin menu"
+      ],
+      "whenDisabled": "Hide location choice; send location_id=null."
+    },
+    "categories": {
+      "controls": [
+        "category-first booking entry",
+        "category admin menu"
+      ],
+      "whenDisabled": "Hide category browsing and list services directly."
+    },
+    "resources": {
+      "controls": [
+        "resource admin",
+        "service resource requirements"
+      ],
+      "whenDisabled": "Do not show resources; backend may ignore resource requirements."
+    },
+    "products": {
+      "controls": [
+        "product upsells"
+      ],
+      "whenDisabled": "Hide products and do not submit product selections."
+    },
+    "add_ons": {
+      "controls": [
+        "service extras"
+      ],
+      "whenDisabled": "Hide add-ons and do not submit add-on selections."
+    },
+    "packages": {
+      "controls": [
+        "package admin"
+      ],
+      "whenDisabled": "Hide packages unless backend exposes package purchase flow."
+    },
+    "waitlist": {
+      "controls": [
+        "join waitlist action"
+      ],
+      "whenDisabled": "Hide waitlist prompts."
+    }
+  },
+  "forms": [
+    {
+      "operationId": "getServiceFormSchema",
+      "method": "GET",
+      "path": "/api/forms/service"
+    },
+    {
+      "operationId": "getProviderFormSchema",
+      "method": "GET",
+      "path": "/api/forms/provider"
+    },
+    {
+      "operationId": "getBookingFormSchema",
+      "method": "GET",
+      "path": "/api/forms/booking"
+    }
+  ]
+}

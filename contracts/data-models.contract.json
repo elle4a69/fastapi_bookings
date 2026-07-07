@@ -1,0 +1,206 @@
+{
+  "version": "1.0",
+  "purpose": "Shared front-end data model contract for FastAPI Bookings.",
+  "envelope": {
+    "success": {
+      "ok": true,
+      "data": "T | T[]",
+      "meta": "object | null"
+    },
+    "error": {
+      "ok": false,
+      "error": {
+        "code": "string",
+        "message": "string",
+        "field": "string | null",
+        "details": "object | null"
+      }
+    }
+  },
+  "enums": {
+    "BookingStatus": [
+      "pending",
+      "confirmed",
+      "cancelled",
+      "completed",
+      "no_show",
+      "rescheduled"
+    ],
+    "HoldStatus": [
+      "pending",
+      "expired",
+      "confirmed"
+    ],
+    "WaitlistStatus": [
+      "requested",
+      "notified",
+      "booked",
+      "cancelled"
+    ],
+    "UserRole": [
+      "owner",
+      "admin",
+      "staff",
+      "viewer"
+    ]
+  },
+  "models": {
+    "Service": {
+      "id": "integer",
+      "name": "string",
+      "description": "string | null",
+      "duration": "integer minutes",
+      "price": "number | null",
+      "active": "boolean"
+    },
+    "Provider": {
+      "id": "integer",
+      "name": "string",
+      "email": "string | null",
+      "phone": "string | null",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "Client": {
+      "id": "integer",
+      "name": "string | null",
+      "email": "string | null",
+      "phone": "string | null",
+      "created_at": "datetime"
+    },
+    "Location": {
+      "id": "integer",
+      "name": "string",
+      "address": "string | null",
+      "timezone": "IANA timezone string | null"
+    },
+    "Category": {
+      "id": "integer",
+      "name": "string",
+      "description": "string | null",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "Resource": {
+      "id": "integer",
+      "name": "string",
+      "type": "string",
+      "location_id": "integer | null",
+      "capacity": "integer",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "ServiceResourceRequirement": {
+      "id": "integer",
+      "service_id": "integer",
+      "resource_type": "string",
+      "quantity": "integer"
+    },
+    "AddOn": {
+      "id": "integer",
+      "service_id": "integer",
+      "name": "string",
+      "description": "string | null",
+      "price": "number | null",
+      "duration": "integer minutes",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "Product": {
+      "id": "integer",
+      "name": "string",
+      "description": "string | null",
+      "price": "number",
+      "sku": "string | null",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "Package": {
+      "id": "integer",
+      "name": "string",
+      "description": "string | null",
+      "price": "number | null",
+      "active": "boolean",
+      "created_at": "datetime"
+    },
+    "PackageStep": {
+      "id": "integer",
+      "package_id": "integer",
+      "service_id": "integer",
+      "order": "integer",
+      "offset_days": "integer",
+      "price": "number | null",
+      "active": "boolean"
+    },
+    "Booking": {
+      "id": "integer",
+      "client_id": "integer",
+      "provider_id": "integer",
+      "service_id": "integer",
+      "location_id": "integer | null",
+      "start_time": "datetime",
+      "end_time": "datetime",
+      "status": "BookingStatus",
+      "notes": "string | null",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    },
+    "Hold": {
+      "id": "integer",
+      "service_id": "integer",
+      "provider_id": "integer | null",
+      "location_id": "integer | null",
+      "client_id": "integer | null",
+      "start_time": "datetime",
+      "end_time": "datetime",
+      "status": "HoldStatus",
+      "expires_at": "datetime",
+      "created_at": "datetime"
+    },
+    "WaitlistEntry": {
+      "id": "integer",
+      "client_id": "integer | null",
+      "service_id": "integer",
+      "provider_id": "integer | null",
+      "location_id": "integer | null",
+      "desired_date_from": "datetime | null",
+      "desired_date_to": "datetime | null",
+      "status": "WaitlistStatus",
+      "created_at": "datetime"
+    },
+    "Payment": {
+      "id": "integer",
+      "booking_id": "integer",
+      "amount": "number",
+      "currency": "string",
+      "status": "string",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    },
+    "Notification": {
+      "id": "integer",
+      "booking_id": "integer | null",
+      "recipient_email": "string | null",
+      "type": "email | sms | push | string",
+      "status": "string",
+      "content": "string | null",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    },
+    "User": {
+      "id": "integer",
+      "company": "string",
+      "login": "string",
+      "role": "UserRole | string",
+      "created_at": "datetime",
+      "updated_at": "datetime"
+    }
+  },
+  "frontendRules": [
+    "Treat IDs as opaque integers.",
+    "Use server-returned datetime values; do not recompute booking end times in the UI except for preview.",
+    "Public bookings are created with status pending and require admin/provider approval.",
+    "If a module is disabled by /api/public/ui-config, hide that UI section and do not call its endpoints.",
+    "The backend is the source of truth for slot availability and resource allocation."
+  ]
+}

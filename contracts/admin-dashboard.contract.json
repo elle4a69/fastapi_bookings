@@ -1,0 +1,192 @@
+{
+  "version": "1.0",
+  "purpose": "Admin dashboard and management portal contract.",
+  "auth": "All /api/admin endpoints require X-Token from /api/admin/auth unless explicitly noted.",
+  "dashboard": {
+    "method": "GET",
+    "path": "/api/admin/dashboard/bootstrap",
+    "response": {
+      "ok": true,
+      "data": {
+        "today": "Booking[]",
+        "upcomingBookings": "Booking[]",
+        "pendingBookings": "Booking[]",
+        "providers": "Provider[]",
+        "services": "Service[]",
+        "summary": "object"
+      }
+    }
+  },
+  "crudResources": {
+    "services": {
+      "base": "/api/admin/services",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Service"
+    },
+    "providers": {
+      "base": "/api/admin/providers",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Provider"
+    },
+    "clients": {
+      "base": "/api/admin/clients",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Client"
+    },
+    "locations": {
+      "base": "/api/admin/locations",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Location"
+    },
+    "categories": {
+      "base": "/api/admin/categories",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Category"
+    },
+    "resources": {
+      "base": "/api/admin/resources",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Resource"
+    },
+    "addOns": {
+      "base": "/api/admin/add-ons",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "AddOn"
+    },
+    "products": {
+      "base": "/api/admin/products",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Product"
+    },
+    "packages": {
+      "base": "/api/admin/packages",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "model": "Package"
+    }
+  },
+  "bookingManagement": [
+    {
+      "operationId": "listBookings",
+      "method": "GET",
+      "path": "/api/admin/bookings",
+      "query": {
+        "page": "integer",
+        "page_size": "integer",
+        "status_filter": "BookingStatus | optional",
+        "client_id": "integer | optional",
+        "provider_id": "integer | optional",
+        "date_from": "datetime | optional",
+        "date_to": "datetime | optional"
+      },
+      "response": "Booking[] + pagination meta"
+    },
+    {
+      "operationId": "createAdminBooking",
+      "method": "POST",
+      "path": "/api/admin/bookings",
+      "body": "BookingCreate",
+      "response": "Booking"
+    },
+    {
+      "operationId": "updateBooking",
+      "method": "PUT",
+      "path": "/api/admin/bookings/{booking_id}",
+      "body": "BookingUpdate",
+      "response": "Booking"
+    },
+    {
+      "operationId": "confirmBooking",
+      "method": "POST",
+      "path": "/api/admin/bookings/{booking_id}/confirm",
+      "response": "Booking status confirmed"
+    },
+    {
+      "operationId": "cancelBooking",
+      "method": "POST",
+      "path": "/api/admin/bookings/{booking_id}/cancel",
+      "response": "Booking status cancelled"
+    },
+    {
+      "operationId": "completeBooking",
+      "method": "POST",
+      "path": "/api/admin/bookings/{booking_id}/complete",
+      "response": "Booking status completed"
+    },
+    {
+      "operationId": "markNoShow",
+      "method": "POST",
+      "path": "/api/admin/bookings/{booking_id}/noshow",
+      "response": "Booking status no_show"
+    },
+    {
+      "operationId": "rescheduleBooking",
+      "method": "POST",
+      "path": "/api/admin/bookings/{booking_id}/reschedule",
+      "query": {
+        "new_start": "datetime",
+        "new_end": "datetime"
+      },
+      "response": "Booking status rescheduled"
+    }
+  ],
+  "resourceRequirements": [
+    {
+      "operationId": "createServiceResourceRequirement",
+      "method": "POST",
+      "path": "/api/admin/resources/requirements",
+      "body": {
+        "service_id": "integer",
+        "resource_type": "string",
+        "quantity": "integer"
+      },
+      "response": "ServiceResourceRequirement"
+    }
+  ],
+  "paymentsNotificationsAudit": {
+    "payments": "/api/admin/payments",
+    "notifications": "/api/admin/notifications",
+    "auditLog": "/api/admin/audit-log",
+    "diagnostics": "/api/admin/system/diagnostics"
+  },
+  "frontendRules": [
+    "Pending bookings appear in admin queue and require confirm/cancel action.",
+    "Do not let admin edit status via generic PUT unless explicitly required; prefer action endpoints.",
+    "Use module flags from /api/public/ui-config/admin to show or hide admin modules."
+  ]
+}
