@@ -51,7 +51,12 @@
       "description": "string | null",
       "duration": "integer minutes",
       "price": "number | null",
-      "active": "boolean"
+      "active": "boolean",
+      "is_visible": "boolean",
+      "deposit_amount": "number",
+      "tax_rate_id": "integer | null",
+      "min_group_size": "integer",
+      "max_group_size": "integer | null"
     },
     "Provider": {
       "id": "integer",
@@ -59,6 +64,10 @@
       "email": "string | null",
       "phone": "string | null",
       "active": "boolean",
+      "is_visible": "boolean",
+      "capacity": "integer",
+      "color": "string | null",
+      "description": "string | null",
       "created_at": "datetime"
     },
     "Client": {
@@ -194,6 +203,17 @@
       "role": "UserRole | string",
       "created_at": "datetime",
       "updated_at": "datetime"
+    },
+    "CalendarNote": {
+      "id": "integer",
+      "provider_id": "integer | null",
+      "date": "string date (YYYY-MM-DD)",
+      "start_time": "string | null (HH:MM)",
+      "end_time": "string | null (HH:MM)",
+      "text": "string",
+      "note_type": "string | null",
+      "is_time_blocked": "boolean",
+      "created_at": "datetime"
     }
   },
   "frontendRules": [

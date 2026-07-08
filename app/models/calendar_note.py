@@ -7,7 +7,7 @@ custom block-out messages that appear in the admin dashboard view.
 
 from datetime import datetime, date
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, String, Text, Boolean
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -24,6 +24,8 @@ class CalendarNote(Base):
     start_time = Column(String, nullable=True)   # HH:MM
     end_time = Column(String, nullable=True)     # HH:MM
     text = Column(Text, nullable=False)
+    note_type = Column(String, nullable=True)
+    is_time_blocked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     provider = relationship("Provider")

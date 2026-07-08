@@ -28,6 +28,12 @@ class Service(Base):
     # Optional comma-separated list of fixed start times (HH:MM), e.g., "09:00,12:00,15:00"
     fixed_start_times = Column(String, nullable=True)
 
+    is_visible = Column(Boolean, default=True, nullable=False)
+    deposit_amount = Column(Float, default=0.0, nullable=False)
+    tax_rate_id = Column(Integer, ForeignKey("tax_rates.id", ondelete="SET NULL"), nullable=True)
+    min_group_size = Column(Integer, default=1, nullable=False)
+    max_group_size = Column(Integer, nullable=True)
+
     # Relationships
     tenant = relationship("Tenant")
     bookings = relationship("Booking", back_populates="service")

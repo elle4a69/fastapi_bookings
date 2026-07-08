@@ -55,6 +55,18 @@ class Settings(BaseSettings):
         description="Comma separated list of allowed origins for CORS",
     )
 
+    # ClickSend SMS/MMS Settings
+    CLICKSEND_API_USERNAME: str = Field("", description="ClickSend API username")
+    CLICKSEND_API_KEY: str = Field("", description="ClickSend API key")
+
+    # Stripe Settings
+    STRIPE_PUBLISHABLE_KEY: str = Field("", description="Stripe Publishable Key")
+    STRIPE_SECRET_KEY: str = Field("", description="Stripe Secret Key")
+    STRIPE_WEBHOOK_SECRET: str = Field("", description="Stripe Webhook Secret")
+
+    # Firebase Settings
+    FIREBASE_CREDENTIALS_JSON: str = Field("", description="Firebase Service Account JSON string or filepath")
+
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.APP_ENV == "production":
@@ -68,6 +80,7 @@ class Settings(BaseSettings):
 
     class Config:
         case_sensitive = True
+        env_file = ".env"
 
 
 settings = Settings()

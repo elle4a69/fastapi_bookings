@@ -181,6 +181,9 @@
     "getBookingForm": "/api/forms/booking"
   },
   "system": {
+    "createDepositSession": "/api/v1/checkout/deposit-session",
+    "stripeWebhook": "/api/v1/webhooks/stripe",
+    "registerDevice": "/api/v1/devices/register",
     "healthHealthGet": "/health",
     "readinessReadyGet": "/ready",
     "versionVersionGet": "/version"

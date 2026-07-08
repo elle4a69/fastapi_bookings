@@ -22,9 +22,10 @@ router = APIRouter()
 def list_clients(
     params: dict = Depends(pagination_params),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of clients."""
-    query = db.query(ClientModel)
+    query = db.query(ClientModel).filter(ClientModel.tenant_id == current_user.tenant_id)
     items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
@@ -36,7 +37,7 @@ def create_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new client."""
-    client = ClientModel(**client_in.dict())
+    client = ClientModel(tenant_id=current_user.tenant_id, **client_in.dict())
     db.add(client)
     db.commit()
     db.refresh(client)
@@ -44,9 +45,13 @@ def create_client(
 
 
 @router.get("/clients/{client_id}", response_model=ClientResponse, tags=["clients"])
-def get_client(client_id: int, db: Session = Depends(get_db)) -> dict:
+def get_client(
+    client_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> dict:
     """Retrieve a single client by ID."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     return {"ok": True, "data": client}
@@ -60,7 +65,7 @@ def update_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Update an existing client."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     for field, value in client_in.dict(exclude_unset=True).items():
@@ -77,7 +82,7 @@ def delete_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Delete a client."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     db.delete(client)

@@ -10,7 +10,7 @@ gateway integrations a stable database contract.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Numeric, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -25,16 +25,17 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
 
     currency = Column(String, default="USD", nullable=False)
-    subtotal = Column(Float, default=0.0, nullable=False)
-    discount_total = Column(Float, default=0.0, nullable=False)
-    tax_total = Column(Float, default=0.0, nullable=False)
-    tip_total = Column(Float, default=0.0, nullable=False)
-    total = Column(Float, default=0.0, nullable=False)
-    amount_paid = Column(Float, default=0.0, nullable=False)
+    subtotal = Column(Numeric(10, 2), default=0.0, nullable=False)
+    discount_total = Column(Numeric(10, 2), default=0.0, nullable=False)
+    tax_total = Column(Numeric(10, 2), default=0.0, nullable=False)
+    tip_total = Column(Numeric(10, 2), default=0.0, nullable=False)
+    total = Column(Numeric(10, 2), default=0.0, nullable=False)
+    amount_paid = Column(Numeric(10, 2), default=0.0, nullable=False)
 
     status = Column(String, default="draft", nullable=False)
     promotion_code = Column(String, nullable=True)
@@ -45,6 +46,7 @@ class Invoice(Base):
 
     booking = relationship("Booking")
     client = relationship("Client")
+    tenant = relationship("Tenant")
     lines = relationship(
         "InvoiceLine",
         back_populates="invoice",
@@ -63,6 +65,7 @@ class InvoiceLine(Base):
     __tablename__ = "invoice_lines"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
 
     line_type = Column(String, nullable=False)
@@ -70,12 +73,13 @@ class InvoiceLine(Base):
     description = Column(String, nullable=False)
 
     quantity = Column(Integer, default=1, nullable=False)
-    unit_price = Column(Float, default=0.0, nullable=False)
-    amount = Column(Float, default=0.0, nullable=False)
+    unit_price = Column(Numeric(10, 2), default=0.0, nullable=False)
+    amount = Column(Numeric(10, 2), default=0.0, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     invoice = relationship("Invoice", back_populates="lines")
+    tenant = relationship("Tenant")
 
 
 class PromotionCode(Base):
@@ -89,16 +93,23 @@ class PromotionCode(Base):
     __tablename__ = "promotion_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String, nullable=False, unique=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String, nullable=False, index=True)
     description = Column(String, nullable=True)
     discount_type = Column(String, default="fixed", nullable=False)
-    discount_value = Column(Float, default=0.0, nullable=False)
+    discount_value = Column(Numeric(10, 2), default=0.0, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     max_redemptions = Column(Integer, nullable=True)
     times_redeemed = Column(Integer, default=0, nullable=False)
     starts_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant = relationship("Tenant")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "code", name="uq_promotion_codes_tenant_code"),
+    )
 
 
 class TaxRate(Base):
@@ -107,10 +118,13 @@ class TaxRate(Base):
     __tablename__ = "tax_rates"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
-    rate_percent = Column(Float, default=0.0, nullable=False)
+    rate_percent = Column(Numeric(10, 2), default=0.0, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant = relationship("Tenant")
 
 
 class Tip(Base):
@@ -119,12 +133,14 @@ class Tip(Base):
     __tablename__ = "tips"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     invoice = relationship("Invoice", back_populates="tips")
+    tenant = relationship("Tenant")
 
 
 class PaymentProcessorConfig(Base):
@@ -137,6 +153,7 @@ class PaymentProcessorConfig(Base):
     __tablename__ = "payment_processor_configs"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     provider = Column(String, nullable=False)
     enabled = Column(Boolean, default=False, nullable=False)
     display_name = Column(String, nullable=True)
@@ -144,3 +161,5 @@ class PaymentProcessorConfig(Base):
     config_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    tenant = relationship("Tenant")

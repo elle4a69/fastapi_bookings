@@ -2376,6 +2376,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/checkout/deposit-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Deposit Session
+         * @description Create a Stripe Checkout Session for a booking deposit.
+         */
+        post: operations["create_deposit_session_api_v1_checkout_deposit_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe Webhook
+         * @description Stripe Webhook endpoint.
+         */
+        post: operations["stripe_webhook_api_v1_webhooks_stripe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Device
+         * @description Register or update a user device token for push notifications.
+         */
+        post: operations["register_device_api_v1_devices_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -3049,6 +3109,13 @@ export interface components {
             end_time?: string | null;
             /** Text */
             text: string;
+            /** Note Type */
+            note_type?: string | null;
+            /**
+             * Is Time Blocked
+             * @default false
+             */
+            is_time_blocked: boolean;
         };
         /** CalendarNoteListResponse */
         CalendarNoteListResponse: {
@@ -3072,6 +3139,13 @@ export interface components {
             end_time?: string | null;
             /** Text */
             text: string;
+            /** Note Type */
+            note_type?: string | null;
+            /**
+             * Is Time Blocked
+             * @default false
+             */
+            is_time_blocked: boolean;
             /** Id */
             id: number;
             /**
@@ -3098,6 +3172,10 @@ export interface components {
             end_time?: string | null;
             /** Text */
             text?: string | null;
+            /** Note Type */
+            note_type?: string | null;
+            /** Is Time Blocked */
+            is_time_blocked?: boolean | null;
         };
         /** CategoryCreate */
         CategoryCreate: {
@@ -3250,6 +3328,69 @@ export interface components {
              */
             active: boolean;
         };
+        /** ClientIdentifyData */
+        ClientIdentifyData: {
+            /**
+             * Name
+             * @description Client's full name
+             */
+            name?: string | null;
+            /**
+             * Email
+             * @description Client's email address
+             */
+            email?: string | null;
+            /**
+             * Phone
+             * @description Client's phone number
+             */
+            phone?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** City */
+            city?: string | null;
+            /** State */
+            state?: string | null;
+            /** Postcode */
+            postcode?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /**
+             * Accepts Marketing
+             * @default false
+             */
+            accepts_marketing: boolean;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Terms Accepted At */
+            terms_accepted_at?: string | null;
+            /** Privacy Accepted At */
+            privacy_accepted_at?: string | null;
+            /** Created */
+            created: boolean;
+        };
+        /** ClientIdentifyResponse */
+        ClientIdentifyResponse: {
+            /** Ok */
+            ok: boolean;
+            data: components["schemas"]["ClientIdentifyData"];
+        };
         /** ClientListResponse */
         ClientListResponse: {
             /** Ok */
@@ -3295,6 +3436,65 @@ export interface components {
             notes?: string | null;
             /** Active */
             active?: boolean | null;
+        };
+        /** DeviceToken */
+        DeviceToken: {
+            /** Client Id */
+            client_id?: number | null;
+            /** User Id */
+            user_id?: number | null;
+            /** Token */
+            token: string;
+            /** Platform */
+            platform?: string | null;
+            /** Device Id */
+            device_id?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DeviceTokenCreate */
+        DeviceTokenCreate: {
+            /** Client Id */
+            client_id?: number | null;
+            /** User Id */
+            user_id?: number | null;
+            /** Token */
+            token: string;
+            /** Platform */
+            platform?: string | null;
+            /** Device Id */
+            device_id?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** DeviceTokenResponse */
+        DeviceTokenResponse: {
+            /** Ok */
+            ok: boolean;
+            data: components["schemas"]["DeviceToken"];
         };
         /** GdprConsentCreate */
         GdprConsentCreate: {
@@ -4203,6 +4403,28 @@ export interface components {
              * @default true
              */
             active: boolean;
+            /**
+             * Is Visible
+             * @description Whether the provider is visible publicly
+             * @default true
+             */
+            is_visible: boolean;
+            /**
+             * Capacity
+             * @description Capacity/slots available for concurrent bookings
+             * @default 1
+             */
+            capacity: number;
+            /**
+             * Color
+             * @description Calendar color hex code
+             */
+            color?: string | null;
+            /**
+             * Description
+             * @description Provider description/bio
+             */
+            description?: string | null;
             /** Id */
             id: number;
             /**
@@ -4234,6 +4456,28 @@ export interface components {
              * @default true
              */
             active: boolean;
+            /**
+             * Is Visible
+             * @description Whether the provider is visible publicly
+             * @default true
+             */
+            is_visible: boolean;
+            /**
+             * Capacity
+             * @description Capacity/slots available for concurrent bookings
+             * @default 1
+             */
+            capacity: number;
+            /**
+             * Color
+             * @description Calendar color hex code
+             */
+            color?: string | null;
+            /**
+             * Description
+             * @description Provider description/bio
+             */
+            description?: string | null;
         };
         /** ProviderListResponse */
         ProviderListResponse: {
@@ -4344,6 +4588,14 @@ export interface components {
             phone?: string | null;
             /** Active */
             active?: boolean | null;
+            /** Is Visible */
+            is_visible?: boolean | null;
+            /** Capacity */
+            capacity?: number | null;
+            /** Color */
+            color?: string | null;
+            /** Description */
+            description?: string | null;
         };
         /** ProviderWorkDayCreate */
         ProviderWorkDayCreate: {
@@ -4717,6 +4969,34 @@ export interface components {
              * @default true
              */
             active: boolean;
+            /**
+             * Is Visible
+             * @description Whether the service is visible publicly
+             * @default true
+             */
+            is_visible: boolean;
+            /**
+             * Deposit Amount
+             * @description Required deposit amount
+             * @default 0
+             */
+            deposit_amount: number;
+            /**
+             * Tax Rate Id
+             * @description Identifier of the associated tax rate
+             */
+            tax_rate_id?: number | null;
+            /**
+             * Min Group Size
+             * @description Minimum spots/people for group booking
+             * @default 1
+             */
+            min_group_size: number;
+            /**
+             * Max Group Size
+             * @description Maximum spots/people for group booking
+             */
+            max_group_size?: number | null;
             /** Id */
             id: number;
         };
@@ -4748,6 +5028,34 @@ export interface components {
              * @default true
              */
             active: boolean;
+            /**
+             * Is Visible
+             * @description Whether the service is visible publicly
+             * @default true
+             */
+            is_visible: boolean;
+            /**
+             * Deposit Amount
+             * @description Required deposit amount
+             * @default 0
+             */
+            deposit_amount: number;
+            /**
+             * Tax Rate Id
+             * @description Identifier of the associated tax rate
+             */
+            tax_rate_id?: number | null;
+            /**
+             * Min Group Size
+             * @description Minimum spots/people for group booking
+             * @default 1
+             */
+            min_group_size: number;
+            /**
+             * Max Group Size
+             * @description Maximum spots/people for group booking
+             */
+            max_group_size?: number | null;
         };
         /** ServiceListResponse */
         ServiceListResponse: {
@@ -4820,6 +5128,16 @@ export interface components {
             price?: number | null;
             /** Active */
             active?: boolean | null;
+            /** Is Visible */
+            is_visible?: boolean | null;
+            /** Deposit Amount */
+            deposit_amount?: number | null;
+            /** Tax Rate Id */
+            tax_rate_id?: number | null;
+            /** Min Group Size */
+            min_group_size?: number | null;
+            /** Max Group Size */
+            max_group_size?: number | null;
         };
         /** TaxRateCreate */
         TaxRateCreate: {
@@ -5546,7 +5864,9 @@ export interface operations {
                 /** @description Number of items per page */
                 page_size?: number;
             };
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5610,7 +5930,9 @@ export interface operations {
     get_client_api_admin_clients__client_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path: {
                 client_id: number;
             };
@@ -5716,7 +6038,9 @@ export interface operations {
                 /** @description Number of items per page */
                 page_size?: number;
             };
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5780,7 +6104,9 @@ export interface operations {
     get_location_api_admin_locations__location_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path: {
                 location_id: number;
             };
@@ -9441,7 +9767,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ClientResponse"];
+                    "application/json": components["schemas"]["ClientIdentifyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10587,6 +10913,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GdprConsentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_deposit_session_api_v1_checkout_deposit_session_post: {
+        parameters: {
+            query: {
+                booking_id: number;
+                amount_cents: number;
+                success_url: string;
+                cancel_url: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stripe_webhook_api_v1_webhooks_stripe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    register_device_api_v1_devices_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceTokenCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceTokenResponse"];
                 };
             };
             /** @description Validation Error */

@@ -25,10 +25,14 @@ class OutboxEvent(Base):
 
     Attributes:
         id: Primary key.
+        tenant_id: Subdomain or identifier of the tenant.
         type: A short string describing the event type (e.g.
             ``booking.created`` or ``payment.received``).
         payload: JSON‑serialised payload containing event data.
-        processed: Whether the event has been processed by the dispatcher.
+        status: Delivery status (PENDING, PROCESSED, FAILED).
+        retry_count: Number of delivery attempts made.
+        error_log: Traceback or error details if delivery failed.
+        processed: Legacy boolean for processed status.
         created_at: When the event was enqueued.
         processed_at: When the event was processed (if processed).
     """
@@ -36,14 +40,18 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True)
     type = Column(String, nullable=False)
     payload = Column(Text, nullable=False)
+    status = Column(String, default="PENDING", nullable=False, index=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    error_log = Column(Text, nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     processed_at = Column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
-        return f"<OutboxEvent id={self.id} type={self.type} processed={self.processed}>"
+        return f"<OutboxEvent id={self.id} type={self.type} status={self.status}>"
 
     def data(self):
         """Return the payload deserialised as a Python object."""

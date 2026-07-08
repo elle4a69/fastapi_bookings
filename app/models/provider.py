@@ -6,7 +6,7 @@ working hours, breaks and are linked to bookings.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -22,6 +22,11 @@ class Provider(Base):
     phone = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    is_visible = Column(Boolean, default=True, nullable=False)
+    capacity = Column(Integer, default=1, nullable=False)
+    color = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
 
     # Relationships
     tenant = relationship("Tenant")

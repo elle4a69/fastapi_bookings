@@ -6,12 +6,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_company, get_db
+from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant
+from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
 from ...services import scheduling_service
 from ...models.booking import Booking as BookingModel
 from ...models import Service
+from ...services.outbox_service import create_outbox_event
 from ...schemas.booking import (
     Booking,
     BookingCreate,
@@ -36,7 +38,7 @@ def list_bookings(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of bookings with optional filters."""
-    query = db.query(BookingModel)
+    query = db.query(BookingModel).filter(BookingModel.tenant_id == current_user.tenant_id)
     if status_filter:
         query = query.filter(BookingModel.status == status_filter)
     if client_id:
@@ -61,12 +63,15 @@ def create_booking(
     # Validate provider eligibility for the service, if provided
     if booking_in.provider_id:
         # Fetch the service to inspect provider assignments
-        service_obj = db.query(Service).filter(Service.id == booking_in.service_id).first()
+        service_obj = db.query(Service).filter(
+            Service.id == booking_in.service_id,
+            Service.tenant_id == current_user.tenant_id
+        ).first()
         if service_obj and service_obj.providers:
             provider_ids = {sp.provider_id for sp in service_obj.providers}
             if booking_in.provider_id not in provider_ids:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
-    booking = BookingModel(**booking_in.dict())
+    booking = BookingModel(tenant_id=current_user.tenant_id, **booking_in.dict())
     db.add(booking)
     db.commit()
     db.refresh(booking)
@@ -78,6 +83,18 @@ def create_booking(
         db.delete(booking)
         db.commit()
         raise exc
+    
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.created", payload)
+    db.commit()
     return {"ok": True, "data": booking}
 
 
@@ -85,7 +102,7 @@ def create_booking(
 def create_public_booking(
     booking_in: BookingCreate,
     db: Session = Depends(get_db),
-    company: str = Depends(get_current_company),
+    tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """Create a new booking via the public widget.
 
@@ -96,12 +113,15 @@ def create_public_booking(
     booking_data["status"] = BookingStatus.PENDING
     # Validate provider eligibility if provided
     if booking_in.provider_id:
-        service_obj = db.query(Service).filter(Service.id == booking_in.service_id).first()
+        service_obj = db.query(Service).filter(
+            Service.id == booking_in.service_id,
+            Service.tenant_id == tenant.id
+        ).first()
         if service_obj and service_obj.providers:
             provider_ids = {sp.provider_id for sp in service_obj.providers}
             if booking_in.provider_id not in provider_ids:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
-    booking = BookingModel(**booking_data)
+    booking = BookingModel(tenant_id=tenant.id, **booking_data)
     db.add(booking)
     db.commit()
     db.refresh(booking)
@@ -111,13 +131,25 @@ def create_public_booking(
         db.delete(booking)
         db.commit()
         raise exc
+
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.subdomain)
+    db.commit()
     return {"ok": True, "data": booking}
 
 
 @router.get("/bookings/{booking_id}", response_model=BookingResponse, tags=["bookings"])
 def get_booking(booking_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)) -> dict:
     """Retrieve a booking by its ID."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     return {"ok": True, "data": booking}
@@ -131,7 +163,7 @@ def update_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Update a booking's basic details (not state transitions)."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     update_data = booking_in.dict(exclude_unset=True)
@@ -157,12 +189,22 @@ def confirm_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Confirm a pending booking."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.CONFIRMED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     booking.status = BookingStatus.CONFIRMED
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.confirmed", payload)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -175,7 +217,7 @@ def cancel_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Cancel a booking."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.CANCELLED):
@@ -184,6 +226,16 @@ def cancel_booking(
     booking.status = BookingStatus.CANCELLED
     # Release any allocated resources since the booking will no longer take place
     scheduling_service.release_resources(db, booking=booking, commit=False)
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.cancelled", payload)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -196,7 +248,7 @@ def complete_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Mark a booking as completed."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.COMPLETED):
@@ -204,6 +256,16 @@ def complete_booking(
     booking.status = BookingStatus.COMPLETED
     # Resources can be considered released at the time the booking is completed
     scheduling_service.release_resources(db, booking=booking, commit=False)
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.completed", payload)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -216,7 +278,7 @@ def noshow_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Mark a booking as no‑show."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.NO_SHOW):
@@ -224,6 +286,16 @@ def noshow_booking(
     booking.status = BookingStatus.NO_SHOW
     # Release resources on no-show to free up capacity
     scheduling_service.release_resources(db, booking=booking, commit=False)
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.no_show", payload)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -243,7 +315,7 @@ def reschedule_booking(
     updates the start and end times. The booking must be in a state
     that allows rescheduling.
     """
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.RESCHEDULED):
@@ -267,4 +339,16 @@ def reschedule_booking(
         db.commit()
         db.refresh(booking)
         raise exc
+    
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.rescheduled", payload)
+    db.commit()
     return {"ok": True, "data": booking}

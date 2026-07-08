@@ -105,6 +105,10 @@ class ClientResponse(BaseModel):
     data: Client
 
 
-class ClientResponse(BaseModel):
+class ClientIdentifyData(Client):
+    created: bool
+
+
+class ClientIdentifyResponse(BaseModel):
     ok: bool
-    data: Client
+    data: ClientIdentifyData

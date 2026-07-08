@@ -112,6 +112,7 @@ class DeviceToken(Base):
     __table_args__ = (UniqueConstraint("token", name="uq_device_tokens_token"),)
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     token = Column(String, nullable=False)

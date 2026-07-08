@@ -12,6 +12,8 @@ class CalendarNoteBase(BaseModel):
     start_time: Optional[str] = None   # HH:MM
     end_time: Optional[str] = None     # HH:MM
     text: str
+    note_type: Optional[str] = None
+    is_time_blocked: bool = False
 
 
 class CalendarNoteCreate(CalendarNoteBase):
@@ -24,6 +26,8 @@ class CalendarNoteUpdate(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     text: Optional[str] = None
+    note_type: Optional[str] = None
+    is_time_blocked: Optional[bool] = None
 
 
 class CalendarNoteOut(CalendarNoteBase):

@@ -561,27 +561,25 @@ These do not need to change:
 
 ### Still needs doing before smoke testing
 
-1. **Contracts are stale** — `contracts/route-manifest.json` and `.contract.json` files reflect the original ~24 router surface. The merged project has 35+ router files and 200+ endpoints. Regenerate from `/openapi.json` once Alembic is set up.
+1. **Contracts are stale** — [x] **Done**. `contracts/route-manifest.json` and `contracts/types.ts` have been fully regenerated from the running backend's `/openapi.json` schema.
 
 2. **Availability engine does not yet use provider schedules** — `ProviderWorkDay`, `ProviderSpecialDay`, `BlockedTime` are persisted but `scheduling_service.py` still ignores them. The engine treats every hour as available.
 
-3. **Outbox not wired** — `OutboxEvent` records are never written by any route. The webhook dispatcher and notification worker need outbox writes in the booking transition endpoints.
+3. **Outbox not wired** — [x] **Done**. The Outbox worker is fully implemented and active in lifespan, and booking status transitions enqueue transactional outbox events correctly.
 
 4. **`updated_at` still not auto-refreshing on PATCH** — the `onupdate` was added to `Booking.updated_at` in this session but not audited across all other models.
 
-5. **`find_or_create_client` response shape** — the `/api/public/clients/identify` endpoint returns `{"created": bool}` outside the `data` envelope. Should be normalised before front-end contract generation.
+5. **`find_or_create_client` response shape** — [x] **Done**. The `/api/public/clients/identify` endpoint has been normalized to return `{"created": bool}` inside the schema data payload, and TypeScript contracts regenerated.
 
 
 What Remains to Be Done (Future Scope)
-To transition from the completed core API foundation into a live product, the following integration phases on the roadmap can be tackled in future coding runs:
-
-Phase 5 (Notifications & AI Orchestration): Building the background polling outbox worker (polling OutboxEvent) and dispatching SMS/emails (via Twilio/SendGrid).
-Phase 6 (Payments): Stripe payments integration, webhooks for failed/successful payments, and deposit collection logic.
-Phase 7 (Mobile Polish & Push Notifications): Token refresh endpoints and device registration/push integration (FCM/APNs).
+All Phase 5, 6, and 7 integrations have been successfully implemented:
+- Phase 5 (Notifications & Transactional Outbox Worker): Done. Polling worker, ClickSend SMS/MMS, and Chatwoot AUTO/TRAINING mode dispatching.
+- Phase 6 (Payments): Done. Stripe payment webhook, session creation, deposit session generation.
+- Phase 7 (Mobile Polish & Push Notifications): Done. Token refresh, device token registration, FCM push notification dispatch.
 
 ### OBJECTIVE
-
-Implement Phase 5 (Transactional Outbox Worker & Notifications via ClickSend/Chatwoot), Phase 6 (Stripe Payments & Webhooks), and Phase 7 (Device Registration & Custom Firebase Push Notifications) within our existing multi-tenant FastAPI application. 
+[x] **Done**. Phase 5, 6, and 7 implemented and fully verified with automated test suites passing. 
 
 
 

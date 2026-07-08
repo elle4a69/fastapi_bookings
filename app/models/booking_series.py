@@ -32,6 +32,7 @@ class BookingSeries(Base):
     __tablename__ = "booking_series"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
@@ -42,6 +43,7 @@ class BookingSeries(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     bookings = relationship("Booking", back_populates="series")
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return f"<BookingSeries id={self.id} service_id={self.service_id}>"

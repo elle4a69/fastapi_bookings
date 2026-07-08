@@ -8,3 +8,10 @@ fastapi_bookings.db
 .remote-code-express/
 .vscode/
 .antigravity/
+.env
+firebase-credentials.json
+foundryctl.exe
+pours/
+scratch/
+*.zip
+*_report.md

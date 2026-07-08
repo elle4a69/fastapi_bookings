@@ -11,6 +11,10 @@ class ProviderBase(BaseModel):
     email: Optional[str] = Field(None, description="Provider's email address")
     phone: Optional[str] = Field(None, description="Provider's phone number")
     active: bool = Field(True, description="Whether the provider is active")
+    is_visible: bool = Field(True, description="Whether the provider is visible publicly")
+    capacity: int = Field(1, description="Capacity/slots available for concurrent bookings")
+    color: Optional[str] = Field(None, description="Calendar color hex code")
+    description: Optional[str] = Field(None, description="Provider description/bio")
 
 
 class ProviderCreate(ProviderBase):
@@ -22,6 +26,10 @@ class ProviderUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     active: Optional[bool] = None
+    is_visible: Optional[bool] = None
+    capacity: Optional[int] = None
+    color: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ProviderInDBBase(ProviderBase):
@@ -38,16 +46,6 @@ class ProviderListResponse(BaseModel):
     ok: bool
     data: list[Provider]
     meta: dict
-
-
-class ProviderResponse(BaseModel):
-    ok: bool
-    data: Provider
-
-
-class ProviderResponse(BaseModel):
-    ok: bool
-    data: Provider
 
 
 class ProviderResponse(BaseModel):

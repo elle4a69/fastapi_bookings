@@ -11,6 +11,11 @@ class ServiceBase(BaseModel):
     duration: int = Field(..., ge=1, description="Duration in minutes")
     price: Optional[float] = Field(None, description="Price of the service")
     active: bool = Field(True, description="Whether the service is available for booking")
+    is_visible: bool = Field(True, description="Whether the service is visible publicly")
+    deposit_amount: float = Field(0.0, description="Required deposit amount")
+    tax_rate_id: Optional[int] = Field(None, description="Identifier of the associated tax rate")
+    min_group_size: int = Field(1, ge=1, description="Minimum spots/people for group booking")
+    max_group_size: Optional[int] = Field(None, ge=1, description="Maximum spots/people for group booking")
 
 
 class ServiceCreate(ServiceBase):
@@ -23,6 +28,11 @@ class ServiceUpdate(BaseModel):
     duration: Optional[int] = Field(None, ge=1)
     price: Optional[float] = None
     active: Optional[bool] = None
+    is_visible: Optional[bool] = None
+    deposit_amount: Optional[float] = None
+    tax_rate_id: Optional[int] = None
+    min_group_size: Optional[int] = Field(None, ge=1)
+    max_group_size: Optional[int] = Field(None, ge=1)
 
 
 class ServiceInDBBase(ServiceBase):

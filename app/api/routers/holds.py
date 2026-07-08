@@ -118,11 +118,17 @@ def confirm_hold_endpoint(
             # Attempt to find an existing client by email or phone
             client_obj = None
             if email:
-                client_obj = db.query(Client).filter(Client.email == email).first()
+                client_obj = db.query(Client).filter(
+                    Client.email == email,
+                    Client.tenant_id == hold.tenant_id
+                ).first()
             if not client_obj and phone:
-                client_obj = db.query(Client).filter(Client.phone == phone).first()
+                client_obj = db.query(Client).filter(
+                    Client.phone == phone,
+                    Client.tenant_id == hold.tenant_id
+                ).first()
             if client_obj is None:
-                client_obj = Client(name=name, email=email, phone=phone)
+                client_obj = Client(tenant_id=hold.tenant_id, name=name, email=email, phone=phone)
                 db.add(client_obj)
                 db.commit()
                 db.refresh(client_obj)
@@ -138,6 +144,7 @@ def confirm_hold_endpoint(
             )
     # Build booking data
     booking = Booking(
+        tenant_id=hold.tenant_id,
         client_id=client_id,
         provider_id=provider.id,
         service_id=service.id,

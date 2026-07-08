@@ -22,9 +22,10 @@ router = APIRouter()
 def list_locations(
     params: dict = Depends(pagination_params),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of locations."""
-    query = db.query(LocationModel)
+    query = db.query(LocationModel).filter(LocationModel.tenant_id == current_user.tenant_id)
     items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
@@ -36,7 +37,7 @@ def create_location(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new location."""
-    location = LocationModel(**location_in.dict())
+    location = LocationModel(tenant_id=current_user.tenant_id, **location_in.dict())
     db.add(location)
     db.commit()
     db.refresh(location)
@@ -44,9 +45,13 @@ def create_location(
 
 
 @router.get("/locations/{location_id}", response_model=LocationResponse, tags=["locations"])
-def get_location(location_id: int, db: Session = Depends(get_db)) -> dict:
+def get_location(
+    location_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> dict:
     """Retrieve a single location by ID."""
-    location = db.query(LocationModel).filter(LocationModel.id == location_id).first()
+    location = db.query(LocationModel).filter(LocationModel.id == location_id, LocationModel.tenant_id == current_user.tenant_id).first()
     if not location:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
     return {"ok": True, "data": location}
@@ -60,7 +65,7 @@ def update_location(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Update an existing location."""
-    location = db.query(LocationModel).filter(LocationModel.id == location_id).first()
+    location = db.query(LocationModel).filter(LocationModel.id == location_id, LocationModel.tenant_id == current_user.tenant_id).first()
     if not location:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
     for field, value in location_in.dict(exclude_unset=True).items():
@@ -77,7 +82,7 @@ def delete_location(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Delete a location."""
-    location = db.query(LocationModel).filter(LocationModel.id == location_id).first()
+    location = db.query(LocationModel).filter(LocationModel.id == location_id, LocationModel.tenant_id == current_user.tenant_id).first()
     if not location:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
     db.delete(location)

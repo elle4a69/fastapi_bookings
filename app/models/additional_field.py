@@ -26,6 +26,7 @@ class AdditionalField(Base):
     __tablename__ = "additional_fields"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     scope = Column(String, default="booking", nullable=False)
     service_id = Column(Integer, ForeignKey("services.id"), nullable=True)
     name = Column(String, nullable=False)
@@ -41,6 +42,7 @@ class AdditionalField(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     service = relationship("Service")
+    tenant = relationship("Tenant")
 
 
 class AdditionalFieldResponse(Base):

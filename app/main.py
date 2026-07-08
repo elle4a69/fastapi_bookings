@@ -116,11 +116,27 @@ from .api.routers import (
     webhooks,
     calendar_notes,
     general_systems,
+    stripe_webhooks,
+    devices,
 )
 
 
 # Database tables are managed entirely via Alembic migrations.
 
+
+
+import asyncio
+from contextlib import asynccontextmanager
+from .services.outbox_worker import start_outbox_worker, stop_outbox_worker
+
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    # Startup
+    worker_task = asyncio.create_task(start_outbox_worker())
+    yield
+    # Shutdown
+    await stop_outbox_worker(worker_task)
 
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
@@ -135,7 +151,17 @@ class PublicRouteRateLimitMiddleware(SlowAPIMiddleware):
         return await super().dispatch(request, call_next)
 
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json")
+servers = [
+    {"url": "https://bookopenapi-backend-208926050296.us-central1.run.app", "description": "Production Deployed Server"},
+    {"url": "http://localhost:8000", "description": "Local Development Server"}
+]
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url="/openapi.json",
+    lifespan=app_lifespan,
+    servers=servers
+)
 
 # Configure SlowAPI limiter
 app.state.limiter = limiter
@@ -198,6 +224,8 @@ app.include_router(webhooks.router)
 app.include_router(calendar_notes.router)
 app.include_router(general_systems.router)
 app.include_router(general_systems.public_router)
+app.include_router(stripe_webhooks.router)
+app.include_router(devices.router)
 
 
 @app.get("/health", tags=["system"])
