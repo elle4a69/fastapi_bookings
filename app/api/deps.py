@@ -9,6 +9,7 @@ from ..core.security import decode_access_token
 from ..db.database import get_db
 from ..models.user import User
 from ..models.tenant import Tenant
+from ..models.client import Client
 
 
 async def get_current_tenant(
@@ -94,3 +95,49 @@ async def get_current_company(
 ) -> str:
     """Retrieve the active tenant subdomain slug."""
     return tenant.subdomain
+
+
+async def get_public_tenant(
+    x_token: str = Header(..., alias="X-Token"),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
+) -> Tenant:
+    """Validate public access token for public booking endpoints.
+
+    Requires X-Token header. Decodes and verifies it belongs to the active tenant
+    (either as a public token, client token, or admin token).
+    """
+    payload = decode_access_token(x_token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token."
+        )
+    
+    sub = payload["sub"]
+    # 1. If it's a public token, sub is the tenant subdomain
+    if isinstance(sub, str) and sub.lower() == tenant.subdomain.lower():
+        return tenant
+        
+    # 2. If it's a user/admin token, sub is user_id
+    try:
+        user_id = int(sub)
+        user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant.id).first()
+        if user:
+            return tenant
+    except (TypeError, ValueError):
+        pass
+
+    # 3. If it's a client token, sub is client_id
+    try:
+        client_id = int(sub)
+        client = db.query(Client).filter(Client.id == client_id, Client.tenant_id == tenant.id).first()
+        if client:
+            return tenant
+    except (TypeError, ValueError):
+        pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Access token is not authorized for this tenant."
+    )

@@ -8,15 +8,17 @@ token is required to create and manage holds.  Admin endpoints may
 list and manage holds for administrative purposes.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.orm import Session
 
-from ...db.database import get_db
+from ..deps import get_db, get_public_tenant
+from ...models.tenant import Tenant
 from ...models import Service, Provider, Location, Hold, HoldStatus, Booking, Client
 from ...schemas.hold import HoldCreate, HoldOut, HoldConfirm
+from ...schemas.booking import BookingResponse
 from ...services import scheduling_service
 # ServiceProvider is not used here but retained for future extensions.
 from ...core.state_machine import BookingStatus
@@ -28,6 +30,7 @@ router = APIRouter(prefix="/api/public/holds", tags=["holds"])
 def create_hold_endpoint(
     payload: HoldCreate,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> HoldOut:
     """Create a new hold for a slot.
 
@@ -35,17 +38,17 @@ def create_hold_endpoint(
     provider, location and client identifiers.  A hold expires after
     the provided ``expires_at`` timestamp.
     """
-    service = db.query(Service).filter(Service.id == payload.service_id).first()
+    service = db.query(Service).filter(Service.id == payload.service_id, Service.tenant_id == tenant.id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if payload.provider_id:
-        provider = db.query(Provider).filter(Provider.id == payload.provider_id).first()
+        provider = db.query(Provider).filter(Provider.id == payload.provider_id, Provider.tenant_id == tenant.id).first()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
     location = None
     if payload.location_id:
-        location = db.query(Location).filter(Location.id == payload.location_id).first()
+        location = db.query(Location).filter(Location.id == payload.location_id, Location.tenant_id == tenant.id).first()
         if not location:
             raise HTTPException(status_code=404, detail="Location not found")
     hold = scheduling_service.create_hold(
@@ -56,16 +59,17 @@ def create_hold_endpoint(
         end_time=payload.end_time,
         provider=provider,
         location=location,
-        expires_in=int((payload.expires_at - datetime.utcnow()).total_seconds() / 60),
+        expires_in=int((payload.expires_at - datetime.now(timezone.utc)).total_seconds() / 60),
     )
     return HoldOut.from_orm(hold)
 
 
-@router.post("/{hold_id}/confirm", response_model=Any)
+@router.post("/{hold_id}/confirm", response_model=BookingResponse)
 def confirm_hold_endpoint(
     hold_id: int = Path(..., description="ID of the hold to confirm"),
     payload: HoldConfirm | None = None,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Convert a hold into a booking and allocate resources.
 
@@ -84,7 +88,7 @@ def confirm_hold_endpoint(
     Returns:
         The newly created booking as a serialisable Pydantic model.
     """
-    hold = db.query(Hold).filter(Hold.id == hold_id).first()
+    hold = db.query(Hold).filter(Hold.id == hold_id, Hold.tenant_id == tenant.id).with_for_update().first()
     if not hold:
         raise HTTPException(status_code=404, detail="Hold not found")
     if hold.status != HoldStatus.PENDING:
@@ -176,12 +180,13 @@ def confirm_hold_endpoint(
 def cancel_hold_endpoint(
     hold_id: int = Path(..., description="ID of the hold to cancel"),
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> HoldOut:
     """Cancel (delete) a hold.
 
     Cancelling a hold frees the slot so that other clients can book it.
     """
-    hold = db.query(Hold).filter(Hold.id == hold_id).first()
+    hold = db.query(Hold).filter(Hold.id == hold_id, Hold.tenant_id == tenant.id).first()
     if not hold:
         raise HTTPException(status_code=404, detail="Hold not found")
     if hold.status == HoldStatus.CONFIRMED:
@@ -189,4 +194,7 @@ def cancel_hold_endpoint(
     hold.status = HoldStatus.EXPIRED
     db.commit()
     db.refresh(hold)
+    if hold.service:
+        from ...services.hold_service import promote_waitlist
+        promote_waitlist(db, service=hold.service)
     return HoldOut.from_orm(hold)

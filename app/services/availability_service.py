@@ -25,12 +25,12 @@ def get_available_slots(
     Compatibility wrapper routing to scheduling_service.compute_availability.
     """
     # Load first provider and service to extract context
-    provider = db.query(Provider).filter(Provider.id == provider_id).first()
+    provider = db.query(Provider).filter(Provider.id == provider_id, Provider.deleted_at.is_(None)).first()
     if not provider:
         return []
 
     # Find any active service belonging to the same tenant to calculate slots
-    service = db.query(Service).filter(Service.tenant_id == provider.tenant_id, Service.active.is_(True)).first()
+    service = db.query(Service).filter(Service.tenant_id == provider.tenant_id, Service.active.is_(True), Service.deleted_at.is_(None)).first()
     if not service:
         return []
 

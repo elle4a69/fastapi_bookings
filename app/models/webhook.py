@@ -6,7 +6,7 @@ matching that event type.  The optional secret is used to sign the
 payload via HMAC-SHA256 so the receiver can verify authenticity.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
@@ -25,7 +25,7 @@ class WebhookRegistration(Base):
     target_url = Column(String, nullable=False)
     secret = Column(String, nullable=True)               # HMAC-SHA256 signing secret
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     tenant = relationship("Tenant")
 

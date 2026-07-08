@@ -771,9 +771,7 @@ export interface paths {
          * @description Search for availability using flexible criteria.
          *
          *     Returns a list of available options.  Each option may include the
-         *     service, provider, location, resource and time.  This function
-         *     currently returns an empty list as the scheduling engine is not yet
-         *     implemented.
+         *     service, provider, location, resource and time.
          */
         post: operations["search_availability_api_public_search_availability_post"];
         delete?: never;
@@ -2509,7 +2507,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Duration
              * @default 0
@@ -2530,7 +2528,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: string | null;
             /**
              * Duration
              * @default 0
@@ -2558,7 +2556,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Duration
              * @default 0
@@ -3026,6 +3024,21 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        /** BookingReschedule */
+        BookingReschedule: {
+            /**
+             * New Start
+             * Format: date-time
+             * @description New start time of the appointment
+             */
+            new_start: string;
+            /**
+             * New End
+             * Format: date-time
+             * @description New end time of the appointment
+             */
+            new_end: string;
         };
         /** BookingResponse */
         BookingResponse: {
@@ -3943,7 +3956,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Active
              * @default true
@@ -3957,7 +3970,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: string | null;
             /**
              * Active
              * @default true
@@ -3985,7 +3998,7 @@ export interface components {
              */
             offset_days: number;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Active
              * @default true
@@ -4006,7 +4019,7 @@ export interface components {
              */
             offset_days: number;
             /** Price */
-            price?: number | null;
+            price?: string | null;
             /**
              * Active
              * @default true
@@ -4029,7 +4042,7 @@ export interface components {
              */
             offset_days: number;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Active
              * @default true
@@ -4043,7 +4056,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Active
              * @default true
@@ -4241,7 +4254,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price: number;
+            price: number | string;
             /** Sku */
             sku?: string | null;
             /**
@@ -4257,7 +4270,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price: number;
+            price: string;
             /** Sku */
             sku?: string | null;
             /**
@@ -4280,7 +4293,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Price */
-            price: number;
+            price: number | string;
             /** Sku */
             sku?: string | null;
             /**
@@ -4962,7 +4975,7 @@ export interface components {
              * Price
              * @description Price of the service
              */
-            price?: number | null;
+            price?: string | null;
             /**
              * Active
              * @description Whether the service is available for booking
@@ -4978,9 +4991,9 @@ export interface components {
             /**
              * Deposit Amount
              * @description Required deposit amount
-             * @default 0
+             * @default 0.0
              */
-            deposit_amount: number;
+            deposit_amount: string;
             /**
              * Tax Rate Id
              * @description Identifier of the associated tax rate
@@ -5021,7 +5034,7 @@ export interface components {
              * Price
              * @description Price of the service
              */
-            price?: number | null;
+            price?: number | string | null;
             /**
              * Active
              * @description Whether the service is available for booking
@@ -5037,9 +5050,9 @@ export interface components {
             /**
              * Deposit Amount
              * @description Required deposit amount
-             * @default 0
+             * @default 0.0
              */
-            deposit_amount: number;
+            deposit_amount: number | string;
             /**
              * Tax Rate Id
              * @description Identifier of the associated tax rate
@@ -5125,13 +5138,13 @@ export interface components {
             /** Duration */
             duration?: number | null;
             /** Price */
-            price?: number | null;
+            price?: number | string | null;
             /** Active */
             active?: boolean | null;
             /** Is Visible */
             is_visible?: boolean | null;
             /** Deposit Amount */
-            deposit_amount?: number | null;
+            deposit_amount?: number | string | null;
             /** Tax Rate Id */
             tax_rate_id?: number | null;
             /** Min Group Size */
@@ -6522,10 +6535,7 @@ export interface operations {
     };
     reschedule_booking_api_admin_bookings__booking_id__reschedule_post: {
         parameters: {
-            query: {
-                new_start: string;
-                new_end: string;
-            };
+            query?: never;
             header: {
                 "X-Token": string;
             };
@@ -6534,7 +6544,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingReschedule"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -6566,7 +6580,9 @@ export interface operations {
                 /** @description Date for which availability is requested */
                 date: string;
             };
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6630,7 +6646,9 @@ export interface operations {
     public_bootstrap_api_public_bootstrap_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6647,12 +6665,23 @@ export interface operations {
                     };
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_public_booking_api_public_bookings_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6972,7 +7001,9 @@ export interface operations {
     create_hold_endpoint_api_public_holds_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7005,7 +7036,9 @@ export interface operations {
     confirm_hold_endpoint_api_public_holds__hold_id__confirm_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path: {
                 /** @description ID of the hold to confirm */
                 hold_id: number;
@@ -7024,7 +7057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BookingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7041,7 +7074,9 @@ export interface operations {
     cancel_hold_endpoint_api_public_holds__hold_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path: {
                 /** @description ID of the hold to cancel */
                 hold_id: number;
@@ -7075,7 +7110,9 @@ export interface operations {
             query: {
                 service_id: number;
             };
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7104,7 +7141,9 @@ export interface operations {
     add_to_waitlist_api_public_waitlist_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7137,7 +7176,9 @@ export interface operations {
     search_availability_api_public_search_availability_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7170,7 +7211,9 @@ export interface operations {
     get_public_ui_config_api_public_ui_config_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7185,12 +7228,23 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     get_admin_ui_config_api_public_ui_config_admin_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7203,6 +7257,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8258,7 +8321,9 @@ export interface operations {
     list_workdays_api_admin_schedule_workdays_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8271,6 +8336,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderWorkDayOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8381,7 +8455,9 @@ export interface operations {
     list_special_days_api_admin_schedule_special_days_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8394,6 +8470,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderSpecialDayOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8504,7 +8589,9 @@ export interface operations {
     list_blocked_times_api_admin_schedule_blocked_times_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8517,6 +8604,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlockedTimeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8627,7 +8723,9 @@ export interface operations {
     list_reserved_times_api_admin_schedule_reserved_times_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8640,6 +8738,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReservedTimeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -8750,7 +8857,9 @@ export interface operations {
     get_workload_api_admin_schedule_workload_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8765,6 +8874,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkloadSummary"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     list_public_additional_fields_api_public_additional_fields_get: {
@@ -8773,7 +8891,9 @@ export interface operations {
                 scope?: string | null;
                 service_id?: number | null;
             };
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8802,7 +8922,9 @@ export interface operations {
     get_public_service_intake_form_api_public_services__service_id__intake_form_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path: {
                 service_id: number;
             };
@@ -8833,7 +8955,9 @@ export interface operations {
     submit_public_additional_field_responses_api_public_additional_field_responses_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                "X-Token": string;
+            };
             path?: never;
             cookie?: never;
         };

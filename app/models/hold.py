@@ -10,7 +10,7 @@ becomes a booking.
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Index, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -28,6 +28,17 @@ class Hold(Base):
     """Represents a temporary hold on a booking slot."""
 
     __tablename__ = "holds"
+
+    __table_args__ = (
+        Index(
+            "uq_pending_holds",
+            "provider_id",
+            "start_time",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)

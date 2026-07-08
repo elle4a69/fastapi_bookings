@@ -4,7 +4,7 @@ Represents a service that can be booked. Services are associated
 with providers and determine the duration and cost of an appointment.
 """
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, ForeignKey
+from sqlalchemy import Boolean, Column, Float, Integer, String, ForeignKey, Numeric, DateTime
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -18,8 +18,9 @@ class Service(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     duration = Column(Integer, nullable=False, comment="Duration in minutes")
-    price = Column(Float, nullable=True)
+    price = Column(Numeric(10, 2), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     
     # Prep and Cleanup buffers (in minutes)
     buffer_before = Column(Integer, default=0, nullable=False)
@@ -29,7 +30,7 @@ class Service(Base):
     fixed_start_times = Column(String, nullable=True)
 
     is_visible = Column(Boolean, default=True, nullable=False)
-    deposit_amount = Column(Float, default=0.0, nullable=False)
+    deposit_amount = Column(Numeric(10, 2), default=0.0, nullable=False)
     tax_rate_id = Column(Integer, ForeignKey("tax_rates.id", ondelete="SET NULL"), nullable=True)
     min_group_size = Column(Integer, default=1, nullable=False)
     max_group_size = Column(Integer, nullable=True)

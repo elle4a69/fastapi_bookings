@@ -34,6 +34,7 @@ class Client(Base):
     privacy_accepted_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships

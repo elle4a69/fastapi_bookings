@@ -69,7 +69,7 @@ def test_predecessor_record_keeping_fields(client, db_session):
     assert resp_serv.status_code == status.HTTP_200_OK, resp_serv.text
     serv_data = resp_serv.json()["data"]
     assert serv_data["is_visible"] is True
-    assert serv_data["deposit_amount"] == 25.0
+    assert float(serv_data["deposit_amount"]) == 25.0
     assert serv_data["min_group_size"] == 2
     assert serv_data["max_group_size"] == 4
 
@@ -80,7 +80,7 @@ def test_predecessor_record_keeping_fields(client, db_session):
     }
     resp_serv_up = client.put(f"/api/admin/services/{serv_data['id']}", json=serv_update, headers=headers)
     assert resp_serv_up.status_code == status.HTTP_200_OK
-    assert resp_serv_up.json()["data"]["deposit_amount"] == 50.0
+    assert float(resp_serv_up.json()["data"]["deposit_amount"]) == 50.0
     assert resp_serv_up.json()["data"]["max_group_size"] == 10
 
     # 4. Test Calendar Note creation with new fields

@@ -39,22 +39,35 @@ from ...schemas.schedule import (
 router = APIRouter(prefix="/api/admin/schedule", tags=["schedule"])
 
 
-def get_provider_or_none(db: Session, provider_id: int | None) -> ProviderModel | None:
+def get_provider_or_none(db: Session, provider_id: int | None, tenant_id: int) -> ProviderModel | None:
     if provider_id is None:
         return None
-    return db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+    provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id, ProviderModel.deleted_at.is_(None)).first()
+    if not provider:
+        return None
+    if provider.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider association invalid")
+    return provider
 
 
-def get_location_or_none(db: Session, location_id: int | None) -> LocationModel | None:
+def get_location_or_none(db: Session, location_id: int | None, tenant_id: int) -> LocationModel | None:
     if location_id is None:
         return None
-    return db.query(LocationModel).filter(LocationModel.id == location_id).first()
+    location = db.query(LocationModel).filter(LocationModel.id == location_id).first()
+    if not location:
+        return None
+    if location.tenant_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Location association invalid")
+    return location
 
 
 @router.get("/workdays", response_model=List[ProviderWorkDayOut])
-def list_workdays(db: Session = Depends(get_db)) -> list[ProviderWorkDay]:
+def list_workdays(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> list[ProviderWorkDay]:
     """Return all provider workday rules."""
-    return db.query(ProviderWorkDay).all()
+    return db.query(ProviderWorkDay).filter(ProviderWorkDay.tenant_id == current_user.tenant_id).all()
 
 
 @router.post("/workdays", response_model=ProviderWorkDayOut, status_code=status.HTTP_201_CREATED)
@@ -64,11 +77,11 @@ def create_workday(
     current_user=Depends(get_current_admin),
 ) -> ProviderWorkDay:
     """Create a new provider workday rule."""
-    if workday_in.provider_id and not get_provider_or_none(db, workday_in.provider_id):
+    if workday_in.provider_id and not get_provider_or_none(db, workday_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
-    if workday_in.location_id and not get_location_or_none(db, workday_in.location_id):
+    if workday_in.location_id and not get_location_or_none(db, workday_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    workday = ProviderWorkDay(**workday_in.dict())
+    workday = ProviderWorkDay(tenant_id=current_user.tenant_id, **workday_in.dict())
     db.add(workday)
     db.commit()
     db.refresh(workday)
@@ -83,12 +96,15 @@ def update_workday(
     current_user=Depends(get_current_admin),
 ) -> ProviderWorkDay:
     """Update an existing provider workday rule."""
-    workday = db.query(ProviderWorkDay).filter(ProviderWorkDay.id == workday_id).first()
+    workday = db.query(ProviderWorkDay).filter(
+        ProviderWorkDay.id == workday_id,
+        ProviderWorkDay.tenant_id == current_user.tenant_id
+    ).first()
     if not workday:
         raise HTTPException(status_code=404, detail="Workday not found")
-    if workday_in.provider_id is not None and not get_provider_or_none(db, workday_in.provider_id):
+    if workday_in.provider_id is not None and not get_provider_or_none(db, workday_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
-    if workday_in.location_id is not None and not get_location_or_none(db, workday_in.location_id):
+    if workday_in.location_id is not None and not get_location_or_none(db, workday_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
     for field, value in workday_in.dict(exclude_unset=True).items():
         setattr(workday, field, value)
@@ -103,7 +119,10 @@ def delete_workday(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
-    workday = db.query(ProviderWorkDay).filter(ProviderWorkDay.id == workday_id).first()
+    workday = db.query(ProviderWorkDay).filter(
+        ProviderWorkDay.id == workday_id,
+        ProviderWorkDay.tenant_id == current_user.tenant_id
+    ).first()
     if not workday:
         raise HTTPException(status_code=404, detail="Workday not found")
     db.delete(workday)
@@ -111,9 +130,12 @@ def delete_workday(
 
 
 @router.get("/special-days", response_model=List[ProviderSpecialDayOut])
-def list_special_days(db: Session = Depends(get_db)) -> list[ProviderSpecialDay]:
+def list_special_days(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> list[ProviderSpecialDay]:
     """Return all special day overrides."""
-    return db.query(ProviderSpecialDay).all()
+    return db.query(ProviderSpecialDay).filter(ProviderSpecialDay.tenant_id == current_user.tenant_id).all()
 
 
 @router.post("/special-days", response_model=ProviderSpecialDayOut, status_code=status.HTTP_201_CREATED)
@@ -123,11 +145,11 @@ def create_special_day(
     current_user=Depends(get_current_admin),
 ) -> ProviderSpecialDay:
     """Create a special day override."""
-    if special_day_in.provider_id and not get_provider_or_none(db, special_day_in.provider_id):
+    if special_day_in.provider_id and not get_provider_or_none(db, special_day_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
-    if special_day_in.location_id and not get_location_or_none(db, special_day_in.location_id):
+    if special_day_in.location_id and not get_location_or_none(db, special_day_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    day = ProviderSpecialDay(**special_day_in.dict())
+    day = ProviderSpecialDay(tenant_id=current_user.tenant_id, **special_day_in.dict())
     db.add(day)
     db.commit()
     db.refresh(day)
@@ -141,11 +163,16 @@ def update_special_day(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> ProviderSpecialDay:
-    day = db.query(ProviderSpecialDay).filter(ProviderSpecialDay.id == day_id).first()
+    day = db.query(ProviderSpecialDay).filter(
+        ProviderSpecialDay.id == day_id,
+        ProviderSpecialDay.tenant_id == current_user.tenant_id
+    ).first()
     if not day:
         raise HTTPException(status_code=404, detail="Special day not found")
-    if special_in.provider_id is not None and not get_provider_or_none(db, special_in.provider_id):
+    if special_in.provider_id is not None and not get_provider_or_none(db, special_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
+    if special_in.location_id is not None and not get_location_or_none(db, special_in.location_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Location not found")
     for field, value in special_in.dict(exclude_unset=True).items():
         setattr(day, field, value)
     db.commit()
@@ -154,8 +181,15 @@ def update_special_day(
 
 
 @router.delete("/special-days/{day_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_special_day(day_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> None:
-    day = db.query(ProviderSpecialDay).filter(ProviderSpecialDay.id == day_id).first()
+def delete_special_day(
+    day_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> None:
+    day = db.query(ProviderSpecialDay).filter(
+        ProviderSpecialDay.id == day_id,
+        ProviderSpecialDay.tenant_id == current_user.tenant_id
+    ).first()
     if not day:
         raise HTTPException(status_code=404, detail="Special day not found")
     db.delete(day)
@@ -163,8 +197,11 @@ def delete_special_day(day_id: int, db: Session = Depends(get_db), current_user=
 
 
 @router.get("/blocked-times", response_model=List[BlockedTimeOut])
-def list_blocked_times(db: Session = Depends(get_db)) -> list[BlockedTime]:
-    return db.query(BlockedTime).all()
+def list_blocked_times(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> list[BlockedTime]:
+    return db.query(BlockedTime).filter(BlockedTime.tenant_id == current_user.tenant_id).all()
 
 
 @router.post("/blocked-times", response_model=BlockedTimeOut, status_code=status.HTTP_201_CREATED)
@@ -173,9 +210,11 @@ def create_blocked_time(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> BlockedTime:
-    if block_in.provider_id and not get_provider_or_none(db, block_in.provider_id):
+    if block_in.provider_id and not get_provider_or_none(db, block_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
-    block = BlockedTime(**block_in.dict())
+    if block_in.location_id and not get_location_or_none(db, block_in.location_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Location not found")
+    block = BlockedTime(tenant_id=current_user.tenant_id, **block_in.dict())
     db.add(block)
     db.commit()
     db.refresh(block)
@@ -189,9 +228,16 @@ def update_blocked_time(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> BlockedTime:
-    block = db.query(BlockedTime).filter(BlockedTime.id == block_id).first()
+    block = db.query(BlockedTime).filter(
+        BlockedTime.id == block_id,
+        BlockedTime.tenant_id == current_user.tenant_id
+    ).first()
     if not block:
         raise HTTPException(status_code=404, detail="Blocked time not found")
+    if block_in.provider_id is not None and not get_provider_or_none(db, block_in.provider_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if block_in.location_id is not None and not get_location_or_none(db, block_in.location_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Location not found")
     for field, value in block_in.dict(exclude_unset=True).items():
         setattr(block, field, value)
     db.commit()
@@ -200,8 +246,15 @@ def update_blocked_time(
 
 
 @router.delete("/blocked-times/{block_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_blocked_time(block_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> None:
-    block = db.query(BlockedTime).filter(BlockedTime.id == block_id).first()
+def delete_blocked_time(
+    block_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> None:
+    block = db.query(BlockedTime).filter(
+        BlockedTime.id == block_id,
+        BlockedTime.tenant_id == current_user.tenant_id
+    ).first()
     if not block:
         raise HTTPException(status_code=404, detail="Blocked time not found")
     db.delete(block)
@@ -209,8 +262,11 @@ def delete_blocked_time(block_id: int, db: Session = Depends(get_db), current_us
 
 
 @router.get("/reserved-times", response_model=List[ReservedTimeOut])
-def list_reserved_times(db: Session = Depends(get_db)) -> list[ReservedTime]:
-    return db.query(ReservedTime).all()
+def list_reserved_times(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> list[ReservedTime]:
+    return db.query(ReservedTime).filter(ReservedTime.tenant_id == current_user.tenant_id).all()
 
 
 @router.post("/reserved-times", response_model=ReservedTimeOut, status_code=status.HTTP_201_CREATED)
@@ -219,7 +275,11 @@ def create_reserved_time(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> ReservedTime:
-    reservation = ReservedTime(**reserved_in.dict())
+    if reserved_in.provider_id and not get_provider_or_none(db, reserved_in.provider_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if reserved_in.location_id and not get_location_or_none(db, reserved_in.location_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Location not found")
+    reservation = ReservedTime(tenant_id=current_user.tenant_id, **reserved_in.dict())
     db.add(reservation)
     db.commit()
     db.refresh(reservation)
@@ -233,9 +293,16 @@ def update_reserved_time(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> ReservedTime:
-    reservation = db.query(ReservedTime).filter(ReservedTime.id == reserved_id).first()
+    reservation = db.query(ReservedTime).filter(
+        ReservedTime.id == reserved_id,
+        ReservedTime.tenant_id == current_user.tenant_id
+    ).first()
     if not reservation:
         raise HTTPException(status_code=404, detail="Reserved time not found")
+    if reserved_in.provider_id is not None and not get_provider_or_none(db, reserved_in.provider_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if reserved_in.location_id is not None and not get_location_or_none(db, reserved_in.location_id, current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Location not found")
     for field, value in reserved_in.dict(exclude_unset=True).items():
         setattr(reservation, field, value)
     db.commit()
@@ -244,8 +311,15 @@ def update_reserved_time(
 
 
 @router.delete("/reserved-times/{reserved_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_reserved_time(reserved_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> None:
-    reservation = db.query(ReservedTime).filter(ReservedTime.id == reserved_id).first()
+def delete_reserved_time(
+    reserved_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> None:
+    reservation = db.query(ReservedTime).filter(
+        ReservedTime.id == reserved_id,
+        ReservedTime.tenant_id == current_user.tenant_id
+    ).first()
     if not reservation:
         raise HTTPException(status_code=404, detail="Reserved time not found")
     db.delete(reservation)
@@ -253,11 +327,14 @@ def delete_reserved_time(reserved_id: int, db: Session = Depends(get_db), curren
 
 
 @router.get("/workload", response_model=WorkloadSummary)
-def get_workload(db: Session = Depends(get_db)) -> WorkloadSummary:
+def get_workload(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> WorkloadSummary:
     """Return counts of bookings within the next day, week and month."""
     now = datetime.utcnow()
     return WorkloadSummary(
-        day=db.query(BookingModel).filter(BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=1)).count(),
-        week=db.query(BookingModel).filter(BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=7)).count(),
-        month=db.query(BookingModel).filter(BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=30)).count(),
+        day=db.query(BookingModel).filter(BookingModel.tenant_id == current_user.tenant_id, BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=1)).count(),
+        week=db.query(BookingModel).filter(BookingModel.tenant_id == current_user.tenant_id, BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=7)).count(),
+        month=db.query(BookingModel).filter(BookingModel.tenant_id == current_user.tenant_id, BookingModel.start_time >= now, BookingModel.start_time < now + timedelta(days=30)).count(),
     )

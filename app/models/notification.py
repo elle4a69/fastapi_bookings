@@ -5,7 +5,7 @@ templates, generated notification records, queue/log entries and
 device push tokens without calling any external provider.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -22,8 +22,8 @@ class Notification(Base):
     type = Column(String, nullable=False, default="email")
     status = Column(String, nullable=False, default="pending")
     content = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     booking = relationship("Booking")
     logs = relationship("NotificationLog", back_populates="notification")
@@ -45,8 +45,8 @@ class NotificationTemplate(Base):
     body = Column(Text, nullable=False)
     locale = Column(String, nullable=False, default="en")
     active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     rules = relationship("ReminderRule", back_populates="template")
     logs = relationship("NotificationLog", back_populates="template")
@@ -67,8 +67,8 @@ class ReminderRule(Base):
     template_id = Column(Integer, ForeignKey("notification_templates.id"), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     conditions_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     template = relationship("NotificationTemplate", back_populates="rules")
     logs = relationship("NotificationLog", back_populates="rule")
@@ -93,9 +93,9 @@ class NotificationLog(Base):
     status = Column(String, nullable=False, default="queued")
     provider = Column(String, nullable=False, default="local-placeholder")
     gateway_response = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    dispatched_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
 
     notification = relationship("Notification", back_populates="logs")
     template = relationship("NotificationTemplate", back_populates="logs")
@@ -119,9 +119,9 @@ class DeviceToken(Base):
     platform = Column(String, nullable=True)
     device_id = Column(String, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
-    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     client = relationship("Client")
     user = relationship("User")
@@ -140,7 +140,7 @@ class NotificationPreference(Base):
     push_enabled = Column(Boolean, default=True, nullable=False)
     reminders_enabled = Column(Boolean, default=True, nullable=False)
     marketing_enabled = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     client = relationship("Client")

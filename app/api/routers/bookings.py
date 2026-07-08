@@ -12,7 +12,7 @@ from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
 from ...services import scheduling_service
 from ...models.booking import Booking as BookingModel
-from ...models import Service
+from ...models import Service, Provider, Client, Location
 from ...services.outbox_service import create_outbox_event
 from ...schemas.booking import (
     Booking,
@@ -20,6 +20,7 @@ from ...schemas.booking import (
     BookingListResponse,
     BookingResponse,
     BookingUpdate,
+    BookingReschedule,
 )
 
 
@@ -60,17 +61,48 @@ def create_booking(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new booking as an admin."""
-    # Validate provider eligibility for the service, if provided
-    if booking_in.provider_id:
-        # Fetch the service to inspect provider assignments
-        service_obj = db.query(Service).filter(
-            Service.id == booking_in.service_id,
-            Service.tenant_id == current_user.tenant_id
+    # 1. Verify service belongs to active tenant
+    service_obj = db.query(Service).filter(
+        Service.id == booking_in.service_id,
+        Service.tenant_id == current_user.tenant_id,
+        Service.deleted_at.is_(None)
+    ).first()
+    if not service_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
+
+    # 2. Verify provider belongs to active tenant
+    provider_obj = db.query(Provider).filter(
+        Provider.id == booking_in.provider_id,
+        Provider.tenant_id == current_user.tenant_id,
+        Provider.deleted_at.is_(None)
+    ).first()
+    if not provider_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
+    # 3. Verify client belongs to active tenant
+    client_obj = db.query(Client).filter(
+        Client.id == booking_in.client_id,
+        Client.tenant_id == current_user.tenant_id,
+        Client.deleted_at.is_(None)
+    ).first()
+    if not client_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+
+    # 4. Verify location (if provided) belongs to active tenant
+    if booking_in.location_id:
+        location_obj = db.query(Location).filter(
+            Location.id == booking_in.location_id,
+            Location.tenant_id == current_user.tenant_id
         ).first()
-        if service_obj and service_obj.providers:
-            provider_ids = {sp.provider_id for sp in service_obj.providers}
-            if booking_in.provider_id not in provider_ids:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
+        if not location_obj:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
+
+    # 5. Validate provider eligibility for the service
+    if service_obj.providers:
+        provider_ids = {sp.provider_id for sp in service_obj.providers}
+        if booking_in.provider_id not in provider_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
+
     booking = BookingModel(tenant_id=current_user.tenant_id, **booking_in.dict())
     db.add(booking)
     db.commit()
@@ -238,6 +270,9 @@ def cancel_booking(
     create_outbox_event(db, "booking.cancelled", payload)
     db.commit()
     db.refresh(booking)
+    if booking.service:
+        from ...services.hold_service import promote_waitlist
+        promote_waitlist(db, service=booking.service)
     return {"ok": True, "data": booking}
 
 
@@ -304,8 +339,7 @@ def noshow_booking(
 @router.post("/bookings/{booking_id}/reschedule", response_model=BookingResponse, tags=["bookings"])
 def reschedule_booking(
     booking_id: int,
-    new_start: datetime,
-    new_end: datetime,
+    reschedule_in: BookingReschedule,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -325,8 +359,8 @@ def reschedule_booking(
     # Release old resources
     scheduling_service.release_resources(db, booking=booking, commit=False)
     # Update times
-    booking.start_time = new_start
-    booking.end_time = new_end
+    booking.start_time = reschedule_in.new_start
+    booking.end_time = reschedule_in.new_end
     db.commit()
     db.refresh(booking)
     # Attempt to allocate resources for the new time

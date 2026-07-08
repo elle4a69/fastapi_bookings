@@ -1,5 +1,6 @@
 """Service CRUD routes."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ def list_services(
     db: Session = Depends(get_db),
 ) -> dict:
     """Return a paginated list of services."""
-    query = db.query(ServiceModel).filter(ServiceModel.tenant_id == tenant.id)
+    query = db.query(ServiceModel).filter(ServiceModel.tenant_id == tenant.id, ServiceModel.deleted_at.is_(None))
     items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
@@ -56,7 +57,8 @@ def get_service(
     """Retrieve a single service by ID."""
     service = db.query(ServiceModel).filter(
         ServiceModel.id == service_id,
-        ServiceModel.tenant_id == tenant.id
+        ServiceModel.tenant_id == tenant.id,
+        ServiceModel.deleted_at.is_(None)
     ).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
@@ -74,7 +76,8 @@ def update_service(
     """Update an existing service."""
     service = db.query(ServiceModel).filter(
         ServiceModel.id == service_id,
-        ServiceModel.tenant_id == tenant.id
+        ServiceModel.tenant_id == tenant.id,
+        ServiceModel.deleted_at.is_(None)
     ).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
@@ -95,10 +98,11 @@ def delete_service(
     """Delete a service."""
     service = db.query(ServiceModel).filter(
         ServiceModel.id == service_id,
-        ServiceModel.tenant_id == tenant.id
+        ServiceModel.tenant_id == tenant.id,
+        ServiceModel.deleted_at.is_(None)
     ).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
-    db.delete(service)
+    service.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "data": service}

@@ -4,7 +4,7 @@ Represents a payment associated with a booking. The payment status
 tracks whether a payment is pending, completed, failed, or refunded.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Numeric, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
@@ -21,8 +21,8 @@ class Payment(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String, nullable=False, default="USD")
     status = Column(String, nullable=False, default="pending")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     booking = relationship("Booking")

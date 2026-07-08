@@ -57,3 +57,8 @@ class BookingResponse(BaseModel):
 class ErrorResponse(BaseModel):
     ok: bool = False
     error: dict
+
+
+class BookingReschedule(BaseModel):
+    new_start: datetime = Field(..., description="New start time of the appointment")
+    new_end: datetime = Field(..., description="New end time of the appointment")

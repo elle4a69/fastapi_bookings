@@ -21,6 +21,7 @@ class Provider(Base):
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     is_visible = Column(Boolean, default=True, nullable=False)

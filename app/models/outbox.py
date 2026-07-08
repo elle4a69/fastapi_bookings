@@ -9,7 +9,7 @@ third‑party integrations.  This module defines a generic
 lifecycles.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from enum import Enum as PyEnum
 
@@ -47,8 +47,8 @@ class OutboxEvent(Base):
     retry_count = Column(Integer, default=0, nullable=False)
     error_log = Column(Text, nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    processed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<OutboxEvent id={self.id} type={self.type} status={self.status}>"
@@ -87,7 +87,7 @@ class BookingEvent(Base):
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=False)
     type = Column(Enum(BookingEventType), nullable=False)
     data = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationship to booking is defined via backref on Booking model for convenience
 

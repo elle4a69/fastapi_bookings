@@ -1,5 +1,6 @@
 """Provider CRUD routes."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ def list_providers(
     db: Session = Depends(get_db),
 ) -> dict:
     """Return a paginated list of providers."""
-    query = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id)
+    query = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id, ProviderModel.deleted_at.is_(None))
     items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
@@ -56,7 +57,8 @@ def get_provider(
     """Retrieve a single provider by ID."""
     provider = db.query(ProviderModel).filter(
         ProviderModel.id == provider_id,
-        ProviderModel.tenant_id == tenant.id
+        ProviderModel.tenant_id == tenant.id,
+        ProviderModel.deleted_at.is_(None)
     ).first()
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -74,7 +76,8 @@ def update_provider(
     """Update an existing provider."""
     provider = db.query(ProviderModel).filter(
         ProviderModel.id == provider_id,
-        ProviderModel.tenant_id == tenant.id
+        ProviderModel.tenant_id == tenant.id,
+        ProviderModel.deleted_at.is_(None)
     ).first()
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -94,11 +97,12 @@ def delete_provider(
 ) -> dict:
     """Delete a provider."""
     provider = db.query(ProviderModel).filter(
-        ProviderModel.id == provider_id,
-        ProviderModel.tenant_id == tenant.id
-    ).first()
+         ProviderModel.id == provider_id,
+         ProviderModel.tenant_id == tenant.id,
+         ProviderModel.deleted_at.is_(None)
+     ).first()
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    db.delete(provider)
+    provider.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "data": provider}

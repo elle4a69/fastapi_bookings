@@ -6,7 +6,7 @@ This project provides a **self‑contained booking management API** built with F
 
 * **Self‑contained**: Uses a local SQLite database and seeds demo data on first startup.  No external services are required.
 * **Admin and Public API**: Exposes clean REST endpoints under `/api/admin` and `/api/public` for use by front‑end clients.
-* **Clean booking API**: Exposes a front-end-ready booking API with admin and public routes. Recurring booking series and automatic waitlist promotion are intentionally excluded from this handoff build.
+* **Clean booking API**: Exposes a front-end-ready booking API with admin and public routes. Recurring booking series and automatic waitlist promotion are fully supported and implemented in this build.
 * **Front‑end bootstrap endpoints**: `/api/public/bootstrap` and `/api/admin/dashboard/bootstrap` return all information needed to initialise a booking flow or admin dashboard in a single request.
 * **Booking state machine**: Bookings transition through `pending`, `confirmed`, `cancelled`, `completed`, `no_show` and `rescheduled` states via dedicated endpoints.
 * **Success/error envelopes**: All API responses follow a consistent envelope shape with `ok`, `data` and `meta` fields on success and a structured `error` object on failure.

@@ -1,6 +1,6 @@
 """General system models: plugin state toggles and GDPR consent logs."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
@@ -22,7 +22,7 @@ class PluginState(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     is_enabled = Column(Boolean, default=True, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def __repr__(self) -> str:
         return f"<PluginState name={self.name} is_enabled={self.is_enabled}>"
@@ -43,7 +43,7 @@ class GdprConsent(Base):
     consent_type = Column(String, default="gdpr", nullable=False)   # gdpr | marketing | terms
     is_approved = Column(Boolean, default=True, nullable=False)
     ip_address = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     client = relationship("Client")
 

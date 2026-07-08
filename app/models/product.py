@@ -7,9 +7,9 @@ recommended upsells.  The relationship between services and
 products is defined in the ``ServiceProduct`` association table.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -33,10 +33,10 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    price = Column(Float, nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
     sku = Column(String, nullable=True, unique=True)
     active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     services = relationship(

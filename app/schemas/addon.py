@@ -1,6 +1,7 @@
 """Schemas for add‑on models."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -10,7 +11,7 @@ class AddOnBase(BaseModel):
     service_id: int
     name: str
     description: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
     duration: int = 0
     active: bool = True
 

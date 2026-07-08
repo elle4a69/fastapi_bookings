@@ -10,7 +10,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 
-from ...db.database import get_db
+from ..deps import get_db, get_public_tenant
+from ...models.tenant import Tenant
 from ...models import Service, Provider, Location, WaitlistEntry, WaitlistStatus
 from ...schemas.waitlist import WaitlistCreate, WaitlistOut
 
@@ -21,23 +22,25 @@ router = APIRouter(prefix="/api/public/waitlist", tags=["waitlist"])
 def add_to_waitlist(
     payload: WaitlistCreate,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> WaitlistOut:
     """Add a client to the waitlist for a service.
     """
-    service = db.query(Service).filter(Service.id == payload.service_id).first()
+    service = db.query(Service).filter(Service.id == payload.service_id, Service.tenant_id == tenant.id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if payload.provider_id:
-        provider = db.query(Provider).filter(Provider.id == payload.provider_id).first()
+        provider = db.query(Provider).filter(Provider.id == payload.provider_id, Provider.tenant_id == tenant.id).first()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
     location = None
     if payload.location_id:
-        location = db.query(Location).filter(Location.id == payload.location_id).first()
+        location = db.query(Location).filter(Location.id == payload.location_id, Location.tenant_id == tenant.id).first()
         if not location:
             raise HTTPException(status_code=404, detail="Location not found")
     entry = WaitlistEntry(
+        tenant_id=tenant.id,
         service_id=payload.service_id,
         provider_id=payload.provider_id,
         location_id=payload.location_id,
@@ -56,8 +59,12 @@ def add_to_waitlist(
 def list_waitlist(
     service_id: int,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> List[WaitlistOut]:
     """List waitlist entries for a service.
     """
-    entries = db.query(WaitlistEntry).filter(WaitlistEntry.service_id == service_id).all()
+    service = db.query(Service).filter(Service.id == service_id, Service.tenant_id == tenant.id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    entries = db.query(WaitlistEntry).filter(WaitlistEntry.service_id == service_id, WaitlistEntry.tenant_id == tenant.id).all()
     return [WaitlistOut.from_orm(e) for e in entries]

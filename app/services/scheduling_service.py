@@ -70,12 +70,12 @@ def compute_availability(
     else:
         # Use explicit service-provider associations if they exist
         if service.providers:
-            providers = [sp.provider for sp in service.providers]
+            providers = [sp.provider for sp in service.providers if sp.provider.deleted_at is None]
         else:
             # Fallback to all active providers belonging to the same tenant
             providers = (
                 db.query(Provider)
-                .filter(Provider.tenant_id == service.tenant_id, Provider.active.is_(True))
+                .filter(Provider.tenant_id == service.tenant_id, Provider.active.is_(True), Provider.deleted_at.is_(None))
                 .all()
             )
 
@@ -249,6 +249,8 @@ def compute_availability(
                     provider_blocked,
                     active_holds,
                     active_reservations,
+                    new_buffer_before=service.buffer_before if service.buffer_before else 0,
+                    new_buffer_after=service.buffer_after if service.buffer_after else 0,
                 ):
                     continue
 

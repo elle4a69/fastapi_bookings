@@ -563,13 +563,18 @@ These do not need to change:
 
 1. **Contracts are stale** — [x] **Done**. `contracts/route-manifest.json` and `contracts/types.ts` have been fully regenerated from the running backend's `/openapi.json` schema.
 
-2. **Availability engine does not yet use provider schedules** — `ProviderWorkDay`, `ProviderSpecialDay`, `BlockedTime` are persisted but `scheduling_service.py` still ignores them. The engine treats every hour as available.
+2. **Availability engine does not yet use provider schedules** — [x] **Done**. The availability engine fully utilizes provider working schedules, special overrides, and blockages to compute slots.
 
 3. **Outbox not wired** — [x] **Done**. The Outbox worker is fully implemented and active in lifespan, and booking status transitions enqueue transactional outbox events correctly.
 
 4. **`updated_at` still not auto-refreshing on PATCH** — the `onupdate` was added to `Booking.updated_at` in this session but not audited across all other models.
 
 5. **`find_or_create_client` response shape** — [x] **Done**. The `/api/public/clients/identify` endpoint has been normalized to return `{"created": bool}` inside the schema data payload, and TypeScript contracts regenerated.
+
+6. **Public Authentication Scoping** — [x] **Done**. Securing public endpoints to require the `X-Token` header and scoping queries by resolved `tenant.id`.
+
+7. **Multi-Service Availability Search** — [x] **Done**. Implemented timezone-aware availability search across all tenant active services (optionally filtered by category) when `service_id` is omitted.
+
 
 
 What Remains to Be Done (Future Scope)

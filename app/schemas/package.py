@@ -1,6 +1,7 @@
 """Schemas for service packages and steps."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -9,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class PackageBase(BaseModel):
     name: str
     description: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
     active: bool = True
 
 
@@ -32,7 +33,7 @@ class PackageStepBase(BaseModel):
     service_id: int
     order: int
     offset_days: int = 0
-    price: Optional[float] = None
+    price: Optional[Decimal] = None
     active: bool = True
 
 

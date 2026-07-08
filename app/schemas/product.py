@@ -1,6 +1,7 @@
 """Schemas for product models."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -9,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
-    price: float
+    price: Decimal
     sku: Optional[str] = None
     active: bool = True
 

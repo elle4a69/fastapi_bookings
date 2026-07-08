@@ -1,5 +1,6 @@
 """Client CRUD routes."""
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ def list_clients(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of clients."""
-    query = db.query(ClientModel).filter(ClientModel.tenant_id == current_user.tenant_id)
+    query = db.query(ClientModel).filter(ClientModel.tenant_id == current_user.tenant_id, ClientModel.deleted_at.is_(None))
     items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
@@ -51,7 +52,7 @@ def get_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Retrieve a single client by ID."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id, ClientModel.deleted_at.is_(None)).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     return {"ok": True, "data": client}
@@ -65,7 +66,7 @@ def update_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Update an existing client."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id, ClientModel.deleted_at.is_(None)).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     for field, value in client_in.dict(exclude_unset=True).items():
@@ -82,9 +83,9 @@ def delete_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Delete a client."""
-    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id).first()
+    client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id, ClientModel.deleted_at.is_(None)).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    db.delete(client)
+    client.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "data": client}

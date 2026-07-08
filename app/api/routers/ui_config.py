@@ -14,12 +14,14 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends
 
 from ...db.database import get_db
+from ..deps import get_public_tenant
+from ...models import Tenant
 
 router = APIRouter(prefix="/api/public/ui-config", tags=["ui-config"])
 
 
 @router.get("", response_model=Any)
-def get_public_ui_config() -> Dict[str, Any]:
+def get_public_ui_config(tenant: Tenant = Depends(get_public_tenant)) -> Dict[str, Any]:
     """Return configuration for the public booking UI.
 
     The returned object contains flags indicating which modules are
@@ -44,7 +46,7 @@ def get_public_ui_config() -> Dict[str, Any]:
 
 
 @router.get("/admin", response_model=Any)
-def get_admin_ui_config() -> Dict[str, Any]:
+def get_admin_ui_config(tenant: Tenant = Depends(get_public_tenant)) -> Dict[str, Any]:
     """Return configuration for the admin dashboard UI.
 
     This endpoint returns module flags and other settings specific to

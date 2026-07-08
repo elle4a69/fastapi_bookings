@@ -4,11 +4,12 @@ import json
 import hmac
 import hashlib
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 from sqlalchemy.orm import Session
 
 from ..db.database import SessionLocal
+from ..core.config import settings
 from ..models.outbox import OutboxEvent
 from ..models.webhook import WebhookRegistration
 from .clicksend import clicksend_client
@@ -32,8 +33,8 @@ async def start_outbox_worker():
         except Exception as e:
             logger.error(f"Error in outbox processing loop: {str(e)}\n{traceback.format_exc()}")
         
-        # Poll every 5 seconds
-        await asyncio.sleep(5.0)
+        # Poll every settings.OUTBOX_POLL_INTERVAL seconds
+        await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL)
 
 async def stop_outbox_worker(task: asyncio.Task):
     """Gracefully stop the outbox worker task."""
@@ -55,10 +56,10 @@ async def process_pending_outbox_events(db: Session = None):
         db = SessionLocal()
         should_close = True
     try:
-        # Fetch pending or failed events with less than 5 retries
+        # Fetch pending or failed events with less than settings.OUTBOX_MAX_RETRIES retries
         events = db.query(OutboxEvent).filter(
             OutboxEvent.status.in_(["PENDING", "FAILED"]),
-            OutboxEvent.retry_count < 5
+            OutboxEvent.retry_count < settings.OUTBOX_MAX_RETRIES
         ).order_by(OutboxEvent.created_at.asc()).limit(20).all()
         
         if not events:
@@ -109,7 +110,7 @@ async def process_pending_outbox_events(db: Session = None):
                 # Success
                 event.status = "PROCESSED"
                 event.processed = True # legacy compatibility
-                event.processed_at = datetime.utcnow()
+                event.processed_at = datetime.now(timezone.utc)
                 db.commit()
                 logger.info(f"Successfully processed outbox event {event.id}")
                 

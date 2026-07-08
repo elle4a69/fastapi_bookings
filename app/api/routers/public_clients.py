@@ -47,7 +47,8 @@ def get_public_client_from_token(
     client = db.query(ClientModel).filter(
         ClientModel.id == client_id,
         ClientModel.tenant_id == tenant.id,
-        ClientModel.active.is_(True)
+        ClientModel.active.is_(True),
+        ClientModel.deleted_at.is_(None)
     ).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -90,12 +91,14 @@ def identify_or_create_client(
     if phone:
         client = db.query(ClientModel).filter(
             ClientModel.phone == phone,
-            ClientModel.tenant_id == tenant.id
+            ClientModel.tenant_id == tenant.id,
+            ClientModel.deleted_at.is_(None)
         ).first()
     if not client and email:
         client = db.query(ClientModel).filter(
             ClientModel.email == email,
-            ClientModel.tenant_id == tenant.id
+            ClientModel.tenant_id == tenant.id,
+            ClientModel.deleted_at.is_(None)
         ).first()
     created = False
     if not client:
@@ -118,7 +121,8 @@ def register_client(
     """Register a new client account."""
     existing = db.query(ClientModel).filter(
         ClientModel.email == client_in.email,
-        ClientModel.tenant_id == tenant.id
+        ClientModel.tenant_id == tenant.id,
+        ClientModel.deleted_at.is_(None)
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="Client email already exists")
@@ -158,7 +162,8 @@ def login_client(
     client = db.query(ClientModel).filter(
         ClientModel.email == login.email,
         ClientModel.tenant_id == tenant.id,
-        ClientModel.active.is_(True)
+        ClientModel.active.is_(True),
+        ClientModel.deleted_at.is_(None)
     ).first()
     if not client or not client.password_hash:
         raise HTTPException(status_code=401, detail="Invalid client login")
@@ -190,8 +195,17 @@ def update_my_profile(
 
 
 @router.post("/password-reset/request")
-def request_password_reset(login: PublicClientLogin, db: Session = Depends(get_db)) -> dict:
+def request_password_reset(
+    login: PublicClientLogin,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
     """Password reset request placeholder.  Actual dispatch wired to notification system later."""
+    client = db.query(ClientModel).filter(
+        ClientModel.email == login.email,
+        ClientModel.tenant_id == tenant.id,
+        ClientModel.deleted_at.is_(None)
+    ).first()
     return {"ok": True, "data": {"message": "If the account exists, a reset link will be sent."}}
 
 

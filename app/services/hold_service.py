@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
 from ..models import (
     Service,
@@ -38,6 +39,85 @@ def create_hold(
     This reserves the slot while a client fills out a booking form, helping to
     prevent double-booking.
     """
+    # Enforce UTC timezone awareness
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    # Acquire a row lock on the provider if provided to serialize concurrent checks
+    if provider:
+        db.query(Provider).filter(Provider.id == provider.id).with_for_update().first()
+
+    # Check for overlapping active bookings/holds/blocks/reservations
+    from ..core.state_machine import BookingStatus
+    from ..models import Booking, BlockedTime, ReservedTime
+    from .scheduling_utils import check_slot_overlaps
+
+    now_utc = datetime.now(timezone.utc)
+    active_bookings = (
+        db.query(Booking)
+        .filter(
+            Booking.provider_id == (provider.id if provider else None),
+            Booking.status != BookingStatus.CANCELLED,
+            Booking.end_time > start_time,
+            Booking.start_time < end_time,
+        )
+        .all()
+    )
+
+    provider_blocked = (
+        db.query(BlockedTime)
+        .filter(
+            BlockedTime.tenant_id == service.tenant_id,
+            BlockedTime.active.is_(True),
+            BlockedTime.end_time > start_time,
+            BlockedTime.start_time < end_time,
+            (BlockedTime.provider_id == (provider.id if provider else None)) | (BlockedTime.provider_id.is_(None)),
+        )
+        .all()
+    )
+
+    active_holds = (
+        db.query(Hold)
+        .filter(
+            Hold.tenant_id == service.tenant_id,
+            Hold.status == HoldStatus.PENDING,
+            Hold.expires_at > now_utc,
+            Hold.end_time > start_time,
+            Hold.start_time < end_time,
+            (Hold.provider_id == (provider.id if provider else None)) | (Hold.provider_id.is_(None)),
+        )
+        .all()
+    )
+
+    active_reservations = (
+        db.query(ReservedTime)
+        .filter(
+            ReservedTime.tenant_id == service.tenant_id,
+            ReservedTime.end_time > start_time,
+            ReservedTime.start_time < end_time,
+            (ReservedTime.provider_id == (provider.id if provider else None)) | (ReservedTime.provider_id.is_(None)),
+            (ReservedTime.expires_at.is_(None)) | (ReservedTime.expires_at > now_utc),
+        )
+        .all()
+    )
+
+    if check_slot_overlaps(
+        start_time,
+        end_time,
+        active_bookings,
+        provider_blocked,
+        active_holds,
+        active_reservations,
+        new_buffer_before=service.buffer_before if service.buffer_before else 0,
+        new_buffer_after=service.buffer_after if service.buffer_after else 0,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The requested slot is no longer available."
+        )
+
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in)
     
     hold = Hold(
@@ -83,6 +163,9 @@ def expire_holds(db: Session) -> int:
         
     if count > 0:
         db.commit()
+        for hold in expired:
+            if hold.service:
+                promote_waitlist(db, service=hold.service)
         
     return count
 
@@ -103,6 +186,7 @@ def promote_waitlist(db: Session, *, service: Service) -> None:
             WaitlistEntry.status == WaitlistStatus.REQUESTED,
         )
         .order_by(WaitlistEntry.created_at.asc())
+        .with_for_update()
         .all()
     )
     
@@ -112,6 +196,11 @@ def promote_waitlist(db: Session, *, service: Service) -> None:
         start_time = entry.desired_date_from or now_utc
         end_time = entry.desired_date_to or (start_time + timedelta(days=7))
         
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=timezone.utc)
+
         # Check if start_time is in the past, if so start from now
         if start_time < now_utc:
             start_time = now_utc
@@ -150,5 +239,6 @@ def promote_waitlist(db: Session, *, service: Service) -> None:
             
             # Update waitlist status to NOTIFIED
             entry.status = WaitlistStatus.NOTIFIED
+            db.flush()
             
     db.commit()

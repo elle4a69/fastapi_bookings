@@ -36,8 +36,13 @@ def check_slot_overlaps(
     provider_blocked: List[Any],
     active_holds: List[Any],
     active_reservations: List[Any],
+    new_buffer_before: int = 0,
+    new_buffer_after: int = 0,
 ) -> bool:
     """Check if a time slot overlaps with active bookings, blocked periods, holds, or reservations."""
+    padded_slot_start = slot_start - timedelta(minutes=new_buffer_before)
+    padded_slot_end = slot_end + timedelta(minutes=new_buffer_after)
+
     # 1. Check overlaps with Bookings (considering buffer_before and buffer_after)
     for b in active_bookings:
         b_start = b.start_time
@@ -52,7 +57,7 @@ def check_slot_overlaps(
         blocked_start = b_start - timedelta(minutes=buf_before)
         blocked_end = b_end + timedelta(minutes=buf_after)
 
-        if blocked_start < slot_end and blocked_end > slot_start:
+        if blocked_start < padded_slot_end and blocked_end > padded_slot_start:
             return True
 
     # 2. Check overlaps with BlockedTime
@@ -63,7 +68,7 @@ def check_slot_overlaps(
         bt_end = bt.end_time
         if bt_end.tzinfo is None:
             bt_end = bt_end.replace(tzinfo=timezone.utc)
-        if bt_start < slot_end and bt_end > slot_start:
+        if bt_start < padded_slot_end and bt_end > padded_slot_start:
             return True
 
     # 3. Check overlaps with unexpired Hold
@@ -74,7 +79,7 @@ def check_slot_overlaps(
         h_end = h.end_time
         if h_end.tzinfo is None:
             h_end = h_end.replace(tzinfo=timezone.utc)
-        if h_start < slot_end and h_end > slot_start:
+        if h_start < padded_slot_end and h_end > padded_slot_start:
             return True
 
     # 4. Check overlaps with unexpired ReservedTime
@@ -85,7 +90,7 @@ def check_slot_overlaps(
         r_end = r.end_time
         if r_end.tzinfo is None:
             r_end = r_end.replace(tzinfo=timezone.utc)
-        if r_start < slot_end and r_end > slot_start:
+        if r_start < padded_slot_end and r_end > padded_slot_start:
             return True
 
     return False

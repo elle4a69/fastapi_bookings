@@ -10,8 +10,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
-from ...models import AdditionalField, AdditionalFieldResponse, Service
+from ..deps import get_current_admin, get_db, get_public_tenant
+from ...models import AdditionalField, AdditionalFieldResponse, Service, Tenant
 from ...schemas.additional_field import (
     AdditionalFieldCreate,
     AdditionalFieldOut,
@@ -26,12 +26,13 @@ router = APIRouter(tags=["additional-fields"])
 
 def field_query(
     db: Session,
+    tenant_id: int,
     *,
     scope: Optional[str] = None,
     service_id: Optional[int] = None,
     active_only: bool = True,
 ):
-    query = db.query(AdditionalField)
+    query = db.query(AdditionalField).filter(AdditionalField.tenant_id == tenant_id)
     if scope:
         query = query.filter(AdditionalField.scope == scope)
     if service_id is not None:
@@ -48,21 +49,26 @@ def list_public_additional_fields(
     scope: Optional[str] = Query(None),
     service_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> list:
     """Return active fields for public forms."""
     if service_id is not None:
-        if not db.query(Service).filter(Service.id == service_id).first():
+        if not db.query(Service).filter(Service.id == service_id, Service.tenant_id == tenant.id).first():
             raise HTTPException(status_code=404, detail="Service not found")
-    return field_query(db, scope=scope, service_id=service_id, active_only=True).all()
+    return field_query(db, tenant_id=tenant.id, scope=scope, service_id=service_id, active_only=True).all()
 
 
 @router.get("/api/public/services/{service_id}/intake-form", response_model=list[AdditionalFieldOut])
-def get_public_service_intake_form(service_id: int, db: Session = Depends(get_db)) -> list:
+def get_public_service_intake_form(
+    service_id: int,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
+) -> list:
     """Return booking + service-specific intake fields for a service."""
-    if not db.query(Service).filter(Service.id == service_id).first():
+    if not db.query(Service).filter(Service.id == service_id, Service.tenant_id == tenant.id).first():
         raise HTTPException(status_code=404, detail="Service not found")
-    generic = field_query(db, scope="booking", service_id=None, active_only=True).all()
-    service_fields = field_query(db, scope="service", service_id=service_id, active_only=True).all()
+    generic = field_query(db, tenant_id=tenant.id, scope="booking", service_id=None, active_only=True).all()
+    service_fields = field_query(db, tenant_id=tenant.id, scope="service", service_id=service_id, active_only=True).all()
     return generic + service_fields
 
 
@@ -70,12 +76,14 @@ def get_public_service_intake_form(service_id: int, db: Session = Depends(get_db
 def submit_public_additional_field_responses(
     payload: AdditionalFieldSubmitRequest,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> list:
     """Submit additional/intake field responses."""
     saved = []
     for response in payload.responses:
         field = db.query(AdditionalField).filter(
             AdditionalField.id == response.field_id,
+            AdditionalField.tenant_id == tenant.id,
             AdditionalField.active.is_(True),
         ).first()
         if not field:
@@ -102,7 +110,7 @@ def list_admin_additional_fields(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> list:
-    return field_query(db, scope=scope, service_id=service_id, active_only=active_only).all()
+    return field_query(db, tenant_id=current_user.tenant_id, scope=scope, service_id=service_id, active_only=active_only).all()
 
 
 @router.post("/api/admin/additional-fields", response_model=AdditionalFieldOut, status_code=status.HTTP_201_CREATED)
@@ -111,7 +119,7 @@ def create_additional_field(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> AdditionalField:
-    field = AdditionalField(**field_in.dict())
+    field = AdditionalField(**field_in.dict(), tenant_id=current_user.tenant_id)
     db.add(field)
     db.commit()
     db.refresh(field)
@@ -125,7 +133,7 @@ def update_additional_field(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> AdditionalField:
-    field = db.query(AdditionalField).filter(AdditionalField.id == field_id).first()
+    field = db.query(AdditionalField).filter(AdditionalField.id == field_id, AdditionalField.tenant_id == current_user.tenant_id).first()
     if not field:
         raise HTTPException(status_code=404, detail="Additional field not found")
     for k, v in field_in.dict(exclude_unset=True).items():
@@ -141,7 +149,7 @@ def delete_additional_field(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
-    field = db.query(AdditionalField).filter(AdditionalField.id == field_id).first()
+    field = db.query(AdditionalField).filter(AdditionalField.id == field_id, AdditionalField.tenant_id == current_user.tenant_id).first()
     if not field:
         raise HTTPException(status_code=404, detail="Additional field not found")
     db.delete(field)
@@ -155,7 +163,8 @@ def list_admin_field_responses(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> list:
-    q = db.query(AdditionalFieldResponse)
+    q = db.query(AdditionalFieldResponse).join(AdditionalField)
+    q = q.filter(AdditionalField.tenant_id == current_user.tenant_id)
     if booking_id is not None:
         q = q.filter(AdditionalFieldResponse.booking_id == booking_id)
     if client_id is not None:

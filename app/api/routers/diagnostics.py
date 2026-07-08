@@ -57,7 +57,7 @@ def get_system_diagnostics(
             "packages": True,
             "holds": True,
             "waitlist": True,
-            "multi_tenant": False,  # toggle once multi‑tenant support is added
+            "multi_tenant": True,  # toggle once multi‑tenant support is added
         },
     }
     return diagnostics

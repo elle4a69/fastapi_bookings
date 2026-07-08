@@ -9,9 +9,9 @@ relative to the initial booking.  Packages can be sold with a single
 price or allow step‑level pricing.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -34,9 +34,9 @@ class ServicePackage(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    price = Column(Float, nullable=True)
+    price = Column(Numeric(10, 2), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     steps = relationship(
@@ -66,7 +66,7 @@ class PackageStep(Base):
     service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
     order = Column(Integer, nullable=False)
     offset_days = Column(Integer, default=0, nullable=False)
-    price = Column(Float, nullable=True)
+    price = Column(Numeric(10, 2), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
 
     # Relationships

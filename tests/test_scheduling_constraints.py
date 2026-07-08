@@ -97,7 +97,8 @@ def test_service_buffers(db_session):
     tenant, provider, client, service = _setup_base_data(db_session)
 
     # Update service buffers: buffer_before=15, buffer_after=15
-    service.buffer_before = 15
+    # Update service buffers: buffer_before=0, buffer_after=15
+    service.buffer_before = 0
     service.buffer_after = 15
     db_session.commit()
 
@@ -124,10 +125,10 @@ def test_service_buffers(db_session):
 
     slots = compute_availability(db_session, service=service, provider=provider, start_time=start_time, end_time=end_time)
 
-    # Booking with buffer_before=15 and buffer_after=15 means 09:30 to 10:30 is blocked.
+    # Booking with buffer_before=0 and buffer_after=15 means 09:45 to 10:30 is blocked.
     # Candidates starting at:
     # 09:00 (ends 09:30) -> Free!
-    # 09:15 (ends 09:45) -> Overlaps with 09:30-10:30 block -> Blocked
+    # 09:15 (ends 09:45) -> Overlaps with 09:45-10:30 block -> Blocked
     # 09:30 (ends 10:00) -> Overlaps -> Blocked
     # 10:30 (ends 11:00) -> Free! (starts right at 10:30, after 10:30 blocked end)
     # Let's assert we have exactly 2 free slots: 09:00-09:30 and 10:30-11:00.

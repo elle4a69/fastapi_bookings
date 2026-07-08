@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     # Firebase Settings
     FIREBASE_CREDENTIALS_JSON: str = Field("", description="Firebase Service Account JSON string or filepath")
 
+    # Outbox settings
+    OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")
+    OUTBOX_MAX_RETRIES: int = Field(5, description="Max retries for enqueued outbox events")
+
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.APP_ENV == "production":

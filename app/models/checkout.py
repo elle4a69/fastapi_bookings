@@ -8,7 +8,7 @@ integrate with external gateways yet; they give the front end and later
 gateway integrations a stable database contract.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Numeric, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -41,8 +41,8 @@ class Invoice(Base):
     promotion_code = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     booking = relationship("Booking")
     client = relationship("Client")
@@ -76,7 +76,7 @@ class InvoiceLine(Base):
     unit_price = Column(Numeric(10, 2), default=0.0, nullable=False)
     amount = Column(Numeric(10, 2), default=0.0, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     invoice = relationship("Invoice", back_populates="lines")
     tenant = relationship("Tenant")
@@ -101,9 +101,9 @@ class PromotionCode(Base):
     active = Column(Boolean, default=True, nullable=False)
     max_redemptions = Column(Integer, nullable=True)
     times_redeemed = Column(Integer, default=0, nullable=False)
-    starts_at = Column(DateTime, nullable=True)
-    expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    starts_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     tenant = relationship("Tenant")
 
@@ -122,7 +122,7 @@ class TaxRate(Base):
     name = Column(String, nullable=False)
     rate_percent = Column(Numeric(10, 2), default=0.0, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     tenant = relationship("Tenant")
 
@@ -137,7 +137,7 @@ class Tip(Base):
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     note = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     invoice = relationship("Invoice", back_populates="tips")
     tenant = relationship("Tenant")
@@ -159,7 +159,7 @@ class PaymentProcessorConfig(Base):
     display_name = Column(String, nullable=True)
     public_key = Column(String, nullable=True)
     config_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     tenant = relationship("Tenant")

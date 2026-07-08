@@ -7,7 +7,7 @@ finite state machine defined in :mod:`..core.state_machine`.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, Index, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -16,6 +16,17 @@ from ..core.state_machine import BookingStatus
 
 class Booking(Base):
     __tablename__ = "bookings"
+
+    __table_args__ = (
+        Index(
+            "uq_active_bookings",
+            "provider_id",
+            "start_time",
+            unique=True,
+            sqlite_where=text("status != 'cancelled'"),
+            postgresql_where=text("status != 'cancelled'"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
