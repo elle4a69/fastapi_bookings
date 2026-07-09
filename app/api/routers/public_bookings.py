@@ -79,9 +79,14 @@ def create_public_booking(
     booking_data["status"] = BookingStatus.PENDING
     booking_data["tenant_id"] = tenant.id
 
+    from sqlalchemy.exc import IntegrityError
     booking = BookingModel(**booking_data)
     db.add(booking)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
     db.refresh(booking)
 
     try:

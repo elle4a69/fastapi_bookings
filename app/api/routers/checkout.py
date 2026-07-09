@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, get_current_tenant, get_public_tenant
 from ...models import (
     AddOn,
     Booking,
@@ -28,6 +28,7 @@ from ...models import (
     TaxRate,
     Tip,
 )
+from ...models.tenant import Tenant
 from ...schemas.checkout import (
     InvoiceCreate,
     InvoiceListResponse,
@@ -58,10 +59,10 @@ def now_utc() -> datetime:
     return datetime.utcnow()
 
 
-def validate_promotion(db: Session, code: Optional[str], subtotal: float) -> dict:
+def validate_promotion(db: Session, code: Optional[str], subtotal: float, tenant_id: int) -> dict:
     if not code:
         return {"valid": False, "discount": 0.0, "reason": "No promotion code supplied"}
-    promo = db.query(PromotionCode).filter(PromotionCode.code == code).first()
+    promo = db.query(PromotionCode).filter(PromotionCode.code == code, PromotionCode.tenant_id == tenant_id).first()
     if not promo:
         return {"valid": False, "discount": 0.0, "reason": "Promotion code not found"}
     if not promo.active:
@@ -78,20 +79,20 @@ def validate_promotion(db: Session, code: Optional[str], subtotal: float) -> dic
     return {"valid": True, "discount": round(discount, 2), "reason": None, "promotion": PromotionCodeOut.from_orm(promo)}
 
 
-def build_quote(db: Session, payload: QuoteRequest) -> dict:
+def build_quote(db: Session, payload: QuoteRequest, tenant_id: int) -> dict:
     lines: list[dict] = []
     subtotal = 0.0
 
     service = None
     if payload.booking_id:
-        booking = db.query(Booking).filter(Booking.id == payload.booking_id).first()
+        booking = db.query(Booking).filter(Booking.id == payload.booking_id, Booking.tenant_id == tenant_id).first()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found")
         service = booking.service
         if payload.client_id is None:
             payload.client_id = booking.client_id
     elif payload.service_id:
-        service = db.query(Service).filter(Service.id == payload.service_id).first()
+        service = db.query(Service).filter(Service.id == payload.service_id, Service.tenant_id == tenant_id).first()
         if not service:
             raise HTTPException(status_code=404, detail="Service not found")
 
@@ -101,7 +102,11 @@ def build_quote(db: Session, payload: QuoteRequest) -> dict:
         subtotal += amount
 
     for add_on_id in payload.add_on_ids:
-        add_on = db.query(AddOn).filter(AddOn.id == add_on_id, AddOn.active.is_(True)).first()
+        add_on = db.query(AddOn).join(Service).filter(
+            AddOn.id == add_on_id,
+            AddOn.active.is_(True),
+            Service.tenant_id == tenant_id
+        ).first()
         if not add_on:
             raise HTTPException(status_code=404, detail=f"Add-on {add_on_id} not found")
         amount = float(add_on.price or 0.0)
@@ -109,7 +114,10 @@ def build_quote(db: Session, payload: QuoteRequest) -> dict:
         subtotal += amount
 
     for product_id in payload.product_ids:
-        product = db.query(Product).filter(Product.id == product_id, Product.active.is_(True)).first()
+        product = db.query(Product).filter(
+            Product.id == product_id,
+            Product.active.is_(True)
+        ).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
         amount = float(product.price or 0.0)
@@ -117,21 +125,24 @@ def build_quote(db: Session, payload: QuoteRequest) -> dict:
         subtotal += amount
 
     if payload.package_id:
-        package = db.query(ServicePackage).filter(ServicePackage.id == payload.package_id, ServicePackage.active.is_(True)).first()
+        package = db.query(ServicePackage).filter(
+            ServicePackage.id == payload.package_id,
+            ServicePackage.active.is_(True)
+        ).first()
         if not package:
             raise HTTPException(status_code=404, detail="Package not found")
         amount = float(package.price) if package.price is not None else sum(float(step.price or 0.0) for step in package.steps if step.active)
         lines.append({"line_type": "package", "item_id": package.id, "description": package.name, "quantity": 1, "unit_price": amount, "amount": amount})
         subtotal += amount
 
-    promo_result = validate_promotion(db, payload.promotion_code, subtotal)
+    promo_result = validate_promotion(db, payload.promotion_code, subtotal, tenant_id)
     discount = float(promo_result.get("discount") or 0.0)
     if promo_result.get("valid") and discount:
         lines.append({"line_type": "discount", "item_id": None, "description": f"Promotion {payload.promotion_code}", "quantity": 1, "unit_price": -discount, "amount": -discount})
 
     taxable = max(0.0, subtotal - discount)
     tax_total = 0.0
-    for tax in db.query(TaxRate).filter(TaxRate.active.is_(True)).all():
+    for tax in db.query(TaxRate).filter(TaxRate.active.is_(True), TaxRate.tenant_id == tenant_id).all():
         tax_amount = round(taxable * float(tax.rate_percent or 0.0) / 100.0, 2)
         if tax_amount:
             lines.append({"line_type": "tax", "item_id": tax.id, "description": tax.name, "quantity": 1, "unit_price": tax_amount, "amount": tax_amount})
@@ -156,32 +167,58 @@ def build_quote(db: Session, payload: QuoteRequest) -> dict:
 
 
 @router.post("/api/public/quote", response_model=QuoteResponse)
-def create_quote(payload: QuoteRequest, db: Session = Depends(get_db)) -> dict:
+def create_quote(
+    payload: QuoteRequest,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
     """Calculate a quote before creating an invoice."""
-    return {"ok": True, "data": build_quote(db, payload)}
+    return {"ok": True, "data": build_quote(db, payload, tenant.id)}
 
 
 @router.get("/api/public/payment-processor/config")
-def public_payment_processor_config(db: Session = Depends(get_db)) -> dict:
-    configs = db.query(PaymentProcessorConfig).filter(PaymentProcessorConfig.enabled.is_(True)).all()
+def public_payment_processor_config(
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    configs = db.query(PaymentProcessorConfig).filter(
+        PaymentProcessorConfig.enabled.is_(True),
+        PaymentProcessorConfig.tenant_id == tenant.id
+    ).all()
     return {"ok": True, "data": [{"provider": c.provider, "display_name": c.display_name, "public_key": c.public_key} for c in configs]}
 
 
 @router.get("/api/public/payment-methods")
-def public_payment_methods(db: Session = Depends(get_db)) -> dict:
-    configs = db.query(PaymentProcessorConfig).filter(PaymentProcessorConfig.enabled.is_(True)).all()
+def public_payment_methods(
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    configs = db.query(PaymentProcessorConfig).filter(
+        PaymentProcessorConfig.enabled.is_(True),
+        PaymentProcessorConfig.tenant_id == tenant.id
+    ).all()
     return {"ok": True, "data": [{"provider": c.provider, "display_name": c.display_name or c.provider} for c in configs]}
 
 
 @router.get("/api/public/promotions/{code}/validate", response_model=PromotionValidationResponse)
-def public_validate_promotion(code: str, subtotal: float = 0.0, db: Session = Depends(get_db)) -> dict:
-    return {"ok": True, "data": validate_promotion(db, code, subtotal)}
+def public_validate_promotion(
+    code: str,
+    subtotal: float = 0.0,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    return {"ok": True, "data": validate_promotion(db, code, subtotal, tenant.id)}
 
 
 @router.post("/api/public/invoices", response_model=InvoiceResponse)
-def create_public_invoice(payload: InvoiceCreate, db: Session = Depends(get_db)) -> dict:
-    quote = build_quote(db, payload.quote)
+def create_public_invoice(
+    payload: InvoiceCreate,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    quote = build_quote(db, payload.quote, tenant.id)
     invoice = Invoice(
+        tenant_id=tenant.id,
         booking_id=payload.booking_id or quote.get("booking_id"),
         client_id=payload.client_id or quote.get("client_id"),
         currency=quote["currency"],
@@ -201,7 +238,10 @@ def create_public_invoice(payload: InvoiceCreate, db: Session = Depends(get_db))
     for line in quote["lines"]:
         db.add(InvoiceLine(invoice_id=invoice.id, line_type=line["line_type"], item_id=line.get("item_id"), description=line["description"], quantity=line["quantity"], unit_price=line["unit_price"], amount=line["amount"]))
     if payload.quote.promotion_code and quote["promotion"].get("valid"):
-        promo = db.query(PromotionCode).filter(PromotionCode.code == payload.quote.promotion_code).first()
+        promo = db.query(PromotionCode).filter(
+            PromotionCode.code == payload.quote.promotion_code,
+            PromotionCode.tenant_id == tenant.id
+        ).first()
         if promo:
             promo.times_redeemed += 1
     db.commit()
@@ -210,16 +250,31 @@ def create_public_invoice(payload: InvoiceCreate, db: Session = Depends(get_db))
 
 
 @router.get("/api/public/invoices/{invoice_id}", response_model=InvoiceResponse)
-def get_public_invoice(invoice_id: int, db: Session = Depends(get_db)) -> dict:
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+def get_public_invoice(
+    invoice_id: int,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == tenant.id
+    ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"ok": True, "data": invoice}
 
 
 @router.post("/api/public/invoices/{invoice_id}/tips", response_model=TipOut)
-def add_public_tip(invoice_id: int, payload: TipCreate, db: Session = Depends(get_db)) -> Tip:
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+def add_public_tip(
+    invoice_id: int,
+    payload: TipCreate,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> Tip:
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == tenant.id
+    ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     tip = Tip(invoice_id=invoice.id, amount=payload.amount, note=payload.note)
@@ -233,22 +288,43 @@ def add_public_tip(invoice_id: int, payload: TipCreate, db: Session = Depends(ge
 
 
 @router.get("/api/admin/invoices", response_model=InvoiceListResponse)
-def list_admin_invoices(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
-    invoices = db.query(Invoice).all()
+def list_admin_invoices(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> dict:
+    invoices = db.query(Invoice).filter(Invoice.tenant_id == tenant.id).all()
     return {"ok": True, "data": invoices, "meta": {"count": len(invoices)}}
 
 
 @router.get("/api/admin/invoices/{invoice_id}", response_model=InvoiceResponse)
-def get_admin_invoice(invoice_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+def get_admin_invoice(
+    invoice_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> dict:
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == tenant.id
+    ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"ok": True, "data": invoice}
 
 
 @router.put("/api/admin/invoices/{invoice_id}/status", response_model=InvoiceResponse)
-def update_invoice_status(invoice_id: int, payload: InvoiceStatusUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
-    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+def update_invoice_status(
+    invoice_id: int,
+    payload: InvoiceStatusUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> dict:
+    invoice = db.query(Invoice).filter(
+        Invoice.id == invoice_id,
+        Invoice.tenant_id == tenant.id
+    ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     invoice.status = payload.status
@@ -261,15 +337,29 @@ def update_invoice_status(invoice_id: int, payload: InvoiceStatusUpdate, db: Ses
 
 
 @router.get("/api/admin/promotions", response_model=list[PromotionCodeOut])
-def list_promotions(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> list:
-    return db.query(PromotionCode).all()
+def list_promotions(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> list:
+    return db.query(PromotionCode).filter(PromotionCode.tenant_id == tenant.id).all()
 
 
 @router.post("/api/admin/promotions", response_model=PromotionCodeOut, status_code=status.HTTP_201_CREATED)
-def create_promotion(payload: PromotionCodeCreate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> PromotionCode:
-    if db.query(PromotionCode).filter(PromotionCode.code == payload.code).first():
+def create_promotion(
+    payload: PromotionCodeCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> PromotionCode:
+    if db.query(PromotionCode).filter(
+        PromotionCode.code == payload.code,
+        PromotionCode.tenant_id == tenant.id
+    ).first():
         raise HTTPException(status_code=409, detail="Promotion code already exists")
-    promo = PromotionCode(**payload.dict())
+    promo_dict = payload.dict()
+    promo_dict["tenant_id"] = tenant.id
+    promo = PromotionCode(**promo_dict)
     db.add(promo)
     db.commit()
     db.refresh(promo)
@@ -277,8 +367,17 @@ def create_promotion(payload: PromotionCodeCreate, db: Session = Depends(get_db)
 
 
 @router.put("/api/admin/promotions/{promotion_id}", response_model=PromotionCodeOut)
-def update_promotion(promotion_id: int, payload: PromotionCodeUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> PromotionCode:
-    promo = db.query(PromotionCode).filter(PromotionCode.id == promotion_id).first()
+def update_promotion(
+    promotion_id: int,
+    payload: PromotionCodeUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> PromotionCode:
+    promo = db.query(PromotionCode).filter(
+        PromotionCode.id == promotion_id,
+        PromotionCode.tenant_id == tenant.id
+    ).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promotion not found")
     for field, value in payload.dict(exclude_unset=True).items():
@@ -289,8 +388,16 @@ def update_promotion(promotion_id: int, payload: PromotionCodeUpdate, db: Sessio
 
 
 @router.delete("/api/admin/promotions/{promotion_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_promotion(promotion_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> None:
-    promo = db.query(PromotionCode).filter(PromotionCode.id == promotion_id).first()
+def delete_promotion(
+    promotion_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> None:
+    promo = db.query(PromotionCode).filter(
+        PromotionCode.id == promotion_id,
+        PromotionCode.tenant_id == tenant.id
+    ).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promotion not found")
     db.delete(promo)
@@ -298,13 +405,24 @@ def delete_promotion(promotion_id: int, db: Session = Depends(get_db), current_u
 
 
 @router.get("/api/admin/tax-rates", response_model=list[TaxRateOut])
-def list_tax_rates(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> list:
-    return db.query(TaxRate).all()
+def list_tax_rates(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> list:
+    return db.query(TaxRate).filter(TaxRate.tenant_id == tenant.id).all()
 
 
 @router.post("/api/admin/tax-rates", response_model=TaxRateOut, status_code=status.HTTP_201_CREATED)
-def create_tax_rate(payload: TaxRateCreate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> TaxRate:
-    tax = TaxRate(**payload.dict())
+def create_tax_rate(
+    payload: TaxRateCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> TaxRate:
+    tax_dict = payload.dict()
+    tax_dict["tenant_id"] = tenant.id
+    tax = TaxRate(**tax_dict)
     db.add(tax)
     db.commit()
     db.refresh(tax)
@@ -312,8 +430,17 @@ def create_tax_rate(payload: TaxRateCreate, db: Session = Depends(get_db), curre
 
 
 @router.put("/api/admin/tax-rates/{tax_rate_id}", response_model=TaxRateOut)
-def update_tax_rate(tax_rate_id: int, payload: TaxRateUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> TaxRate:
-    tax = db.query(TaxRate).filter(TaxRate.id == tax_rate_id).first()
+def update_tax_rate(
+    tax_rate_id: int,
+    payload: TaxRateUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> TaxRate:
+    tax = db.query(TaxRate).filter(
+        TaxRate.id == tax_rate_id,
+        TaxRate.tenant_id == tenant.id
+    ).first()
     if not tax:
         raise HTTPException(status_code=404, detail="Tax rate not found")
     for field, value in payload.dict(exclude_unset=True).items():
@@ -324,8 +451,16 @@ def update_tax_rate(tax_rate_id: int, payload: TaxRateUpdate, db: Session = Depe
 
 
 @router.delete("/api/admin/tax-rates/{tax_rate_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
-def delete_tax_rate(tax_rate_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> None:
-    tax = db.query(TaxRate).filter(TaxRate.id == tax_rate_id).first()
+def delete_tax_rate(
+    tax_rate_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> None:
+    tax = db.query(TaxRate).filter(
+        TaxRate.id == tax_rate_id,
+        TaxRate.tenant_id == tenant.id
+    ).first()
     if not tax:
         raise HTTPException(status_code=404, detail="Tax rate not found")
     db.delete(tax)
@@ -333,13 +468,24 @@ def delete_tax_rate(tax_rate_id: int, db: Session = Depends(get_db), current_use
 
 
 @router.get("/api/admin/payment-processor/configs", response_model=list[PaymentProcessorConfigOut])
-def list_payment_processor_configs(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> list:
-    return db.query(PaymentProcessorConfig).all()
+def list_payment_processor_configs(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> list:
+    return db.query(PaymentProcessorConfig).filter(PaymentProcessorConfig.tenant_id == tenant.id).all()
 
 
 @router.post("/api/admin/payment-processor/configs", response_model=PaymentProcessorConfigOut, status_code=status.HTTP_201_CREATED)
-def create_payment_processor_config(payload: PaymentProcessorConfigCreate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> PaymentProcessorConfig:
-    config = PaymentProcessorConfig(**payload.dict())
+def create_payment_processor_config(
+    payload: PaymentProcessorConfigCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> PaymentProcessorConfig:
+    config_dict = payload.dict()
+    config_dict["tenant_id"] = tenant.id
+    config = PaymentProcessorConfig(**config_dict)
     db.add(config)
     db.commit()
     db.refresh(config)
@@ -347,8 +493,17 @@ def create_payment_processor_config(payload: PaymentProcessorConfigCreate, db: S
 
 
 @router.put("/api/admin/payment-processor/configs/{config_id}", response_model=PaymentProcessorConfigOut)
-def update_payment_processor_config(config_id: int, payload: PaymentProcessorConfigUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> PaymentProcessorConfig:
-    config = db.query(PaymentProcessorConfig).filter(PaymentProcessorConfig.id == config_id).first()
+def update_payment_processor_config(
+    config_id: int,
+    payload: PaymentProcessorConfigUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin)
+) -> PaymentProcessorConfig:
+    config = db.query(PaymentProcessorConfig).filter(
+        PaymentProcessorConfig.id == config_id,
+        PaymentProcessorConfig.tenant_id == tenant.id
+    ).first()
     if not config:
         raise HTTPException(status_code=404, detail="Payment processor config not found")
     for field, value in payload.dict(exclude_unset=True).items():

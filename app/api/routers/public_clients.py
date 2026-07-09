@@ -107,8 +107,8 @@ def identify_or_create_client(
         db.commit()
         db.refresh(client)
         created = True
+    client.created = created
     client_data = ClientIdentifyData.model_validate(client)
-    client_data.created = created
     return {"ok": True, "data": client_data}
 
 

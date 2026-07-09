@@ -28,9 +28,18 @@ def db_session(engine):
     connection = engine.connect()
     transaction = connection.begin()
     
+    nested = connection.begin_nested()
+    
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=connection)
     session = SessionLocal()
     
+    from sqlalchemy import event
+    @event.listens_for(session, "after_transaction_end")
+    def restart_savepoint(session, trans):
+        nonlocal nested
+        if not nested.is_active:
+            nested = connection.begin_nested()
+            
     yield session
     
     session.close()

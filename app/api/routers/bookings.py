@@ -103,9 +103,14 @@ def create_booking(
         if booking_in.provider_id not in provider_ids:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
 
+    from sqlalchemy.exc import IntegrityError
     booking = BookingModel(tenant_id=current_user.tenant_id, **booking_in.dict())
     db.add(booking)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
     db.refresh(booking)
     # Allocate resources if needed
     try:
@@ -153,9 +158,15 @@ def create_public_booking(
             provider_ids = {sp.provider_id for sp in service_obj.providers}
             if booking_in.provider_id not in provider_ids:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
+    
+    from sqlalchemy.exc import IntegrityError
     booking = BookingModel(tenant_id=tenant.id, **booking_data)
     db.add(booking)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
     db.refresh(booking)
     try:
         scheduling_service.allocate_resources(db, booking=booking, commit=True)
