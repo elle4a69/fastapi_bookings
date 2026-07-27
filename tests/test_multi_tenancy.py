@@ -49,20 +49,26 @@ def test_tenant_separation_via_headers(client, db_session):
     created_service_id = response.json()["data"]["id"]
 
     # 4. Check listing services for Tenant A (using header)
-    resp_list_a = client.get("/api/admin/services", headers={"X-Tenant": "tenant-a"})
+    resp_list_a = client.get("/api/admin/services", headers=headers_a)
     assert resp_list_a.status_code == status.HTTP_200_OK
     services_a = resp_list_a.json()["data"]
     assert len(services_a) == 1
     assert services_a[0]["name"] == "Service A"
 
+    # Define headers for Tenant B
+    headers_b = {
+        "X-Tenant": "tenant-b",
+        "X-Token": token_b
+    }
+
     # 5. Check listing services for Tenant B (using query param instead of header)
-    resp_list_b = client.get("/api/admin/services?tenant=tenant-b")
+    resp_list_b = client.get("/api/admin/services?tenant=tenant-b", headers={"X-Token": token_b})
     assert resp_list_b.status_code == status.HTTP_200_OK
     services_b = resp_list_b.json()["data"]
     assert len(services_b) == 0
 
     # 6. Check isolation: Tenant B trying to access Tenant A's service ID directly (should 404)
-    resp_direct_b = client.get(f"/api/admin/services/{created_service_id}", headers={"X-Tenant": "tenant-b"})
+    resp_direct_b = client.get(f"/api/admin/services/{created_service_id}", headers=headers_b)
     assert resp_direct_b.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -104,7 +110,7 @@ def test_cross_tenant_token_rejection(client, db_session):
     
     response = client.post("/api/admin/services", json=service_payload, headers=headers_mismatched)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert "User not found in this tenant" in response.json()["detail"]
+    assert "User not found in this tenant" in response.json()["error"]["message"]
 
 
 def test_missing_or_invalid_tenant(client):
@@ -112,12 +118,12 @@ def test_missing_or_invalid_tenant(client):
     # 1. Missing tenant context entirely
     response_missing = client.get("/api/admin/services")
     assert response_missing.status_code == status.HTTP_400_BAD_REQUEST
-    assert "Tenant subdomain is missing" in response_missing.json()["detail"]
+    assert "Tenant subdomain is missing" in response_missing.json()["error"]["message"]
 
     # 2. Non-existent tenant slug
     response_invalid = client.get("/api/admin/services", headers={"X-Tenant": "non-existent"})
     assert response_invalid.status_code == status.HTTP_404_NOT_FOUND
-    assert "Tenant 'non-existent' not found" in response_invalid.json()["detail"]
+    assert "Tenant 'non-existent' not found" in response_invalid.json()["error"]["message"]
 
 
 def test_admin_booking_scoping(client, db_session):

@@ -24,6 +24,7 @@ def list_providers(
     params: dict = Depends(pagination_params),
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of providers."""
     query = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id, ProviderModel.deleted_at.is_(None))
@@ -50,13 +51,19 @@ def create_provider(
 
 @router.get("/providers/{provider_id}", response_model=ProviderResponse, tags=["providers"])
 def get_provider(
-    provider_id: int,
+    provider_id: str,
     tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> dict:
     """Retrieve a single provider by ID."""
+    try:
+        numeric_id = int(provider_id.replace("prov-", ""))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
     provider = db.query(ProviderModel).filter(
-        ProviderModel.id == provider_id,
+        ProviderModel.id == numeric_id,
         ProviderModel.tenant_id == tenant.id,
         ProviderModel.deleted_at.is_(None)
     ).first()
@@ -67,20 +74,29 @@ def get_provider(
 
 @router.put("/providers/{provider_id}", response_model=ProviderResponse, tags=["providers"])
 def update_provider(
-    provider_id: int,
+    provider_id: str,
     provider_in: ProviderUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Update an existing provider."""
-    provider = db.query(ProviderModel).filter(
-        ProviderModel.id == provider_id,
-        ProviderModel.tenant_id == tenant.id,
-        ProviderModel.deleted_at.is_(None)
-    ).first()
+    try:
+        numeric_id = int(provider_id.replace("prov-", ""))
+    except ValueError:
+        numeric_id = None
+
+    provider = None
+    if numeric_id is not None:
+        provider = db.query(ProviderModel).filter(
+            ProviderModel.id == numeric_id,
+            ProviderModel.tenant_id == tenant.id,
+            ProviderModel.deleted_at.is_(None)
+        ).first()
+
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
     for field, value in provider_in.dict(exclude_unset=True).items():
         setattr(provider, field, value)
     db.commit()
@@ -90,19 +106,26 @@ def update_provider(
 
 @router.delete("/providers/{provider_id}", response_model=ProviderResponse, tags=["providers"])
 def delete_provider(
-    provider_id: int,
+    provider_id: str,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Delete a provider."""
-    provider = db.query(ProviderModel).filter(
-         ProviderModel.id == provider_id,
-         ProviderModel.tenant_id == tenant.id,
-         ProviderModel.deleted_at.is_(None)
-     ).first()
-    if not provider:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    provider.deleted_at = datetime.now(timezone.utc)
-    db.commit()
-    return {"ok": True, "data": provider}
+    try:
+        numeric_id = int(provider_id.replace("prov-", ""))
+    except ValueError:
+        numeric_id = None
+
+    if numeric_id is not None:
+        provider = db.query(ProviderModel).filter(
+             ProviderModel.id == numeric_id,
+             ProviderModel.tenant_id == tenant.id,
+             ProviderModel.deleted_at.is_(None)
+         ).first()
+        if provider:
+            provider.deleted_at = datetime.now(timezone.utc)
+            db.commit()
+            return {"ok": True, "data": provider}
+    
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")

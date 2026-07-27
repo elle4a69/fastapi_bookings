@@ -20,8 +20,11 @@ router = APIRouter(prefix="/api/admin/packages", tags=["packages"])
 
 
 @router.get("", response_model=List[PackageOut])
-def list_packages(db: Session = Depends(get_db)) -> List[PackageOut]:
-    packages = db.query(PackageModel).all()
+def list_packages(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> List[PackageOut]:
+    packages = db.query(PackageModel).filter(PackageModel.tenant_id == current_user.tenant_id).all()
     return [PackageOut.from_orm(p) for p in packages]
 
 
@@ -31,7 +34,7 @@ def create_package(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
-    package = PackageModel(**package_in.dict())
+    package = PackageModel(**package_in.dict(), tenant_id=current_user.tenant_id)
     db.add(package)
     db.commit()
     db.refresh(package)
@@ -39,8 +42,15 @@ def create_package(
 
 
 @router.get("/{package_id}", response_model=PackageOut)
-def get_package(package_id: int, db: Session = Depends(get_db)) -> PackageOut:
-    package = db.query(PackageModel).filter(PackageModel.id == package_id).first()
+def get_package(
+    package_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> PackageOut:
+    package = db.query(PackageModel).filter(
+        PackageModel.id == package_id,
+        PackageModel.tenant_id == current_user.tenant_id
+    ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
     return PackageOut.from_orm(package)
@@ -53,7 +63,10 @@ def update_package(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
-    package = db.query(PackageModel).filter(PackageModel.id == package_id).first()
+    package = db.query(PackageModel).filter(
+        PackageModel.id == package_id,
+        PackageModel.tenant_id == current_user.tenant_id
+    ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
     for field, value in package_in.dict(exclude_unset=True).items():
@@ -69,7 +82,10 @@ def delete_package(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
-    package = db.query(PackageModel).filter(PackageModel.id == package_id).first()
+    package = db.query(PackageModel).filter(
+        PackageModel.id == package_id,
+        PackageModel.tenant_id == current_user.tenant_id
+    ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
     db.delete(package)
@@ -85,7 +101,10 @@ def add_package_step(
     current_user = Depends(get_current_admin),
 ) -> PackageStepOut:
     # Validate package existence
-    package = db.query(PackageModel).filter(PackageModel.id == package_id).first()
+    package = db.query(PackageModel).filter(
+        PackageModel.id == package_id,
+        PackageModel.tenant_id == current_user.tenant_id
+    ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
     step = StepModel(**step_in.dict())

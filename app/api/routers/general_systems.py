@@ -32,7 +32,7 @@ public_router = APIRouter(tags=["public-gdpr"])
 @router.get("/api/admin/plugin-states", response_model=PluginStateListResponse)
 def list_plugin_states(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
     """Return all plugin state toggles."""
-    states = db.query(PluginState).order_by(PluginState.name.asc()).all()
+    states = db.query(PluginState).filter(PluginState.tenant_id == current_user.tenant_id).order_by(PluginState.name.asc()).all()
     return {"ok": True, "data": states}
 
 
@@ -43,13 +43,16 @@ def upsert_plugin_state(
     current_user=Depends(get_current_admin),
 ) -> dict:
     """Create or update a plugin state toggle."""
-    existing = db.query(PluginState).filter(PluginState.name == state_in.name).first()
+    existing = db.query(PluginState).filter(
+        PluginState.name == state_in.name,
+        PluginState.tenant_id == current_user.tenant_id
+    ).first()
     if existing:
         existing.is_enabled = state_in.is_enabled
         db.commit()
         db.refresh(existing)
         return {"ok": True, "data": existing}
-    state = PluginState(**state_in.dict())
+    state = PluginState(**state_in.dict(), tenant_id=current_user.tenant_id)
     db.add(state)
     db.commit()
     db.refresh(state)
@@ -64,7 +67,10 @@ def toggle_plugin_state(
     current_user=Depends(get_current_admin),
 ) -> dict:
     """Toggle a plugin on or off by name."""
-    state = db.query(PluginState).filter(PluginState.name == name).first()
+    state = db.query(PluginState).filter(
+        PluginState.name == name,
+        PluginState.tenant_id == current_user.tenant_id
+    ).first()
     if not state:
         raise HTTPException(status_code=404, detail="Plugin state not found")
     state.is_enabled = update.is_enabled
