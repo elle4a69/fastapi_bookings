@@ -63,6 +63,7 @@ export default function ResourcesPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchInitialData();
@@ -94,43 +95,101 @@ export default function ResourcesPage() {
     }
   };
 
-  // Group resources by type
-  const resourceGroups = resources.reduce<Record<string, Resource[]>>((acc, res) => {
-    if (!acc[res.type]) {
-      acc[res.type] = [];
+  // Expand all locations by default
+  useEffect(() => {
+    if (locations.length > 0) {
+      const initial: Record<string, boolean> = {};
+      locations.forEach(l => {
+        initial[String(l.id)] = true;
+      });
+      initial['unassigned'] = true;
+      setExpandedLocations(prev => ({ ...initial, ...prev }));
     }
+  }, [locations]);
+
+  // Group resources by type within each location
+  const listGroupsByLocation = locations.map(loc => {
+    const locId = String(loc.id);
+    const locResources = resources.filter(r => String(r.location_id) === locId);
+    
+    const typeMap = locResources.reduce<Record<string, Resource[]>>((acc, res) => {
+      if (!acc[res.type]) acc[res.type] = [];
+      acc[res.type].push(res);
+      return acc;
+    }, {});
+    
+    const groups = Object.keys(typeMap).map(type => {
+      const groupResources = typeMap[type];
+      const isShared = groupResources.some(r => (r.capacity || 1) > 1);
+      const groupReqs = requirements.filter(req => req.resource_type === type);
+      
+      return {
+        type,
+        location_id: locId,
+        required_mode: (isShared ? 'shared' : 'one') as 'one' | 'shared',
+        qty: groupResources.length,
+        active: groupResources.some(r => r.active),
+        resources: groupResources,
+        connected_services: groupReqs.map(req => ({
+          service_id: req.service_id,
+          quantity: req.quantity
+        }))
+      };
+    });
+    
+    return {
+      location: loc,
+      groups
+    };
+  });
+
+  const unassignedResources = resources.filter(r => !r.location_id);
+  const unassignedTypeMap = unassignedResources.reduce<Record<string, Resource[]>>((acc, res) => {
+    if (!acc[res.type]) acc[res.type] = [];
     acc[res.type].push(res);
     return acc;
   }, {});
-
-  const listGroups = Object.keys(resourceGroups).map(type => {
-    const groupResources = resourceGroups[type];
-    const firstRes = groupResources[0];
+  const unassignedGroups = Object.keys(unassignedTypeMap).map(type => {
+    const groupResources = unassignedTypeMap[type];
     const isShared = groupResources.some(r => (r.capacity || 1) > 1);
-    
     const groupReqs = requirements.filter(req => req.resource_type === type);
-    const connectedServices = groupReqs.map(req => ({
-      service_id: req.service_id,
-      quantity: req.quantity
-    }));
-
+    
     return {
       type,
-      location_id: firstRes?.location_id || (locations[0]?.id ? String(locations[0].id) : ''),
+      location_id: '',
       required_mode: (isShared ? 'shared' : 'one') as 'one' | 'shared',
       qty: groupResources.length,
       active: groupResources.some(r => r.active),
       resources: groupResources,
-      connected_services: connectedServices
+      connected_services: groupReqs.map(req => ({
+        service_id: req.service_id,
+        quantity: req.quantity
+      }))
     };
   });
 
-  const filteredGroups = listGroups.filter(g => 
-    g.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.resources.some(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const allLocationGroups = [
+    ...listGroupsByLocation,
+    ...(unassignedGroups.length > 0 ? [{
+      location: { id: 'unassigned', name: 'Unassigned Location' },
+      groups: unassignedGroups
+    }] : [])
+  ];
 
-  const handleSelectGroup = (group: typeof listGroups[0]) => {
+  const filteredLocationGroups = allLocationGroups.map(item => {
+    const matched = item.groups.filter(g => 
+      g.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      g.resources.some(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+    return {
+      ...item,
+      groups: matched
+    };
+  }).filter(item => item.groups.length > 0 || searchQuery === '');
+
+  const totalGroupsCount = allLocationGroups.reduce((sum, item) => sum + item.groups.length, 0);
+
+  const handleSelectGroup = (group: any) => {
     setIsCreating(false);
     setSelectedGroupType(group.type);
     setSelectedGroup({
@@ -145,6 +204,20 @@ export default function ResourcesPage() {
     setSelectedGroup({
       type: '',
       location_id: locations[0]?.id ? String(locations[0].id) : '',
+      required_mode: 'one',
+      qty: 1,
+      active: true,
+      resources: [],
+      connected_services: []
+    });
+  };
+
+  const handleCreateNewForLocation = (locationId: string) => {
+    setIsCreating(true);
+    setSelectedGroupType(null);
+    setSelectedGroup({
+      type: '',
+      location_id: locationId === 'unassigned' ? '' : locationId,
       required_mode: 'one',
       qty: 1,
       active: true,
@@ -332,13 +405,13 @@ export default function ResourcesPage() {
         <div className="p-4 border-b flex flex-col gap-4 bg-card">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Resources</h2>
-              <span className="text-xs text-muted-foreground">
-                {resources.length} total in {listGroups.length} groups
+              <h2 className="text-lg font-semibold tracking-tight">Location Resources</h2>
+              <span className="text-xs text-muted-foreground font-sans">
+                {resources.length} total in {totalGroupsCount} groups
               </span>
             </div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={handleCreateNew} className="h-9 w-9 text-primary hover:bg-primary/10">
+              <Button variant="ghost" size="icon" onClick={handleCreateNew} className="h-9 w-9 text-primary hover:bg-primary/10" title="Add resource group">
                 <Plus className="w-5 h-5" />
               </Button>
               {selectedGroupType && (
@@ -360,63 +433,117 @@ export default function ResourcesPage() {
         </div>
 
         <ScrollArea className="flex-1 p-4 bg-muted/5">
-          <div className="flex flex-col gap-3">
-            {filteredGroups.length === 0 ? (
-              <div className="text-center p-8 text-muted-foreground text-sm">
-                No resources found.
+          <div className="flex flex-col gap-4">
+            {filteredLocationGroups.every(item => item.groups.length === 0) && searchQuery !== "" ? (
+              <div className="text-center p-8 text-muted-foreground text-sm font-sans">
+                No matching resource groups found.
               </div>
             ) : (
-              filteredGroups.map((group) => {
-                const isExpanded = !!expandedGroups[group.type];
+              filteredLocationGroups.map((item) => {
+                const locId = String(item.location.id);
+                const isLocExpanded = expandedLocations[locId] !== false; // Default to true
+                const hasGroups = item.groups.length > 0;
+                
                 return (
-                  <div key={group.type} className="flex flex-col gap-1 border rounded-lg overflow-hidden bg-card hover:shadow-sm transition-all">
-                    <div
-                      onClick={() => handleSelectGroup(group)}
-                      className={`flex items-center justify-between p-3.5 cursor-pointer select-none transition-colors
-                        ${selectedGroupType === group.type 
-                          ? 'bg-primary/5 border-l-2 border-primary' 
-                          : 'bg-card hover:bg-accent/40'}
-                      `}
+                  <div key={locId} className="flex flex-col gap-2">
+                    {/* Location Divider / Section Header */}
+                    <div 
+                      className="flex items-center justify-between p-2 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors select-none cursor-pointer"
+                      onClick={() => {
+                        setExpandedLocations(prev => ({
+                          ...prev,
+                          [locId]: !isLocExpanded
+                        }));
+                      }}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleGroupExpand(group.type);
-                          }}
-                          className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent shrink-0"
+                      <div className="flex items-center gap-2 min-w-0">
+                        <MapPin className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground truncate">
+                          {item.location.name}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleCreateNewForLocation(locId)}
+                          className="h-6 w-6 text-primary hover:bg-primary/10 rounded-full"
+                          title={`Add resource group under ${item.location.name}`}
                         >
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-sm truncate">{group.type}</span>
-                          <span className="text-[11px] text-muted-foreground">
-                            {getLocationName(group.location_id)}
-                          </span>
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                        <div className="h-4 w-4 flex items-center justify-center text-muted-foreground/60">
+                          {isLocExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="text-xs h-5">
-                        {group.qty} {group.qty === 1 ? 'asset' : 'assets'}
-                      </Badge>
                     </div>
 
-                    {isExpanded && (
-                      <div className="bg-muted/15 border-t divide-y divide-border/30 pl-11 pr-4 py-1">
-                        {group.resources.map((res, index) => (
-                          <div key={res.id || index} className="py-2.5 flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{res.name}</span>
-                            <div className="flex items-center gap-2">
-                              {!res.active && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">Inactive</Badge>}
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-background">
-                                Cap: {res.capacity || 1}
-                              </Badge>
-                            </div>
+                    {/* Location Resource Groups List */}
+                    {isLocExpanded && (
+                      <div className="flex flex-col gap-2.5 pl-1.5 border-l-2 border-primary/10 ml-2">
+                        {hasGroups ? (
+                          item.groups.map((group) => {
+                            const locGroupId = group.type + '-' + locId;
+                            const isGroupExpanded = !!expandedGroups[locGroupId];
+                            
+                            return (
+                              <div key={locGroupId} className="flex flex-col gap-1 border rounded-lg overflow-hidden bg-card hover:shadow-xs transition-all">
+                                <div
+                                  onClick={() => handleSelectGroup(group)}
+                                  className={`flex items-center justify-between p-3.5 cursor-pointer select-none transition-colors
+                                    ${selectedGroupType === group.type && String(selectedGroup?.location_id) === String(group.location_id)
+                                      ? 'bg-primary/5 border-l-2 border-primary' 
+                                      : 'bg-card hover:bg-accent/40'}
+                                  `}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedGroups(prev => ({
+                                          ...prev,
+                                          [locGroupId]: !prev[locGroupId]
+                                        }));
+                                      }}
+                                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent shrink-0"
+                                    >
+                                      {isGroupExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                      )}
+                                    </button>
+                                    <span className="font-semibold text-sm truncate">{group.type}</span>
+                                  </div>
+                                  <Badge variant="secondary" className="text-xs h-5 shrink-0 px-2 py-0">
+                                    {group.qty}
+                                  </Badge>
+                                </div>
+
+                                {isGroupExpanded && (
+                                  <div className="bg-muted/15 border-t divide-y divide-border/30 pl-11 pr-4 py-1 font-sans">
+                                    {group.resources.map((res, index) => (
+                                      <div key={res.id || index} className="py-2.5 flex items-center justify-between text-xs text-muted-foreground">
+                                        <span className="truncate pr-2">{res.name}</span>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          {!res.active && <Badge variant="outline" className="text-[9px] px-1 py-0 h-4">Inactive</Badge>}
+                                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-background">
+                                            Cap: {res.capacity || 1}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-xs text-muted-foreground italic p-2 pl-4 font-sans">
+                            No resource groups. Click '+' to add.
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -467,6 +594,23 @@ export default function ResourcesPage() {
                       Name of resource group
                     </AccordionTrigger>
                     <AccordionContent className="pt-2 pb-6 space-y-5">
+                      <div className="grid gap-2">
+                        <Label className="text-sm font-medium">Branch / Location <span className="text-destructive">*</span></Label>
+                        <Select
+                          value={selectedGroup.location_id}
+                          onValueChange={(val) => setSelectedGroup({ ...selectedGroup, location_id: val })}
+                        >
+                          <SelectTrigger className="min-h-[40px]">
+                            <SelectValue placeholder="Select location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {locations.map((loc) => (
+                              <SelectItem key={loc.id} value={String(loc.id)}>{loc.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       <div className="grid gap-2">
                         <Label htmlFor="type-name" className="text-sm font-medium">Name of resource type <span className="text-destructive">*</span></Label>
                         <Input
@@ -521,35 +665,16 @@ export default function ResourcesPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 pt-2">
-                        <div className="grid gap-2">
-                          <Label htmlFor="qty" className="text-sm font-medium">Qty of resources</Label>
-                          <Input
-                            id="qty"
-                            type="number"
-                            value={selectedGroup.qty || ''}
-                            onChange={(e) => setSelectedGroup({ ...selectedGroup, qty: Math.max(1, Number(e.target.value)) })}
-                            placeholder="e.g. 3"
-                            className="min-h-[40px]"
-                          />
-                        </div>
-
-                        <div className="grid gap-2">
-                          <Label className="text-sm font-medium">Branch / Location <span className="text-destructive">*</span></Label>
-                          <Select
-                            value={selectedGroup.location_id}
-                            onValueChange={(val) => setSelectedGroup({ ...selectedGroup, location_id: val })}
-                          >
-                            <SelectTrigger className="min-h-[40px]">
-                              <SelectValue placeholder="Select location" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {locations.map((loc) => (
-                                <SelectItem key={loc.id} value={String(loc.id)}>{loc.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="grid gap-2 pt-2">
+                        <Label htmlFor="qty" className="text-sm font-medium">Qty of resources</Label>
+                        <Input
+                          id="qty"
+                          type="number"
+                          value={selectedGroup.qty || ''}
+                          onChange={(e) => setSelectedGroup({ ...selectedGroup, qty: Math.max(1, Number(e.target.value)) })}
+                          placeholder="e.g. 3"
+                          className="min-h-[40px]"
+                        />
                       </div>
 
                       <div className="flex flex-col justify-center gap-2 pt-2 border-t border-border/30">

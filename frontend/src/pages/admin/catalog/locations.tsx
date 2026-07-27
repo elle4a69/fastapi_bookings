@@ -485,6 +485,12 @@ export default function LocationsPage() {
   const activeProvider = providers.find(p => String(p.id) === String(selectedProviderId));
   const activeService = services.find(s => String(s.id) === String(selectedServiceId));
 
+  const resourcesByType = resources.reduce<Record<string, Resource[]>>((acc, res) => {
+    if (!acc[res.type]) acc[res.type] = [];
+    acc[res.type].push(res);
+    return acc;
+  }, {});
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -816,28 +822,43 @@ export default function LocationsPage() {
                       Location Resources
                     </AccordionTrigger>
                     <AccordionContent className="pt-2 pb-6">
-                      <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {resources.length > 0 ? resources.map(resource => (
-                          <div key={resource.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
-                            <Label htmlFor={`resource-${resource.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
-                              <Box className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{resource.name}</span>
-                                <span className="text-xs text-muted-foreground">Type: {resource.type}</span>
-                              </div>
-                            </Label>
-                            <Checkbox 
-                              id={`resource-${resource.id}`} 
-                              disabled={!isEditing}
-                              checked={resourceLocationIds.includes(String(resource.id))}
-                              onCheckedChange={(checked) => handleResourceCheckboxChange(String(resource.id), checked as boolean)}
-                              className="h-5 w-5 rounded-md"
-                            />
-                          </div>
-                        )) : (
+                      <Accordion type="multiple" className="w-full space-y-2">
+                        {Object.keys(resourcesByType).map(type => {
+                          const typeResources = resourcesByType[type];
+                          return (
+                            <AccordionItem key={type} value={type} className="border rounded-md px-3 bg-muted/5">
+                              <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline font-heading">
+                                <div className="flex items-center gap-2">
+                                  <Box className="h-4 w-4 text-primary shrink-0" />
+                                  <span>{type}</span>
+                                  <span className="text-xs text-muted-foreground font-normal">
+                                    ({typeResources.length} {typeResources.length === 1 ? 'resource' : 'resources'})
+                                  </span>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent className="pt-1 pb-3 divide-y divide-border/30">
+                                {typeResources.map(resource => (
+                                  <div key={resource.id} className="flex items-center justify-between py-2 hover:bg-muted/10 transition-colors">
+                                    <Label htmlFor={`loc-resource-${resource.id}`} className="cursor-pointer text-sm font-medium flex-1 pl-1">
+                                      {resource.name}
+                                    </Label>
+                                    <Checkbox 
+                                      id={`loc-resource-${resource.id}`} 
+                                      disabled={!isEditing}
+                                      checked={resourceLocationIds.includes(String(resource.id))}
+                                      onCheckedChange={(checked) => handleResourceCheckboxChange(String(resource.id), checked as boolean)}
+                                      className="h-4 w-4 rounded"
+                                    />
+                                  </div>
+                                ))}
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                        {resources.length === 0 && (
                           <p className="text-sm text-muted-foreground italic p-4">No resources found.</p>
                         )}
-                      </div>
+                      </Accordion>
                     </AccordionContent>
                   </AccordionItem>
 
