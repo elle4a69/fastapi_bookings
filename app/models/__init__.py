@@ -8,7 +8,7 @@ from .user import User
 from .service import Service
 from .provider import Provider
 from .client import Client
-from .location import Location
+from .location import Location, LocationProvider, LocationService, LocationCategory, LocationProduct, LocationProvider, LocationService, LocationCategory, LocationProduct
 from .booking import Booking
 from .audit import AuditLog
 from .payment import Payment
@@ -30,8 +30,10 @@ from .resource import (
 )
 from .category import Category, ServiceCategory
 from .service_provider import ServiceProvider
-from .addon import AddOn
+from .addon import AddOn, ServiceAddOn
 from .product import Product, ServiceProduct
+from .provider_category import ProviderCategory
+from .booking_form import BookingForm
 from .package import ServicePackage, PackageStep
 from .outbox import OutboxEvent, BookingEvent, BookingEventType
 from .hold import Hold, HoldStatus
@@ -63,6 +65,7 @@ from .checkout import (
 from .webhook import WebhookRegistration
 from .calendar_note import CalendarNote
 from .general_systems import PluginState, GdprConsent
+from .management_review_request import ManagementReviewRequest
 
 # System models (from FastBook merge)
 from .webhook import WebhookRegistration
@@ -102,4 +105,13 @@ __all__ = [
     "HoldStatus",
     "WaitlistEntry",
     "WaitlistStatus",
+
+    "LocationProvider",
+    "LocationService",
+    "LocationCategory",
+    "LocationProduct",
+    "ServiceAddOn",
+    "ProviderCategory",
+    "BookingForm",
+    "ManagementReviewRequest",
 ]
