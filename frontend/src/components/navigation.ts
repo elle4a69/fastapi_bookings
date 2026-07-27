@@ -49,13 +49,19 @@ export const navigation: NavSection[] = [
   {
     label: "Catalog",
     items: [
-      { title: "Locations", url: "/admin/catalog/locations", icon: MapPinIcon },
+      {
+        title: "Locations",
+        icon: MapPinIcon,
+        children: [
+          { title: "Locations", url: "/admin/catalog/locations" },
+          { title: "Location Resources", url: "/admin/resources" },
+        ],
+      },
       { title: "Providers", url: "/admin/catalog/providers", icon: UserRoundCogIcon },
       { title: "Scheduling", url: "/admin/catalog/scheduling", icon: CalendarClockIcon },
       { title: "Services", url: "/admin/catalog/services", icon: BriefcaseBusinessIcon },
       { title: "Categories", url: "/admin/catalog/categories", icon: TagsIcon },
       { title: "Add-ons", url: "/admin/catalog/add-ons", icon: SparklesIcon },
-      { title: "Resources", url: "/admin/resources", icon: BoxesIcon },
       { title: "Products", url: "/admin/catalog/products", icon: ShoppingBagIcon },
       { title: "Packages", url: "/admin/catalog/packages", icon: GiftIcon },
     ],

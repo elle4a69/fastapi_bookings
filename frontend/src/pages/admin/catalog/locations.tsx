@@ -810,7 +810,38 @@ export default function LocationsPage() {
                     </AccordionContent>
                   </AccordionItem>
 
-                  {/* Accordion 2: Location Providers */}
+                  {/* Accordion 2: Location Resources */}
+                  <AccordionItem value="location_resources" id="item-location_resources" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="text-base font-semibold py-4 hover:no-underline font-heading">
+                      Location Resources
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-6">
+                      <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
+                        {resources.length > 0 ? resources.map(resource => (
+                          <div key={resource.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
+                            <Label htmlFor={`resource-${resource.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
+                              <Box className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">{resource.name}</span>
+                                <span className="text-xs text-muted-foreground">Type: {resource.type}</span>
+                              </div>
+                            </Label>
+                            <Checkbox 
+                              id={`resource-${resource.id}`} 
+                              disabled={!isEditing}
+                              checked={resourceLocationIds.includes(String(resource.id))}
+                              onCheckedChange={(checked) => handleResourceCheckboxChange(String(resource.id), checked as boolean)}
+                              className="h-5 w-5 rounded-md"
+                            />
+                          </div>
+                        )) : (
+                          <p className="text-sm text-muted-foreground italic p-4">No resources found.</p>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Accordion 3: Location Providers */}
                   <AccordionItem value="providers" id="item-providers" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="text-base font-semibold py-4 hover:no-underline font-heading">
                       Location Providers
