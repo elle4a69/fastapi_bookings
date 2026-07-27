@@ -2,6 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, CalendarRange, Sparkles, Layers, Box, ShoppingBag, Gift, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { useAutoSave } from "@/hooks/use-auto-save";
+import { AutoSaveStatus } from "@/components/ui/auto-save-status";
+
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -133,6 +136,25 @@ export default function LocationsPage() {
   // Form State
   const [formData, setFormData] = useState<Partial<Location>>({});
 
+  const { triggerSave, saveState, retry } = useAutoSave<Partial<Location>>({
+    onSave: async (payload) => {
+      if (!selectedLocation) return;
+      try {
+        const res = await apiClient.put<any>(`/api/admin/locations/${selectedLocation.id}`, payload);
+        const savedLocation = res?.data || res;
+        
+        // Update local lists
+        setLocations(prev => prev.map(l => String(l.id) === String(savedLocation.id) ? savedLocation : l));
+        // Keep selectedLocation fresh
+        setSelectedLocation(savedLocation);
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save changes.");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -208,8 +230,12 @@ export default function LocationsPage() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, image: reader.result as string }));
+        const updated = { ...formData, image: reader.result as string };
+        setFormData(updated);
         toast.success("Location image uploaded");
+        if (selectedLocation) {
+          triggerSave(updated, true);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -234,7 +260,7 @@ export default function LocationsPage() {
       .filter(r => String(r.location_id) === String(location.id))
       .map(r => String(r.id));
     setResourceLocationIds(assignedResourceIds);
-    setIsEditing(false);
+    setIsEditing(true);
   };
 
   const handleCreateNew = () => {
@@ -303,7 +329,7 @@ export default function LocationsPage() {
       const refreshedResources = await apiClient.get<any>("/api/admin/resources").catch(() => []);
       setResources(Array.isArray(refreshedResources) ? refreshedResources : (refreshedResources?.data ?? []));
 
-      setIsEditing(false);
+      setIsEditing(true);
     } catch (error: any) {
       toast.error(error.message || "Failed to save location.");
     } finally {
@@ -332,19 +358,41 @@ export default function LocationsPage() {
   const handleCheckboxChange = (field: 'provider_ids' | 'service_ids' | 'category_ids' | 'product_ids', id: string, checked: boolean) => {
     setFormData(prev => {
       const currentList = prev[field] || [];
-      if (checked) {
-        return { ...prev, [field]: [...currentList, String(id)] };
-      } else {
-        return { ...prev, [field]: currentList.filter(itemId => String(itemId) !== String(id)) };
+      const updatedList = checked 
+        ? [...currentList, String(id)] 
+        : currentList.filter(itemId => String(itemId) !== String(id));
+      
+      const updated = { ...prev, [field]: updatedList };
+      if (selectedLocation) {
+        triggerSave(updated, true);
       }
+      return updated;
     });
   };
 
-  const handleResourceCheckboxChange = (id: string, checked: boolean) => {
+  const handleResourceCheckboxChange = async (id: string, checked: boolean) => {
     if (checked) {
       setResourceLocationIds(prev => [...prev, String(id)]);
     } else {
       setResourceLocationIds(prev => prev.filter(rid => String(rid) !== String(id)));
+    }
+
+    if (selectedLocation) {
+      try {
+        const resObj = resources.find(r => String(r.id) === String(id));
+        if (resObj) {
+          await apiClient.put(`/api/admin/resources/${id}`, {
+            ...resObj,
+            location_id: checked ? parseInt(selectedLocation.id) : null
+          });
+          toast.success("Resource assignment updated");
+          
+          const refreshedResources = await apiClient.get<any>("/api/admin/resources").catch(() => []);
+          setResources(Array.isArray(refreshedResources) ? refreshedResources : (refreshedResources?.data ?? []));
+        }
+      } catch (error: any) {
+        toast.error(error.message || "Failed to update resource assignment.");
+      }
     }
   };
 
@@ -623,26 +671,19 @@ export default function LocationsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {!isEditing && selectedLocation && (
+                {selectedLocation ? (
                   <>
-                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="min-h-[40px] rounded-md px-4">
-                      Edit
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isDeleting} className="min-h-[40px] rounded-md px-4">
+                    <AutoSaveStatus state={saveState} onRetry={retry} />
+                    <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isDeleting} className="min-h-[40px] rounded-md px-4 ml-2">
                       {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
                       Delete
                     </Button>
                   </>
-                )}
-                {isEditing && (
+                ) : (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => {
-                      if (selectedLocation) {
-                        handleSelectLocation(selectedLocation); // Cancel edit
-                      } else {
-                        setSelectedLocation(null);
-                        setIsEditing(false); // Cancel create
-                      }
+                      setSelectedLocation(null);
+                      setIsEditing(false); // Cancel create
                     }} className="min-h-[40px] rounded-md px-4">
                       Cancel
                     </Button>
@@ -670,7 +711,13 @@ export default function LocationsPage() {
                         <Input 
                           id="name" 
                           value={formData.name || ""} 
-                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          onChange={(e) => {
+                            const updated = { ...formData, name: e.target.value };
+                            setFormData(updated);
+                            if (selectedLocation && e.target.value.trim() !== "") {
+                              triggerSave(updated);
+                            }
+                          }}
                           disabled={!isEditing}
                           placeholder="e.g. Downtown Wellness Clinic"
                           className="min-h-[40px]"
@@ -684,7 +731,13 @@ export default function LocationsPage() {
                           <Input 
                             id="address" 
                             value={formData.address || ""} 
-                            onChange={(e) => setFormData({...formData, address: e.target.value})}
+                            onChange={(e) => {
+                              const updated = { ...formData, address: e.target.value };
+                              setFormData(updated);
+                              if (selectedLocation) {
+                                triggerSave(updated);
+                              }
+                            }}
                             disabled={!isEditing}
                             placeholder="e.g. 73 Market Street, Sydney NSW 2000, Australia"
                             className="pl-10 min-h-[40px]"
@@ -701,7 +754,13 @@ export default function LocationsPage() {
                           <Input 
                             id="phone" 
                             value={formData.phone || ""} 
-                            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                            onChange={(e) => {
+                              const updated = { ...formData, phone: e.target.value };
+                              setFormData(updated);
+                              if (selectedLocation) {
+                                triggerSave(updated);
+                              }
+                            }}
                             disabled={!isEditing}
                             placeholder="e.g. 02 9876 5432"
                             className="rounded-l-none min-h-[40px]"
@@ -716,7 +775,13 @@ export default function LocationsPage() {
                           <Input 
                             id="contact_person" 
                             value={formData.contact_person || ""} 
-                            onChange={(e) => setFormData({...formData, contact_person: e.target.value})}
+                            onChange={(e) => {
+                              const updated = { ...formData, contact_person: e.target.value };
+                              setFormData(updated);
+                              if (selectedLocation) {
+                                triggerSave(updated);
+                              }
+                            }}
                             disabled={!isEditing}
                             placeholder="e.g. Sarah Jenkins (Location Director)"
                             className="pl-10 min-h-[40px]"
@@ -729,7 +794,13 @@ export default function LocationsPage() {
                         <Select
                           disabled={!isEditing}
                           value={formData.timezone || "Australia/Melbourne"}
-                          onValueChange={(val) => setFormData({...formData, timezone: val})}
+                          onValueChange={(val) => {
+                            const updated = { ...formData, timezone: val };
+                            setFormData(updated);
+                            if (selectedLocation) {
+                              triggerSave(updated, true);
+                            }
+                          }}
                         >
                           <SelectTrigger id="timezone" className="min-h-[40px]">
                             <SelectValue placeholder="Select a timezone" />
@@ -767,8 +838,12 @@ export default function LocationsPage() {
                                    size="icon" 
                                    className="h-7 w-7 rounded-full shadow-md z-10"
                                    onClick={() => {
-                                     setFormData(prev => ({ ...prev, image: "" }));
+                                     const updated = { ...formData, image: "" };
+                                     setFormData(updated);
                                      toast.success("Location image removed");
+                                     if (selectedLocation) {
+                                       triggerSave(updated, true);
+                                     }
                                    }}
                                  >
                                    <X className="h-4 w-4" />
@@ -1252,15 +1327,11 @@ export default function LocationsPage() {
                 </Accordion>
               </div>
             </div>
-            {isEditing && (
+            {isEditing && !selectedLocation && (
               <div className="md:hidden sticky bottom-0 bg-background z-10 p-4 border-t flex gap-2 justify-end">
                 <Button variant="ghost" size="sm" className="min-h-[44px] flex-1" onClick={() => {
-                  if (selectedLocation) {
-                    handleSelectLocation(selectedLocation); // Cancel edit
-                  } else {
-                    setSelectedLocation(null);
-                    setIsEditing(false); // Cancel create
-                  }
+                  setSelectedLocation(null);
+                  setIsEditing(false); // Cancel create
                 }}>
                   Cancel
                 </Button>
