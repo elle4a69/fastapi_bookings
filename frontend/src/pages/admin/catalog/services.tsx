@@ -472,6 +472,15 @@ export default function ServicesPage() {
       {/* Left Pane - Master List */}
       <div className={`md:w-[35%] flex flex-col gap-4 border-r md:pr-4 transition-all duration-300 ${selectedServiceId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
         <div className="flex gap-2 items-center px-4 md:px-0">
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => navigate('/admin/catalog/categories', { state: { returnToServiceId: selectedServiceId || "new", section: "categories" } })} 
+            className="min-h-[44px] min-w-[44px] shrink-0" 
+            title="Add Category"
+          >
+            <Plus className="w-5 h-5" />
+          </Button>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3.5 md:top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -506,7 +515,12 @@ export default function ServicesPage() {
                 >
                   <div className="flex items-center gap-2">
                     <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{cat.name}</h3>
+                    <h3 
+                      className="text-sm font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-primary transition-colors"
+                      onClick={() => setOpenSection('categories')}
+                    >
+                      {cat.name}
+                    </h3>
                   </div>
                   <div className={isListView ? "space-y-2" : "grid grid-cols-2 gap-2"}>
                     {groupedServices[cat.id].map(svc => (
@@ -517,7 +531,7 @@ export default function ServicesPage() {
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => handleDropService(e, svc.id)}
                         onClick={() => handleSelectService(svc)}
-                        className={`p-3 rounded-lg cursor-pointer border transition-all duration-150 flex flex-col justify-center min-h-[64px] ${
+                        className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                           selectedServiceId === svc.id 
                             ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
                             : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
@@ -525,13 +539,13 @@ export default function ServicesPage() {
                       >
                         <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                           {svc.image ? (
-                            <img src={svc.image} alt={svc.name} className="w-[48px] h-[48px] object-cover rounded shrink-0" />
+                            <img src={svc.image} alt={svc.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
                           ) : (
-                            <div className="w-[48px] h-[48px] bg-muted rounded flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-4 h-4 opacity-20"/></div>
+                            <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-4 h-4 opacity-20"/></div>
                           )}
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
-                            <span className="font-semibold text-xs leading-tight truncate block text-foreground" title={svc.name}>{svc.name}</span>
-                            <div className="text-[10px] text-muted-foreground">${svc.price} &bull; {svc.duration} mins</div>
+                            <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
+                            <div className="text-xs text-muted-foreground mt-0.5">${svc.price} &bull; {svc.duration} mins</div>
                           </div>
                           <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
                             <div 
@@ -575,7 +589,12 @@ export default function ServicesPage() {
               
               {uncategorizedServices.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-6">Uncategorized</h3>
+                  <h3 
+                    className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-6 cursor-pointer hover:text-primary transition-colors"
+                    onClick={() => setOpenSection('categories')}
+                  >
+                    Uncategorized
+                  </h3>
                   <div className={isListView ? "space-y-2" : "grid grid-cols-2 gap-2"}>
                     {uncategorizedServices.map(svc => (
                       <div 
@@ -585,7 +604,7 @@ export default function ServicesPage() {
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => handleDropService(e, svc.id)}
                         onClick={() => handleSelectService(svc)}
-                        className={`p-3 rounded-lg cursor-pointer border transition-all duration-150 flex flex-col justify-center min-h-[64px] ${
+                        className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                           selectedServiceId === svc.id 
                             ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
                             : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
@@ -593,13 +612,13 @@ export default function ServicesPage() {
                       >
                         <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                           {svc.image ? (
-                            <img src={svc.image} alt={svc.name} className="w-[48px] h-[48px] object-cover rounded shrink-0" />
+                            <img src={svc.image} alt={svc.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
                           ) : (
-                            <div className="w-[48px] h-[48px] bg-muted rounded flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-4 h-4 opacity-20"/></div>
+                            <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-4 h-4 opacity-20"/></div>
                           )}
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
-                            <span className="font-semibold text-xs leading-tight truncate block text-foreground" title={svc.name}>{svc.name}</span>
-                            <div className="text-[10px] text-muted-foreground">${svc.price} &bull; {svc.duration} mins</div>
+                            <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
+                            <div className="text-xs text-muted-foreground mt-0.5">${svc.price} &bull; {svc.duration} mins</div>
                           </div>
                           <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
                             <div 
