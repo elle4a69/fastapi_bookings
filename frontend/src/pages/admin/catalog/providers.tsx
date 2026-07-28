@@ -6,7 +6,7 @@ import {
   Link, Image as ImageIcon, Video, Code, HelpCircle, 
   X, Check,
   ChevronDown, Link2, Upload,
-  Eye, EyeOff, Loader2, Circle, CircleSlash, Layers
+  Eye, EyeOff, Loader2, Circle, CircleSlash, Layers, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -333,44 +333,49 @@ export default function ProvidersPage() {
     setProviders(prev => [...prev, createdProvider!]);
     setSelectedProvider(createdProvider);
     toast.success('Provider created successfully');
+
+    if (initialProps?.locations && initialProps.locations.length > 0 && createdProvider) {
+      const locId = initialProps.locations[0];
+      const loc = locations.find(l => String(l.id) === String(locId));
+      if (loc) {
+        const providerIdNum = Number(createdProvider.id);
+        const currentProviderIds = loc.provider_ids || [];
+        const nextProviderIds = [...currentProviderIds.filter((id: number) => id !== providerIdNum), providerIdNum];
+        
+        setLocations(prev => prev.map(l => String(l.id) === String(locId) ? { ...l, provider_ids: nextProviderIds } : l));
+        
+        apiClient.put(`/api/admin/locations/${locId}`, {
+          name: loc.name,
+          provider_ids: nextProviderIds
+        }).catch((err) => {
+          console.warn("Failed to update location provider_ids on create:", err);
+        });
+      }
+    }
   };
 
   const handleAssignProviderToLocation = async (providerId: string, locationId: string) => {
     const prov = providers.find(p => p.id === providerId);
     if (!prov) return;
-    const currentLocs = prov.locations || [];
-    if (currentLocs.includes(locationId)) return;
-    const nextLocs = [...currentLocs, locationId];
+    const loc = locations.find(l => String(l.id) === String(locationId));
+    if (!loc) return;
+
+    const providerIdNum = Number(providerId);
+    const currentProviderIds = loc.provider_ids || [];
+    if (currentProviderIds.includes(providerIdNum)) return;
+    const nextProviderIds = [...currentProviderIds, providerIdNum];
     
-    // Optimistic update
-    const updatedProvider = { ...prov, locations: nextLocs };
-    setProviders(prev => prev.map(p => p.id === providerId ? updatedProvider : p));
-    if (selectedProvider?.id === providerId) {
-      setSelectedProvider(updatedProvider);
-    }
+    setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? { ...l, provider_ids: nextProviderIds } : l));
     
     try {
-      const payload: any = {
-        name: prov.name || '',
-        email: prov.email || null,
-        phone: prov.phone || null,
-        active: prov.active ?? true,
-        is_visible: prov.is_visible ?? true,
-        capacity: prov.capacity || 1,
-        color: prov.color || null,
-        description: prov.description || null,
-        ignore_company_hours: prov.ignore_company_hours ?? false,
-        locations: nextLocs,
-      };
-      await apiClient.put(`/api/admin/providers/${providerId}`, payload);
+      await apiClient.put(`/api/admin/locations/${locationId}`, {
+        name: loc.name,
+        provider_ids: nextProviderIds
+      });
       toast.success(`Assigned ${prov.name} to location`);
     } catch (err: any) {
       toast.error(err.message || "Failed to update provider assignment");
-      // Rollback
-      setProviders(prev => prev.map(p => p.id === providerId ? prov : p));
-      if (selectedProvider?.id === providerId) {
-        setSelectedProvider(prov);
-      }
+      setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? loc : l));
     }
   };
 
@@ -581,6 +586,31 @@ export default function ProvidersPage() {
     }
   };
 
+  const handleToggleLocationAssociation = async (locationId: string, checked: boolean) => {
+    if (!selectedProvider) return;
+    const loc = locations.find(l => String(l.id) === String(locationId));
+    if (!loc) return;
+    
+    const providerIdNum = Number(selectedProvider.id);
+    const currentProviderIds = loc.provider_ids || [];
+    const nextProviderIds = checked 
+      ? [...currentProviderIds.filter((id: number) => id !== providerIdNum), providerIdNum]
+      : currentProviderIds.filter((id: number) => id !== providerIdNum);
+      
+    setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? { ...l, provider_ids: nextProviderIds } : l));
+    
+    try {
+      await apiClient.put(`/api/admin/locations/${locationId}`, {
+        name: loc.name,
+        provider_ids: nextProviderIds
+      });
+      toast.success(checked ? "Provider assigned to location" : "Provider removed from location");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update location association");
+      setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? loc : l));
+    }
+  };
+
   const autoSaveProviderSchedule = async (updatedProvider: Provider) => {
     try {
       setSaveStatus('saving');
@@ -733,11 +763,12 @@ export default function ProvidersPage() {
             <>
               {/* Dynamic Locations Group */}
               {locations.map((loc) => {
-                const locProviders = filteredProviders.filter(p => p.locations?.includes(String(loc.id)));
+                const locProviders = filteredProviders.filter(p => (loc.provider_ids || []).map(String).includes(String(p.id)));
+                if (locProviders.length === 0) return null;
                 return (
                   <div 
                     key={loc.id} 
-                    className="space-y-2"
+                    className="space-y-2 mb-4"
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={async (e) => {
                       const providerId = e.dataTransfer.getData("text/plain");
@@ -804,6 +835,12 @@ export default function ProvidersPage() {
                               <div className="text-xs text-muted-foreground mt-0.5 text-left truncate">{provider.email || 'No email'}</div>
                             </div>
                             <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                              <div 
+                                className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
                               <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); toggleProviderVisibility(provider.id, e); }} 
@@ -839,7 +876,7 @@ export default function ProvidersPage() {
 
               {/* Unassigned Group */}
               {(() => {
-                const unassigned = filteredProviders.filter(p => !p.locations || p.locations.length === 0);
+                const unassigned = filteredProviders.filter(p => !locations.some(l => (l.provider_ids || []).map(String).includes(String(p.id))));
                 if (unassigned.length === 0) return null;
                 return (
                   <div className="space-y-2 pt-2 border-t">
@@ -874,6 +911,12 @@ export default function ProvidersPage() {
                               <div className="text-xs text-muted-foreground mt-0.5 text-left truncate">{provider.email || 'No email'}</div>
                             </div>
                             <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                              <div 
+                                className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
                               <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); toggleProviderVisibility(provider.id, e); }} 
@@ -1333,15 +1376,8 @@ export default function ProvidersPage() {
                         <div key={loc.id || `location-${lIndex}`} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
                           <Checkbox
                             id={`location-${loc.id}`}
-                            checked={(selectedProvider.locations || []).includes(loc.id)}
-                            onCheckedChange={(checked) => {
-                              const current = selectedProvider.locations || [];
-                              if (checked) {
-                                handleProviderChange('locations', [...current, loc.id], true);
-                              } else {
-                                handleProviderChange('locations', current.filter((id) => id !== loc.id), true);
-                              }
-                            }}
+                            checked={(loc.provider_ids || []).map(String).includes(String(selectedProvider.id))}
+                            onCheckedChange={(checked) => handleToggleLocationAssociation(String(loc.id), !!checked)}
                           />
                           <Label htmlFor={`location-${loc.id}`} className="text-sm font-normal cursor-pointer w-full">
                             {loc.name}
