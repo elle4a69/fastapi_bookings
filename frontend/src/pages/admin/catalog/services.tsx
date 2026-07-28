@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -47,10 +47,43 @@ interface Service {
   image: string | null;
 }
 
-interface Category { id: string; name: string; description?: string; active: boolean; }
-interface Provider { id: string; name: string; }
-interface Addon { id: string; name: string; }
-interface Product { id: string; name: string; }
+interface Category { id: string; name: string; description?: string; active: boolean; image?: string | null; }
+interface Provider { id: string; name: string; email?: string; color?: string; avatar?: string; image?: string; }
+interface Addon { id: string; name: string; price?: number; duration?: number; }
+interface Product { id: string; name: string; price?: number; }
+
+const generateHalfHourSlots = (): string[] => {
+  const slots: string[] = [];
+  const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  for (const period of ['AM', 'PM']) {
+    for (const hour of hours) {
+      slots.push(`${hour}:00 ${period}`);
+      slots.push(`${hour}:30 ${period}`);
+    }
+  }
+  return slots;
+};
+const HALF_HOUR_SLOTS = generateHalfHourSlots();
+
+// Parse stored comma-string like "09:00, 13:30" <-> pill values
+const to24h = (slot: string): string => {
+  const [time, period] = slot.split(' ');
+  let [h, m] = time.split(':').map(Number);
+  if (period === 'AM' && h === 12) h = 0;
+  if (period === 'PM' && h !== 12) h += 12;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+};
+const to12h = (hhmm: string): string => {
+  const [h, m] = hhmm.split(':').map(Number);
+  const period = h < 12 ? 'AM' : 'PM';
+  const hour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour}:${String(m).padStart(2,'0')} ${period}`;
+};
+const parseSelectedSlots = (csv: string): string[] =>
+  csv.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+    // If already in 12h format just return as-is, else convert
+    return s.includes('AM') || s.includes('PM') ? s : to12h(s);
+  });
 
 
 function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: { imagePreview: string | null; onImageSelect: (file: string) => void; onImageRemove: () => void; disabled?: boolean }) {
@@ -1141,38 +1174,61 @@ export default function ServicesPage() {
                   <AccordionItem value="fixed_times" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Schedule</AccordionTrigger>
                     <AccordionContent className="space-y-6 pt-2 pb-4">
-                      <div className="space-y-4">
-                        <h4 className="font-semibold text-sm">Fixed Start Times</h4>
-                        <div className="space-y-2">
-                          <Label htmlFor="fixed_start_times">Times (comma-separated)</Label>
-                          <div className="flex gap-2">
-                            <Input 
-                              id="fixed_start_times" 
-                              value={formData.fixed_start_times} 
-                              onChange={(e) => {
-                                const next = { ...formData, fixed_start_times: e.target.value };
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-sm">Fixed Start Times</h4>
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = { ...formData, fixed_start_times: '' };
                                 setFormData(next);
-                                triggerSave(next);
+                                triggerSave(next, true);
                               }}
-                              disabled={!isEditing}
-                              placeholder="e.g. 09:00, 13:00, 15:30"
-                            />
-                            {isEditing && (
-                              <Button variant="outline" onClick={() => {
-                                const v = window.prompt('Add a time (HH:MM)');
-                                if (v) {
-                                  const current = formData.fixed_start_times.trim();
-                                  const nextTimes = current ? current + ', ' + v : v;
-                                  const next = { ...formData, fixed_start_times: nextTimes };
+                              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Clear all
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 max-h-[300px] overflow-y-auto pr-0.5">
+                          {HALF_HOUR_SLOTS.map((slot) => {
+                            const selectedSlots = parseSelectedSlots(formData.fixed_start_times);
+                            const isSelected = selectedSlots.includes(slot);
+                            return (
+                              <button
+                                key={slot}
+                                type="button"
+                                disabled={!isEditing}
+                                onClick={() => {
+                                  const current = parseSelectedSlots(formData.fixed_start_times);
+                                  const updated = isSelected
+                                    ? current.filter(s => s !== slot)
+                                    : [...current, slot];
+                                  // Store as 24h comma string for backend compatibility
+                                  const csv = updated.map(to24h).join(', ');
+                                  const next = { ...formData, fixed_start_times: csv };
                                   setFormData(next);
                                   triggerSave(next, true);
-                                }
-                              }}>Add Time</Button>
-                            )}
-                          </div>
+                                }}
+                                className={`w-full py-0.5 rounded-md text-[9px] font-medium border transition-colors ${
+                                  isSelected && isEditing
+                                    ? 'bg-primary text-primary-foreground border-primary'
+                                    : 'bg-muted/10 text-muted-foreground border-border/20'
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                              >
+                                {slot}
+                              </button>
+                            );
+                          })}
                         </div>
+                        {formData.fixed_start_times && (
+                          <p className="text-[10px] text-muted-foreground">
+                            {parseSelectedSlots(formData.fixed_start_times).length} time{parseSelectedSlots(formData.fixed_start_times).length !== 1 ? 's' : ''} selected
+                          </p>
+                        )}
                       </div>
-                      
+
                       <div className="space-y-4 pt-4 border-t">
                         <div className="flex items-center justify-between">
                           <h4 className="font-semibold text-sm">Groups</h4>
@@ -1231,32 +1287,45 @@ export default function ServicesPage() {
                   <AccordionItem value="categories" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {categories.length > 0 && (
-                        <div className="flex flex-col gap-2.5">
-                          {categories.map(c => (
-                            <div key={c.id} className="flex items-center space-x-2">
-                              <Checkbox 
-                                id={`cat-${c.id}`} 
-                                checked={formData.category_ids.includes(c.id)}
+                      {categories.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No categories available.</p>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {categories.map(c => {
+                          const isLinked = formData.category_ids.includes(c.id);
+                          return (
+                            <div
+                              key={c.id}
+                              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                                isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
+                              }`}
+                            >
+                              {c.image ? (
+                                <img src={c.image} alt={c.name} className="w-8 h-8 object-cover rounded-md shrink-0" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                  <span className="text-xs font-bold text-primary">{c.name[0]?.toUpperCase()}</span>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{c.name}</p>
+                                {c.description && <p className="text-[10px] text-muted-foreground truncate">{c.description}</p>}
+                              </div>
+                              <Switch
+                                checked={isLinked}
+                                disabled={!isEditing}
                                 onCheckedChange={(checked) => {
                                   const current = formData.category_ids || [];
-                                  const updated = checked 
-                                    ? [...current, c.id]
-                                    : current.filter(id => id !== c.id);
+                                  const updated = checked ? [...current, c.id] : current.filter(id => id !== c.id);
                                   const next = { ...formData, category_ids: updated };
                                   setFormData(next);
                                   triggerSave(next, true);
                                 }}
-                                disabled={!isEditing}
                               />
-                              <Label htmlFor={`cat-${c.id}`} className="font-normal">{c.name}</Label>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                      {categories.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No categories available.</p>
-                      )}
+                          );
+                        })}
+                      </div>
                       {isEditing && (
                         <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/categories', 'categories')}>
                           <Plus className="w-4 h-4 mr-2" /> Add Category
@@ -1272,32 +1341,44 @@ export default function ServicesPage() {
                       <p className="text-xs text-muted-foreground italic">
                         Note: If no providers are selected, this service will be available with all providers by default.
                       </p>
-                      {providers.length > 0 && (
-                        <div className="flex flex-col gap-2.5">
-                          {providers.map(p => (
-                            <div key={p.id} className="flex items-center space-x-2">
-                              <Checkbox 
-                                id={`prov-${p.id}`} 
-                                checked={formData.provider_ids.includes(p.id)}
+                      {providers.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No providers available.</p>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {providers.map(p => {
+                          const isLinked = formData.provider_ids.includes(p.id);
+                          return (
+                            <div
+                              key={p.id}
+                              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                                isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
+                              }`}
+                            >
+                              <Avatar className="h-8 w-8 shrink-0 border" style={{ backgroundColor: p.color || '#e2e8f0' }}>
+                                <AvatarImage src={p.avatar || p.image} alt={p.name} className="object-cover" />
+                                <AvatarFallback className="text-xs font-bold bg-transparent text-white">
+                                  {p.name ? p.name[0].toUpperCase() : 'P'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{p.name}</p>
+                                {p.email && <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>}
+                              </div>
+                              <Switch
+                                checked={isLinked}
+                                disabled={!isEditing}
                                 onCheckedChange={(checked) => {
                                   const current = formData.provider_ids || [];
-                                  const updated = checked 
-                                    ? [...current, p.id]
-                                    : current.filter(id => id !== p.id);
+                                  const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
                                   const next = { ...formData, provider_ids: updated };
                                   setFormData(next);
                                   triggerSave(next, true);
                                 }}
-                                disabled={!isEditing}
                               />
-                              <Label htmlFor={`prov-${p.id}`} className="font-normal">{p.name}</Label>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                      {providers.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No providers available.</p>
-                      )}
+                          );
+                        })}
+                      </div>
                       {isEditing && (
                         <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/providers', 'providers')}>
                           <Plus className="w-4 h-4 mr-2" /> Add Provider
@@ -1310,37 +1391,30 @@ export default function ServicesPage() {
                   <AccordionItem value="products" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {products.length > 0 && (
-                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                          {products.map(p => (
-                            <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                              <div className="flex items-center space-x-2 flex-1 min-w-0">
-                                <Checkbox 
-                                  id={`prod-${p.id}`} 
-                                  checked={formData.product_ids.includes(p.id)}
-                                  onCheckedChange={(checked) => {
-                                    const current = formData.product_ids || [];
-                                    const updated = checked 
-                                      ? [...current, p.id]
-                                      : current.filter(id => id !== p.id);
-                                    const next = { ...formData, product_ids: updated };
-                                    setFormData(next);
-                                    triggerSave(next, true);
-                                  }}
-                                  disabled={!isEditing}
-                                />
-                                <Label htmlFor={`prod-${p.id}`} className="font-normal truncate">{p.name}</Label>
-                              </div>
-                              <div className="shrink-0 text-xs font-medium text-foreground pl-4 w-16 text-right">
-                                ${p.price || '0.00'}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                       {products.length === 0 && (
                         <p className="text-sm text-muted-foreground">No products available.</p>
                       )}
+                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                        {products.map(p => (
+                          <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                            <Label className="font-normal truncate flex-1">{p.name}</Label>
+                            <div className="flex items-center gap-3 shrink-0 pl-4">
+                              <span className="text-xs font-medium text-foreground w-14 text-right">${p.price || '0.00'}</span>
+                              <Switch
+                                checked={formData.product_ids.includes(p.id)}
+                                disabled={!isEditing}
+                                onCheckedChange={(checked) => {
+                                  const current = formData.product_ids || [];
+                                  const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
+                                  const next = { ...formData, product_ids: updated };
+                                  setFormData(next);
+                                  triggerSave(next, true);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                       {isEditing && (
                         <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/products', 'products')}>
                           <Plus className="w-4 h-4 mr-2" /> Add Product
@@ -1353,38 +1427,31 @@ export default function ServicesPage() {
                   <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {addons.length > 0 && (
-                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                          {addons.map(a => (
-                            <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                              <div className="flex items-center space-x-2 flex-1 min-w-0">
-                                <Checkbox 
-                                  id={`addon-${a.id}`} 
-                                  checked={formData.addon_ids.includes(a.id)}
-                                  onCheckedChange={(checked) => {
-                                    const current = formData.addon_ids || [];
-                                    const updated = checked 
-                                      ? [...current, a.id]
-                                      : current.filter(id => id !== a.id);
-                                    const next = { ...formData, addon_ids: updated };
-                                    setFormData(next);
-                                    triggerSave(next, true);
-                                  }}
-                                  disabled={!isEditing}
-                                />
-                                <Label htmlFor={`addon-${a.id}`} className="font-normal truncate">{a.name}</Label>
-                              </div>
-                              <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-4">
-                                <span className="w-20 text-right">{a.duration > 0 ? `+${a.duration} mins` : ''}</span>
-                                <span className="w-16 text-right font-medium text-foreground">${a.price || '0.00'}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                       {addons.length === 0 && (
                         <p className="text-sm text-muted-foreground">No add-ons available.</p>
                       )}
+                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                        {addons.map(a => (
+                          <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                            <Label className="font-normal truncate flex-1">{a.name}</Label>
+                            <div className="flex items-center gap-3 shrink-0 pl-4">
+                              {a.duration != null && a.duration > 0 && <span className="text-xs text-muted-foreground">+{a.duration} mins</span>}
+                              <span className="text-xs font-medium text-foreground w-14 text-right">${a.price || '0.00'}</span>
+                              <Switch
+                                checked={formData.addon_ids.includes(a.id)}
+                                disabled={!isEditing}
+                                onCheckedChange={(checked) => {
+                                  const current = formData.addon_ids || [];
+                                  const updated = checked ? [...current, a.id] : current.filter(id => id !== a.id);
+                                  const next = { ...formData, addon_ids: updated };
+                                  setFormData(next);
+                                  triggerSave(next, true);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                       {isEditing && (
                         <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
                           <Plus className="w-4 h-4 mr-2" /> Add Add-on

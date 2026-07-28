@@ -20,7 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Checkbox } from '@/components/ui/checkbox';
+
 import {
   Accordion,
   AccordionContent,
@@ -1376,15 +1376,13 @@ export default function ProvidersPage() {
                   <AccordionContent className="p-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
                       {locations.map((loc, lIndex) => (
-                        <div key={loc.id || `location-${lIndex}`} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
-                          <Checkbox
+                        <div key={loc.id || `location-${lIndex}`} className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                          <Label htmlFor={`location-${loc.id}`} className="text-sm font-medium cursor-pointer">{loc.name}</Label>
+                          <Switch
                             id={`location-${loc.id}`}
                             checked={(loc.provider_ids || []).map(String).includes(String(selectedProvider.id))}
-                            onCheckedChange={(checked) => handleToggleLocationAssociation(String(loc.id), !!checked)}
+                            onCheckedChange={(checked) => handleToggleLocationAssociation(String(loc.id), checked)}
                           />
-                          <Label htmlFor={`location-${loc.id}`} className="text-sm font-normal cursor-pointer w-full">
-                            {loc.name}
-                          </Label>
                         </div>
                       ))}
                     </div>

@@ -22,3 +22,35 @@ operable program or batch file.
 
 'vite' is not recognized as an internal or external command,
 operable program or batch file.
+
+--- Started 2026-07-28T11:21:00.534Z | cmd="npm run dev" | cwd="F:\Projects\fastapi_bookings\mapbox" ---
+
+> fastapi-bookings-front-end-mapbox@0.0.0 dev
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T11:23:43.440Z | cmd="npm run dev" | cwd="F:\Projects\fastapi_bookings\mapbox" ---
+
+> fastapi-bookings-front-end-mapbox@0.0.0 dev
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T11:23:45.389Z | cmd="npm run dev" | cwd="F:\Projects\fastapi_bookings\mapbox" ---
+
+> fastapi-bookings-front-end-mapbox@0.0.0 dev
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T11:23:47.031Z | cmd="npm run dev" | cwd="F:\Projects\fastapi_bookings\mapbox" ---
+
+> fastapi-bookings-front-end-mapbox@0.0.0 dev
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
