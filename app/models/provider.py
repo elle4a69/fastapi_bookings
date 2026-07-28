@@ -28,6 +28,7 @@ class Provider(Base):
     capacity = Column(Integer, default=1, nullable=False)
     color = Column(String, nullable=True)
     description = Column(Text, nullable=True)
+    ignore_company_hours = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     tenant = relationship("Tenant")
@@ -38,7 +39,12 @@ class Provider(Base):
         "ServiceProvider",
         back_populates="provider",
         cascade="all, delete-orphan",
+        lazy="joined"
     )
+
+    @property
+    def service_ids(self) -> list[int]:
+        return [s.service_id for s in self.services]
 
     def __repr__(self) -> str:
         return f"<Provider id={self.id} name={self.name}>"

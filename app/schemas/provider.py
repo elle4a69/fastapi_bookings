@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProviderBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     name: str = Field(..., description="Provider's name")
     email: Optional[str] = Field(None, description="Provider's email address")
     phone: Optional[str] = Field(None, description="Provider's phone number")
@@ -15,6 +16,7 @@ class ProviderBase(BaseModel):
     capacity: int = Field(1, description="Capacity/slots available for concurrent bookings")
     color: Optional[str] = Field(None, description="Calendar color hex code")
     description: Optional[str] = Field(None, description="Provider description/bio")
+    ignore_company_hours: bool = Field(False, description="Whether this provider ignores company-wide working hours")
 
 
 class ProviderCreate(ProviderBase):
@@ -22,6 +24,7 @@ class ProviderCreate(ProviderBase):
 
 
 class ProviderUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -30,6 +33,8 @@ class ProviderUpdate(BaseModel):
     capacity: Optional[int] = None
     color: Optional[str] = None
     description: Optional[str] = None
+    ignore_company_hours: Optional[bool] = None
+    service_ids: Optional[list[int]] = None
 
 
 class ProviderInDBBase(ProviderBase):
@@ -39,7 +44,7 @@ class ProviderInDBBase(ProviderBase):
 
 
 class Provider(ProviderInDBBase):
-    pass
+    service_ids: list[int] = []
 
 
 class ProviderListResponse(BaseModel):

@@ -97,8 +97,15 @@ def update_provider(
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
-    for field, value in provider_in.dict(exclude_unset=True).items():
+    for field, value in provider_in.dict(exclude_unset=True, exclude={"service_ids"}).items():
         setattr(provider, field, value)
+
+    if provider_in.service_ids is not None:
+        from ...models.service_provider import ServiceProvider
+        provider.services = []
+        db.flush()
+        provider.services = [ServiceProvider(tenant_id=tenant.id, service_id=svc_id) for svc_id in provider_in.service_ids]
+
     db.commit()
     db.refresh(provider)
     return {"ok": True, "data": provider}
