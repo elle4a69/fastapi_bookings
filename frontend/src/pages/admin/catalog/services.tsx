@@ -1402,8 +1402,8 @@ export default function ServicesPage() {
                 </CardFooter>
               )}
             </Card>
-        )}
-      </div>
+        ))
+      }</div>
 
       <Dialog open={newEntityDialog.open} onOpenChange={(o) => setNewEntityDialog({type: '', open: o})}>
         <DialogContent>
