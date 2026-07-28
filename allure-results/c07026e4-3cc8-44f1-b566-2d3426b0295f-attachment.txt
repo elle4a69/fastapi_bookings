@@ -1,0 +1,11 @@
+INFO     app.services.outbox_worker:outbox_worker.py:28 Outbox worker background loop starting...
+INFO     httpx:_client.py:1025 HTTP Request: TRACE http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: QUERY http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: PUT http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: PATCH http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: OPTIONS http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/add-ons "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/add-ons "HTTP/1.1 200 OK"
+INFO     app.services.outbox_worker:outbox_worker.py:42 Stopping outbox worker background loop...
+ERROR    opentelemetry.exporter.otlp.proto.http.trace_exporter:__init__.py:235 Failed to export span batch due to timeout, max retries or shutdown.

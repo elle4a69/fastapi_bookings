@@ -1,0 +1,7 @@
+Timestamp: 20260713-190234
+Base URL: http://127.0.0.1:8017
+Newman exit code: 1
+JSON report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190234\authenticated-sweep.json
+HTML report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190234\authenticated-sweep.html
+Console log: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190234\console.log
+Server started by script: True

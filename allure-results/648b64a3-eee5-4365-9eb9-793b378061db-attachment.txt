@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:00:56,792", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:56,805", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,814", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,820", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,829", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,838", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,847", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,863", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/packages \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,884", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/packages \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:56,887", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:58,360", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.05s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

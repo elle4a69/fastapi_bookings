@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:01:32,025", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:32,044", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,057", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,072", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,084", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,094", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,105", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}
+{"timestamp": "2026-07-09 12:01:32,109", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,125", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,152", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/steps/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:32,156", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

@@ -1,0 +1,1538 @@
+@sb_active: @sb_base_color;
+@border_slot_color: #e9e9e9;
+
+@sb_busy_font: contrast(@sb_busy, @dark_font_color, @light_font_color);
+@sb_available_font: contrast(@sb_available, @dark_font_color, @light_font_color);
+@sb_active_font: contrast(@sb_active, @dark_font_color, @light_font_color);
+
+@formThemeColor: @sb_base_color;
+@svg-base-color: fade(@formThemeColor, 99.9%);
+
+@btn_color: if((iscolor(@btn_color_1)), @btn_color_1, @sb_base_color);
+@new_btn_color: if(@allow_new_theme_btn_color, @btn_color, @sb_base_color);
+
+@svg-btn-contrast-text-color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+@svg-btn-text-color: fade(@svg-btn-contrast-text-color, 99.9%);
+
+@chat_bg_color: if(iscolor(@body_bg_color), @body_bg_color, #ffffff);
+
+:root{
+  --colors_accent: @sb_base_color;
+  --chat_bg: @chat_bg_color;
+  --base-color: @sb_base_color;
+  --btn-bg: @btn_color;
+  --btn-text-color: contrast(@btn_color, @dark_font_color, @light_font_color);
+  --colors_text: contrast(@chat_bg_color, @dark_font_color, @light_font_color);
+
+  --chat-client-message-bg: tint(@sb_base_color, 88%);
+  --chat-client-message-color: @dark_font_color;
+}
+
+// AI chat widget
+html body .sb-chat{
+  &-container{
+    --border-angle: 0turn;
+    --main-bg: conic-gradient(
+            from var(--border-angle),
+            var(--chat_bg),
+            var(--chat_bg) 5%
+    );
+    --gradient-border: conic-gradient(
+            from var(--border-angle),
+            var(--base-color),
+            var(--btn-bg) 65%,
+            color-mix(in srgb, var(--btn-bg), black 15%) 85%,
+            var(--base-color) 100%
+    );
+    color: var(--colors_text);
+    background:
+            // padding-box clip this background in to the overall element except the border.
+            var(--main-bg) padding-box,
+              // border-box extends this background to the border space
+            var(--gradient-border) border-box,
+              // Duplicate main background to fill in behind the gradient border. You can remove this if you want the border to extend "outside" the box background.
+            var(--main-bg) border-box;
+    background-position: center center;
+
+    .sb-message-input {
+      input[type="text"] {
+        border: 1px solid var(--colors_border);
+        background: transparent;
+
+        &:focus {
+          border-color: var(--base-color);
+        }
+      }
+    }
+
+    .sb-message-input-closed {
+      border: 1px solid var(--chat-client-message-bg);
+      background: var(--chat-client-message-bg);
+      color: var(--chat-client-message-color);
+    }
+
+    .sb-start-new-session-btn {
+      border: 1px solid var(--colors_accent);
+      background: var(--colors_accent);
+      color: var(--btn-text-color);
+
+      &:hover {
+        background: color-mix(in srgb, var(--colors_accent), black 10%);
+      }
+    }
+
+    .sb-payment-link {
+      background: linear-gradient(90deg, var(--btn-bg) 0%, color-mix(in srgb, var(--btn-bg), black 15%) 100%);
+      color: var(--btn-text-color);
+
+      &:hover, &:focus {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--btn-bg), black 15%) 0%, var(--btn-bg) 100%);
+        color: var(--btn-text-color);
+      }
+    }
+  }
+
+  // button
+  &--button{
+    border: 1px solid var(--btn-bg);
+
+    &_audio{
+      color: var(--colors_text);
+      background: transparent;
+    }
+
+    &_send{
+      background: var(--btn-bg);
+      color: var(--btn-text-color);
+    }
+  }
+
+  //header
+  &--header{
+    &_close-btn{
+      background: transparent;
+      border: none;
+      color: var(--close_chat_btn_color);
+
+      &:hover,
+      &:focus{
+        color: var(--colors_error);
+      }
+    }
+  }
+  // x header
+
+
+  //body
+  &--content,
+  &--content_conversation,
+  &--content_empty {
+    scrollbar-width: thin;
+    scrollbar-color: var(--btn-bg, #06adef) var(--colors_secondary);
+
+    &::-webkit-scrollbar-track {
+      background: var(--colors_secondary);
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: var(--btn-bg, #06adef);
+      border: 1px solid var(--colors_secondary);
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: color-mix(in srgb, var(--btn-bg, #06adef), black 15%);
+    }
+  }
+  // x body
+
+
+  //greeting banner
+  &--greeting{
+
+    &_icon{
+      color: var(--btn-bg);
+    }
+
+    &_title{
+
+    }
+
+    &_txt{
+
+    }
+  }
+  // x greeting banner
+
+
+  //footer
+  &--footer{
+    &_input{
+      border: 1px solid var(--colors_border);
+      background: transparent;
+      scrollbar-color: var(--btn-bg) var(--chat-client-message-bg) ;
+
+      &:focus{
+        border-color: var(--btn-bg);
+        outline: none;
+      }
+
+
+      &::-webkit-scrollbar-track {
+        background: var(--btn-bg);
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: var(--chat-client-message-bg);
+      }
+
+      &::-webkit-scrollbar-thumb:hover {
+        background: var(--btn-bg);
+      }
+
+
+      &.expanded{
+        border-color: var(--btn-bg);
+      }
+    }
+  }
+  // x footer
+}
+
+.sb-message {
+  color: var(--chat-client-message-color);
+
+  &.sb-message-client {
+    background-color: var(--chat-client-message-bg);
+
+    .sb-chat--icon-recording{
+      color: var(--btn-bg);
+    }
+  }
+
+  &.sb-message-bot,
+  &.sb-status-message-thinking {
+    background: none;
+    box-shadow: none;
+  }
+
+  .sb-message-status {
+    .sb-thinking-dot {
+      background: var(--btn-bg);
+    }
+  }
+}
+
+.sb-start-chat-btn {
+  background: linear-gradient(
+          to right,
+          tint(@btn_color, 10%),
+          @btn_color 50%,
+          shade(@btn_color, 10%)
+  );
+  border-color: @btn_color;
+  color: contrast(@btn_color, @dark_font_color, @light_font_color);
+
+  &_txt{
+    background: var(--chat_bg);
+    border: 1px solid var(--btn-bg);
+    color: var(--colors_text);
+
+    &.pos-bottom {
+      &:after {
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-bottom: 6px solid var(--chat_bg);
+      }
+    }
+
+    /* ▲ TOP (tooltip above button) */
+    &.pos-top {
+      &:after {
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid var(--chat_bg);
+      }
+    }
+
+    /* ◀ LEFT (tooltip left of button) */
+    &.pos-left {
+      &:after {
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-left: 6px solid var(--chat_bg);
+      }
+    }
+
+    /* ▶ RIGHT (tooltip right of button) */
+    &.pos-right {
+      &:after {
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-right: 6px solid var(--chat_bg);
+      }
+    }
+
+    .ai-icon{
+      color: color-mix(in srgb, var(--btn-bg), black 12%);
+    }
+  }
+
+  &:hover{
+    background: linear-gradient(
+            to right,
+            tint(shade(@btn_color, 10%), 5%),
+            shade(@btn_color, 5%) 50%,
+            shade(@btn_color, 20%)
+    );
+    border-color: @btn_color;
+    color: contrast(shade(@btn_color, 10%), @dark_font_color, @light_font_color);
+  }
+
+  &:active,
+  &:focus{
+    background: shade(@btn_color, 15%);
+    border-color: @btn_color;
+    color: contrast(shade(@btn_color, 15%), @dark_font_color, @light_font_color);
+  }
+
+  &:focus:not(:focus-visible),
+  &:focus {
+    outline: none; // Remove browser default focus outline on click
+  }
+
+  &:focus-visible {
+    outline: 1px solid @btn_color; // Visible outline only for keyboard users
+  }
+}
+
+.sb-cell {
+  cursor: pointer;
+
+  &.free {
+    background: @sb_available;
+    color: @sb_available_font;
+
+    a {
+      color: @sb_available_font;
+    }
+
+    &.hovered,
+    &:hover {
+      background-color: @sb_active;
+      color: @sb_active_font;
+
+      a {
+        color: @sb_available_font;
+      }
+    }
+
+    &.buffertime {
+      background-image: url('/v2/images/admin/icons/pattern.png');
+    }
+  }
+
+  &.breaktime,
+  &.reserved,
+  &.busy_time,
+  &.busy {
+    background: @sb_busy;
+    color: @sb_busy_font;
+    opacity: .4;
+    cursor: not-allowed;
+  }
+}
+
+#header .nav-wrapper .items-wrapper .nav-item#book-btn .book-btn-container .item-container {
+  background-color: @sb_base_color;
+}
+
+#sb_content #sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper #sb-time-classes-container.classes-plugin .inner .provider-container .provider-col .provider-item .cell {
+  border-top-color: @sb_base_color;
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .slots-view.as-table .timeline-wrapper #sb_time_slots_container .slot {
+  border-right: 1px solid fade(@sb_base_color, 70%);
+  border-bottom: 1px solid fade(@sb_base_color, 70%);
+
+  &:nth-of-type(5n) {
+    border-right: none;
+  }
+
+  @media (max-width: 767px) {
+    &:nth-of-type(3n) {
+      border-right: none;
+    }
+
+    &:nth-of-type(5n) {
+      border-right: 1px solid fade(@sb_base_color, 70%);
+    }
+  }
+  @media (max-width: 575px) {
+    border-right: none;
+    &:nth-of-type(2n - 1) {
+      border-right: 1px solid fade(@sb_base_color, 70%);
+    }
+  }
+
+  a {
+    background-color: @sb_base_color;
+    color: @light_font_color;
+
+    &:hover {
+      background-color: fade(@sb_base_color, 70%);
+    }
+  }
+}
+
+.back-to-services {
+  color: @dark_font_color;
+
+  &:hover,
+  &:focus {
+    color: @dark_font_color;
+  }
+}
+
+.classes-modal #time_classes_time_container .time-slot {
+  background-color: @sb_available;
+}
+
+.classes-modal .tab .plugin-group-booking .ui-slider {
+  background: @sb_base_color;
+}
+
+#header .nav-wrapper #sb_menu .nav #sb_appended_menu_item ul li.active a {
+  color: @sb_base_color;
+}
+
+#sb_terms_and_conditions a {
+  color: @sb_base_color;
+}
+
+.remind-pass {
+  color: @sb_base_color;
+}
+
+#news-index .news-list .article .bar .read-more a {
+  color: @sb_base_color;
+}
+
+//#reviews-view .add-review .form .send-btn-container button {
+//  background: @sb_base_color;
+//  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+//}
+
+.time-legend .available .circle {
+  background: @sb_available;
+}
+
+.time-legend .unavailable .circle {
+  background: @sb_busy;
+  opacity: .4;
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_dateview_container .top-date-select .calendar .weeks-date .date.selected {
+  background: @sb_available;
+
+  .day-on,
+  .day-off {
+    color: @sb_available_font;
+  }
+
+  &:hover {
+    background: @sb_available;
+  }
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner table .btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner table td .data-trigger {
+  color: @sb_base_color;
+}
+
+.invoice-pay-page .promo-code-input .custom-form .promo-btn {
+  background: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+}
+
+.service-bar__icon .icon.icon-reccuring .fa {
+  color: @dark_font_color;
+}
+
+//DATEPICKER COLORS
+.datepicker table tr td.active:active,
+.datepicker table tr td.active.highlighted:active,
+.datepicker table tr td.active.active,
+.datepicker table tr td.active.highlighted.active {
+  background-color: @sb_available;
+  background: @sb_available;
+  color: @sb_available_font;
+}
+
+.datepicker-button .btn-link {
+  color: @sb_base_color;
+}
+
+//.mb.btn-bar .info-container .wrapper,
+.plugin-group-booking .ui-slider,
+#membership-plugin .btn-with-icon,
+#membership-plugin .mb.btn-bar .active-container .wrapper,
+.plugin-group-booking .ui-slider {
+  background: @new_btn_color;
+}
+
+.sb_changed_filter_item {
+  background-color: @sb_base_color;
+  color: @light_font_color;
+}
+
+//.mb.btn-bar .info-container .wrapper,
+#membership-plugin .btn-with-icon a.wrapper,
+#membership-plugin .mb.btn-bar .active-container .wrapper,
+#membership-view .mb.btn-bar a.wrapper {
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#membership-plugin .see-more a {
+  color: #ffffff;
+}
+
+#membership-view .mb.btn-bar .active-container a.wrapper,
+#membership-view .mb.btn-bar .info-container a.wrapper {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.custom-checkbox input:checked + .custom-label {
+  border-color: @sb_base_color;
+  background-color: @sb_base_color;
+}
+
+a.btn.select,
+#sb_booking_content .tab .btn.select,
+#sb_time_classes_service_container .btn.select,
+.package-content .btn.select,
+div.tab .btn.select,
+a.btn.select{
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  a {
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.btn--secondary{
+  border-color: @new_btn_color;
+  color: @new_btn_color;
+  background: transparent;
+}
+
+.btn--secondary:hover, .btn--secondary:focus, .btn--secondary:active{
+  color: @new_btn_color;
+  background: transparent;
+  border-color: darken( @new_btn_color, 6%);
+}
+
+.buttons .btn--action{
+  background: transparent;
+  color: @dark_font_color;
+}
+
+#content-view #contacts li .links .btn-bar__social-links .btn--action{
+  color: darken( @new_btn_color, 6%);
+}
+
+.buttons .btn--action:hover, .buttons .btn--action:focus, .buttons .btn--action:active{
+  background: transparent;
+  color: @dark_font_color;
+}
+
+#reviews-view .add-review .form .social-container .txt:before, #reviews-view .add-review .form .social-container .txt:after{
+    background: @dark_font_color;
+}
+
+.item .read-more,
+.membership-item .read-more {
+  color: @sb_base_color;
+}
+
+
+#membership-view #sb_membership_list_container .membership-item .purchased,
+.modal-dialog .modal-content .modal-header {
+  background-color: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+
+  a {
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.custom-radio input:checked + label {
+  border: 2px solid @sb_base_color;
+}
+
+.custom-radio input:checked + label:before {
+  background-color: @sb_base_color;
+}
+
+.license-modal a {
+  color: @sb_base_color;
+}
+
+.sb-widget-form .buttons .send-message-button {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#remind-password .bar #sb_remind_btn {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#footer .cookies .btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#footer a {
+  color: @sb_base_color;
+}
+
+.empty-week-time-part {
+  .btn-next-week {
+    background: @new_btn_color;
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+#sb_gdpr_report_module_container #sb_gdpr_email_form .content .form-container .btn {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#sb_gdpr_send_email_container .btn-send-code,
+#sb_gdpr_send_code_container .btn-get-report {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.tab.tab-col.get-gdpr-info-modal .full-info .close-full-info {
+  background-color: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+}
+
+#footer #sb_scroll_top_btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  &:hover {
+    background-color: fade(@new_btn_color, 70%);
+  }
+}
+
+.page--line-liff .btn-bar .btn,
+.error-card .redirect-block .block .btn {
+  background-color: @new_btn_color;
+  border-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  &:hover {
+    background-color: darken(@new_btn_color, 10%);
+  }
+}
+
+//.invoice-pay-page .custom-title {
+//  background-color: @sb_base_color;
+//  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+//}
+
+.invoice-payment-systems #sb_pay_btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.invoice-deposit-info .btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.invoice-pay-page .invoice-btn-bar .btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.invoice-pay-page .promo-code-input .custom-form .btn {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.invoice-pay-page #sb_invoice_pager_container .pagination-wrapper .arrow,
+.invoice-pay-page #sb_invoice_pager_container .pagination-wrapper a {
+  &:hover {
+    background-color: @sb_base_color;
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+
+  &.current {
+    background-color: @sb_base_color;
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.invoice-pay-page .to-invoices-list:hover {
+  color: @sb_base_color;
+}
+
+.invoice-pay-page .accordion .accordion-header .title {
+  color: @dark_font_color;
+}
+
+.pdf-invoice .invoice-top {
+  border-color: @sb_base_color !important;
+}
+
+.pdf-invoice .invoice-top .name {
+  color: @sb_base_color !important;
+}
+
+.pdf-invoice .general-table thead {
+  background: @sb_base_color !important;
+  background-color: @sb_base_color !important;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color) !important;
+}
+
+.pdf-invoice .general-table .table thead tr {
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color) !important;
+  th {
+    border-color: @sb_base_color !important;
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color) !important;
+  }
+}
+
+.btn-invoice {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  &:hover,
+  &:focus,
+  &:active,
+  &:visited {
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.invoice-table a {
+  color: @sb_base_color;
+}
+
+.accordion a {
+  color: @sb_base_color;
+}
+
+.current-booking-info .info a {
+  color: @sb_base_color;
+}
+
+.wrap-client-info-view .back-button {
+  color: @dark_font_color;
+}
+
+.wrap-client-info-view .client-info-view .btn-bar .btn {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  border-color: @new_btn_color;
+}
+
+.btn.start-date-btn,
+.start-date-btn {
+  a,
+  .sb_start_date {
+    color: @sb_base_color;
+  }
+}
+
+//.promotion-print-card .card-contacts .company-card-view .card-view-content .bant{
+//  -webkit-print-color-adjust: exact;
+//  background: url('data:image/svg+xml;utf8,<?xml version="1.0" encoding="iso-8859-1"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90.54 84.2"><defs><style>.cls-1{fill:@{svg-base-color}}.cls-2{fill:@{svg-base-color}}.cls-3{fill:@{svg-base-color}}.cls-4{fill:@{svg-base-color}}</style></defs><g id="Layer_2" data-name="Layer 2"><g id="Layer_1-2" data-name="Layer 1"><path class="cls-1" d="M36.69 30.83l-.81 3.39c-1.39-.12-3.42-.16-5.8-.29-10-.52-26.51-2.44-29.76-17.37C.19 16 .09 15.37 0 14.75l9.48-8.49S8.8 26 36.69 30.83z"/><path class="cls-2" d="M39.41 31.13l-1.14.87-2.65 2a25 25 0 0 0-2-3.83 26.17 26.17 0 0 0-5.8-6.54 35.32 35.32 0 0 0-9.52-5.44A54.63 54.63 0 0 0 0 14.75L10.49 3.27a25.47 25.47 0 0 1 12.82 3.4A25.29 25.29 0 0 1 29 11.29 31.72 31.72 0 0 1 31.93 15c3.37 4.88 5.37 10.33 6.82 14.36z"/><path class="cls-3" d="M39.52 31.12l-3.37 4c-.69-1.18-1.75-3.67-2.49-4.85C34.67 27.93 35 22 31.93 15c3.37 4.83 6.14 12.09 7.59 16.12z"/><path class="cls-2" d="M90.54 77.62L79.13 84.2l-7.71-8.83-35.19-40.36 2.6-4.14 45.73 41.34 5.98 5.41z"/><path class="cls-2" d="M39.06 30.97L45 32.98 26.77 68.69 12.62 67.1l26.44-36.13z"/><path class="cls-4" d="M75.41 10a18.74 18.74 0 0 1-4.33 12.5c-5.65 6.71-15.65 9.19-22.61 10.5-2.36.45-4.38.76-5.75 1.08l-1.49-3.25c26.21-3 23.64-28 23.64-28z"/><path class="cls-2" d="M63.46 0C43.55 3 40.57 22.56 38.58 31.52l4.14 2.4C48 13.35 75.4 10 75.4 10z"/></g></g></svg>') !important;
+//  background-size: 50px;
+//  background-repeat: no-repeat;
+//  background-position: center center;
+//}
+
+#reviews-view .add-review .info .name {
+  color: @sb_base_color;
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .location-item .address a {
+  color: @sb_base_color;
+}
+
+.sb-widget-form .buttons .open-booking-widget-button {
+  color: @sb_base_color;
+}
+
+.btn-classes {
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  &:hover,
+  &:focus,
+  &:active,
+  &:visited {
+    text-decoration: none;
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+@media print {
+  .pdf-invoice .general-table thead th {
+    background: @sb_base_color !important;
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color) !important;
+  }
+}
+
+@media print {
+  .promotion-print-card .card-content .left-part.percentage .name {
+    //color: @sb_base_color;
+  }
+}
+
+.promotion-print-card .card-content .right-part .block .black-text.custom-font,
+.promotion-print-card .card-content .left-part .top-title {
+  //color: @sb_base_color;
+}
+
+.promotion-print-card .card-content .left-part, .promotion-print-card .card-content .right-part {
+  //border-color: @sb_base_color;
+}
+
+@media print {
+  .promotion-print-card .card-content .right-part .block .black-text.custom-font,
+  .promotion-print-card .card-content .left-part .top-title {
+    //color: @sb_base_color !important;
+  }
+
+  @media print and (-webkit-min-device-pixel-ratio: 0) {
+    .promotion-print-card .card-content .right-part .block .black-text.custom-font,
+    .promotion-print-card .card-content .left-part .top-title {
+      //color: @sb_base_color !important;
+    }
+  }
+
+  .promotion-print-card .card-content .left-part, .promotion-print-card .card-content .right-part {
+    //border-color: @sb_base_color;
+  }
+}
+
+/* Grid weekly timeline */
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner .top-inline-steps .parts-of-day .btn,
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner .top-inline-steps .days-of-week .btn {
+  background: transparent;
+  color: contrast(@light_font_color, @dark_font_color, @light_font_color);
+  border-color: @new_btn_color !important;
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner .top-inline-steps .parts-of-day .btn.active,
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-inner .top-inline-steps .days-of-week .btn.active {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#sb_timeview_container .timeline-wrapper .grid-weekly-header .grid-weekly-header-item {
+  background-color: @sb_base_color;
+  color: contrast(@sb_base_color, @light_font_color, @dark_font_color);
+}
+
+.grid-weekly-item .data-trigger {
+  color: @sb_base_color;
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .grid-weekly-table .grid-weekly-body .grid-weekly-row .grid-weekly-item.grid-weekly-button .btn {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @light_font_color, @dark_font_color);
+}
+
+.invoice-pay-page #sb_invoice_pager_container .pagination-wrapper a {
+  color: @sb_base_color;
+}
+
+//#sb_simplybook_terms_link:hover {
+//  border-bottom-color: @sb_base_color;
+//}
+
+.membership-item.panel .btn-bar .btn.price-formatter,
+.item.panel .btn-bar .btn {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @light_font_color, @dark_font_color);
+}
+
+.item.panel .btn-bar .btn:hover{
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @light_font_color, @dark_font_color);
+}
+
+.content-mode-list .title,
+.content-mode-list .title a,
+item.panel .title,
+.item.panel .title a {
+  color: contrast(@body_bg_color, @light_font_color, @dark_font_color);
+}
+
+.bar-flex-item.price:not(.service-deposit) .txt {
+  color: @sb_base_color;
+}
+
+.panel .plugin-group-booking .active-count .plus,
+.panel .plugin-group-booking .active-count .minus {
+  color: @dark_font_color;
+
+  &:hover {
+    background: @sb_base_color;
+    color: contrast(@sb_base_color, @light_font_color, @dark_font_color);
+  }
+}
+
+.panel > .wrap-collapse-content .collapse-content .btn-bar-full-info .btn-hide,
+.panel > .wrap-collapse-content .collapse-content .btn-bar-full-info .btn-hide span,
+.panel .btn-bar .wrap-read-more .read-more .part,
+#sb-timeline #steps #steps-content #sb_booking_content .location-item.panel .address a {
+  color: #337ab7;
+
+  &:hover, &:active, &:focus {
+    color: #23527c;
+  }
+}
+
+.payment-modal .payment-system-container .payment-system, .payment-modal #sb_payment_systems_container .payment-system {
+  &:hover,
+  &.active {
+    border-color: @sb_base_color;
+  }
+}
+
+#membership-plugin #sb_membership_module_list_container.content-mode-list .membership-item .one-line > .btn-bar .btn.sb_cancel_recurring, #membership-view #sb_membership_list_container.content-mode-list .membership-item .one-line > .btn-bar .btn.sb_cancel_recurring {
+  background: #F44336;
+  color: #fff;
+}
+
+.phone b,
+.phone .txt-wrap,
+#content-view #contacts li .phone,
+.phone-number {
+  direction: ltr !important;
+}
+
+.confirm-details {
+  .btn {
+    color: contrast(@sb_base_color, @light_font_color, @dark_font_color);
+  }
+}
+
+// Add-ons
+#sb-timeline #steps #steps-content #sb_booking_content {
+  .paid-attribute-step #sb_attribute_list_container {
+    .product-item {
+      &.selected {
+        border-color: @sb_base_color;
+        .item-name {
+          font-weight: 600;
+        }
+      }
+      .item-price {
+        color: @sb_base_color;
+      }
+    }
+  }
+  .paid-attribute-footer {
+    .btn.next {
+      background: @new_btn_color;
+      color: contrast(@new_btn_color, @light_font_color, @dark_font_color);
+    }
+  }
+}
+
+.current-booking-info .btn.sb-ticket-download {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.current-booking-info .btn.sb-ticket-download .txt {
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.page-content--online-meeting .online-meeting .btn{
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.page-content--online-meeting .online-meeting__picture .svg__theme-color{
+  g{
+    fill: @sb_base_color;
+  }
+}
+
+.current-booking-info .package-use-credits-msg .link{
+  color: @sb_base_color;
+}
+
+.pwa_install{
+  &__button{
+    background: transparent;
+    color: #06adef;
+  }
+}
+
+.booking-btns{
+  .sb-medical-test-download{
+    background: @sb_base_color;
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.waiting-list--btn-bar .btn{
+  background: @new_btn_color;
+  border-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+#sb_time_slots_weekly_container .waiting-list-day .cell{
+  background: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+
+  &:hover{
+    background: darken(@sb_base_color, 4%);
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+}
+.btn-bar--gallery .btn--load-more{
+  border: 2px solid @new_btn_color;
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  &:hover, &:active{
+    border-color: @new_btn_color;
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+#header .nav-wrapper #sb_menu,
+#header .nav-wrapper #sb_menu .nav{
+  &::-webkit-scrollbar-track {
+    background-color: fade(@sb_base_color, 20%);
+  }
+  &::-webkit-scrollbar {
+
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: @sb_base_color;
+  }
+}
+
+#steps-content #sb_booking_content #details .product-attribute-section .product-list-view-wrapper #sb_attribute_list_container .product-item .bar-service .badge,
+#sb_attribute_list_container .paid-attr__item .bar-service .badge{
+  background: transparent;
+  color: @sb_base_color;
+}
+
+.paid-attr__item.panel .bar-service__item-price .txt{
+  color: @sb_base_color;
+}
+
+.telegram-notifications{
+  &--card {
+    //background: @sb_available;
+
+    .btn{
+      background: @new_btn_color;
+      color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+    }
+  }
+  &--modal{
+    .btn{
+      background: @new_btn_color;
+      color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+    }
+  }
+}
+
+.promotion-item .bar-service__item-promo-time-devider:before{
+  background: @dark_font_color;
+}
+
+.bonus{
+  &__amount,
+  &__count{
+    color: @sb_base_color;
+    &.no-income{
+      color: #D42752;
+    }
+  }
+  &__count-row{
+    .icon{
+      color: @sb_base_color;
+    }
+  }
+  &__table{
+    td{
+      a{
+        color: @sb_base_color;
+      }
+    }
+  }
+  &__btn-bar--wrapper{
+    .btn{
+      background: @new_btn_color;
+      color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+    }
+  }
+}
+
+.promotion-list .content-mode-list .panel .one-line .content .info-bar > .d-flex .bar-flex-item--code .promotion-item__code{
+  color: @sb_base_color;
+}
+.promotion-list .content-mode-list .panel.item-used .one-line .content .info-bar > .d-flex .bar-flex-item--code .promotion-item__code{
+  color: @dark_font_color;
+  opacity: 0.7;
+}
+
+.classes-modal .bar-service .service-bonus,
+.current-booking-info .info.bonus,
+.service-bonus{
+  color: @sb_base_color;
+}
+
+.invoice-pay-page .invoice-payment-systems>div .invoice-payment-systems-info.payment-modal .btn-primary{
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  border: none;
+  border-color: transparent;
+
+  &:hover{
+    background: darken(@new_btn_color, 5%);
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+
+
+.invoice-pay-page-grid form input[type='submit'],
+.invoice-pay-page-grid form input[type='button']{
+  background: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  border: none;
+  border-color: transparent;
+  &:hover{
+    background: darken(@sb_base_color, 5%);
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+  &:active{
+    background: darken(@sb_base_color, 7%);
+    color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  }
+}
+
+.promotion-list .promotion-item .modal-dialog .item__info-bar,
+.promotion-list .promotion-item .modal-dialog .item__additional-info-action .promo-label__text,
+.promotion-list .promotion-item .modal-dialog .item__additional-info-action .promo-label__value,
+.promotion-list .promotion-item .modal-dialog .item__additional-info-action .used-label__text{
+  color: contrast(@body_bg_color, @light_font_color, @dark_font_color);
+}
+
+.dropdown__mobile-bar .dropdown-menu{
+  border-color: @sb_base_color;
+}
+
+.payment-modal .payment-system-container .payment-system,
+.payment-modal #sb_payment_systems_container .payment-system,
+.invoice-pay-page .accordion .accordion-header{
+  background: rgba(@sb_base_color, 0.10);
+}
+
+.invoice-pay-page .promo-code-input .control-label .dropdown-menu{
+  color: @dark_font_color;
+}
+
+//.is-widget .preloader .img.default svg *{
+//  fill: @sb_base_color;
+//}
+.promotion-list .promotion-item__tag .promo-label.amount,
+.promotion-list .promotion-item__tag .promo-label.discount{
+  background: rgba(darken(@sb_base_color, 5%), 0.8);
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+  box-shadow: 0px 0px 2px 0px rgba(#0c232d, 0.2);
+}
+
+.pwa-app--btn{
+  background: @sb_base_color;
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+}
+.pwa-app--btn:hover,
+.pwa-app--btn:focus,
+.pwa-app--btn:active{
+  color: contrast(@sb_base_color, @dark_font_color, @light_font_color);
+}
+
+.pwa_install__button-link{
+  color: @sb_base_color;
+}
+
+.pwa-app--install-page .pwa-app--btn{
+  border-color: @sb_base_color;
+}
+.pwa-app--install-page .loader:before{
+  border-color: @sb_base_color;
+}
+
+// Pagination
+#sb_content .pagination-wrapper a,
+#sb_content .pagination-wrapper span {
+  color: @dark_font_color;
+
+  &:hover {
+    background-color: @sb_base_color;
+    color: @light_font_color;
+  }
+}
+
+#sb_content .pagination-wrapper .current {
+  background-color: @sb_base_color;
+  color: @light_font_color;
+}
+
+.is-widget.line .preloader .img.default svg *{
+  fill: none;
+}
+
+// tips plugin
+.btn--primary {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+
+  *{
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  }
+}
+.btn--primary:active,
+.btn--primary:hover {
+  background: darken(@new_btn_color, 6%);
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+.btn--primary:focus {
+  background: darken(@new_btn_color, 8%);
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+.btn--primary-outline {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: rgba(@new_btn_color, 0.2) !important;
+  border: 1px solid @new_btn_color !important;
+  color: darken(@new_btn_color, 4%) !important;
+  text-shadow: 0px 0px 5px rgba(@dark_font_color, 0.2) !important;
+
+  *{
+    color: darken(@new_btn_color, 4%) !important;
+  }
+}
+.btn--primary-outline:focus,
+.btn--primary-outline:active,
+.btn--primary-outline:hover{
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: rgba(@new_btn_color, 0.3) !important;
+  border: 1px solid darken(@new_btn_color, 8%) !important;
+  color: darken(@new_btn_color, 8%) !important;
+}
+
+.btn--primary-outline.disabled,
+.btn--primary-outline:disabled,
+.btn--primary.disabled,
+.btn--primary:disabled,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:disabled{
+  cursor: not-allowed;
+  color: contrast(@body_bg_color, @dark_font_color, @light_font_color) !important;
+  background: rgba(#f8fafc, 0.01) !important;
+  border-color: darken(#f8fafc, 6%) !important;
+  text-shadow: none !important;
+  opacity: 0.5;
+
+  *{
+    color: contrast(@body_bg_color, @dark_font_color, @light_font_color) !important;
+  }
+}
+
+.btn--primary-outline.disabled:hover,
+.btn--primary-outline:disabled:hover,
+.btn--primary.disabled:hover,
+.btn--primary:disabled:hover,
+.btn--primary-outline.disabled:focus,
+.btn--primary-outline:disabled:focus,
+.btn--primary.disabled:focus,
+.btn--primary:disabled:focus,
+.btn--primary-outline.disabled:active,
+.btn--primary-outline:disabled:active,
+.btn--primary.disabled:active,
+.btn--primary:disabled:active,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:disabled:hover,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:focus,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:active{
+  cursor: not-allowed;
+  color: contrast(@body_bg_color, @dark_font_color, @light_font_color);
+  background: rgba(#f8fafc, 0.01);
+  border-color: darken(#f8fafc, 6%);
+  text-shadow: none;
+}
+
+
+
+// invoice-notification buttons
+.invoice-notification--pay,
+.invoice-notification.closed .invoice-notification--open{
+  background-color: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+  &:hover{
+    color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+    background-color: darken(@new_btn_color, 8%);
+  }
+}
+
+.invoice-notification--close{
+  color: @sb_base_color;
+
+  &:hover{
+    color: darken(@sb_base_color, 8%);
+    background-color: rgba(@sb_base_color, 0.1);
+  }
+}
+
+.invoice-notification--close-tooltip {
+  color: @dark_font_color;
+}
+
+// product shop catalog
+.step-content--product .item .badge{
+  color: @sb_base_color;
+  background: unset;
+}
+
+.product-view--history_list{
+  border-color: rgba(@dark_font_color, 0.2);
+}
+
+.product-view--history_item{
+  color: @dark_font_color;
+}
+
+.product-view--history_item.passed:hover{
+  color: @sb_base_color;
+}
+
+.full-info.full-info--cart{
+  background: @body_bg_color;
+  color: contrast(@body_bg_color, @dark_font_color, @light_font_color);
+  box-shadow: 3px 0px 20px rgba(@dark_font_color, 0.26);
+}
+
+.invoice-pay-page-grid_item.right-block .right-block--section-pd{
+  background: @body_bg_color;
+  color: contrast(@body_bg_color, @dark_font_color, @light_font_color);
+  border-color: rgba(darken(@dark_font_color, 100%), 0.15);
+  box-shadow: 2px 0px 18px rgba(@dark_font_color, 0.15);
+}
+
+.promotions-letter-flag,
+.deposit-paid-event,
+.product-delivery-container > div,
+.invoice-tips .tips-view,
+.invoice-pay-page.invoice-pay-page--select-pm .promo-code-input,
+.invoice-used-packages-list .accordion-wrapper,
+.full-info--cart_module .full-info--cart_footer,
+.btn-group .full-info--cart_item-count,
+.full-info--cart_item,
+.full-info--cart_item-product .btn-group{
+  border-color: rgba(darken(@dark_font_color, 100%), 0.2) !important;
+}
+
+.full-info--cart_module .package-use-credits-msg{
+  border-color: @sb_base_color !important;
+}
+
+.full-info--cart_close-btn,
+.full-info--cart_item-delete {
+  background: rgba(#fff3f3, 0.1);
+  color: #ff3259;
+}
+.full-info--cart_close-btn,
+.full-info--cart_item-delete:active,
+.full-info--cart_item-delete:hover {
+  background: rgba(#fff3f3, 0.8);
+  color: darken(#ff3259, 6%);
+}
+.full-info--cart_close-btn,
+.full-info--cart_item-delete:focus {
+  background: rgba(#fff3f3, 0.8);
+  color: darken(#ff3259, 6%);
+}
+
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:hover,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:focus,
+.full-info--cart_item-product .btn-group .full-info--cart_item-action:active{
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: rgba(@sb_base_color, 0.2);
+  color: darken(@sb_base_color, 8%);
+}
+
+.invoice-pay-page-grid_item.right-block .right-block--body table thead{
+  background: darken(@body_bg_color, 10%);
+  color: contrast(@body_bg_color, @dark_font_color, @light_font_color);
+}
+
+.full-info--cart_empty-content svg path,
+.full-info--cart_header .title svg path{
+  fill: @sb_base_color;
+}
+
+.custom-checkbox--icon-instead-checkbox .form-group--checkbox-renew__icon path{
+  fill: darken(@sb_base_color, 4%);
+}
+
+.duotone .fill,
+.product-item .preloader .duotone .fill {
+  fill: @sb_base_color;
+}
+.duotone .fill-darker,
+.product-item .preloader .duotone .fill-darker {
+  fill: darken(@sb_base_color, 10%);
+}
+.duotone .fill-darker-stroke,
+.product-item .preloader .duotone .fill-darker-stroke {
+  stroke: darken(@sb_base_color, 10%);
+  fill: none;
+}
+.duotone .fill-stroke,
+.product-item .preloader .duotone .fill-stroke {
+  stroke: @sb_base_color;
+  fill: none;
+}
+
+.full-info--cart_bookings .full-info--cart_list .full-info--cart_item-service .full-info--cart_item-image .default.img svg path{
+  stroke: @sb_base_color;
+}
+
+// Modern Provider
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper #sb-time-classes-container .inner .hour-container .hour-row:after {
+  background: fade(contrast(@body_bg_color, @dark_font_color, @light_font_color), 8%);
+}
+
+// Flexible weekly provider
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper .flexible-weekly-inner .content-container #sb_time_flexible_weekly_container .data-col {
+  .time-container .time-slot {
+    border-right-color: fade(contrast(@sb_available, @dark_font_color, @light_font_color), 15%);
+    border-bottom-color: fade(contrast(@sb_available, @dark_font_color, @light_font_color), 15%);
+
+    &.free.hovered {
+      border-right-color: fade(contrast(@sb_base_color, @dark_font_color, @light_font_color), 20%);
+      border-bottom-color: fade(contrast(@sb_base_color, @dark_font_color, @light_font_color), 20%);
+    }
+  }
+}
+
+#sb-timeline #steps #steps-content #sb_booking_content .datetime-step #sb_timeview_container .timeline-wrapper {
+  .data-col {
+    .day-container {
+      .date {
+        color: contrast(@body_bg_color, @dark_font_color, @light_font_color) !important;
+      }
+    }
+  }
+}
+
+.invoice-used-packages-list {
+  .accordion {
+    .custom-checkbox .custom-label,
+    .custom-checkbox input:checked + .custom-label{
+      background: fade(contrast(@body_bg_color, @dark_font_color, @light_font_color), 15%) !important;
+    }
+  }
+}
+
+// time different informer on booking step
+.current-booking-info .info .date-line .dropdown-toggle{
+  color: @sb_base_color;
+}
+
+.full-info-price--wrapper_global{border-color: @sb_base_color !important;}
+
+.filter--list-header{
+  color: @sb_base_color;
+  border-color: @sb_base_color;
+  background: rgba(@sb_base_color, 0.1);
+}
+
+
+.subscribe-component--popup .modal-content #booking-result-popup .modal-header .close-modal{
+  color: @dark_font_color;
+  background: transparent;
+}
+.subscribe-component--popup .modal-content #booking-result-popup .modal-header .close-modal:hover{
+  color: #f44336;
+  background: transparent;
+}
+.subscribe-component--status-icon{color: #f44336;}
+.subscribe-component--status-icon.status-pending{color: #9aa6b6;}
+.subscribe-component--status-icon.status-pending{color: #9aa6b6;}
+.subscribe-component--status-icon.status-delay{color: #9aa6b6;}
+.subscribe-component--status-icon.status-reschedule_success,
+.subscribe-component--status-icon.status-paid,
+//.subscribe-component--status-icon.status-delay,
+.subscribe-component--status-icon.status-success{color: #00D38B;}
+.go-to-admin__button {
+  background: @new_btn_color;
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+.go-to-admin__button:hover,
+.go-to-admin__button:active,
+.go-to-admin__button:focus{
+  background: darken(@new_btn_color, 5%);
+  color: contrast(@new_btn_color, @dark_font_color, @light_font_color);
+}
+
+// Theme main icons color
+.item-picture,
+.provider-photo,
+.preloader,
+.photo,
+.provider-item .default,
+.empty-step__image{
+  svg {
+    path[stroke] {stroke: @sb_base_color;}
+    path[fill] {fill: @sb_base_color;}
+    circle[stroke] {stroke: @sb_base_color;}
+    circle[fill] {fill: @sb_base_color;}
+  }
+}
+
+.company-location .company-name{
+  color: @sb_base_color !important;
+}
+
+.provider-name--clicable,
+.provider-col .icon--provider-info{
+  color: @new_btn_color ;
+}
+
+.btn-bar--authorize .cursive{
+  color: @new_btn_color;
+}
+
+.bar-service .badge{
+  color: @sb_base_color;
+}
+
+.bar-service .badge .text{
+  color: @dark_font_color;
+}

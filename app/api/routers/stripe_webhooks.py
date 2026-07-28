@@ -2,6 +2,7 @@ import json
 import logging
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_db
@@ -12,6 +13,11 @@ from ...services.outbox_service import create_outbox_event
 from ...services.stripe_service import stripe_service
 
 logger = logging.getLogger(__name__)
+
+
+class WebhookAckResponse(BaseModel):
+    ok: bool
+
 
 router = APIRouter(prefix="/api/v1", tags=["stripe"])
 
@@ -36,7 +42,7 @@ def create_deposit_session(
     )
     return {"ok": True, "data": {"session_id": session.id, "url": session.url}}
 
-@router.post("/webhooks/stripe")
+@router.post("/webhooks/stripe", response_model=WebhookAckResponse)
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Stripe Webhook endpoint."""
     payload = await request.body()

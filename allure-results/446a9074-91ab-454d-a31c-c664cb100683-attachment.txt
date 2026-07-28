@@ -1,0 +1,10 @@
+INFO     app.services.outbox_worker:outbox_worker.py:28 Outbox worker background loop starting...
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/0 "HTTP/1.1 404 Not Found"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/null%2Cnull "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/AAA "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/null "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/false "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/2.5890419884777833e-42 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/0 "HTTP/1.1 404 Not Found"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/add-ons/1 "HTTP/1.1 404 Not Found"
+INFO     app.services.outbox_worker:outbox_worker.py:42 Stopping outbox worker background loop...

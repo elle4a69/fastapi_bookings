@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, ArrowLeft, Circle, CircleSlash, Eye, EyeOff, GripVertical, Package as PackageIcon } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Circle, CircleSlash, Eye, EyeOff, GripVertical, Package as PackageIcon, Upload, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,7 +32,39 @@ interface Package {
   price: number;
   active: boolean;
   is_visible: boolean;
+  image?: string | null;
   steps?: PackageStep[];
+}
+
+function ImageUpload({ imagePreview, onImageSelect, onImageRemove }: { imagePreview: string | null; onImageSelect: (file: string) => void; onImageRemove: () => void; }) {
+  const handleFile = (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => onImageSelect(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('image/')) handleFile(f); }}
+      className="relative h-[160px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 hover:bg-muted/40 transition-colors flex items-center justify-center overflow-hidden cursor-pointer"
+      onClick={() => document.getElementById('pkg-img-upload')?.click()}
+    >
+      <input id="pkg-img-upload" type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f?.type.startsWith('image/')) handleFile(f); }} />
+      {imagePreview ? (
+        <>
+          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+          <button type="button" onClick={e => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center text-muted-foreground pointer-events-none">
+          <Upload className="w-8 h-8 mb-2 opacity-50" />
+          <span className="text-sm">Drag & drop or click to upload</span>
+          <span className="text-xs opacity-70">JPG, PNG, GIF up to 5MB</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function PackagesPage() {
@@ -45,7 +77,7 @@ export default function PackagesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  const defaultForm: Omit<Package, 'id'> = { name: '', description: '', price: 0, active: true, is_visible: true, steps: [] };
+  const defaultForm: Omit<Package, 'id'> & { service_ids?: string[] } = { name: '', description: '', price: 0, active: true, is_visible: true, image: null, steps: [] };
   const [formData, setFormData] = useState(defaultForm);
 
   const { saveState, triggerSave, retry } = useAutoSave({
@@ -100,6 +132,7 @@ export default function PackagesPage() {
       price: pkg.price || 0,
       active: pkg.active ?? true,
       is_visible: pkg.is_visible ?? true,
+      image: pkg.image || null,
       steps: pkg.steps || [],
     });
   };
@@ -213,9 +246,13 @@ export default function PackagesPage() {
                 }`}
               >
                 <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
-                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                    <PackageIcon className="w-4 h-4 opacity-35" />
-                  </div>
+                  {pkg.image ? (
+                    <img src={pkg.image} alt={pkg.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                      <PackageIcon className="w-4 h-4 opacity-35" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
                     <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={pkg.name}>{pkg.name}</span>
                     <div className="text-xs text-muted-foreground mt-0.5 text-left">${pkg.price} &bull; {(pkg.steps || []).length} step{(pkg.steps || []).length !== 1 ? 's' : ''}</div>
@@ -272,7 +309,7 @@ export default function PackagesPage() {
             </CardHeader>
 
             <CardContent className="flex-1 overflow-y-auto p-6">
-              <Accordion type="multiple" defaultValue={['details', 'status']} className="space-y-3">
+              <Accordion type="multiple" defaultValue={['details']} className="space-y-3">
 
                 <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Package Details</AccordionTrigger>
@@ -289,6 +326,14 @@ export default function PackagesPage() {
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Package Price ($)</Label>
                         <Input type="number" min={0} step={0.01} value={formData.price} onChange={e => { const next = { ...formData, price: parseFloat(e.target.value) || 0 }; setFormData(next); if (selectedId) triggerSave(next); }} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Package Image</Label>
+                        <ImageUpload
+                          imagePreview={formData.image || null}
+                          onImageSelect={img => { const next = { ...formData, image: img }; setFormData(next); if (selectedId) triggerSave(next, true); }}
+                          onImageRemove={() => { const next = { ...formData, image: null }; setFormData(next); if (selectedId) triggerSave(next, true); }}
+                        />
                       </div>
                     </div>
                   </AccordionContent>
@@ -331,22 +376,6 @@ export default function PackagesPage() {
                         <Plus className="w-4 h-4 mr-2" /> Add Step
                       </Button>
                       {services.length === 0 && <p className="text-xs text-muted-foreground text-center">Create services first to add steps.</p>}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="status" className="border rounded-lg bg-card overflow-hidden shadow-sm">
-                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Visibility &amp; Status</AccordionTrigger>
-                  <AccordionContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
-                        <Label htmlFor="pkg-active" className="text-sm font-medium">Active</Label>
-                        <Switch id="pkg-active" checked={formData.active} onCheckedChange={checked => { const next = { ...formData, active: checked, ...(!checked ? { is_visible: false } : {}) }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
-                      </div>
-                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
-                        <Label htmlFor="pkg-visible" className="text-sm font-medium">Visible to clients</Label>
-                        <Switch id="pkg-visible" checked={formData.is_visible} disabled={!formData.active} onCheckedChange={checked => { const next = { ...formData, is_visible: checked }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
-                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

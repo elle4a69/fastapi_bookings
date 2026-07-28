@@ -13,6 +13,7 @@ class PackageBase(BaseModel):
     price: Optional[Decimal] = None
     active: bool = True
     is_visible: bool = True
+    image: Optional[str] = None
 
 
 class PackageCreate(PackageBase):

@@ -1,0 +1,66 @@
+{"timestamp": "2026-07-09 12:08:04,960", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:08:04,979", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:04,988", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:04,996", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,003", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,010", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,017", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,027", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,044", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,053", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,064", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,075", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,085", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,094", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,110", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,125", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,136", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,148", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,160", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,172", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,183", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,194", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,206", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,216", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,228", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,239", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,249", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,261", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,272", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,282", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,292", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,303", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,313", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,323", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,333", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,343", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,353", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,365", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,377", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,389", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,399", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,408", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,419", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,429", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,439", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,449", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,460", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,471", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,482", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,491", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,502", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,511", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,523", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,534", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,547", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,558", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,570", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,582", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,593", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,604", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,614", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,624", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,635", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,660", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/calendar-notes/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:05,663", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:08:07,960", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

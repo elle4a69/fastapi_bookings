@@ -1,0 +1,16 @@
+INFO     app.services.outbox_worker:outbox_worker.py:28 Outbox worker background loop starting...
+INFO     httpx:_client.py:1025 HTTP Request: TRACE http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: QUERY http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: PUT http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: PATCH http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: OPTIONS http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/categories "HTTP/1.1 405 Method Not Allowed"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/null%2Cnull/categories "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/AAA/categories "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/null/categories "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/false/categories "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/2.5890419884777833e-42/categories "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/0/categories "HTTP/1.1 404 Not Found"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/admin/services/1/categories "HTTP/1.1 404 Not Found"
+INFO     app.services.outbox_worker:outbox_worker.py:42 Stopping outbox worker background loop...

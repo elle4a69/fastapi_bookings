@@ -79,6 +79,8 @@ def update_calendar_note(
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
     for field, value in note_in.dict(exclude_unset=True).items():
+        if value is None and field in {"date", "text"}:
+            continue
         setattr(note, field, value)
     db.commit()
     db.refresh(note)

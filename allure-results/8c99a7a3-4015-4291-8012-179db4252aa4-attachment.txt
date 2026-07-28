@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 11:59:51,248", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:59:51,270", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,283", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,297", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,310", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,319", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,331", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,345", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,372", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:51,375", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:59:51,377", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

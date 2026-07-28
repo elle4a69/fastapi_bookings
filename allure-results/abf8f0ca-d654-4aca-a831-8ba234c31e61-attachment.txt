@@ -1,0 +1,37 @@
+{"timestamp": "2026-07-09 11:51:58,093", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:51:58,117", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,128", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,140", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,152", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,163", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,178", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,194", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,205", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,217", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,228", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,238", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,252", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,263", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,272", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,283", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,292", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,305", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,317", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,328", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,339", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,351", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,364", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,375", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,386", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,398", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,413", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,426", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,440", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,454", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,466", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,477", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,491", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,560", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,635", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,653", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks \"HTTP/1.1 400 Bad Request\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:51:58,656", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

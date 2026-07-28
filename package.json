@@ -1,0 +1,15 @@
+{
+  "name": "fastapi-bookings-front-end",
+  "workspaces": [
+    "backend"
+  ],
+  "scripts": {
+    "dev-backend": "npm run dev --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "latest"
+  },
+  "dependencies": {
+    "playwright": "^1.62.0"
+  }
+}

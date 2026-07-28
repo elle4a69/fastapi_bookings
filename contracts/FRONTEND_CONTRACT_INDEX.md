@@ -4,8 +4,9 @@ This directory is the front-end contract layer for the booking application. It i
 
 ## Source of truth order
 
-1. `contracts/route-manifest.json` — canonical endpoint names and paths.
-2. `contracts/data-models.contract.json` — shared models, enums, and response envelope rules.
+1. Running backend OpenAPI and committed `openapi.json` — canonical wire shapes.
+2. `contracts/route-manifest.json` — canonical logical endpoint names and paths.
+3. `contracts/data-models.contract.json` and feature contracts — behavioral rules.
 3. Feature contracts:
    - `auth.contract.json`
    - `public-booking.contract.json`
@@ -13,11 +14,11 @@ This directory is the front-end contract layer for the booking application. It i
    - `modules-ui.contract.json`
    - `booking-flow.contract.json`
    - `errors.contract.json`
-4. Running backend OpenAPI:
-   - `/docs`
-   - `/openapi.json`
+4. Generated TypeScript: `contracts/types.ts` and `contracts/client.ts`.
 
-If the contracts and OpenAPI disagree, prefer the running backend, then update the contract file.
+If a handwritten contract and OpenAPI disagree about a wire shape, OpenAPI wins and the handwritten contract must be updated.
+
+New booking widgets must begin with `configurable-booking-forms.contract.json` and `docs/CONFIGURABLE_BOOKING_FORMS_WIDGET_HANDOFF.md`. The static UI config and general public entity lists are deprecated for new integrations.
 
 ## Important front-end rules
 

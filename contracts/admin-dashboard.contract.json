@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "purpose": "Admin dashboard and management portal contract.",
   "auth": "All /api/admin endpoints require X-Token from /api/admin/auth unless explicitly noted.",
   "dashboard": {
@@ -18,6 +18,18 @@
     }
   },
   "crudResources": {
+    "bookingForms": {
+      "base": "/api/admin/booking-forms",
+      "list": "GET",
+      "create": "POST",
+      "get": "GET /{id}",
+      "update": "PUT /{id}",
+      "delete": "DELETE /{id}",
+      "duplicate": "POST /{id}/duplicate",
+      "preview": "GET /{id}/preview",
+      "embed": "GET /{id}/embed",
+      "model": "BookingForm"
+    },
     "services": {
       "base": "/api/admin/services",
       "list": "GET",
@@ -185,6 +197,8 @@
     "diagnostics": "/api/admin/system/diagnostics"
   },
   "frontendRules": [
+    "Use aggregate /{resource}/{id}/editor endpoints for relationship panels and schedule context.",
+    "Use whitelisted /api/admin/relationships routes for link, unlink, and transactional create-and-connect operations.",
     "Pending bookings appear in admin queue and require confirm/cancel action.",
     "Do not let admin edit status via generic PUT unless explicitly required; prefer action endpoints.",
     "Use module flags from /api/public/ui-config/admin to show or hide admin modules."

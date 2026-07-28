@@ -1,0 +1,53 @@
+{"timestamp": "2026-07-09 11:58:00,447", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:00,468", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,474", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,480", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,484", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,489", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,494", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,499", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,503", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/notifications/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,512", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,521", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,533", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,543", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,552", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,561", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,572", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,580", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,591", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,600", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,609", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,617", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,626", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,638", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,651", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,665", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,675", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,684", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,693", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,701", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,712", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,725", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,735", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,744", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,754", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,764", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,776", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,790", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,804", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,820", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,834", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,847", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,862", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,880", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,896", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,912", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,926", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,938", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,952", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,965", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,976", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:00,991", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:01,015", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/notifications/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:01,017", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

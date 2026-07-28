@@ -1,0 +1,82 @@
+{"timestamp": "2026-07-13 19:03:07,861", "level": "INFO", "message": "Firebase Admin SDK successfully initialized.", "logger": "app.services.fcm"}
+{"timestamp": "2026-07-13 19:03:08,044", "level": "INFO", "message": "Started server process [46532]", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 19:03:08,075", "level": "INFO", "message": "Waiting for application startup.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 19:03:08,111", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:03:08,544", "level": "INFO", "message": "Application startup complete.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 19:03:08,546", "level": "INFO", "message": "Uvicorn running on http://127.0.0.1:8017 (Press CTRL+C to quit)", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 19:03:10,339", "level": "INFO", "message": "127.0.0.1:61079 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 19:03:10,485", "level": "INFO", "message": "127.0.0.1:61093 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 19:03:59,319", "level": "INFO", "message": "Processing outbox event 91 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:00,908", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:00,910", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:01,248", "level": "ERROR", "message": "Failed to process outbox event 91 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:01,252", "level": "INFO", "message": "Processing outbox event 93 (booking.cancelled)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:01,556", "level": "INFO", "message": "Successfully processed outbox event 93", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:06,603", "level": "INFO", "message": "Processing outbox event 91 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:08,097", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:08,099", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:08,364", "level": "ERROR", "message": "Failed to process outbox event 91 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:08,369", "level": "INFO", "message": "Processing outbox event 94 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:09,705", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:09,707", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:09,960", "level": "ERROR", "message": "Failed to process outbox event 94 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:15,011", "level": "INFO", "message": "Processing outbox event 94 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:16,263", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:16,265", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:16,518", "level": "ERROR", "message": "Failed to process outbox event 94 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:21,595", "level": "INFO", "message": "Processing outbox event 94 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:22,891", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:22,905", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:04:23,193", "level": "ERROR", "message": "Failed to process outbox event 94 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:09,700", "level": "INFO", "message": "Processing outbox event 95 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:10,770", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:10,789", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:11,039", "level": "ERROR", "message": "Failed to process outbox event 95 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:16,054", "level": "INFO", "message": "Processing outbox event 95 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:17,543", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:17,544", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:17,865", "level": "ERROR", "message": "Failed to process outbox event 95 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:17,870", "level": "INFO", "message": "Processing outbox event 98 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:19,953", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:19,954", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,208", "level": "ERROR", "message": "Failed to process outbox event 98 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,212", "level": "INFO", "message": "Processing outbox event 99 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,391", "level": "INFO", "message": "Successfully processed outbox event 99", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,394", "level": "INFO", "message": "Processing outbox event 100 (booking.no_show)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,674", "level": "INFO", "message": "Successfully processed outbox event 100", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:20,675", "level": "INFO", "message": "Processing outbox event 101 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:22,206", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:22,223", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:22,913", "level": "ERROR", "message": "Failed to process outbox event 101 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:22,917", "level": "INFO", "message": "Processing outbox event 102 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:23,154", "level": "INFO", "message": "Successfully processed outbox event 102", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:23,157", "level": "INFO", "message": "Processing outbox event 103 (booking.rescheduled)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:23,329", "level": "INFO", "message": "Successfully processed outbox event 103", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:28,332", "level": "INFO", "message": "Processing outbox event 95 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:29,949", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:29,951", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:30,247", "level": "ERROR", "message": "Failed to process outbox event 95 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:30,250", "level": "INFO", "message": "Processing outbox event 98 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:31,530", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:31,531", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:32,015", "level": "ERROR", "message": "Failed to process outbox event 98 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:32,019", "level": "INFO", "message": "Processing outbox event 101 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:33,485", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:33,487", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:35,709", "level": "ERROR", "message": "Failed to process outbox event 101 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:40,791", "level": "INFO", "message": "Processing outbox event 98 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:42,406", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:42,407", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:44,489", "level": "ERROR", "message": "Failed to process outbox event 98 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:44,494", "level": "INFO", "message": "Processing outbox event 101 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:45,913", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:45,916", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:47,541", "level": "ERROR", "message": "Failed to process outbox event 101 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:52,542", "level": "INFO", "message": "Processing outbox event 98 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:54,122", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:54,123", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:54,448", "level": "ERROR", "message": "Failed to process outbox event 98 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:54,452", "level": "INFO", "message": "Processing outbox event 101 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:56,994", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:56,995", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 19:05:58,896", "level": "ERROR", "message": "Failed to process outbox event 101 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}

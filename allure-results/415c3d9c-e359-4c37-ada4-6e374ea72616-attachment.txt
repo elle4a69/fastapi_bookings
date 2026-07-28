@@ -1,0 +1,36 @@
+{"timestamp": "2026-07-09 11:48:36,779", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:48:36,796", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,804", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,811", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,818", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,824", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,831", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,838", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/invoices/0/tips \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,848", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/null%2Cnull/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,858", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/AAA/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,870", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/null/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,881", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/false/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,890", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/2.5890419884777833e-42/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,899", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,909", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,917", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,925", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,935", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,941", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,950", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,957", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,964", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,971", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,978", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,986", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:36,993", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,001", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,009", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,018", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,026", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,036", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/0/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,053", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/1/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,088", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/2971833/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,108", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/invoices/-15033/tips \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:48:37,111", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:48:39,313", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.96s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,45 @@
+{"timestamp": "2026-07-09 11:54:59,161", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:54:59,183", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=25&x-schemathesis-unknown-property=42 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,190", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,198", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=101 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,205", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=null&page_size=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,214", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,221", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,230", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,239", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,251", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page_size=25 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,261", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&x-schemathesis-unknown-property=42 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,269", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,277", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=null&page=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,287", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,295", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,302", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,310", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,320", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,326", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,331", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,337", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,343", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,349", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,354", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,363", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,369", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=101 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,376", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=null&page_size=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,383", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,390", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,397", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,403", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,412", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=99 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,420", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=100 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,430", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=2 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,439", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=1 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,446", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=0&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,452", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=null&page=null&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,458", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=AAA&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,466", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=null&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,472", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=false&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,479", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=2.5890419884777833e-42&page_size=25 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,487", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=2&page_size=25 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,496", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers?page=1&page_size=25 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,514", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/providers \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:54:59,517", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

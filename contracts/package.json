@@ -1,0 +1,18 @@
+{
+  "name": "@fastapi-bookings/contracts",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "export": "node ../tools/run-project-python.cjs tools/export_openapi.py",
+    "generate": "npm run export && openapi-typescript ../openapi.json -o types.ts",
+    "check": "node ../tools/run-project-python.cjs tools/export_openapi.py --check && tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.9.3"
+  }
+}

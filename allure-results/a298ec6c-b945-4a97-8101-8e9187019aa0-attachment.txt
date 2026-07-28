@@ -1,0 +1,16 @@
+INFO     app.services.outbox_worker:outbox_worker.py:28 Outbox worker background loop starting...
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/0 "HTTP/1.1 204 No Content"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/null%2Cnull "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/AAA "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/null "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/false "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/2.5890419884777833e-42 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/null%2Cnull/providers/0 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/AAA/providers/0 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/null/providers/0 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/false/providers/0 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/2.5890419884777833e-42/providers/0 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/0/providers/0 "HTTP/1.1 204 No Content"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/services/1/providers/1 "HTTP/1.1 204 No Content"
+INFO     app.services.outbox_worker:outbox_worker.py:42 Stopping outbox worker background loop...
+ERROR    opentelemetry.exporter.otlp.proto.http.trace_exporter:__init__.py:235 Failed to export span batch due to timeout, max retries or shutdown.

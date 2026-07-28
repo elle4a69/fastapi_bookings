@@ -1,0 +1,58 @@
+{"timestamp": "2026-07-09 11:46:25,732", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:46:25,800", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,819", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,839", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,858", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,874", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,891", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,908", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,931", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,950", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,967", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:25,983", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,003", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,020", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,569", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,587", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,603", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,648", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,663", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,678", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,692", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,707", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,731", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,756", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,778", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,796", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,813", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,829", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,845", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,862", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,880", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,897", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,913", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,931", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,949", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,968", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:26,984", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,003", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,018", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,038", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,055", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,076", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,096", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,115", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,134", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,155", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,176", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,196", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,217", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,238", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,259", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,279", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,299", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,319", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,359", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,486", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,582", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/special-days \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:27,585", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

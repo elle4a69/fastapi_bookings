@@ -1,0 +1,6 @@
+Timestamp: 20260713-190626
+Base URL: http://127.0.0.1:8017
+Status: FAILED BEFORE COMPLETION
+Error: API did not become healthy within 45 seconds.
+Console log: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190626\console.log
+Server stderr: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190626\uvicorn.stderr.log

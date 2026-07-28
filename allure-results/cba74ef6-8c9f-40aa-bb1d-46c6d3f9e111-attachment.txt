@@ -1,0 +1,48 @@
+{"timestamp": "2026-07-09 12:05:23,808", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:05:23,826", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,832", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,838", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,843", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,848", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,855", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,860", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,865", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,876", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,887", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,900", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,911", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,922", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,931", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,941", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,956", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,966", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,979", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:23,992", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,002", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,013", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,024", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,033", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,042", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,050", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,060", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,069", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,078", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,087", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,096", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,107", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,116", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,127", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,137", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,147", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,160", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,172", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,182", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,196", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,208", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,218", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,226", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,236", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,244", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,264", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/payment-processor/configs/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:24,266", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:05:25,360", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

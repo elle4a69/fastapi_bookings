@@ -1,0 +1,51 @@
+{"timestamp": "2026-07-09 12:02:22,444", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:02:22,472", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,483", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,497", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,510", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,523", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,540", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,553", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,565", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,581", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,595", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,608", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,622", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,636", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,652", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,665", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,680", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,693", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,707", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,720", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,736", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,748", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,760", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,773", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,786", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,805", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,821", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,836", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,851", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,866", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,879", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,892", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,902", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,919", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,932", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,948", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,963", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,976", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:22,992", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,006", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,024", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,044", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,059", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,074", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,090", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,111", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,127", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,141", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,152", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,175", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times \"HTTP/1.1 201 Created\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:23,177", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

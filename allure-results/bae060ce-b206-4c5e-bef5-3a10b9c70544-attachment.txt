@@ -1,0 +1,15 @@
+{"timestamp": "2026-07-09 12:03:58,161", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:58,177", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,189", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,200", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,213", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,224", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,234", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,247", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,261", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate?subtotal=null&subtotal=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,271", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate?subtotal=AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,281", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate?subtotal=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,289", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate?subtotal=false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,305", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate?subtotal=0.0 \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,326", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/promotions/0/validate \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:58,330", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

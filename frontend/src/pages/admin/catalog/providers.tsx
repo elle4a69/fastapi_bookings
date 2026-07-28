@@ -125,6 +125,7 @@ export default function ProvidersPage() {
         color: updatedData.color || null,
         description: updatedData.description || null,
         ignore_company_hours: updatedData.ignore_company_hours ?? false,
+        image: updatedData.image || null,
       };
 
       try {
@@ -193,23 +194,25 @@ export default function ProvidersPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [servicesSaveStatus, setServicesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
+        const dataUrl = reader.result as string;
         if (selectedProvider) {
-          setSelectedProvider({
-            ...selectedProvider,
-            avatar: reader.result as string,
-            image: reader.result as string
-          });
+          // Update both fields and immediately persist via auto-save
+          const next = { ...selectedProvider, image: dataUrl, avatar: dataUrl };
+          setSelectedProvider(next);
+          triggerSave(next, true);
         }
         toast.success('Provider image uploaded');
       };
       reader.readAsDataURL(file);
     }
   };
+
 
   const fetchProviders = async () => {
     try {

@@ -1,0 +1,112 @@
+
+--- Started 2026-07-15T00:28:48.379Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+
+> frontend@1.0.0 dev F:\Projects\signoz\frontend
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+--- Started 2026-07-15T00:28:57.367Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+
+> frontend@1.0.0 dev F:\Projects\signoz\frontend
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+--- Started 2026-07-15T20:27:04.672Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-15T20:27:06.169Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-15T20:27:07.993Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-20T04:51:24.749Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+
+> frontend@1.0.0 dev F:\Projects\signoz\frontend
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+--- Started 2026-07-20T04:55:12.548Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+
+> frontend@1.0.0 dev F:\Projects\signoz\frontend
+> vite
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+
+--- Started 2026-07-20T09:55:12.456Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-20T09:55:23.191Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-20T09:56:28.699Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T20:53:13.534Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T20:55:02.638Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T20:55:04.361Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T20:56:28.770Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T21:04:39.678Z | cmd="pnpm dev" | cwd="F:\Projects\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:02:48.667Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:02:49.665Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:03:14.192Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T08:15:44.339Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T08:15:47.068Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T08:20:38.220Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-28T08:20:40.912Z | cmd="pnpm dev" | cwd="F:\Projects\fastapi_bookings\signoz\frontend" ---
+'pnpm' is not recognized as an internal or external command,
+operable program or batch file.

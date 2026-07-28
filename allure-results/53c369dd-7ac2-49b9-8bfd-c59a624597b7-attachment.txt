@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 11:58:55,830", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:55,844", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,854", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,863", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,876", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,886", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,892", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,901", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/forms/booking \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,912", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/forms/booking \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,929", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/forms/booking \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:55,933", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

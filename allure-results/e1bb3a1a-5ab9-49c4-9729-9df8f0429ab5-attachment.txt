@@ -1,0 +1,29 @@
+{"timestamp": "2026-07-09 12:05:59,066", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:05:59,081", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,094", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,110", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,132", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,144", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,157", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,169", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,187", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,202", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,216", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,230", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,245", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,258", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,269", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,280", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,296", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,305", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,318", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,329", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,342", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,352", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,368", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,387", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,404", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,421", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,452", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/password-reset/request \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:59,454", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:03,476", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

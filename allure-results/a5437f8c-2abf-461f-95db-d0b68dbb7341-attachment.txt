@@ -1,0 +1,70 @@
+{"timestamp": "2026-07-09 11:42:54,064", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:42:54,084", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,091", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,098", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,108", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,114", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,122", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,128", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,135", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/search-availability \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,149", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,161", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,174", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,187", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,198", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,207", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,217", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,226", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,236", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,248", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,265", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,274", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,283", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,293", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,304", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,317", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,333", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,341", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,350", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,362", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,371", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,381", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,393", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,403", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,416", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,426", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,437", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,447", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,459", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,476", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,487", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,500", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,510", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,523", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,541", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,553", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,563", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,607", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,614", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,624", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,635", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,645", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,672", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,688", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,704", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,720", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,736", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,746", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,761", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,775", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,791", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,805", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,821", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,833", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,847", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,860", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,887", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,960", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,993", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/search-availability \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:54,995", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:42:58,778", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.14s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

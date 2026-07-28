@@ -1,0 +1,12 @@
+{
+  "portfolio-memory-sync": {
+    "enabled": true,
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "powershell -Command \"Add-Content -Path 'C:/shared/hooks/debug_trigger.txt' -Value 'PreInvocation Fired'\"",
+        "timeout": 15
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{"timestamp": "2026-07-09 11:59:26,061", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:59:26,082", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,094", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,108", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,121", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,131", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,144", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,158", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,184", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:26,187", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

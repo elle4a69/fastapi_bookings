@@ -1,0 +1,103 @@
+{"timestamp": "2026-07-09 11:50:02,376", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:50:02,387", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,395", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,401", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,409", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,415", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,423", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,431", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/clients/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,443", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,453", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,468", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,481", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,488", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,500", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,508", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,517", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,524", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,533", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,543", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,552", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,560", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,567", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,573", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,582", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,589", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,598", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,606", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,614", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,623", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,631", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,641", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,650", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,662", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,670", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,682", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,694", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,705", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,714", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,728", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,741", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,753", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,763", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,778", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,792", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,805", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,819", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,833", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,846", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,862", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,873", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,887", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,900", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,909", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,923", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,939", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,952", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,965", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,980", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:02,995", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,009", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,024", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,040", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,052", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,059", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,067", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,074", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,084", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,091", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,101", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,111", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,120", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,130", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,140", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,150", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,160", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,170", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,183", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,194", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,208", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,220", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,232", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,241", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,252", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,262", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,272", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,284", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,294", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,305", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,314", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,325", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,336", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,345", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,356", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,367", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,378", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,388", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,399", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,421", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,456", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,470", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:03,484", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/register \"HTTP/1.1 409 Conflict\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:04,245", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:50:06,581", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

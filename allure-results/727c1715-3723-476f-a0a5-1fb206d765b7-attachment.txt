@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 12:06:09,160", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:09,174", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,184", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,191", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,199", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,206", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,214", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,227", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/services \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,241", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/services \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,256", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/services \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:09,259", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:13,361", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 12:08:15,012", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:08:15,037", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/plugin-states \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,046", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,055", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,062", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,070", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,079", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,089", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/plugin-states \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,105", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/plugin-states \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,129", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/plugin-states \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:15,132", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:08:17,301", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

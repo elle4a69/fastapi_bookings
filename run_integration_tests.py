@@ -222,7 +222,7 @@ def run_integration_tests():
             print(f"\n--- [STEP 10] Rescheduling Booking {booking_id} to new slot: {new_slot['start_time']} ---")
             res = client.post(
                 f"/api/admin/bookings/{booking_id}/reschedule",
-                params={
+                json={
                     "new_start": new_slot["start_time"],
                     "new_end": new_slot["end_time"]
                 },

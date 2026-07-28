@@ -1,0 +1,56 @@
+{"timestamp": "2026-07-09 12:08:55,301", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:08:55,313", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,324", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,332", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,341", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,349", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,360", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,371", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/v1/devices/register \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,388", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,400", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,412", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,426", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,437", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,449", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,460", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,469", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,480", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,492", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,508", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,519", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,529", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,540", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,549", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,560", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,568", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,579", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,586", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,594", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,602", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,612", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,621", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,633", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,682", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,696", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,709", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,726", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,738", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,751", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,762", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,776", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,792", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,804", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,820", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,835", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,850", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,866", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,882", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,904", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,920", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,936", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,953", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,969", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:55,984", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:56,016", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/v1/devices/register \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:08:56,019", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:09:00,264", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

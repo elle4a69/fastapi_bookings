@@ -13,5 +13,6 @@ firebase-credentials.json
 foundryctl.exe
 pours/
 scratch/
+node_modules/
 *.zip
 *_report.md

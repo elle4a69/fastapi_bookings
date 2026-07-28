@@ -2,8 +2,9 @@ import sys
 from os.path import abspath, dirname
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, inspect, pool
 from alembic import context
+from alembic.script import ScriptDirectory
 
 # Ensure the root project directory is in sys.path
 sys.path.insert(0, abspath(dirname(dirname(__file__))))
@@ -54,6 +55,21 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
         )
+
+        # This repository adopted Alembic after its original tables already
+        # existed, so the oldest revision is a legacy delta rather than a true
+        # create-from-zero migration.  Bootstrap a genuinely empty database
+        # from the authoritative current metadata and stamp it at head.  All
+        # existing databases continue through the normal revision chain.
+        destination = getattr(getattr(config, "cmd_opts", None), "revision", None)
+        user_tables = set(inspect(connection).get_table_names()) - {"alembic_version"}
+        if destination == "head" and not user_tables:
+            script = ScriptDirectory.from_config(config)
+            with context.begin_transaction():
+                target_metadata.create_all(bind=connection)
+                context.get_context().stamp(script, script.get_current_head())
+            connection.commit()
+            return
 
         with context.begin_transaction():
             context.run_migrations()

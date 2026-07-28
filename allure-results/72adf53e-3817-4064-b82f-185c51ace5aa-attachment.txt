@@ -1,0 +1,16 @@
+{"timestamp": "2026-07-09 12:06:59,477", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:59,490", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,497", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,504", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,512", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,517", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,525", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,529", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,541", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/null%2Cnull/providers \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,548", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/AAA/providers \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,557", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/null/providers \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,567", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/false/providers \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,576", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/2.5890419884777833e-42/providers \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,585", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/0/providers \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,604", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/services/1/providers \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:59,607", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

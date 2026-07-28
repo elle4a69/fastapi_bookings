@@ -16,7 +16,8 @@ router = APIRouter(prefix="/api/admin/series", tags=["series"])
 @router.get("", response_model=List[BookingSeriesOut])
 def list_series(
     tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> List[BookingSeriesOut]:
     series_list = db.query(SeriesModel).filter(SeriesModel.tenant_id == tenant.id).all()
     return [BookingSeriesOut.from_orm(s) for s in series_list]
@@ -42,7 +43,8 @@ def create_series(
 def get_series(
     series_id: int,
     tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> BookingSeriesOut:
     series = db.query(SeriesModel).filter(
         SeriesModel.id == series_id,

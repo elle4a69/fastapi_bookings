@@ -14,6 +14,7 @@ class AddOnBase(BaseModel):
     duration: int = 0
     active: bool = True
     is_visible: bool = True
+    image: Optional[str] = None
 
 
 class AddOnCreate(AddOnBase):

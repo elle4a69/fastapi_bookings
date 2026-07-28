@@ -1,0 +1,16 @@
+{"timestamp": "2026-07-09 12:07:09,573", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:07:09,592", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/0 \"HTTP/1.1 204 No Content\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,606", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,623", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,640", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,657", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,672", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,686", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/null%2Cnull/providers/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,696", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/AAA/providers/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,707", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/null/providers/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,718", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/false/providers/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,729", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/2.5890419884777833e-42/providers/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,741", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/0/providers/0 \"HTTP/1.1 204 No Content\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,765", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/services/1/providers/1 \"HTTP/1.1 204 No Content\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:09,768", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:07:10,513", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

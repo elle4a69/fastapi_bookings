@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:07:44,819", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:07:44,836", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,846", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,856", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,865", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,874", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,883", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,893", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,918", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/webhooks/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:07:44,921", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:07:48,464", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.89s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

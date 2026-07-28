@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:01:16,920", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:16,938", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:16,950", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:16,963", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:16,976", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:16,986", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:16,996", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:17,013", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:17,039", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/packages/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:17,042", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:18,798", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

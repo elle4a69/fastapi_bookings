@@ -1,0 +1,11 @@
+INFO     app.services.outbox_worker:outbox_worker.py:28 Outbox worker background loop starting...
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/0 "HTTP/1.1 404 Not Found"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/null%2Cnull "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/AAA "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/null "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/false "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/2.5890419884777833e-42 "HTTP/1.1 422 Unprocessable Entity"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/0 "HTTP/1.1 404 Not Found"
+INFO     httpx:_client.py:1025 HTTP Request: DELETE http://testserver/api/admin/tax-rates/1 "HTTP/1.1 404 Not Found"
+INFO     app.services.outbox_worker:outbox_worker.py:42 Stopping outbox worker background loop...
+ERROR    opentelemetry.exporter.otlp.proto.http.trace_exporter:__init__.py:235 Failed to export span batch due to timeout, max retries or shutdown.

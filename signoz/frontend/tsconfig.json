@@ -1,0 +1,86 @@
+{
+	"compilerOptions": {
+		"sourceMap": true,
+		"outDir": "./dist/",
+		"noImplicitAny": true,
+		"noImplicitReturns": true,
+		"module": "esnext",
+		"target": "es2018",
+		"jsx": "react-jsx",
+		"allowJs": true,
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"lib": [
+			"dom",
+			"dom.iterable",
+			"esnext"
+		],
+		"allowSyntheticDefaultImports": true,
+		"noFallthroughCasesInSwitch": true,
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"incremental": true,
+		"tsBuildInfoFile": "./node_modules/.cache/ts/tsconfig.tsbuildinfo",
+		"paths": {
+			"@constants/*": [
+				"./src/container/OnboardingContainer/constants/*"
+			],
+			"@/*": [
+				"./src/*"
+			],
+			"test-mocks/*": [
+				"./__mocks__/*"
+			],
+			"api": ["./src/api"],
+			"AppRoutes": ["./src/AppRoutes"],
+			"ReactI18": ["./src/ReactI18"],
+			"store": ["./src/store"],
+			"styles.scss": ["./src/styles.scss"],
+			"api/*": ["./src/api/*"],
+			"AppRoutes/*": ["./src/AppRoutes/*"],
+			"assets/*": ["./src/assets/*"],
+			"components/*": ["./src/components/*"],
+			"constants/*": ["./src/constants/*"],
+			"container/*": ["./src/container/*"],
+			"hooks/*": ["./src/hooks/*"],
+			"lib/*": ["./src/lib/*"],
+			"mocks-server/*": ["./src/mocks-server/*"],
+			"modules/*": ["./src/modules/*"],
+			"pages/*": ["./src/pages/*"],
+			"parser/*": ["./src/parser/*"],
+			"periscope/*": ["./src/periscope/*"],
+			"providers/*": ["./src/providers/*"],
+			"schemas/*": ["./src/schemas/*"],
+			"store/*": ["./src/store/*"],
+			"__tests__/*": ["./src/__tests__/*"],
+			"tests/*": ["./src/tests/*"],
+			"types/*": ["./src/types/*"],
+			"utils/*": ["./src/utils/*"]
+		},
+		"plugins": [
+			{
+				"name": "typescript-plugin-css-modules"
+			}
+		],
+		"types": ["vite/client", "node", "jest", "testing-library__jest-dom"]
+	},
+	"exclude": [
+		"node_modules",
+		"src/parser/*.ts",
+		"src/parser/TraceOperatorParser/*.ts",
+		"orval.config.ts"
+	],
+	"include": [
+		"./src",
+		"./__mocks__",
+		"./babel.config.cjs",
+		"./jest.config.ts",
+		"./jest.setup.ts",
+		"./vite.config.ts",
+		"./commitlint.config.ts"
+	]
+}

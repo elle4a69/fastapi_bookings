@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 11:55:44,491", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:55:44,508", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,517", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,527", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,536", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,545", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,555", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,564", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,593", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/clients/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:44,595", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:55:49,208", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 11:59:05,913", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:59:05,927", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,937", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,946", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,956", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,965", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,975", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/categories \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:05,987", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/categories \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:06,008", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/categories \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:59:06,012", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:59:08,348", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

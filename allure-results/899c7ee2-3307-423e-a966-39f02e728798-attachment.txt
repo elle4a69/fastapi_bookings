@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 12:03:53,111", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:53,129", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,141", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,153", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,164", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,175", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,188", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,200", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/payment-methods \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,214", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/payment-methods \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,228", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/payment-methods \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:53,232", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:56,958", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,16 +1,17 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "purpose": "Public customer booking portal contract.",
   "recommendedFlow": [
     "Obtain public token with POST /api/public/auth/token.",
-    "Load public config with GET /api/public/ui-config.",
-    "Load selectable data with GET /api/public/bootstrap.",
-    "Search availability with POST /api/public/search-availability or GET /api/public/availability.",
-    "Optionally create a temporary hold with POST /api/public/holds.",
+    "Load the configured flow with GET /api/public/booking-forms/{slug}.",
+    "After each choice, POST current selections to /api/public/booking-forms/{slug}/resolve.",
+    "Search relationship-aware availability with POST /api/public/booking-forms/{slug}/availability.",
     "Collect client details.",
-    "Confirm hold with POST /api/public/holds/{hold_id}/confirm, or create pending booking directly with POST /api/public/bookings.",
+    "Create a revalidated pending booking with POST /api/public/booking-forms/{slug}/bookings.",
     "Show confirmation screen explaining that booking is pending provider/admin approval."
   ],
+  "authoritativeWidgetContract": "configurable-booking-forms.contract.json",
+  "legacyEndpointsDeprecated": true,
   "endpoints": [
     {
       "operationId": "getPublicUiConfig",

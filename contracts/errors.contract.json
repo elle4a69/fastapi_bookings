@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "errorEnvelope": {
     "ok": false,
     "error": {
@@ -34,6 +34,9 @@
     "BOOKING_SLOT_UNAVAILABLE",
     "RESOURCE_UNAVAILABLE",
     "PROVIDER_NOT_ELIGIBLE",
+    "BOOKING_FORM_INCOMPATIBLE",
+    "BOOKING_FORM_UNRESOLVED",
+    "DUPLICATE_BOOKING_FORM_SLUG",
     "INVALID_STATUS_TRANSITION",
     "MODULE_DISABLED",
     "CLIENT_REQUIRED",

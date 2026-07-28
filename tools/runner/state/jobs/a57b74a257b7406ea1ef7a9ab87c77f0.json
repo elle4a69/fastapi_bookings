@@ -1,0 +1,24 @@
+{
+  "id": "a57b74a257b7406ea1ef7a9ab87c77f0",
+  "status": "completed",
+  "created_at": "2026-07-12T10:18:50.054971+00:00",
+  "started_at": "2026-07-12T10:18:50.099177+00:00",
+  "finished_at": "2026-07-12T10:20:50.055426+00:00",
+  "exit_code": 0,
+  "pid": 6972,
+  "command": [
+    "powershell.exe",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "F:\\Projects\\fastapi_bookings\\tools\\postman-sweep\\launch-and-save-authenticated-sweep.ps1",
+    "-StartDelaySeconds",
+    "5",
+    "-RequestDelayMilliseconds",
+    "100"
+  ],
+  "log_path": "F:\\Projects\\fastapi_bookings\\tools\\runner\\state\\jobs\\a57b74a257b7406ea1ef7a9ab87c77f0.log",
+  "result_dir": "F:\\Projects\\fastapi_bookings\\tools\\postman-sweep\\reports\\run-20260712-201850",
+  "error": null
+}

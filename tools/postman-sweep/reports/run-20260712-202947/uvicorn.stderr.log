@@ -1,0 +1,9 @@
+{"timestamp": "2026-07-12 20:30:01,606", "level": "INFO", "message": "Firebase Admin SDK successfully initialized.", "logger": "app.services.fcm"}
+{"timestamp": "2026-07-12 20:30:01,786", "level": "INFO", "message": "Started server process [162028]", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-12 20:30:01,809", "level": "INFO", "message": "Waiting for application startup.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-12 20:30:01,847", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-12 20:30:02,237", "level": "INFO", "message": "Application startup complete.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-12 20:30:02,239", "level": "ERROR", "message": "[Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000): only one usage of each socket address (protocol/network address/port) is normally permitted", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-12 20:30:02,239", "level": "INFO", "message": "Waiting for application shutdown.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-12 20:30:02,240", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-12 20:30:07,262", "level": "INFO", "message": "Application shutdown complete.", "logger": "uvicorn.error"}

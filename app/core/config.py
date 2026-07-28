@@ -54,6 +54,10 @@ class Settings(BaseSettings):
         "",
         description="Comma separated list of allowed origins for CORS",
     )
+    WIDGET_SCRIPT_URL: str = Field(
+        "/static/booking-widget.js",
+        description="URL used in generated booking-form embed metadata",
+    )
 
     # ClickSend SMS/MMS Settings
     CLICKSEND_API_USERNAME: str = Field("", description="ClickSend API username")
@@ -66,6 +70,9 @@ class Settings(BaseSettings):
 
     # Firebase Settings
     FIREBASE_CREDENTIALS_JSON: str = Field("", description="Firebase Service Account JSON string or filepath")
+
+    # Mapbox Settings
+    MAPBOX_ACCESS_TOKEN: str = Field("", description="Mapbox Access Token")
 
     # Outbox settings
     OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")

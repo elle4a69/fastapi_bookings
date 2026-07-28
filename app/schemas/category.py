@@ -10,6 +10,7 @@ class CategoryBase(BaseModel):
     description: Optional[str] = None
     active: bool = True
     is_visible: bool = True
+    image: Optional[str] = None
 
 
 class CategoryCreate(CategoryBase):

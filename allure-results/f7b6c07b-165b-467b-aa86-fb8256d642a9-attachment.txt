@@ -1,0 +1,49 @@
+{"timestamp": "2026-07-09 11:52:03,140", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:52:03,163", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,169", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,175", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,181", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,189", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,195", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,203", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/webhooks/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,216", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,227", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,238", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,249", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,259", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,270", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,280", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,289", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,299", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,308", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,318", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,328", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,338", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,350", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,359", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,369", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,378", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,389", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,399", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,408", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,419", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,428", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,438", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,448", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,460", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,471", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,484", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,494", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,508", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,519", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,531", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,542", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,556", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,566", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,576", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,586", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,605", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,629", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/972 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,693", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/webhooks/28153 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:03,696", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:52:05,962", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.09s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,89 @@
+{"timestamp": "2026-07-09 12:03:43,014", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:43,030", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,041", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,053", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,068", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,081", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,093", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,104", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/quote \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,119", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,130", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,143", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,155", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,167", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,178", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,191", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,202", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,214", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,224", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,236", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,248", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,260", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,271", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,287", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,297", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,310", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,323", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,337", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,348", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,362", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,374", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,389", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,401", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,413", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,426", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,439", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,450", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,461", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,474", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,487", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,499", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,509", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,521", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,531", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,543", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,550", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,559", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,570", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,580", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,587", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,595", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,604", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,615", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,629", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,639", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,650", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,695", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,738", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,755", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,767", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,781", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,802", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,814", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,829", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,837", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,847", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,855", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,864", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,872", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,879", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,887", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,896", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,906", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,915", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,924", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,931", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,939", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,946", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,954", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,962", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,970", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,978", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,986", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:43,994", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:44,003", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:44,015", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:44,025", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:44,042", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/quote \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:44,046", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:47,737", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

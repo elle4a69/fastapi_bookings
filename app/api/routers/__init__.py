@@ -23,6 +23,8 @@ from . import holds  # noqa: F401
 from . import waitlist  # noqa: F401
 from . import search  # noqa: F401
 from . import ui_config  # noqa: F401
+from . import booking_forms  # noqa: F401
+from . import relationship_management  # noqa: F401
 from . import forms  # noqa: F401
 from . import diagnostics  # noqa: F401
 from . import categories  # noqa: F401

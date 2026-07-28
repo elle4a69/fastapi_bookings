@@ -20,18 +20,18 @@ def test_public_endpoints_require_x_token(client, db_session: Session):
     db_session.add(tenant)
     db_session.commit()
 
-    # 1. Missing X-Token header -> FastAPI returns 422 Unprocessable Entity
+    # 1. Missing X-Token header is an authentication failure.
     headers_missing_token = {
         "X-Tenant": "test-biz"
     }
     
     # Check GET /api/public/ui-config
     response = client.get("/api/public/ui-config", headers=headers_missing_token)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     # Check GET /api/public/additional-fields
     response = client.get("/api/public/additional-fields", headers=headers_missing_token)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     # Check POST /api/public/search-availability
     query_payload = {
@@ -39,7 +39,7 @@ def test_public_endpoints_require_x_token(client, db_session: Session):
         "date_to": "2026-07-06T23:59:59Z"
     }
     response = client.post("/api/public/search-availability", json=query_payload, headers=headers_missing_token)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     # 2. Invalid X-Token header -> returns 401 Unauthorized
     headers_invalid_token = {
@@ -93,11 +93,11 @@ def test_multi_service_availability_search(client, db_session: Session):
     db_session.commit()
 
     # 2. Assign Service A to Category A
-    category = Category(name="Category A", created_at=datetime.now(timezone.utc))
+    category = Category(tenant_id=tenant.id, name="Category A", created_at=datetime.now(timezone.utc))
     db_session.add(category)
     db_session.commit()
 
-    service_cat = ServiceCategory(service_id=service_a.id, category_id=category.id)
+    service_cat = ServiceCategory(tenant_id=tenant.id, service_id=service_a.id, category_id=category.id)
     db_session.add(service_cat)
     db_session.commit()
 

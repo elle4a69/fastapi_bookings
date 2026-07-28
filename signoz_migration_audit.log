@@ -1,0 +1,30 @@
+# SigNoz APM Stack Migration and Audit Log
+
+## 1. Migration
+- **Source:** `F:\Projects\signoz`
+- **Destination:** `F:\Projects\fastapi_bookings\signoz`
+- **Action:** Migrated cleanly using `shutil.copytree` with exclusions for `node_modules`, `.devenv`, `.git`, `.cache`, `build`, and `dist`.
+- **Status:** Complete.
+
+## 2. Dependencies
+- **Action:** Executed `pnpm install --config.engine-strict=false` in `F:\Projects\fastapi_bookings\signoz\frontend` to re-install dependencies and bypass Node version mismatches with `lint-staged`.
+- **Status:** Complete/Running in background.
+
+## 3. Configuration Update
+- **File Checked:** `F:\Projects\fastapi_bookings\dev-dashboard\project-modules.json`
+- **Observations:** The module `signoz-apm` is correctly configured:
+  - `working_dir` points to `F:\Projects\fastapi_bookings\signoz\frontend`.
+  - `command` is correctly set to `pnpm dev`.
+  - `port` is 3301.
+- **Status:** Verified. No update needed.
+
+## 4. Port and Troubleshooting
+- **Port 3301 Check:** Executed `netstat -ano | findstr :3301`. No conflicting processes were found on port 3301.
+- **Docker Compose Audit:** Reviewed `F:\Projects\fastapi_bookings\pours\deployment\compose.yaml`.
+  - Clickhouse, Postgres, Query Service, and OTel collector (ingester) containers are correctly defined in the configuration.
+  - **Environment Check:** Executed `docker ps`. Docker API is not reachable (`failed to connect to the docker API`).
+  - **Resolution/Action required:** The user must start Docker Desktop to allow the backend telemetry, clickhouse, and postgres metastore services to run.
+
+## 5. Next Steps
+- Verify `pnpm run build` or `pnpm dev` in the frontend starts properly once the dependencies have finished installing.
+- Start Docker Desktop and run `docker compose up -d` in `F:\Projects\fastapi_bookings\pours\deployment`.

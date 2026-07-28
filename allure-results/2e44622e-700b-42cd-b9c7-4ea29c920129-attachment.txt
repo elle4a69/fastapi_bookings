@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:06:14,213", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:14,234", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,243", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,253", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,263", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,275", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,286", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,296", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/providers \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,314", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/providers \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,339", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/providers \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:14,343", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

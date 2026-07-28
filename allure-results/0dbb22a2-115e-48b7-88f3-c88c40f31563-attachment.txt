@@ -1,0 +1,41 @@
+{"timestamp": "2026-07-09 12:05:03,701", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:05:03,724", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,735", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,742", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,750", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,756", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,763", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,769", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,782", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,797", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,810", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,822", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,836", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,849", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,864", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,878", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,895", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,912", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,926", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,938", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,949", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,962", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,978", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:03,993", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,008", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,023", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,038", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,054", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,071", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,085", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,098", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,116", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,134", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,145", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,155", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,165", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,177", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,189", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,212", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/tax-rates/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:05:04,214", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:05:06,034", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.01s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -9,6 +9,31 @@ services:
     environment:
       - APP_ENV=production
       - FRONTEND_ORIGINS=http://localhost:3000,http://localhost:5173
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fastapi_bookings
+      - SECRET_KEY=production-secret-key-must-be-configured
+      - PUBLIC_API_KEY=production-public-key-must-be-configured
     volumes:
       - ./app:/app/app
-      - ./fastapi_bookings.db:/app/fastapi_bookings.db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: fastapi_bookings_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fastapi_bookings
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fastapi_bookings"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

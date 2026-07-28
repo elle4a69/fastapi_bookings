@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..deps import get_db, get_public_tenant
@@ -159,7 +160,14 @@ def confirm_hold_endpoint(
     )
     # Persist booking
     db.add(booking)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The selected provider and time are no longer available",
+        ) from exc
     db.refresh(booking)
     # Allocate resources
     try:

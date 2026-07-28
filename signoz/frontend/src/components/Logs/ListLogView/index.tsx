@@ -1,0 +1,259 @@
+import { memo, useCallback, useMemo } from 'react';
+import { blue } from '@ant-design/colors';
+import { Typography } from '@signozhq/ui/typography';
+import cx from 'classnames';
+import { VIEW_TYPES } from 'components/LogDetail/constants';
+import { DATE_TIME_FORMATS } from 'constants/dateTimeFormats';
+import { ChangeViewFunctionType } from 'container/ExplorerOptions/types';
+import {
+	getBodyDisplayString,
+	getSanitizedLogBody,
+} from 'container/LogDetailedView/utils';
+import { FontSize } from 'container/OptionsMenu/types';
+import { useCopyLogLink } from 'hooks/logs/useCopyLogLink';
+import { useIsDarkMode } from 'hooks/useDarkMode';
+// utils
+import { FlatLogData } from 'lib/logs/flatLogData';
+import { useTimezone } from 'providers/Timezone';
+// interfaces
+import { IField } from 'types/api/logs/fields';
+import { ILog } from 'types/api/logs/log';
+
+// components
+import AddToQueryHOC, { AddToQueryHOCProps } from '../AddToQueryHOC';
+import LogLinesActionButtons from '../LogLinesActionButtons/LogLinesActionButtons';
+import LogStateIndicator from '../LogStateIndicator/LogStateIndicator';
+import { getLogIndicatorType } from '../LogStateIndicator/utils';
+// styles
+import { Container, LogContainer, LogText } from './styles';
+import { isValidLogField } from './util';
+
+import './ListLogView.styles.scss';
+
+interface LogFieldProps {
+	fieldKey: string;
+	fieldValue: string;
+	linesPerRow?: number;
+	fontSize: FontSize;
+}
+
+type LogSelectedFieldProps = Omit<LogFieldProps, 'linesPerRow'> &
+	Pick<AddToQueryHOCProps, 'onAddToQuery'>;
+
+function LogGeneralField({
+	fieldKey,
+	fieldValue,
+	linesPerRow = 1,
+	fontSize,
+}: LogFieldProps): JSX.Element {
+	const html = useMemo(
+		() => ({
+			__html: getSanitizedLogBody(fieldValue, { shouldEscapeHtml: true }),
+		}),
+		[fieldValue],
+	);
+
+	return (
+		<div className="log-field-container">
+			<p className={cx('log-field-key', fontSize)} title={fieldKey}>
+				{fieldKey}
+			</p>
+			<span className={cx('log-field-key-colon', fontSize)}>&nbsp;:&nbsp;</span>
+			<LogText
+				dangerouslySetInnerHTML={html}
+				className={cx('log-value', fontSize)}
+				title={fieldValue}
+				linesPerRow={linesPerRow > 1 ? linesPerRow : undefined}
+			/>
+		</div>
+	);
+}
+
+function LogSelectedField({
+	fieldKey = '',
+	fieldValue = '',
+	onAddToQuery,
+	fontSize,
+}: LogSelectedFieldProps): JSX.Element {
+	return (
+		<div className="log-selected-fields">
+			<AddToQueryHOC
+				fieldKey={fieldKey}
+				fieldValue={fieldValue}
+				onAddToQuery={onAddToQuery}
+				fontSize={fontSize}
+			>
+				<Typography.Text>
+					<span
+						style={{ color: blue[4] }}
+						className={cx('selected-log-field-key', fontSize)}
+					>
+						{fieldKey}
+					</span>
+				</Typography.Text>
+			</AddToQueryHOC>
+			<Typography.Text truncate={1} className={cx('selected-log-kv', fontSize)}>
+				<span className={cx('selected-log-field-key', fontSize)}>{': '}</span>
+				<span className={cx('selected-log-value', fontSize)}>
+					{fieldValue || "''"}
+				</span>
+			</Typography.Text>
+		</div>
+	);
+}
+
+type ListLogViewProps = {
+	logData: ILog;
+	selectedFields: IField[];
+	onSetActiveLog: (
+		log: ILog,
+		selectedTab?: (typeof VIEW_TYPES)[keyof typeof VIEW_TYPES],
+	) => void;
+	onAddToQuery: AddToQueryHOCProps['onAddToQuery'];
+	activeLog?: ILog | null;
+	linesPerRow: number;
+	fontSize: FontSize;
+	handleChangeSelectedView?: ChangeViewFunctionType;
+	isActiveLog?: boolean;
+	onClearActiveLog?: () => void;
+};
+
+function ListLogView({
+	logData,
+	selectedFields,
+	onSetActiveLog,
+	onAddToQuery,
+	activeLog,
+	linesPerRow,
+	fontSize,
+	isActiveLog,
+	onClearActiveLog,
+}: ListLogViewProps): JSX.Element {
+	const flattenLogData = useMemo(() => FlatLogData(logData), [logData]);
+
+	const { isHighlighted, isLogsExplorerPage, onLogCopy } = useCopyLogLink(
+		logData.id,
+	);
+	const isReadOnlyLog = !isLogsExplorerPage;
+
+	const isDarkMode = useIsDarkMode();
+
+	const handleDetailedView = useCallback(() => {
+		if (isActiveLog) {
+			onClearActiveLog?.();
+			return;
+		}
+
+		onSetActiveLog(logData);
+	}, [logData, onSetActiveLog, isActiveLog, onClearActiveLog]);
+
+	const handleShowContext = useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			onSetActiveLog(logData, VIEW_TYPES.CONTEXT);
+		},
+		[logData, onSetActiveLog],
+	);
+
+	const updatedSelecedFields = useMemo(
+		() => selectedFields.filter((e) => e.name !== 'id'),
+		[selectedFields],
+	);
+
+	const { formatTimezoneAdjustedTimestamp } = useTimezone();
+
+	const timestampValue = useMemo(
+		() =>
+			typeof flattenLogData.timestamp === 'string'
+				? formatTimezoneAdjustedTimestamp(
+						flattenLogData.timestamp,
+						DATE_TIME_FORMATS.ISO_DATETIME_MS,
+					)
+				: formatTimezoneAdjustedTimestamp(
+						flattenLogData.timestamp / 1e6,
+						DATE_TIME_FORMATS.ISO_DATETIME_MS,
+					),
+		[flattenLogData.timestamp, formatTimezoneAdjustedTimestamp],
+	);
+
+	const logType = getLogIndicatorType(logData);
+
+	return (
+		<>
+			<Container
+				$isActiveLog={isHighlighted || activeLog?.id === logData.id}
+				$isDarkMode={isDarkMode}
+				$logType={logType}
+				onClick={handleDetailedView}
+				fontSize={fontSize}
+			>
+				<div className="log-line">
+					<LogStateIndicator
+						fontSize={fontSize}
+						severityText={logData.severity_text}
+						severityNumber={logData.severity_number}
+					/>
+					<div>
+						<LogContainer fontSize={fontSize}>
+							{updatedSelecedFields.some((field) => field.name === 'body') && (
+								<LogGeneralField
+									fieldKey="Log"
+									fieldValue={getBodyDisplayString(logData.body)}
+									linesPerRow={linesPerRow}
+									fontSize={fontSize}
+								/>
+							)}
+							{flattenLogData.stream && (
+								<LogGeneralField
+									fieldKey="Stream"
+									fieldValue={flattenLogData.stream}
+									fontSize={fontSize}
+								/>
+							)}
+							{updatedSelecedFields.some((field) => field.name === 'timestamp') && (
+								<LogGeneralField
+									fieldKey="Timestamp"
+									fieldValue={timestampValue}
+									fontSize={fontSize}
+								/>
+							)}
+
+							{updatedSelecedFields
+								.filter((field) => !['timestamp', 'body'].includes(field.name))
+								.map((field) =>
+									isValidLogField(flattenLogData[field.name] as never) ? (
+										<LogSelectedField
+											key={field.name}
+											fieldKey={field.name}
+											fieldValue={flattenLogData[field.name] as never}
+											onAddToQuery={onAddToQuery}
+											fontSize={fontSize}
+										/>
+									) : null,
+								)}
+						</LogContainer>
+					</div>
+				</div>
+
+				{!isReadOnlyLog && (
+					<LogLinesActionButtons
+						handleShowContext={handleShowContext}
+						onLogCopy={onLogCopy}
+					/>
+				)}
+			</Container>
+		</>
+	);
+}
+
+ListLogView.defaultProps = {
+	activeLog: null,
+	handleChangeSelectedView: undefined,
+};
+
+LogGeneralField.defaultProps = {
+	linesPerRow: 1,
+};
+
+export default memo(ListLogView);

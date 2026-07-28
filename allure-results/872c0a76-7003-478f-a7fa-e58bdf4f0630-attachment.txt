@@ -1,0 +1,45 @@
+{"timestamp": "2026-07-09 11:53:03,622", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:53:03,636", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,647", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,652", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,661", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,669", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,678", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,689", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/gdpr-consent \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,704", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,716", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,727", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,734", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,744", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,752", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,762", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,772", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,783", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,798", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,810", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,820", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,832", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,843", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,852", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,863", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,877", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,884", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,893", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,903", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,913", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,919", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,929", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,938", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,950", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,964", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,973", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,984", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:03,998", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,009", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,026", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,037", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,061", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,084", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,977", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:04,989", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/gdpr-consent \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:53:05,441", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

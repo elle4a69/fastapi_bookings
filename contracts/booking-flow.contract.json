@@ -1,18 +1,17 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "publicFlow": [
     {
       "step": 1,
       "name": "Auth/bootstrap",
       "calls": [
         "POST /api/public/auth/token",
-        "GET /api/public/ui-config",
-        "GET /api/public/bootstrap"
+        "GET /api/public/booking-forms/{slug}"
       ]
     },
     {
       "step": 2,
-      "name": "Choose entry point",
+      "name": "Resolve configured modules",
       "allowedEntryPoints": [
         "location",
         "provider",
@@ -20,19 +19,19 @@
         "service",
         "date_time"
       ],
-      "rule": "The selected entry point only affects filtering. The final booking still needs service_id, provider_id, start_time, end_time and client_id."
+      "rule": "Render only visible_modules and POST selections after each change; predefined, inferred, automatic, and disabled modules remain hidden."
     },
     {
       "step": 3,
       "name": "Search slots",
-      "preferredCall": "POST /api/public/search-availability",
-      "fallbackCall": "GET /api/public/availability"
+      "preferredCall": "POST /api/public/booking-forms/{slug}/availability",
+      "fallbackCall": "Legacy availability endpoints are deprecated for new widgets"
     },
     {
       "step": 4,
-      "name": "Create hold",
-      "call": "POST /api/public/holds",
-      "rule": "Use holds when the user spends time filling forms after selecting a slot."
+      "name": "Select server-resolved slot",
+      "call": "Use one slot returned by the form availability endpoint",
+      "rule": "Automatic and Anyone provider selection is assigned by the backend."
     },
     {
       "step": 5,
@@ -44,10 +43,9 @@
     },
     {
       "step": 6,
-      "name": "Confirm hold or create booking",
+      "name": "Create booking",
       "calls": [
-        "POST /api/public/holds/{hold_id}/confirm",
-        "POST /api/public/bookings"
+        "POST /api/public/booking-forms/{slug}/bookings"
       ],
       "result": "Booking status pending"
     },

@@ -1,0 +1,832 @@
+[2026-07-12 17:07:29] Run directory: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-170729
+[2026-07-12 17:07:31] API is not responding on port 8000. Starting Uvicorn.
+[2026-07-12 17:07:38] Preparing authenticated collection and temporary JWTs.
+Prepared 216 requests with temporary local authentication
+Resolved 101 concrete path values
+Collection: F:\Projects\fastapi_bookings\tools\postman-sweep\FastAPI-Bookings-Local-Authenticated.postman_collection.json
+Environment: F:\Projects\fastapi_bookings\tools\postman-sweep\SimplyDemo-Local.postman_environment.json
+[2026-07-12 17:07:41] Waiting 2 second(s) before Newman execution.
+[2026-07-12 17:07:43] Running authenticated Newman sweep.
+newman
+
+FastAPI Bookings Local Authenticated Sweep
+
+□ api / admin / auth
+└ Admin Login
+  POST http://127.0.0.1:8000/api/admin/auth [200 OK, 325B, 368ms]
+
+□ api / admin / users
+└ Create User
+  POST http://127.0.0.1:8000/api/admin/users [400 Bad Request, 272B, 18ms]
+
+□ api / admin / services
+└ List Services
+  GET http://127.0.0.1:8000/api/admin/services?page=1&page_size=25 [200 OK, 800B, 34ms]
+
+└ Create Service
+  POST http://127.0.0.1:8000/api/admin/services [200 OK, 347B, 187ms]
+
+□ api / admin / services / {service_id}
+└ Get Service
+  GET http://127.0.0.1:8000/api/admin/services/1 [200 OK, 349B, 21ms]
+
+└ Update Service
+  PUT http://127.0.0.1:8000/api/admin/services/1 [200 OK, 349B, 18ms]
+
+└ Delete Service
+  DELETE http://127.0.0.1:8000/api/admin/services/999999 [404 Not Found, 265B, 12ms]
+
+□ api / admin / services / {service_id} / providers
+└ List Service Providers
+  GET http://127.0.0.1:8000/api/admin/services/1/providers [200 OK, 363B, 27ms]
+
+□ api / admin / services / {service_id} / providers / {provider_id}
+└ Assign Provider To Service
+  POST http://127.0.0.1:8000/api/admin/services/1/providers/4 [204 No Content, 113B, 27ms]
+
+└ Unassign Provider From Service
+  DELETE http://127.0.0.1:8000/api/admin/services/999999/providers/999999 [204 No Content, 113B, 16ms]
+
+□ api / admin / services / {service_id} / categories
+└ List Service Categories
+  GET http://127.0.0.1:8000/api/admin/services/1/categories [200 OK, 227B, 20ms]
+
+□ api / admin / services / {service_id} / categories / {category_id}
+└ Assign Category To Service
+  POST http://127.0.0.1:8000/api/admin/services/1/categories/4 [204 No Content, 113B, 21ms]
+
+└ Unassign Category From Service
+  DELETE http://127.0.0.1:8000/api/admin/services/999999/categories/999999 [204 No Content, 113B, 16ms]
+
+□ api / admin / providers
+└ List Providers
+  GET http://127.0.0.1:8000/api/admin/providers?page=1&page_size=25 [200 OK, 893B, 25ms]
+
+└ Create Provider
+  POST http://127.0.0.1:8000/api/admin/providers [200 OK, 378B, 167ms]
+
+□ api / admin / providers / {provider_id}
+└ Get Provider
+  GET http://127.0.0.1:8000/api/admin/providers/4 [200 OK, 380B, 14ms]
+
+└ Update Provider
+  PUT http://127.0.0.1:8000/api/admin/providers/4 [200 OK, 380B, 17ms]
+
+└ Delete Provider
+  DELETE http://127.0.0.1:8000/api/admin/providers/999999 [404 Not Found, 266B, 15ms]
+
+□ api / admin / clients
+└ List Clients
+  GET http://127.0.0.1:8000/api/admin/clients?page=1&page_size=25 [200 OK, 3.48kB, 28ms]
+
+└ Create Client
+  POST http://127.0.0.1:8000/api/admin/clients [200 OK, 705B, 166ms]
+
+□ api / admin / clients / {client_id}
+└ Get Client
+  GET http://127.0.0.1:8000/api/admin/clients/6 [200 OK, 704B, 14ms]
+
+└ Update Client
+  PUT http://127.0.0.1:8000/api/admin/clients/6 [200 OK, 705B, 176ms]
+
+└ Delete Client
+  DELETE http://127.0.0.1:8000/api/admin/clients/999999 [404 Not Found, 264B, 10ms]
+
+□ api / admin / locations
+└ List Locations
+  GET http://127.0.0.1:8000/api/admin/locations?page=1&page_size=25 [200 OK, 363B, 21ms]
+
+└ Create Location
+  POST http://127.0.0.1:8000/api/admin/locations [200 OK, 201B, 181ms]
+
+□ api / admin / locations / {location_id}
+└ Get Location
+  GET http://127.0.0.1:8000/api/admin/locations/4 [200 OK, 201B, 19ms]
+
+└ Update Location
+  PUT http://127.0.0.1:8000/api/admin/locations/4 [200 OK, 201B, 18ms]
+
+└ Delete Location
+  DELETE http://127.0.0.1:8000/api/admin/locations/999999 [404 Not Found, 266B, 17ms]
+
+□ api / admin / locations / {location_id} / providers / {provider_id}
+└ Link Location Provider
+  POST http://127.0.0.1:8000/api/admin/locations/4/providers/4 [201 Created, 173B, 21ms]
+
+└ Unlink Location Provider
+  DELETE http://127.0.0.1:8000/api/admin/locations/999999/providers/999999 [404 Not Found, 262B, 14ms]
+
+□ api / admin / locations / {location_id} / providers
+└ List Location Providers
+  GET http://127.0.0.1:8000/api/admin/locations/4/providers [200 OK, 363B, 23ms]
+
+□ api / admin / locations / {location_id} / services / {service_id}
+└ Link Location Service
+  POST http://127.0.0.1:8000/api/admin/locations/4/services/1 [201 Created, 173B, 43ms]
+
+└ Unlink Location Service
+  DELETE http://127.0.0.1:8000/api/admin/locations/999999/services/999999 [404 Not Found, 262B, 16ms]
+
+□ api / admin / locations / {location_id} / services
+└ List Location Services
+  GET http://127.0.0.1:8000/api/admin/locations/4/services [200 OK, 332B, 24ms]
+
+□ api / admin / locations / {location_id} / categories / {category_id}
+└ Link Location Category
+  POST http://127.0.0.1:8000/api/admin/locations/4/categories/4 [201 Created, 173B, 21ms]
+
+└ Unlink Location Category
+  DELETE http://127.0.0.1:8000/api/admin/locations/999999/categories/999999 [404 Not Found, 262B, 17ms]
+
+□ api / admin / locations / {location_id} / categories
+└ List Location Categories
+  GET http://127.0.0.1:8000/api/admin/locations/4/categories [200 OK, 227B, 21ms]
+
+□ api / admin / bookings
+└ List Bookings
+  GET http://127.0.0.1:8000/api/admin/bookings?status_filter=no_show&client_id=1&provider_id=1&date_from=2026-07-13T10:00:00Z&date_to=2026-07-13T10:00:00Z&page=1&page_size=25 [200 OK, 189B, 34ms]
+
+└ Create Booking
+  POST http://127.0.0.1:8000/api/admin/bookings [409 Conflict, 283B, 25ms]
+
+□ api / admin / bookings / {booking_id}
+└ Get Booking
+  GET http://127.0.0.1:8000/api/admin/bookings/1 [200 OK, 402B, 21ms]
+
+└ Update Booking
+  PUT http://127.0.0.1:8000/api/admin/bookings/1 [400 Bad Request, 325B, 16ms]
+
+□ api / admin / bookings / {booking_id} / confirm
+└ Confirm Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/1/confirm [400 Bad Request, 277B, 19ms]
+
+□ api / admin / bookings / {booking_id} / cancel
+└ Cancel Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/1/cancel [400 Bad Request, 277B, 13ms]
+
+□ api / admin / bookings / {booking_id} / complete
+└ Complete Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/1/complete [400 Bad Request, 277B, 16ms]
+
+□ api / admin / bookings / {booking_id} / noshow
+└ Noshow Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/1/noshow [400 Bad Request, 277B, 15ms]
+
+□ api / admin / bookings / {booking_id} / reschedule
+└ Reschedule Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/1/reschedule [400 Bad Request, 277B, 15ms]
+
+□ api / admin / public / bookings
+└ Create Public Booking
+  POST http://127.0.0.1:8000/api/admin/public/bookings [409 Conflict, 283B, 27ms]
+
+□ api / admin / dashboard / bootstrap
+└ Admin Dashboard Bootstrap
+  GET http://127.0.0.1:8000/api/admin/dashboard/bootstrap [200 OK, 4.07kB, 28ms]
+
+□ api / admin / audit-log
+└ List Audit Logs
+  GET http://127.0.0.1:8000/api/admin/audit-log?page=1&page_size=25 [200 OK, 579B, 25ms]
+
+└ Create Audit Log
+  POST http://127.0.0.1:8000/api/admin/audit-log [200 OK, 274B, 202ms]
+
+□ api / admin / payments
+└ List Payments
+  GET http://127.0.0.1:8000/api/admin/payments?page=1&page_size=25 [200 OK, 657B, 17ms]
+
+└ Create Payment
+  POST http://127.0.0.1:8000/api/admin/payments [200 OK, 301B, 165ms]
+
+□ api / admin / payments / {payment_id}
+└ Update Payment
+  PUT http://127.0.0.1:8000/api/admin/payments/1 [200 OK, 298B, 18ms]
+
+□ api / admin / notifications
+└ List Notifications
+  GET http://127.0.0.1:8000/api/admin/notifications?page=1&page_size=25 [200 OK, 1.29kB, 23ms]
+
+└ Create Notification
+  POST http://127.0.0.1:8000/api/admin/notifications [200 OK, 328B, 172ms]
+
+□ api / admin / notifications / {notification_id}
+└ Update Notification
+  PUT http://127.0.0.1:8000/api/admin/notifications/1 [200 OK, 324B, 16ms]
+
+□ api / admin / notification-templates
+└ List Notification Templates
+  GET http://127.0.0.1:8000/api/admin/notification-templates?page=1&page_size=25 [200 OK, 633B, 17ms]
+
+└ Create Notification Template
+  POST http://127.0.0.1:8000/api/admin/notification-templates [409 Conflict, 326B, 14ms]
+
+□ api / admin / notification-templates / {template_id}
+└ Update Notification Template
+  PUT http://127.0.0.1:8000/api/admin/notification-templates/999999 [404 Not Found, 266B, 16ms]
+
+└ Delete Notification Template
+  DELETE http://127.0.0.1:8000/api/admin/notification-templates/999999 [404 Not Found, 266B, 17ms]
+
+□ api / admin / reminder-rules
+└ List Reminder Rules
+  GET http://127.0.0.1:8000/api/admin/reminder-rules?page=1&page_size=25 [200 OK, 1.25kB, 21ms]
+
+└ Create Reminder Rule
+  POST http://127.0.0.1:8000/api/admin/reminder-rules [200 OK, 413B, 213ms]
+
+□ api / admin / reminder-rules / {rule_id}
+└ Update Reminder Rule
+  PUT http://127.0.0.1:8000/api/admin/reminder-rules/1 [200 OK, 397B, 20ms]
+
+└ Delete Reminder Rule
+  DELETE http://127.0.0.1:8000/api/admin/reminder-rules/999999 [404 Not Found, 271B, 13ms]
+
+□ api / admin / system / diagnostics
+└ Get System Diagnostics
+  GET http://127.0.0.1:8000/api/admin/system/diagnostics [200 OK, 404B, 57ms]
+
+□ api / admin / system / cleanup
+└ Run Historic Cleanup
+  POST http://127.0.0.1:8000/api/admin/system/cleanup?days=365 [200 OK, 299B, 22ms]
+
+□ api / admin / system / clients / {client_id} / anonymize
+└ Anonymize Client Record
+  POST http://127.0.0.1:8000/api/admin/system/clients/6/anonymize [200 OK, 180B, 182ms]
+
+□ api / admin / categories
+└ List Categories
+  GET http://127.0.0.1:8000/api/admin/categories [200 OK, 427B, 12ms]
+
+└ Create Category
+  POST http://127.0.0.1:8000/api/admin/categories [200 OK, 224B, 191ms]
+
+□ api / admin / categories / {category_id}
+└ Get Category
+  GET http://127.0.0.1:8000/api/admin/categories/4 [200 OK, 224B, 12ms]
+
+└ Update Category
+  PUT http://127.0.0.1:8000/api/admin/categories/4 [200 OK, 224B, 19ms]
+
+└ Delete Category
+  DELETE http://127.0.0.1:8000/api/admin/categories/999999 [404 Not Found, 266B, 14ms]
+
+□ api / admin / resources
+└ List Resources
+  GET http://127.0.0.1:8000/api/admin/resources [200 OK, 493B, 17ms]
+
+└ Create Resource
+  POST http://127.0.0.1:8000/api/admin/resources [200 OK, 247B, 166ms]
+
+□ api / admin / resources / {resource_id}
+└ Get Resource
+  GET http://127.0.0.1:8000/api/admin/resources/1 [200 OK, 247B, 13ms]
+
+└ Update Resource
+  PUT http://127.0.0.1:8000/api/admin/resources/1 [200 OK, 247B, 15ms]
+
+└ Delete Resource
+  DELETE http://127.0.0.1:8000/api/admin/resources/999999 [404 Not Found, 266B, 11ms]
+
+□ api / admin / resources / requirements
+└ Create Service Resource Requirement
+  POST http://127.0.0.1:8000/api/admin/resources/requirements [200 OK, 184B, 266ms]
+
+□ api / admin / add-ons
+└ List Addons
+  GET http://127.0.0.1:8000/api/admin/add-ons [200 OK, 413B, 9ms]
+
+└ Create Addon
+  POST http://127.0.0.1:8000/api/admin/add-ons [200 OK, 268B, 152ms]
+
+□ api / admin / add-ons / {add_on_id}
+└ Get Addon
+  GET http://127.0.0.1:8000/api/admin/add-ons/1 [200 OK, 268B, 13ms]
+
+└ Update Addon
+  PUT http://127.0.0.1:8000/api/admin/add-ons/1 [200 OK, 268B, 18ms]
+
+└ Delete Addon
+  DELETE http://127.0.0.1:8000/api/admin/add-ons/999999 [404 Not Found, 266B, 13ms]
+
+□ api / admin / products
+└ List Products
+  GET http://127.0.0.1:8000/api/admin/products [200 OK, 419B, 15ms]
+
+└ Create Product
+  POST http://127.0.0.1:8000/api/admin/products [409 Conflict, 297B, 18ms]
+
+□ api / admin / products / {product_id}
+└ Get Product
+  GET http://127.0.0.1:8000/api/admin/products/1 [200 OK, 271B, 11ms]
+
+└ Update Product
+  PUT http://127.0.0.1:8000/api/admin/products/1 [200 OK, 271B, 18ms]
+
+└ Delete Product
+  DELETE http://127.0.0.1:8000/api/admin/products/999999 [404 Not Found, 265B, 11ms]
+
+□ api / admin / products / assign
+└ Assign Product To Service
+  POST http://127.0.0.1:8000/api/admin/products/assign [200 OK, 163B, 134ms]
+
+□ api / admin / packages
+└ List Packages
+  GET http://127.0.0.1:8000/api/admin/packages [200 OK, 472B, 15ms]
+
+└ Create Package
+  POST http://127.0.0.1:8000/api/admin/packages [200 OK, 240B, 151ms]
+
+□ api / admin / packages / {package_id}
+└ Get Package
+  GET http://127.0.0.1:8000/api/admin/packages/1 [200 OK, 240B, 9ms]
+
+└ Update Package
+  PUT http://127.0.0.1:8000/api/admin/packages/999999 [404 Not Found, 265B, 17ms]
+
+└ Delete Package
+  DELETE http://127.0.0.1:8000/api/admin/packages/999999 [404 Not Found, 265B, 14ms]
+
+□ api / admin / packages / {package_id} / steps
+└ Add Package Step
+  POST http://127.0.0.1:8000/api/admin/packages/999999/steps [404 Not Found, 265B, 15ms]
+
+□ api / admin / packages / steps / {step_id}
+└ Update Package Step
+  PUT http://127.0.0.1:8000/api/admin/packages/steps/1 [404 Not Found, 270B, 19ms]
+
+└ Delete Package Step
+  DELETE http://127.0.0.1:8000/api/admin/packages/steps/999999 [404 Not Found, 270B, 13ms]
+
+□ api / admin / schedule / workdays
+└ List Workdays
+  GET http://127.0.0.1:8000/api/admin/schedule/workdays [200 OK, 429B, 15ms]
+
+└ Create Workday
+  POST http://127.0.0.1:8000/api/admin/schedule/workdays [201 Created, 281B, 225ms]
+
+□ api / admin / schedule / workdays / {workday_id}
+└ Update Workday
+  PUT http://127.0.0.1:8000/api/admin/schedule/workdays/999999 [404 Not Found, 265B, 16ms]
+
+└ Delete Workday
+  DELETE http://127.0.0.1:8000/api/admin/schedule/workdays/999999 [404 Not Found, 265B, 15ms]
+
+□ api / admin / schedule / special-days
+└ List Special Days
+  GET http://127.0.0.1:8000/api/admin/schedule/special-days [200 OK, 479B, 18ms]
+
+└ Create Special Day
+  POST http://127.0.0.1:8000/api/admin/schedule/special-days [201 Created, 306B, 179ms]
+
+□ api / admin / schedule / special-days / {day_id}
+└ Update Special Day
+  PUT http://127.0.0.1:8000/api/admin/schedule/special-days/1 [200 OK, 301B, 24ms]
+
+└ Delete Special Day
+  DELETE http://127.0.0.1:8000/api/admin/schedule/special-days/999999 [404 Not Found, 269B, 16ms]
+
+□ api / admin / schedule / blocked-times
+└ List Blocked Times
+  GET http://127.0.0.1:8000/api/admin/schedule/blocked-times [200 OK, 490B, 23ms]
+
+└ Create Blocked Time
+  POST http://127.0.0.1:8000/api/admin/schedule/blocked-times [201 Created, 311B, 159ms]
+
+□ api / admin / schedule / blocked-times / {block_id}
+└ Update Blocked Time
+  PUT http://127.0.0.1:8000/api/admin/schedule/blocked-times/1 [200 OK, 307B, 28ms]
+
+└ Delete Blocked Time
+  DELETE http://127.0.0.1:8000/api/admin/schedule/blocked-times/999999 [404 Not Found, 270B, 16ms]
+
+□ api / admin / schedule / reserved-times
+└ List Reserved Times
+  GET http://127.0.0.1:8000/api/admin/schedule/reserved-times [200 OK, 621B, 21ms]
+
+└ Create Reserved Time
+  POST http://127.0.0.1:8000/api/admin/schedule/reserved-times [201 Created, 379B, 213ms]
+
+□ api / admin / schedule / reserved-times / {reserved_id}
+└ Update Reserved Time
+  PUT http://127.0.0.1:8000/api/admin/schedule/reserved-times/1 [200 OK, 370B, 162ms]
+
+└ Delete Reserved Time
+  DELETE http://127.0.0.1:8000/api/admin/schedule/reserved-times/999999 [404 Not Found, 271B, 18ms]
+
+□ api / admin / schedule / workload
+└ Get Workload
+  GET http://127.0.0.1:8000/api/admin/schedule/workload [200 OK, 153B, 21ms]
+
+□ api / admin / additional-fields
+└ List Admin Additional Fields
+  GET http://127.0.0.1:8000/api/admin/additional-fields?scope=test&service_id=1&active_only=false [200 OK, 387B, 18ms]
+
+└ Create Additional Field
+  POST http://127.0.0.1:8000/api/admin/additional-fields [201 Created, 392B, 179ms]
+
+□ api / admin / additional-fields / {field_id}
+└ Update Additional Field
+  PUT http://127.0.0.1:8000/api/admin/additional-fields/1 [200 OK, 385B, 19ms]
+
+└ Delete Additional Field
+  DELETE http://127.0.0.1:8000/api/admin/additional-fields/999999 [404 Not Found, 274B, 15ms]
+
+□ api / admin / additional-field-responses
+└ List Admin Field Responses
+  GET http://127.0.0.1:8000/api/admin/additional-field-responses?booking_id=1&client_id=1 [200 OK, 126B, 19ms]
+
+□ api / admin / invoices
+└ List Admin Invoices
+  GET http://127.0.0.1:8000/api/admin/invoices [200 OK, 1.75kB, 53ms]
+
+□ api / admin / invoices / {invoice_id}
+└ Get Admin Invoice
+  GET http://127.0.0.1:8000/api/admin/invoices/1 [200 OK, 447B, 17ms]
+
+□ api / admin / invoices / {invoice_id} / status
+└ Update Invoice Status
+  PUT http://127.0.0.1:8000/api/admin/invoices/1/status [200 OK, 447B, 154ms]
+
+□ api / admin / promotions
+└ List Promotions
+  GET http://127.0.0.1:8000/api/admin/promotions [200 OK, 400B, 15ms]
+
+└ Create Promotion
+  POST http://127.0.0.1:8000/api/admin/promotions [409 Conflict, 275B, 20ms]
+
+□ api / admin / promotions / {promotion_id}
+└ Update Promotion
+  PUT http://127.0.0.1:8000/api/admin/promotions/999999 [404 Not Found, 267B, 19ms]
+
+└ Delete Promotion
+  DELETE http://127.0.0.1:8000/api/admin/promotions/999999 [404 Not Found, 267B, 17ms]
+
+□ api / admin / tax-rates
+└ List Tax Rates
+  GET http://127.0.0.1:8000/api/admin/tax-rates [200 OK, 422B, 15ms]
+
+└ Create Tax Rate
+  POST http://127.0.0.1:8000/api/admin/tax-rates [201 Created, 227B, 165ms]
+
+□ api / admin / tax-rates / {tax_rate_id}
+└ Update Tax Rate
+  PUT http://127.0.0.1:8000/api/admin/tax-rates/4 [200 OK, 223B, 19ms]
+
+└ Delete Tax Rate
+  DELETE http://127.0.0.1:8000/api/admin/tax-rates/999999 [404 Not Found, 266B, 16ms]
+
+□ api / admin / payment-processor / configs
+└ List Payment Processor Configs
+  GET http://127.0.0.1:8000/api/admin/payment-processor/configs [200 OK, 1.3kB, 19ms]
+
+└ Create Payment Processor Config
+  POST http://127.0.0.1:8000/api/admin/payment-processor/configs [201 Created, 320B, 182ms]
+
+□ api / admin / payment-processor / configs / {config_id}
+└ Update Payment Processor Config
+  PUT http://127.0.0.1:8000/api/admin/payment-processor/configs/1 [200 OK, 319B, 150ms]
+
+□ api / admin / series
+└ List Series
+  GET http://127.0.0.1:8000/api/admin/series [200 OK, 679B, 11ms]
+
+└ Create Series
+  POST http://127.0.0.1:8000/api/admin/series [200 OK, 309B, 161ms]
+
+□ api / admin / series / {series_id}
+└ Get Series
+  GET http://127.0.0.1:8000/api/admin/series/1 [200 OK, 309B, 16ms]
+
+□ api / admin / webhooks
+└ List Webhooks
+  GET http://127.0.0.1:8000/api/admin/webhooks [200 OK, 407B, 18ms]
+
+└ Create Webhook
+  POST http://127.0.0.1:8000/api/admin/webhooks [201 Created, 279B, 171ms]
+
+□ api / admin / webhooks / {webhook_id}
+└ Update Webhook
+  PUT http://127.0.0.1:8000/api/admin/webhooks/1 [200 OK, 275B, 21ms]
+
+└ Delete Webhook
+  DELETE http://127.0.0.1:8000/api/admin/webhooks/999999 [404 Not Found, 265B, 14ms]
+
+□ api / admin / webhooks / events
+└ List Supported Events
+  GET http://127.0.0.1:8000/api/admin/webhooks/events [200 OK, 328B, 11ms]
+
+□ api / admin / calendar-notes
+└ List Calendar Notes
+  GET http://127.0.0.1:8000/api/admin/calendar-notes?provider_id=1&date_from=2026-07-13&date_to=2026-07-13 [200 OK, 146B, 20ms]
+
+└ Create Calendar Note
+  POST http://127.0.0.1:8000/api/admin/calendar-notes [201 Created, 331B, 175ms]
+
+□ api / admin / calendar-notes / {note_id}
+└ Update Calendar Note
+  PUT http://127.0.0.1:8000/api/admin/calendar-notes/1 [200 OK, 326B, 21ms]
+
+└ Delete Calendar Note
+  DELETE http://127.0.0.1:8000/api/admin/calendar-notes/999999 [404 Not Found, 271B, 15ms]
+
+□ api / admin / plugin-states
+└ List Plugin States
+  GET http://127.0.0.1:8000/api/admin/plugin-states [200 OK, 316B, 15ms]
+
+└ Upsert Plugin State
+  POST http://127.0.0.1:8000/api/admin/plugin-states [201 Created, 232B, 20ms]
+
+□ api / admin / plugin-states / {name}
+└ Toggle Plugin State
+  PUT http://127.0.0.1:8000/api/admin/plugin-states/test-plugin [404 Not Found, 270B, 15ms]
+
+□ api / admin / gdpr-consents
+└ List Gdpr Consents
+  GET http://127.0.0.1:8000/api/admin/gdpr-consents [200 OK, 524B, 13ms]
+
+□ api / admin / gdpr-consents / {client_id}
+└ List Gdpr Consents For Client
+  GET http://127.0.0.1:8000/api/admin/gdpr-consents/6 [200 OK, 146B, 17ms]
+
+□ api / admin / management-reviews
+└ List Review Requests
+  GET http://127.0.0.1:8000/api/admin/management-reviews?page=1&page_size=25 [200 OK, 189B, 24ms]
+
+□ api / admin / management-reviews / {review_id}
+└ Get Review Request
+  GET http://127.0.0.1:8000/api/admin/management-reviews/1 [404 Not Found, 272B, 19ms]
+
+□ api / admin / management-reviews / {review_id} / resolve
+└ Resolve Review Request
+  PUT http://127.0.0.1:8000/api/admin/management-reviews/1/resolve [404 Not Found, 272B, 18ms]
+
+□ api / admin / business-profile
+└ Get Business Profile
+  GET http://127.0.0.1:8000/api/admin/business-profile [200 OK, 359B, 12ms]
+
+└ Update Business Profile
+  PUT http://127.0.0.1:8000/api/admin/business-profile [200 OK, 359B, 15ms]
+
+□ api / public / auth / token
+└ Public Login
+  POST http://127.0.0.1:8000/api/public/auth/token [401 Unauthorized, 269B, 9ms]
+
+□ api / public / availability
+└ Availability
+  GET http://127.0.0.1:8000/api/public/availability?service_id=1&provider_id=1&date=2026-07-13T10:00:00Z [200 OK, 146B, 19ms]
+
+□ api / public / bootstrap
+└ Public Bootstrap
+  GET http://127.0.0.1:8000/api/public/bootstrap [200 OK, 2.84kB, 19ms]
+
+□ api / public / bookings
+└ Create Public Booking
+  POST http://127.0.0.1:8000/api/public/bookings [404 Not Found, 264B, 16ms]
+
+□ api / public / holds
+└ Create Hold Endpoint
+  POST http://127.0.0.1:8000/api/public/holds [200 OK, 366B, 229ms]
+
+□ api / public / holds / {hold_id} / confirm
+└ Confirm Hold Endpoint
+  POST http://127.0.0.1:8000/api/public/holds/1/confirm [500 Internal Server Error, 325B, 102ms]
+
+□ api / public / holds / {hold_id}
+└ Cancel Hold Endpoint
+  DELETE http://127.0.0.1:8000/api/public/holds/999999 [404 Not Found, 262B, 19ms]
+
+□ api / public / waitlist
+└ Add To Waitlist
+  POST http://127.0.0.1:8000/api/public/waitlist [200 OK, 340B, 181ms]
+
+└ List Waitlist
+  GET http://127.0.0.1:8000/api/public/waitlist?service_id=1 [200 OK, 772B, 16ms]
+
+□ api / public / search-availability
+└ Search Availability
+  POST http://127.0.0.1:8000/api/public/search-availability [200 OK, 165B, 25ms]
+
+□ api / public / ui-config
+└ Get Public Ui Config
+  GET http://127.0.0.1:8000/api/public/ui-config [200 OK, 346B, 12ms]
+
+□ api / public / ui-config / admin
+└ Get Admin Ui Config
+  GET http://127.0.0.1:8000/api/public/ui-config/admin [200 OK, 282B, 10ms]
+
+□ api / public / additional-fields
+└ List Public Additional Fields
+  GET http://127.0.0.1:8000/api/public/additional-fields?scope=test&service_id=1 [200 OK, 126B, 26ms]
+
+□ api / public / services / {service_id} / intake-form
+└ Get Public Service Intake Form
+  GET http://127.0.0.1:8000/api/public/services/1/intake-form [200 OK, 651B, 14ms]
+
+□ api / public / services
+└ List Public Services
+  GET http://127.0.0.1:8000/api/public/services [200 OK, 774B, 16ms]
+
+□ api / public / additional-field-responses
+└ Submit Public Additional Field Responses
+  POST http://127.0.0.1:8000/api/public/additional-field-responses [404 Not Found, 276B, 20ms]
+
+□ api / public / quote
+└ Create Quote
+  POST http://127.0.0.1:8000/api/public/quote [200 OK, 959B, 38ms]
+
+□ api / public / payment-processor / config
+└ Public Payment Processor Config
+  GET http://127.0.0.1:8000/api/public/payment-processor/config [200 OK, 146B, 15ms]
+
+□ api / public / payment-methods
+└ Public Payment Methods
+  GET http://127.0.0.1:8000/api/public/payment-methods [200 OK, 146B, 17ms]
+
+□ api / public / promotions / {code} / validate
+└ Public Validate Promotion
+  GET http://127.0.0.1:8000/api/public/promotions/TEST/validate?subtotal=0 [200 OK, 210B, 15ms]
+
+□ api / public / invoices
+└ Create Public Invoice
+  POST http://127.0.0.1:8000/api/public/invoices [200 OK, 1.43kB, 374ms]
+
+□ api / public / invoices / {invoice_id}
+└ Get Public Invoice
+  GET http://127.0.0.1:8000/api/public/invoices/1 [200 OK, 447B, 15ms]
+
+□ api / public / invoices / {invoice_id} / tips
+└ Add Public Tip
+  POST http://127.0.0.1:8000/api/public/invoices/1/tips [500 Internal Server Error, 325B, 48ms]
+
+□ api / public / checkout / commit
+└ Checkout Commit
+  POST http://127.0.0.1:8000/api/public/checkout/commit [400 Bad Request, 375B, 1383ms]
+
+□ api / public / clients
+└ Create Public Client Contact
+  POST http://127.0.0.1:8000/api/public/clients [200 OK, 705B, 511ms]
+
+□ api / public / clients / identify
+└ Identify Or Create Client
+  POST http://127.0.0.1:8000/api/public/clients/identify?phone=test&email=test [200 OK, 643B, 22ms]
+
+□ api / public / clients / register
+└ Register Client
+  POST http://127.0.0.1:8000/api/public/clients/register [409 Conflict, 273B, 23ms]
+
+□ api / public / clients / login
+└ Login Client
+  POST http://127.0.0.1:8000/api/public/clients/login [401 Unauthorized, 274B, 44ms]
+
+□ api / public / clients / me
+└ Get My Profile
+  GET http://127.0.0.1:8000/api/public/clients/me [404 Not Found, 264B, 18ms]
+
+└ Update My Profile
+  PUT http://127.0.0.1:8000/api/public/clients/me [404 Not Found, 264B, 18ms]
+
+□ api / public / clients / password-reset / request
+└ Request Password Reset
+  POST http://127.0.0.1:8000/api/public/clients/password-reset/request [200 OK, 207B, 16ms]
+
+□ api / public / clients / terms
+└ Get Client Terms
+  GET http://127.0.0.1:8000/api/public/clients/terms [200 OK, 276B, 11ms]
+
+□ api / public / providers
+└ List Public Providers
+  GET http://127.0.0.1:8000/api/public/providers [200 OK, 867B, 17ms]
+
+□ api / public / categories
+└ List Public Categories
+  GET http://127.0.0.1:8000/api/public/categories [200 OK, 227B, 29ms]
+
+□ api / public / locations
+└ List Public Locations
+  GET http://127.0.0.1:8000/api/public/locations [200 OK, 359B, 17ms]
+
+□ api / public / timeline / schedule / {provider_id}
+└ Get Provider Schedule
+  GET http://127.0.0.1:8000/api/public/timeline/schedule/4 [200 OK, 1.17kB, 20ms]
+
+□ api / public / timeline / slots
+└ Get Available Slots
+  GET http://127.0.0.1:8000/api/public/timeline/slots?service_id=1&provider_id=1&date_from=2026-07-13&date_to=2026-07-13 [200 OK, 165B, 29ms]
+
+□ api / public / timeline / first-available-day
+└ Get First Available Day
+  GET http://127.0.0.1:8000/api/public/timeline/first-available-day?service_id=1&provider_id=1 [200 OK, 148B, 97ms]
+
+□ api / public / gdpr-consent
+└ Record Gdpr Consent
+  POST http://127.0.0.1:8000/api/public/gdpr-consent [201 Created, 275B, 154ms]
+
+□ api / public / management-reviews
+└ Submit Review Request
+  POST http://127.0.0.1:8000/api/public/management-reviews [404 Not Found, 264B, 13ms]
+
+□ api / public / business-profile
+└ Get Public Business Profile
+  GET http://127.0.0.1:8000/api/public/business-profile [200 OK, 331B, 10ms]
+
+□ api / forms / service
+└ Get Service Form
+  GET http://127.0.0.1:8000/api/forms/service [200 OK, 465B, 9ms]
+
+□ api / forms / provider
+└ Get Provider Form
+  GET http://127.0.0.1:8000/api/forms/provider [200 OK, 375B, 7ms]
+
+□ api / forms / booking
+└ Get Booking Form
+  GET http://127.0.0.1:8000/api/forms/booking [200 OK, 760B, 10ms]
+
+□ api / v1 / checkout / deposit-session
+└ Create Deposit Session
+  POST http://127.0.0.1:8000/api/v1/checkout/deposit-session?booking_id=1&amount_cents=1&success_url=https://example.com/callback&cancel_url=https://example.com/callback [500 Internal Server Error, 325B, 969ms]
+
+□ api / v1 / webhooks / stripe
+└ Stripe Webhook
+  POST http://127.0.0.1:8000/api/v1/webhooks/stripe [400 Bad Request, 267B, 16ms]
+
+□ api / v1 / devices / register
+└ Register Device
+  POST http://127.0.0.1:8000/api/v1/devices/register [200 OK, 385B, 170ms]
+
+□ notifications
+└ List Notifications
+  GET http://127.0.0.1:8000/notifications?page=1&page_size=25 [200 OK, 1.47kB, 18ms]
+
+└ Create Notification
+  POST http://127.0.0.1:8000/notifications [200 OK, 328B, 191ms]
+
+□ notifications / {notification_id}
+└ Update Notification
+  PUT http://127.0.0.1:8000/notifications/1 [200 OK, 324B, 20ms]
+
+□ notification-templates
+└ List Notification Templates
+  GET http://127.0.0.1:8000/notification-templates?page=1&page_size=25 [200 OK, 633B, 17ms]
+
+└ Create Notification Template
+  POST http://127.0.0.1:8000/notification-templates [409 Conflict, 326B, 17ms]
+
+□ notification-templates / {template_id}
+└ Update Notification Template
+  PUT http://127.0.0.1:8000/notification-templates/999999 [404 Not Found, 266B, 19ms]
+
+└ Delete Notification Template
+  DELETE http://127.0.0.1:8000/notification-templates/999999 [404 Not Found, 266B, 14ms]
+
+□ reminder-rules
+└ List Reminder Rules
+  GET http://127.0.0.1:8000/reminder-rules?page=1&page_size=25 [200 OK, 1.52kB, 16ms]
+
+└ Create Reminder Rule
+  POST http://127.0.0.1:8000/reminder-rules [200 OK, 413B, 204ms]
+
+□ reminder-rules / {rule_id}
+└ Update Reminder Rule
+  PUT http://127.0.0.1:8000/reminder-rules/1 [200 OK, 397B, 19ms]
+
+└ Delete Reminder Rule
+  DELETE http://127.0.0.1:8000/reminder-rules/999999 [404 Not Found, 271B, 15ms]
+
+□ health
+└ Health
+  GET http://127.0.0.1:8000/health [200 OK, 136B, 10ms]
+
+□ ready
+└ Readiness
+  GET http://127.0.0.1:8000/ready [200 OK, 136B, 12ms]
+
+□ version
+└ Version
+  GET http://127.0.0.1:8000/version [200 OK, 191B, 10ms]
+
+┌─────────────────────────┬────────────────────┬───────────────────┐
+│                         │           executed │            failed │
+├─────────────────────────┼────────────────────┼───────────────────┤
+│              iterations │                  1 │                 0 │
+├─────────────────────────┼────────────────────┼───────────────────┤
+│                requests │                216 │                 0 │
+├─────────────────────────┼────────────────────┼───────────────────┤
+│            test-scripts │                  0 │                 0 │
+├─────────────────────────┼────────────────────┼───────────────────┤
+│      prerequest-scripts │                  0 │                 0 │
+├─────────────────────────┼────────────────────┼───────────────────┤
+│              assertions │                  0 │                 0 │
+├─────────────────────────┴────────────────────┴───────────────────┤
+│ total run duration: 50.8s                                        │
+├──────────────────────────────────────────────────────────────────┤
+│ total data received: 61.2kB (approx)                             │
+├──────────────────────────────────────────────────────────────────┤
+│ average response time: 61ms [min: 7ms, max: 1383ms, s.d.: 132ms] │
+└──────────────────────────────────────────────────────────────────┘
+[2026-07-12 17:08:43] Sweep finished with Newman exit code 0
+[2026-07-12 17:08:43] JSON report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-170729\authenticated-sweep.json
+[2026-07-12 17:08:43] HTML report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-170729\authenticated-sweep.html
+[2026-07-12 17:08:43] Summary: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-170729\summary.txt
+[2026-07-12 17:08:43] Cleaning up temporary sweep identity and token material.
+Removed 0 temporary sweep user(s)
+[2026-07-12 17:08:46] Stopping the Uvicorn process started by this launcher.

@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 12:06:04,099", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:04,115", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,127", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,136", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,147", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,155", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,165", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,173", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/clients/terms \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,186", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/clients/terms \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,246", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/clients/terms \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:04,249", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:08,377", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.83s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

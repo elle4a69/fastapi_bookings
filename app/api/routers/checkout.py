@@ -9,21 +9,26 @@ Stripe, Square or manual payment.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from ...core.config import settings
 
 from ..deps import get_current_admin, get_db, get_current_tenant, get_public_tenant
 from ...models import (
     AddOn,
     Booking,
+    Client,
     Invoice,
     InvoiceLine,
+    Location,
     PaymentProcessorConfig,
     Product,
     PromotionCode,
+    Provider,
     ServicePackage,
     TaxRate,
     Tip,
@@ -49,6 +54,8 @@ from ...schemas.checkout import (
     TaxRateUpdate,
     TipCreate,
     TipOut,
+    CheckoutCommitRequest,
+    CheckoutCommitResponse,
 )
 from ...models.service import Service
 
@@ -102,10 +109,10 @@ def build_quote(db: Session, payload: QuoteRequest, tenant_id: int) -> dict:
         subtotal += amount
 
     for add_on_id in payload.add_on_ids:
-        add_on = db.query(AddOn).join(Service).filter(
+        add_on = db.query(AddOn).filter(
             AddOn.id == add_on_id,
             AddOn.active.is_(True),
-            Service.tenant_id == tenant_id
+            AddOn.tenant_id == tenant_id,
         ).first()
         if not add_on:
             raise HTTPException(status_code=404, detail=f"Add-on {add_on_id} not found")
@@ -116,7 +123,8 @@ def build_quote(db: Session, payload: QuoteRequest, tenant_id: int) -> dict:
     for product_id in payload.product_ids:
         product = db.query(Product).filter(
             Product.id == product_id,
-            Product.active.is_(True)
+            Product.active.is_(True),
+            Product.tenant_id == tenant_id,
         ).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
@@ -216,6 +224,18 @@ def create_public_invoice(
     tenant: Tenant = Depends(get_public_tenant),
     db: Session = Depends(get_db)
 ) -> dict:
+    client_id = payload.client_id or payload.quote.client_id
+    if client_id:
+        client_obj = db.query(Client).filter(
+            Client.id == client_id,
+            Client.tenant_id == tenant.id,
+            Client.deleted_at.is_(None)
+        ).first()
+        if client_obj and client_obj.management_approval_required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Client requires management approval before completing checkout.",
+            )
     quote = build_quote(db, payload.quote, tenant.id)
     invoice = Invoice(
         tenant_id=tenant.id,
@@ -236,7 +256,7 @@ def create_public_invoice(
     db.commit()
     db.refresh(invoice)
     for line in quote["lines"]:
-        db.add(InvoiceLine(invoice_id=invoice.id, line_type=line["line_type"], item_id=line.get("item_id"), description=line["description"], quantity=line["quantity"], unit_price=line["unit_price"], amount=line["amount"]))
+        db.add(InvoiceLine(tenant_id=tenant.id, invoice_id=invoice.id, line_type=line["line_type"], item_id=line.get("item_id"), description=line["description"], quantity=line["quantity"], unit_price=line["unit_price"], amount=line["amount"]))
     if payload.quote.promotion_code and quote["promotion"].get("valid"):
         promo = db.query(PromotionCode).filter(
             PromotionCode.code == payload.quote.promotion_code,
@@ -277,9 +297,10 @@ def add_public_tip(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    tip = Tip(invoice_id=invoice.id, amount=payload.amount, note=payload.note)
-    invoice.tip_total += float(payload.amount)
-    invoice.total += float(payload.amount)
+    tip = Tip(tenant_id=tenant.id, invoice_id=invoice.id, amount=payload.amount, note=payload.note)
+    tip_amount = Decimal(str(payload.amount))
+    invoice.tip_total = (invoice.tip_total or Decimal("0")) + tip_amount
+    invoice.total = (invoice.total or Decimal("0")) + tip_amount
     invoice.updated_at = now_utc()
     db.add(tip)
     db.commit()
@@ -512,3 +533,170 @@ def update_payment_processor_config(
     db.commit()
     db.refresh(config)
     return config
+
+
+@router.post("/api/public/checkout/commit", response_model=CheckoutCommitResponse)
+def checkout_commit(
+    payload: CheckoutCommitRequest,
+    tenant: Tenant = Depends(get_public_tenant),
+    db: Session = Depends(get_db)
+) -> dict:
+    from ...models.booking import Booking as BookingModel
+    from ...services import scheduling_service
+    from ...core.state_machine import BookingStatus
+
+    # 1. Check idempotency: does a booking already exist with this idempotency key?
+    existing_booking = db.query(BookingModel).filter(
+        BookingModel.idempotency_key == payload.idempotency_key,
+        BookingModel.tenant_id == tenant.id
+    ).first()
+    if existing_booking:
+        existing_invoice = db.query(Invoice).filter(
+            Invoice.idempotency_key == payload.idempotency_key,
+            Invoice.tenant_id == tenant.id
+        ).first()
+        return {
+            "ok": True,
+            "data": {
+                "booking_id": existing_booking.id,
+                "status": "confirmed",
+                "invoice_id": existing_invoice.id if existing_invoice else None,
+                "message": "Transaction already processed successfully (idempotent)."
+            }
+        }
+
+    # 2. Revalidate Stripe session payment status
+    try:
+        import stripe
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        session = stripe.checkout.Session.retrieve(payload.stripe_session_id)
+        if session.payment_status != "paid":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Stripe session is not paid yet."
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to retrieve or verify Stripe checkout session: {str(e)}"
+        )
+
+    # 3. Check client restriction
+    client_obj = db.query(Client).filter(
+        Client.id == payload.client_id,
+        Client.tenant_id == tenant.id,
+        Client.deleted_at.is_(None)
+    ).first()
+    if not client_obj:
+        raise HTTPException(status_code=404, detail="Client not found")
+    if client_obj.management_approval_required:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client requires management approval."
+        )
+
+    # 4. Check slot availability (revalidation)
+    service_obj = db.query(Service).filter(
+        Service.id == payload.service_id,
+        Service.tenant_id == tenant.id,
+        Service.deleted_at.is_(None)
+    ).first()
+    if not service_obj:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    provider_obj = db.query(Provider).filter(
+        Provider.id == payload.provider_id,
+        Provider.tenant_id == tenant.id,
+        Provider.deleted_at.is_(None)
+    ).first()
+    if not provider_obj:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    location_obj = None
+    if payload.location_id:
+        location_obj = db.query(Location).filter(
+            Location.id == payload.location_id,
+            Location.tenant_id == tenant.id
+        ).first()
+        if not location_obj:
+            raise HTTPException(status_code=404, detail="Location not found")
+
+    # Use compute_availability to verify slot is still open
+    available_slots = scheduling_service.compute_availability(
+        db,
+        service=service_obj,
+        provider=provider_obj,
+        location=location_obj,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        desired_duration=service_obj.duration
+    )
+    req_start_iso = payload.start_time.isoformat()
+    slot_is_available = any(slot["start_time"] == req_start_iso for slot in available_slots)
+    
+    if not slot_is_available:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Slot is no longer available. Please contact management to reschedule or get a refund."
+        )
+
+    # 5. Create Booking and Invoice atomically
+    booking = BookingModel(
+        tenant_id=tenant.id,
+        client_id=payload.client_id,
+        provider_id=payload.provider_id,
+        service_id=payload.service_id,
+        location_id=payload.location_id,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        status=BookingStatus.CONFIRMED,
+        notes=payload.notes,
+        idempotency_key=payload.idempotency_key
+    )
+    db.add(booking)
+    db.flush()
+
+    scheduling_service.allocate_resources(db, booking=booking, commit=False)
+
+    amount_paid = float(service_obj.deposit_amount or service_obj.price or 0.0)
+    invoice = Invoice(
+        tenant_id=tenant.id,
+        booking_id=booking.id,
+        client_id=payload.client_id,
+        currency="AUD",
+        subtotal=amount_paid,
+        discount_total=0.0,
+        tax_total=0.0,
+        tip_total=0.0,
+        total=amount_paid,
+        amount_paid=amount_paid,
+        status="paid",
+        idempotency_key=payload.idempotency_key
+    )
+    db.add(invoice)
+    db.flush()
+
+    db.add(InvoiceLine(
+        tenant_id=tenant.id,
+        invoice_id=invoice.id,
+        line_type="service",
+        item_id=service_obj.id,
+        description=f"Deposit for {service_obj.name}",
+        quantity=1,
+        unit_price=amount_paid,
+        amount=amount_paid
+    ))
+
+    db.commit()
+    db.refresh(booking)
+    db.refresh(invoice)
+
+    return {
+        "ok": True,
+        "data": {
+            "booking_id": booking.id,
+            "status": "confirmed",
+            "invoice_id": invoice.id,
+            "message": "Booking and payment committed successfully."
+        }
+    }

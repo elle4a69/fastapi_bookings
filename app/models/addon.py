@@ -39,6 +39,7 @@ class AddOn(Base):
     duration = Column(Integer, default=0, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     is_visible = Column(Boolean, default=True, nullable=False)
+    image = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships

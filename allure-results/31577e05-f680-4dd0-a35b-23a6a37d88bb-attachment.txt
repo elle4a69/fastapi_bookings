@@ -1,0 +1,17 @@
+{"timestamp": "2026-07-09 11:56:39,840", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:56:39,859", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,868", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,876", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,883", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,889", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,897", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,907", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,916", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,926", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null%2Cnull/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,935", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/AAA/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,952", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,960", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/false/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,969", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/2.5890419884777833e-42/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,978", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:39,998", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/1/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:40,001", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

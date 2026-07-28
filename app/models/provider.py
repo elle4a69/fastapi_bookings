@@ -29,6 +29,7 @@ class Provider(Base):
     color = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     ignore_company_hours = Column(Boolean, default=False, nullable=False)
+    image = Column(Text, nullable=True)
 
     # Relationships
     tenant = relationship("Tenant")

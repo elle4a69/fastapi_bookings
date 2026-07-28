@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 12:09:10,365", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:09:10,378", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,389", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,401", "level": "INFO", "message": "HTTP Request: PUT http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,410", "level": "INFO", "message": "HTTP Request: POST http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,419", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,429", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,438", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/version \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,452", "level": "INFO", "message": "HTTP Request: GET http://testserver/version \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,474", "level": "INFO", "message": "HTTP Request: GET http://testserver/version \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:10,477", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:09:14,573", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

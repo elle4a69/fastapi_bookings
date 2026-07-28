@@ -34,7 +34,7 @@ def availability(
     provider = db.query(Provider).filter(Provider.id == provider_id, Provider.tenant_id == tenant.id).first()
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
-    slots = get_available_slots(db, service.duration, provider_id, date)
+    slots = get_available_slots(db, service.duration, provider_id, date, service_id=service.id)
     # Convert datetimes to ISO strings
     formatted = [
         {"start": slot["start"].isoformat(), "end": slot["end"].isoformat()}

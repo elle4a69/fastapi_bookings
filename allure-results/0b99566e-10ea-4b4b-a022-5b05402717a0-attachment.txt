@@ -1,0 +1,67 @@
+{"timestamp": "2026-07-09 11:46:50,914", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:46:50,941", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,949", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,957", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,965", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,970", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,978", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:50,985", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,003", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,022", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,040", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,055", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,075", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,096", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,111", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,124", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,139", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,151", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,163", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,174", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,188", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,205", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,218", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,231", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,245", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,260", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,276", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,293", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,307", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,319", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,332", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,348", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,358", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,371", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,385", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,397", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,411", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,424", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,436", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,447", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,458", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,472", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,485", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,495", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,506", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,521", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,534", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,549", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,561", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,573", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,586", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,600", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,614", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,624", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,635", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,646", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,658", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,674", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,684", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,696", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,708", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,721", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,747", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,772", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/972 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,836", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/blocked-times/597 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:46:51,838", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:46:52,846", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

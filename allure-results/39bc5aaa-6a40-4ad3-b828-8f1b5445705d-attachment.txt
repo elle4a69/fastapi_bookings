@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:03:32,924", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:32,947", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:32,961", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:32,976", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:32,989", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:33,004", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:33,017", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:33,031", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:33,062", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/additional-fields/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:03:33,065", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:03:37,561", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

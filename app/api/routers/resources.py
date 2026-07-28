@@ -22,7 +22,8 @@ router = APIRouter(prefix="/api/admin/resources", tags=["resources"])
 @router.get("", response_model=List[ResourceOut])
 def list_resources(
     tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> List[ResourceOut]:
     resources = db.query(ResourceModel).filter(ResourceModel.tenant_id == tenant.id).all()
     return [ResourceOut.from_orm(r) for r in resources]
@@ -48,7 +49,8 @@ def create_resource(
 def get_resource(
     resource_id: int,
     tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
 ) -> ResourceOut:
     resource = db.query(ResourceModel).filter(
         ResourceModel.id == resource_id,
@@ -109,3 +111,24 @@ def create_service_resource_requirement(
     db.commit()
     db.refresh(requirement)
     return ServiceResourceRequirementOut.from_orm(requirement)
+
+
+@router.get("/requirements", response_model=List[ServiceResourceRequirementOut])
+def list_requirements(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> List[ServiceResourceRequirementOut]:
+    requirements = db.query(SRRModel).all()
+    return [ServiceResourceRequirementOut.from_orm(r) for r in requirements]
+
+
+@router.delete("/requirements/{requirement_id}", response_model=None, status_code=204)
+def delete_requirement(
+    requirement_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> None:
+    requirement = db.query(SRRModel).filter(SRRModel.id == requirement_id).first()
+    if requirement:
+        db.delete(requirement)
+        db.commit()

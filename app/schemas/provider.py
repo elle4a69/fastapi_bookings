@@ -17,6 +17,7 @@ class ProviderBase(BaseModel):
     color: Optional[str] = Field(None, description="Calendar color hex code")
     description: Optional[str] = Field(None, description="Provider description/bio")
     ignore_company_hours: bool = Field(False, description="Whether this provider ignores company-wide working hours")
+    image: Optional[str] = Field(None, description="Provider profile image (base64 or URL)")
 
 
 class ProviderCreate(ProviderBase):
@@ -34,6 +35,7 @@ class ProviderUpdate(BaseModel):
     color: Optional[str] = None
     description: Optional[str] = None
     ignore_company_hours: Optional[bool] = None
+    image: Optional[str] = None
     service_ids: Optional[list[int]] = None
 
 

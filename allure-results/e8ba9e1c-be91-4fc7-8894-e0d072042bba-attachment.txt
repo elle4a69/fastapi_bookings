@@ -1,0 +1,16 @@
+{"timestamp": "2026-07-09 11:55:34,412", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:55:34,445", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,454", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/clients/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,460", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/clients/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,468", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/clients/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,474", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/clients/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,480", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/clients/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,491", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,504", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,513", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,524", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,537", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,547", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,572", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/clients/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:55:34,574", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:55:38,416", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:04:48,622", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:04:48,639", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,649", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,660", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,670", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,680", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,690", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,706", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,733", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/promotions/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:04:48,736", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:04:51,585", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.93s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

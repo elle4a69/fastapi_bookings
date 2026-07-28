@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:02:37,523", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:02:37,546", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,552", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,558", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,565", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,570", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,576", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,581", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,596", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,620", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/reserved-times \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:37,623", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

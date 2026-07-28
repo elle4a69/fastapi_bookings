@@ -1,0 +1,28 @@
+{"timestamp": "2026-07-09 11:50:07,419", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:50:07,432", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,439", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,446", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,451", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,457", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,464", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,470", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/clients/login \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,481", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,488", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,497", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,505", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,514", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,522", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,532", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,540", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,548", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,556", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,565", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,572", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,580", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,588", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,596", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,607", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 401 Unauthorized\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,615", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 401 Unauthorized\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:07,624", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/clients/login \"HTTP/1.1 401 Unauthorized\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:50:08,480", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:50:10,750", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.97s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

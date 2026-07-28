@@ -23,6 +23,7 @@ from ..models import (
     ReservedTime,
     Hold,
     HoldStatus,
+    Tenant,
 )
 from ..core.state_machine import BookingStatus
 
@@ -40,6 +41,7 @@ from .hold_service import (
 
 # Import extracted utility functions to keep file under 250 lines
 from .scheduling_utils import parse_working_hours, check_slot_overlaps
+from .booking_relationship_resolver import get_valid_providers, pair_allowed
 
 
 def compute_availability(
@@ -63,21 +65,26 @@ def compute_availability(
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
 
+    # Enforce booking horizon limit (max_advance_days)
+    tenant = db.query(Tenant).filter(Tenant.id == service.tenant_id).first()
+    max_days = service.max_advance_days if service.max_advance_days is not None else (tenant.max_advance_days if tenant else 60)
+    horizon_limit = datetime.now(timezone.utc) + timedelta(days=max_days)
+    end_time = min(end_time, horizon_limit)
+
     # Step 1: Gather candidate providers
     providers: List[Provider] = []
     if provider:
-        providers = [provider]
+        context = {"service": service.id, "location": location.id if location else None}
+        providers = [provider] if provider.tenant_id == service.tenant_id and all(
+            pair_allowed(db, service.tenant_id, "provider", provider.id, kind, value)
+            for kind, value in context.items() if value is not None
+        ) else []
     else:
-        # Use explicit service-provider associations if they exist
-        if service.providers:
-            providers = [sp.provider for sp in service.providers if sp.provider.deleted_at is None]
-        else:
-            # Fallback to all active providers belonging to the same tenant
-            providers = (
-                db.query(Provider)
-                .filter(Provider.tenant_id == service.tenant_id, Provider.active.is_(True), Provider.deleted_at.is_(None))
-                .all()
-            )
+        providers = get_valid_providers(
+            db,
+            service.tenant_id,
+            {"service": service.id, "location": location.id if location else None},
+        )
 
     results: List[dict] = []
 
@@ -100,7 +107,7 @@ def compute_availability(
                 )
                 .first()
             )
-            if not special_day:
+            if not special_day and not prov.ignore_company_hours:
                 special_day = (
                     db.query(ProviderSpecialDay)
                     .filter(
@@ -133,7 +140,7 @@ def compute_availability(
                     )
                     .first()
                 )
-                if not work_day:
+                if not work_day and not prov.ignore_company_hours:
                     work_day = (
                         db.query(ProviderWorkDay)
                         .filter(

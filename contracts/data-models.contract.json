@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.0",
   "purpose": "Shared front-end data model contract for FastAPI Bookings.",
   "envelope": {
     "success": {
@@ -42,6 +42,20 @@
       "admin",
       "staff",
       "viewer"
+    ],
+    "ProviderSelectionMode": [
+      "required",
+      "optional",
+      "automatic",
+      "predefined"
+    ],
+    "ResolutionSource": [
+      "predefined",
+      "customer_selected",
+      "inferred",
+      "automatic",
+      "unresolved",
+      "disabled"
     ]
   },
   "models": {

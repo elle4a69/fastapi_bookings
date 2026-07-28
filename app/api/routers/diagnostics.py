@@ -7,6 +7,7 @@ the health of the system and aid in troubleshooting.
 """
 
 from typing import Any, Dict
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -23,10 +24,38 @@ from ...models import (
     WaitlistEntry,
 )
 
+
+class DiagnosticsCounts(BaseModel):
+    services: int
+    providers: int
+    clients: int
+    bookings: int
+    resources: int
+    waitlist_entries: int
+    outbox_events: int
+
+
+class DiagnosticsModules(BaseModel):
+    locations: bool
+    categories: bool
+    resources: bool
+    products: bool
+    add_ons: bool
+    packages: bool
+    holds: bool
+    waitlist: bool
+    multi_tenant: bool
+
+
+class DiagnosticsResponse(BaseModel):
+    counts: DiagnosticsCounts
+    modules: DiagnosticsModules
+
+
 router = APIRouter(prefix="/api/admin/system", tags=["system"])
 
 
-@router.get("/diagnostics", response_model=Any)
+@router.get("/diagnostics", response_model=DiagnosticsResponse)
 def get_system_diagnostics(
     current_admin = Depends(get_current_admin),
     db: Session = Depends(get_db),

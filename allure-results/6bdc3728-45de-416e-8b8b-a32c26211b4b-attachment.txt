@@ -1,0 +1,67 @@
+{"timestamp": "2026-07-09 11:41:43,621", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:41:43,641", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,648", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,653", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,661", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,667", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,673", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,678", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,684", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/bookings \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,695", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,706", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,715", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,723", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,731", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,739", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,748", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,756", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,764", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,772", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,781", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,790", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,799", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,807", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,816", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,824", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,867", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,879", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,893", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,907", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,920", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,934", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,946", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,957", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,969", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,983", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:43,997", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,009", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,019", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,030", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,039", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,046", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,054", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,062", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,070", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,078", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,086", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,094", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,102", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,110", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,119", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,127", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,135", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,144", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,154", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,166", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,178", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,190", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,203", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,215", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,227", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,239", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,254", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,264", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,293", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,400", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,503", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/bookings \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:41:44,506", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

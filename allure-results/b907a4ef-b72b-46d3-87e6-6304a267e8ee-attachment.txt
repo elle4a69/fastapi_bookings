@@ -1,0 +1,43 @@
+{"timestamp": "2026-07-09 11:57:30,245", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:57:30,268", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,280", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,289", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,300", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,310", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,323", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,334", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,346", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,355", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,365", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,373", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,383", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,395", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,408", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,423", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,433", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,443", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,457", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,466", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,481", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,490", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,499", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,506", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,515", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,523", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,532", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,540", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,548", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,558", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,566", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,575", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,586", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,599", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,613", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,630", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,645", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,659", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,673", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,688", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,726", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/audit-log \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:30,729", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:57:33,456", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "sourceOfTruth": "../openapi.json",
+  "modules": ["location", "category", "service", "provider", "time"],
+  "terminalModule": "client",
+  "resolutionSources": ["predefined", "customer_selected", "inferred", "automatic", "unresolved", "disabled"],
+  "providerModes": ["required", "optional", "automatic", "predefined"],
+  "universalDefault": "A relationship pair is valid when explicitly linked, or when neither endpoint has explicit links in that relationship table.",
+  "resolution": {
+    "algorithm": "Apply configured and customer values, validate compatibility, infer singleton option sets, and repeat until no value changes.",
+    "clientRule": "The client module is always appended after time.",
+    "timeRule": "Time cannot be disabled."
+  },
+  "publicPolicy": {
+    "authentication": ["X-Tenant", "X-Token"],
+    "surface": "Only booking-form bootstrap, resolution, availability, booking, and embed configuration are authoritative for new widgets."
+  },
+  "deprecations": [
+    "/api/public/ui-config",
+    "/api/public/ui-config/admin",
+    "/api/public/services",
+    "/api/public/providers",
+    "/api/public/categories",
+    "/api/public/locations"
+  ]
+}

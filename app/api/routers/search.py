@@ -36,10 +36,44 @@ class AvailabilitySearchQuery(BaseModel):
     date_to: Optional[datetime] = Field(None, description="Latest acceptable date/time")
 
 
+class SearchAvailabilityProvider(BaseModel):
+    id: int
+    name: str
+
+
+class SearchAvailabilityResource(BaseModel):
+    id: int
+    name: str
+    quantity: int
+
+
+class SearchAvailabilityService(BaseModel):
+    id: int
+    name: str
+
+
+class SearchAvailabilityItem(BaseModel):
+    start_time: str
+    end_time: str
+    provider: SearchAvailabilityProvider
+    resources: List[SearchAvailabilityResource]
+    service: SearchAvailabilityService
+
+
+class SearchAvailabilityMeta(BaseModel):
+    count: int
+
+
+class SearchAvailabilityResponse(BaseModel):
+    ok: bool
+    data: List[SearchAvailabilityItem]
+    meta: SearchAvailabilityMeta
+
+
 router = APIRouter(prefix="/api/public/search-availability", tags=["search-availability"])
 
 
-@router.post("", response_model=Any)
+@router.post("", response_model=SearchAvailabilityResponse)
 def search_availability(
     query: AvailabilitySearchQuery,
     db: Session = Depends(get_db),

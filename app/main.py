@@ -10,8 +10,12 @@ import logging
 import os
 import traceback
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -22,7 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from .core.config import settings
-from .db.database import Base, engine
+from .db.database import Base, engine, get_db
 
 
 class JSONFormatter(logging.Formatter):
@@ -65,8 +69,11 @@ setup_logging()
 
 # --- OpenTelemetry setup ---
 otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+telemetry_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"1", "true", "yes"}
 provider = TracerProvider()
-if otlp_endpoint:
+if telemetry_disabled:
+    pass
+elif otlp_endpoint:
     try:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint)))
@@ -118,6 +125,14 @@ from .api.routers import (
     general_systems,
     stripe_webhooks,
     devices,
+    management_reviews,
+    business_profile,
+    location_relations,
+    system,
+    notifications,
+    booking_forms,
+    relationship_management,
+    discovery,
 )
 
 
@@ -153,7 +168,8 @@ class PublicRouteRateLimitMiddleware(SlowAPIMiddleware):
 
 servers = [
     {"url": "https://bookopenapi-backend-208926050296.us-central1.run.app", "description": "Production Deployed Server"},
-    {"url": "http://localhost:8000", "description": "Local Development Server"}
+    {"url": "http://localhost:8000", "description": "Local Backend (FastAPI)"},
+    {"url": "http://localhost:7070", "description": "Local Frontend Dev Server (Vite)"},
 ]
 
 app = FastAPI(
@@ -168,7 +184,102 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(PublicRouteRateLimitMiddleware)
 
-FastAPIInstrumentor.instrument_app(app)
+
+def add_cors_headers(request, response: JSONResponse) -> JSONResponse:
+    origin = request.headers.get("origin")
+    if origin:
+        allowed_origins = [o.strip() for o in settings.FRONTEND_ORIGINS.split(",") if o.strip()]
+        if origin in allowed_origins or "*" in allowed_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc: StarletteHTTPException):
+    code = "HTTP_ERROR"
+    if exc.status_code == 401:
+        code = "UNAUTHORIZED"
+    elif exc.status_code == 403:
+        code = "FORBIDDEN"
+    elif exc.status_code == 404:
+        code = "NOT_FOUND"
+    elif exc.status_code == 400:
+        code = "BAD_REQUEST"
+    elif exc.status_code == 409:
+        code = "CONFLICT"
+    elif exc.status_code == 429:
+        code = "TOO_MANY_REQUESTS"
+    
+    current_span = trace.get_current_span()
+    trace_id = ""
+    if current_span and current_span.get_span_context().is_valid:
+        trace_id = f"{current_span.get_span_context().trace_id:032x}"
+        
+    response = JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "ok": False,
+            "error": {
+                "code": code,
+                "message": exc.detail,
+                "details": {},
+                "request_id": trace_id
+            }
+        }
+    )
+    return add_cors_headers(request, response)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    current_span = trace.get_current_span()
+    trace_id = ""
+    if current_span and current_span.get_span_context().is_valid:
+        trace_id = f"{current_span.get_span_context().trace_id:032x}"
+        
+    response = JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "ok": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Validation failed for the request.",
+                "details": jsonable_encoder(exc.errors()),
+                "request_id": trace_id
+            }
+        }
+    )
+    return add_cors_headers(request, response)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    logging.exception(f"Unhandled exception occurred: {str(exc)}")
+    current_span = trace.get_current_span()
+    trace_id = ""
+    if current_span and current_span.get_span_context().is_valid:
+        trace_id = f"{current_span.get_span_context().trace_id:032x}"
+        
+    response = JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "ok": False,
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred. Please contact support.",
+                "details": {},
+                "request_id": trace_id
+            }
+        }
+    )
+    return add_cors_headers(request, response)
+
+
+if not telemetry_disabled:
+    FastAPIInstrumentor.instrument_app(app)
 
 # Configure CORS
 origins = [o.strip() for o in settings.FRONTEND_ORIGINS.split(",") if o.strip()]
@@ -226,6 +337,15 @@ app.include_router(general_systems.router)
 app.include_router(general_systems.public_router)
 app.include_router(stripe_webhooks.router)
 app.include_router(devices.router)
+app.include_router(management_reviews.router)
+app.include_router(business_profile.router)
+app.include_router(location_relations.router)
+app.include_router(system.router)
+app.include_router(notifications.router)
+app.include_router(booking_forms.admin_router)
+app.include_router(booking_forms.public_router)
+app.include_router(relationship_management.router)
+app.include_router(discovery.router)
 
 
 @app.get("/health", tags=["system"])
@@ -236,8 +356,17 @@ def health() -> dict:
 
 
 @app.get("/ready", tags=["system"])
-def readiness() -> dict:
-    """Simple readiness check endpoint."""
+def readiness(db=Depends(get_db)) -> dict:
+    """Readiness check endpoint that verifies database connectivity."""
+    from sqlalchemy.sql import text
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        logging.error(f"Readiness check failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connectivity failed."
+        )
     return {"ok": True}
 
 

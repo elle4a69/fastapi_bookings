@@ -1,0 +1,26 @@
+{"timestamp": "2026-07-09 11:52:48,533", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:52:48,558", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,568", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,577", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,585", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,593", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,598", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,606", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,614", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,629", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,642", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,654", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,666", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,678", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,690", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,703", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,715", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,738", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,754", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,768", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,783", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,799", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,826", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:48,860", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/%ED%92%BD%F4%81%80%B8%C2%BB%08im%3BN%C2%A5V%12%C2%8D%F1%A2%86%81%C2%AA%C3%84%C3%A9%C3%93%F0%B6%A9%B1%C3%88 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:49,062", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/plugin-states/%096Q \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:52:49,065", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

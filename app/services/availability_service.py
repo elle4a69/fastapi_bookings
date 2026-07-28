@@ -19,6 +19,7 @@ def get_available_slots(
     service_duration: int,
     provider_id: int,
     date: datetime,
+    service_id: int | None = None,
 ) -> List[dict]:
     """Return a list of available time slots for a provider on a given date.
 
@@ -29,8 +30,19 @@ def get_available_slots(
     if not provider:
         return []
 
-    # Find any active service belonging to the same tenant to calculate slots
-    service = db.query(Service).filter(Service.tenant_id == provider.tenant_id, Service.active.is_(True), Service.deleted_at.is_(None)).first()
+    # Resolve the requested service; compatibility callers without service_id
+    # may only use the unique active service for the tenant.
+    service_query = db.query(Service).filter(
+        Service.tenant_id == provider.tenant_id,
+        Service.active.is_(True),
+        Service.deleted_at.is_(None),
+    )
+    if service_id is not None:
+        service_query = service_query.filter(Service.id == service_id)
+        service = service_query.first()
+    else:
+        services = service_query.limit(2).all()
+        service = services[0] if len(services) == 1 else None
     if not service:
         return []
 

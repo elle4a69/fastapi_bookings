@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 11:58:25,596", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:25,615", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,626", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,639", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=null&service_id=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,650", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,659", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,671", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,686", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,700", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,729", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/waitlist?service_id=0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:25,732", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

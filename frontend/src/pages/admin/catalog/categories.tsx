@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Trash2, ArrowLeft, Layers, Circle, CircleSlash, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Layers, Circle, CircleSlash, Eye, EyeOff, GripVertical, Upload, X } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
@@ -21,6 +21,40 @@ interface Category {
   description: string | null;
   active: boolean;
   is_visible: boolean;
+  image?: string | null;
+}
+
+function ImageUpload({ imagePreview, onImageSelect, onImageRemove }: { imagePreview: string | null; onImageSelect: (file: string) => void; onImageRemove: () => void; }) {
+  const handleDrop = (e: React.DragEvent) => { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file && file.type.startsWith('image/')) handleFile(file); };
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file && file.type.startsWith('image/')) handleFile(file); };
+  const handleFile = (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => onImageSelect(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div onDragOver={e => e.preventDefault()} onDrop={handleDrop}
+      className="relative h-[160px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 hover:bg-muted/40 transition-colors flex items-center justify-center overflow-hidden cursor-pointer"
+      onClick={() => document.getElementById('cat-img-upload')?.click()}
+    >
+      <input id="cat-img-upload" type="file" accept="image/jpeg,image/png,image/gif" className="hidden" onChange={handleChange} />
+      {imagePreview ? (
+        <>
+          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+          <button type="button" onClick={e => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center text-muted-foreground pointer-events-none">
+          <Upload className="w-8 h-8 mb-2 opacity-50" />
+          <span className="text-sm">Drag & drop or click to upload</span>
+          <span className="text-xs opacity-70">JPG, PNG, GIF up to 5MB</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CategoriesPage() {
@@ -35,7 +69,7 @@ export default function CategoriesPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  const defaultForm = { name: '', description: '', active: true, is_visible: true };
+  const defaultForm = { name: '', description: '', active: true, is_visible: true, image: null as string | null };
   const [formData, setFormData] = useState(defaultForm);
 
   const { saveState, triggerSave, retry } = useAutoSave({
@@ -100,6 +134,7 @@ export default function CategoriesPage() {
       description: cat.description || '',
       active: cat.active,
       is_visible: cat.is_visible ?? true,
+      image: cat.image || null,
     });
   };
 
@@ -194,9 +229,13 @@ export default function CategoriesPage() {
                 }`}
               >
                 <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
-                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                    <Layers className="w-4 h-4 opacity-35" />
-                  </div>
+                  {cat.image ? (
+                    <img src={cat.image} alt={cat.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                      <Layers className="w-4 h-4 opacity-35" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
                     <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={cat.name}>{cat.name}</span>
                     <div className="text-xs text-muted-foreground mt-0.5 truncate text-left">{cat.description || 'No description'}</div>
@@ -206,19 +245,10 @@ export default function CategoriesPage() {
                       <GripVertical className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => updateCategoryQuick(cat.id, { active: !cat.active, ...(cat.active ? { is_visible: false } : {}) })}
-                        className="p-0.5 hover:bg-muted rounded transition-colors"
-                        title={cat.active ? 'Deactivate' : 'Activate'}
-                      >
+                      <button onClick={() => updateCategoryQuick(cat.id, { active: !cat.active, ...(cat.active ? { is_visible: false } : {}) })} className="p-0.5 hover:bg-muted rounded transition-colors" title={cat.active ? 'Deactivate' : 'Activate'}>
                         {cat.active ? <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" /> : <CircleSlash className="w-3.5 h-3.5 text-rose-500" />}
                       </button>
-                      <button
-                        disabled={!cat.active}
-                        onClick={() => cat.active && updateCategoryQuick(cat.id, { is_visible: !cat.is_visible })}
-                        className={`p-0.5 rounded transition-colors ${cat.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
-                        title={!cat.active ? 'Deactivated' : (cat.is_visible ? 'Hide' : 'Show')}
-                      >
+                      <button disabled={!cat.active} onClick={() => cat.active && updateCategoryQuick(cat.id, { is_visible: !cat.is_visible })} className={`p-0.5 rounded transition-colors ${cat.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`} title={!cat.active ? 'Deactivated' : (cat.is_visible ? 'Hide' : 'Show')}>
                         {cat.is_visible && cat.active ? <Eye className="w-3.5 h-3.5 text-emerald-500" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
                       </button>
                     </div>
@@ -262,7 +292,7 @@ export default function CategoriesPage() {
             </CardHeader>
 
             <CardContent className="flex-1 overflow-y-auto p-6">
-              <Accordion type="multiple" defaultValue={['details', 'status']} className="space-y-3">
+              <Accordion type="multiple" defaultValue={['details']} className="space-y-3">
 
                 <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Category Details</AccordionTrigger>
@@ -290,37 +320,20 @@ export default function CategoriesPage() {
                             if (selectedCategoryId) triggerSave(next);
                           }}
                           placeholder="A brief description of this category..."
-                          rows={4}
+                          rows={3}
                         />
                       </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="status" className="border rounded-lg bg-card overflow-hidden shadow-sm">
-                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Visibility &amp; Status</AccordionTrigger>
-                  <AccordionContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
-                        <Label htmlFor="cat-active" className="text-sm font-medium">Active</Label>
-                        <Switch
-                          id="cat-active"
-                          checked={formData.active}
-                          onCheckedChange={checked => {
-                            const next = { ...formData, active: checked, ...(!checked ? { is_visible: false } : {}) };
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Category Image</Label>
+                        <ImageUpload
+                          imagePreview={formData.image || null}
+                          onImageSelect={img => {
+                            const next = { ...formData, image: img };
                             setFormData(next);
                             if (selectedCategoryId) triggerSave(next, true);
                           }}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
-                        <Label htmlFor="cat-visible" className="text-sm font-medium">Visible to clients</Label>
-                        <Switch
-                          id="cat-visible"
-                          checked={formData.is_visible}
-                          disabled={!formData.active}
-                          onCheckedChange={checked => {
-                            const next = { ...formData, is_visible: checked };
+                          onImageRemove={() => {
+                            const next = { ...formData, image: null };
                             setFormData(next);
                             if (selectedCategoryId) triggerSave(next, true);
                           }}

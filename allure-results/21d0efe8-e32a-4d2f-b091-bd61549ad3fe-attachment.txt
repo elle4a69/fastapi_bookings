@@ -1,0 +1,13 @@
+{"timestamp": "2026-07-09 12:02:57,678", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:02:57,701", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/workload \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,707", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,715", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,722", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,732", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,741", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,748", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,757", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workload \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,776", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/workload \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,800", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/schedule/workload \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:02:57,803", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:02:59,485", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

@@ -1,0 +1,42 @@
+.all-errors-page {
+	display: flex;
+	height: 100%;
+	.all-errors-quick-filter-section {
+		width: 0%;
+		flex-shrink: 0;
+	}
+
+	.all-errors-right-section {
+		.right-toolbar-actions-container {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			justify-content: flex-end;
+		}
+	}
+
+	.ant-tabs {
+		margin: 0 8px;
+	}
+
+	&.filter-visible {
+		// Width is owned by ResizableBox (inline style); this section is the
+		// ResizableBox root, so it stays position: relative for the drag handle.
+		.all-errors-quick-filter-section {
+			.resizable-box__content {
+				display: flex;
+				flex-direction: column;
+			}
+
+			.quick-filters-container {
+				flex: 1;
+				min-height: 0;
+			}
+		}
+
+		.all-errors-right-section {
+			flex: 1;
+			min-width: 0;
+		}
+	}
+}

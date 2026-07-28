@@ -1,0 +1,11 @@
+{"timestamp": "2026-07-09 12:09:00,323", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:09:00,336", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,346", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,352", "level": "INFO", "message": "HTTP Request: PUT http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,359", "level": "INFO", "message": "HTTP Request: POST http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,364", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,370", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,376", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/health \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,383", "level": "INFO", "message": "HTTP Request: GET http://testserver/health \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,396", "level": "INFO", "message": "HTTP Request: GET http://testserver/health \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:09:00,399", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

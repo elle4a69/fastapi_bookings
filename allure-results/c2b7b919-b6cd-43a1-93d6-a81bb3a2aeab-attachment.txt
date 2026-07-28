@@ -1,0 +1,10 @@
+{"timestamp": "2026-07-09 12:01:52,252", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:52,277", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,295", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,313", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,328", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,346", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,361", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,380", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,408", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/schedule/workdays/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:52,410", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

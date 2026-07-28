@@ -1,0 +1,15 @@
+{"timestamp": "2026-07-09 12:00:11,389", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:11,403", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/add-ons/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,414", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/add-ons/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,425", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,434", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/add-ons/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,445", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/add-ons/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,475", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,484", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,495", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,506", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,515", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,528", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,554", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/add-ons/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:11,558", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:15,112", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.08s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

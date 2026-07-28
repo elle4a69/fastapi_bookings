@@ -1,0 +1,33 @@
+{"timestamp": "2026-07-09 11:45:15,153", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:45:15,176", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,185", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/products/assign \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,192", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/products/assign \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,200", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,205", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/products/assign \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,210", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/products/assign \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,218", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,230", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,243", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,259", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,270", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,611", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,622", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,633", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,646", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,659", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,670", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,681", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,691", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,702", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,714", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,729", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,742", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,759", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,771", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,787", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,800", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,820", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,849", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:15,977", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:16,039", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/products/assign \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:45:16,043", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

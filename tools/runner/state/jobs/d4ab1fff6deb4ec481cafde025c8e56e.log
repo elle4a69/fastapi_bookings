@@ -1,0 +1,831 @@
+[2026-07-12 15:56:16] Run directory: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-155616
+[2026-07-12 15:56:18] API is not responding on port 8000. Starting Uvicorn.
+[2026-07-12 15:56:26] Preparing authenticated collection and temporary JWTs.
+Prepared 216 requests with temporary local authentication
+Collection: F:\Projects\fastapi_bookings\tools\postman-sweep\FastAPI-Bookings-Local-Authenticated.postman_collection.json
+Environment: F:\Projects\fastapi_bookings\tools\postman-sweep\SimplyDemo-Local.postman_environment.json
+[2026-07-12 15:56:29] Waiting 2 second(s) before Newman execution.
+[2026-07-12 15:56:31] Running authenticated Newman sweep.
+newman
+
+FastAPI Bookings Local Authenticated Sweep
+
+□ api / admin / auth
+└ Admin Login
+  POST http://127.0.0.1:8000/api/admin/auth [400 Bad Request, 337B, 78ms]
+
+□ api / admin / users
+└ Create User
+  POST http://127.0.0.1:8000/api/admin/users [400 Bad Request, 300B, 18ms]
+
+□ api / admin / services
+└ List Services
+  GET http://127.0.0.1:8000/api/admin/services?page=1&page_size=25 [200 OK, 189B, 55ms]
+
+└ Create Service
+  POST http://127.0.0.1:8000/api/admin/services [422 Unprocessable Entity, 1.13kB, 46ms]
+
+□ api / admin / services / {service_id}
+└ Get Service
+  GET http://127.0.0.1:8000/api/admin/services/:service_id [422 Unprocessable Entity, 450B, 13ms]
+
+└ Update Service
+  PUT http://127.0.0.1:8000/api/admin/services/:service_id [422 Unprocessable Entity, 1.71kB, 14ms]
+
+└ Delete Service
+  DELETE http://127.0.0.1:8000/api/admin/services/:service_id [422 Unprocessable Entity, 450B, 13ms]
+
+□ api / admin / services / {service_id} / providers
+└ List Service Providers
+  GET http://127.0.0.1:8000/api/admin/services/:service_id/providers [422 Unprocessable Entity, 450B, 32ms]
+
+□ api / admin / services / {service_id} / providers / {provider_id}
+└ Assign Provider To Service
+  POST http://127.0.0.1:8000/api/admin/services/:service_id/providers/:provider_id [422 Unprocessable Entity, 603B, 17ms]
+
+└ Unassign Provider From Service
+  DELETE http://127.0.0.1:8000/api/admin/services/:service_id/providers/:provider_id [422 Unprocessable Entity, 603B, 12ms]
+
+□ api / admin / services / {service_id} / categories
+└ List Service Categories
+  GET http://127.0.0.1:8000/api/admin/services/:service_id/categories [422 Unprocessable Entity, 450B, 11ms]
+
+□ api / admin / services / {service_id} / categories / {category_id}
+└ Assign Category To Service
+  POST http://127.0.0.1:8000/api/admin/services/:service_id/categories/:category_id [422 Unprocessable Entity, 603B, 16ms]
+
+└ Unassign Category From Service
+  DELETE http://127.0.0.1:8000/api/admin/services/:service_id/categories/:category_id [422 Unprocessable Entity, 603B, 15ms]
+
+□ api / admin / providers
+└ List Providers
+  GET http://127.0.0.1:8000/api/admin/providers?page=1&page_size=25 [200 OK, 189B, 40ms]
+
+└ Create Provider
+  POST http://127.0.0.1:8000/api/admin/providers [200 OK, 369B, 181ms]
+
+□ api / admin / providers / {provider_id}
+└ Get Provider
+  GET http://127.0.0.1:8000/api/admin/providers/:provider_id [422 Unprocessable Entity, 452B, 10ms]
+
+└ Update Provider
+  PUT http://127.0.0.1:8000/api/admin/providers/:provider_id [422 Unprocessable Entity, 1.02kB, 15ms]
+
+└ Delete Provider
+  DELETE http://127.0.0.1:8000/api/admin/providers/:provider_id [422 Unprocessable Entity, 452B, 13ms]
+
+□ api / admin / clients
+└ List Clients
+  GET http://127.0.0.1:8000/api/admin/clients?page=1&page_size=25 [200 OK, 189B, 45ms]
+
+└ Create Client
+  POST http://127.0.0.1:8000/api/admin/clients [422 Unprocessable Entity, 1.05kB, 11ms]
+
+□ api / admin / clients / {client_id}
+└ Get Client
+  GET http://127.0.0.1:8000/api/admin/clients/:client_id [422 Unprocessable Entity, 448B, 10ms]
+
+└ Update Client
+  PUT http://127.0.0.1:8000/api/admin/clients/:client_id [422 Unprocessable Entity, 1.64kB, 10ms]
+
+└ Delete Client
+  DELETE http://127.0.0.1:8000/api/admin/clients/:client_id [422 Unprocessable Entity, 448B, 11ms]
+
+□ api / admin / locations
+└ List Locations
+  GET http://127.0.0.1:8000/api/admin/locations?page=1&page_size=25 [200 OK, 189B, 39ms]
+
+└ Create Location
+  POST http://127.0.0.1:8000/api/admin/locations [200 OK, 213B, 151ms]
+
+□ api / admin / locations / {location_id}
+└ Get Location
+  GET http://127.0.0.1:8000/api/admin/locations/:location_id [422 Unprocessable Entity, 452B, 14ms]
+
+└ Update Location
+  PUT http://127.0.0.1:8000/api/admin/locations/:location_id [422 Unprocessable Entity, 452B, 11ms]
+
+└ Delete Location
+  DELETE http://127.0.0.1:8000/api/admin/locations/:location_id [422 Unprocessable Entity, 452B, 12ms]
+
+□ api / admin / locations / {location_id} / providers / {provider_id}
+└ Link Location Provider
+  POST http://127.0.0.1:8000/api/admin/locations/:location_id/providers/:provider_id [422 Unprocessable Entity, 605B, 37ms]
+
+└ Unlink Location Provider
+  DELETE http://127.0.0.1:8000/api/admin/locations/:location_id/providers/:provider_id [422 Unprocessable Entity, 605B, 14ms]
+
+□ api / admin / locations / {location_id} / providers
+└ List Location Providers
+  GET http://127.0.0.1:8000/api/admin/locations/:location_id/providers [422 Unprocessable Entity, 452B, 13ms]
+
+□ api / admin / locations / {location_id} / services / {service_id}
+└ Link Location Service
+  POST http://127.0.0.1:8000/api/admin/locations/:location_id/services/:service_id [422 Unprocessable Entity, 603B, 12ms]
+
+└ Unlink Location Service
+  DELETE http://127.0.0.1:8000/api/admin/locations/:location_id/services/:service_id [422 Unprocessable Entity, 603B, 17ms]
+
+□ api / admin / locations / {location_id} / services
+└ List Location Services
+  GET http://127.0.0.1:8000/api/admin/locations/:location_id/services [422 Unprocessable Entity, 452B, 15ms]
+
+□ api / admin / locations / {location_id} / categories / {category_id}
+└ Link Location Category
+  POST http://127.0.0.1:8000/api/admin/locations/:location_id/categories/:category_id [422 Unprocessable Entity, 605B, 17ms]
+
+└ Unlink Location Category
+  DELETE http://127.0.0.1:8000/api/admin/locations/:location_id/categories/:category_id [422 Unprocessable Entity, 605B, 14ms]
+
+□ api / admin / locations / {location_id} / categories
+└ List Location Categories
+  GET http://127.0.0.1:8000/api/admin/locations/:location_id/categories [422 Unprocessable Entity, 452B, 9ms]
+
+□ api / admin / bookings
+└ List Bookings
+  GET http://127.0.0.1:8000/api/admin/bookings?status_filter=no_show&client_id=1&provider_id=1&date_from=2026-07-13T10:00:00Z&date_to=2026-07-13T10:00:00Z&page=1&page_size=25 [200 OK, 189B, 50ms]
+
+└ Create Booking
+  POST http://127.0.0.1:8000/api/admin/bookings [422 Unprocessable Entity, 1.31kB, 16ms]
+
+□ api / admin / bookings / {booking_id}
+└ Get Booking
+  GET http://127.0.0.1:8000/api/admin/bookings/:booking_id [422 Unprocessable Entity, 450B, 12ms]
+
+└ Update Booking
+  PUT http://127.0.0.1:8000/api/admin/bookings/:booking_id [422 Unprocessable Entity, 1.16kB, 8ms]
+
+□ api / admin / bookings / {booking_id} / confirm
+└ Confirm Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/:booking_id/confirm [422 Unprocessable Entity, 450B, 10ms]
+
+□ api / admin / bookings / {booking_id} / cancel
+└ Cancel Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/:booking_id/cancel [422 Unprocessable Entity, 450B, 11ms]
+
+□ api / admin / bookings / {booking_id} / complete
+└ Complete Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/:booking_id/complete [422 Unprocessable Entity, 450B, 11ms]
+
+□ api / admin / bookings / {booking_id} / noshow
+└ Noshow Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/:booking_id/noshow [422 Unprocessable Entity, 450B, 12ms]
+
+□ api / admin / bookings / {booking_id} / reschedule
+└ Reschedule Booking
+  POST http://127.0.0.1:8000/api/admin/bookings/:booking_id/reschedule [422 Unprocessable Entity, 860B, 16ms]
+
+□ api / admin / public / bookings
+└ Create Public Booking
+  POST http://127.0.0.1:8000/api/admin/public/bookings [422 Unprocessable Entity, 1.31kB, 14ms]
+
+□ api / admin / dashboard / bootstrap
+└ Admin Dashboard Bootstrap
+  GET http://127.0.0.1:8000/api/admin/dashboard/bootstrap [500 Internal Server Error, 325B, 398ms]
+
+□ api / admin / audit-log
+└ List Audit Logs
+  GET http://127.0.0.1:8000/api/admin/audit-log?page=1&page_size=25 [200 OK, 189B, 35ms]
+
+└ Create Audit Log
+  POST http://127.0.0.1:8000/api/admin/audit-log [422 Unprocessable Entity, 593B, 14ms]
+
+□ api / admin / payments
+└ List Payments
+  GET http://127.0.0.1:8000/api/admin/payments?page=1&page_size=25 [200 OK, 189B, 39ms]
+
+└ Create Payment
+  POST http://127.0.0.1:8000/api/admin/payments [422 Unprocessable Entity, 591B, 15ms]
+
+□ api / admin / payments / {payment_id}
+└ Update Payment
+  PUT http://127.0.0.1:8000/api/admin/payments/:payment_id [422 Unprocessable Entity, 450B, 15ms]
+
+□ api / admin / notifications
+└ List Notifications
+  GET http://127.0.0.1:8000/api/admin/notifications?page=1&page_size=25 [200 OK, 189B, 31ms]
+
+└ Create Notification
+  POST http://127.0.0.1:8000/api/admin/notifications [422 Unprocessable Entity, 448B, 13ms]
+
+□ api / admin / notifications / {notification_id}
+└ Update Notification
+  PUT http://127.0.0.1:8000/api/admin/notifications/:notification_id [422 Unprocessable Entity, 609B, 11ms]
+
+□ api / admin / notification-templates
+└ List Notification Templates
+  GET http://127.0.0.1:8000/api/admin/notification-templates?page=1&page_size=25 [200 OK, 189B, 21ms]
+
+└ Create Notification Template
+  POST http://127.0.0.1:8000/api/admin/notification-templates [200 OK, 358B, 175ms]
+
+□ api / admin / notification-templates / {template_id}
+└ Update Notification Template
+  PUT http://127.0.0.1:8000/api/admin/notification-templates/:template_id [422 Unprocessable Entity, 587B, 15ms]
+
+└ Delete Notification Template
+  DELETE http://127.0.0.1:8000/api/admin/notification-templates/:template_id [422 Unprocessable Entity, 452B, 14ms]
+
+□ api / admin / reminder-rules
+└ List Reminder Rules
+  GET http://127.0.0.1:8000/api/admin/reminder-rules?page=1&page_size=25 [200 OK, 189B, 14ms]
+
+└ Create Reminder Rule
+  POST http://127.0.0.1:8000/api/admin/reminder-rules [422 Unprocessable Entity, 449B, 13ms]
+
+□ api / admin / reminder-rules / {rule_id}
+└ Update Reminder Rule
+  PUT http://127.0.0.1:8000/api/admin/reminder-rules/:rule_id [422 Unprocessable Entity, 882B, 13ms]
+
+└ Delete Reminder Rule
+  DELETE http://127.0.0.1:8000/api/admin/reminder-rules/:rule_id [422 Unprocessable Entity, 444B, 10ms]
+
+□ api / admin / system / diagnostics
+└ Get System Diagnostics
+  GET http://127.0.0.1:8000/api/admin/system/diagnostics [200 OK, 403B, 66ms]
+
+□ api / admin / system / cleanup
+└ Run Historic Cleanup
+  POST http://127.0.0.1:8000/api/admin/system/cleanup?days=365 [200 OK, 299B, 40ms]
+
+□ api / admin / system / clients / {client_id} / anonymize
+└ Anonymize Client Record
+  POST http://127.0.0.1:8000/api/admin/system/clients/:client_id/anonymize [422 Unprocessable Entity, 448B, 14ms]
+
+□ api / admin / categories
+└ List Categories
+  GET http://127.0.0.1:8000/api/admin/categories [200 OK, 126B, 30ms]
+
+└ Create Category
+  POST http://127.0.0.1:8000/api/admin/categories [200 OK, 233B, 156ms]
+
+□ api / admin / categories / {category_id}
+└ Get Category
+  GET http://127.0.0.1:8000/api/admin/categories/:category_id [422 Unprocessable Entity, 452B, 10ms]
+
+└ Update Category
+  PUT http://127.0.0.1:8000/api/admin/categories/:category_id [422 Unprocessable Entity, 452B, 14ms]
+
+└ Delete Category
+  DELETE http://127.0.0.1:8000/api/admin/categories/:category_id [422 Unprocessable Entity, 452B, 12ms]
+
+□ api / admin / resources
+└ List Resources
+  GET http://127.0.0.1:8000/api/admin/resources [200 OK, 126B, 25ms]
+
+└ Create Resource
+  POST http://127.0.0.1:8000/api/admin/resources [422 Unprocessable Entity, 449B, 11ms]
+
+□ api / admin / resources / {resource_id}
+└ Get Resource
+  GET http://127.0.0.1:8000/api/admin/resources/:resource_id [422 Unprocessable Entity, 452B, 12ms]
+
+└ Update Resource
+  PUT http://127.0.0.1:8000/api/admin/resources/:resource_id [422 Unprocessable Entity, 602B, 12ms]
+
+└ Delete Resource
+  DELETE http://127.0.0.1:8000/api/admin/resources/:resource_id [422 Unprocessable Entity, 452B, 11ms]
+
+□ api / admin / resources / requirements
+└ Create Service Resource Requirement
+  POST http://127.0.0.1:8000/api/admin/resources/requirements [422 Unprocessable Entity, 448B, 14ms]
+
+□ api / admin / add-ons
+└ List Addons
+  GET http://127.0.0.1:8000/api/admin/add-ons [200 OK, 126B, 30ms]
+
+└ Create Addon
+  POST http://127.0.0.1:8000/api/admin/add-ons [422 Unprocessable Entity, 557B, 12ms]
+
+□ api / admin / add-ons / {add_on_id}
+└ Get Addon
+  GET http://127.0.0.1:8000/api/admin/add-ons/:add_on_id [422 Unprocessable Entity, 448B, 8ms]
+
+└ Update Addon
+  PUT http://127.0.0.1:8000/api/admin/add-ons/:add_on_id [422 Unprocessable Entity, 706B, 14ms]
+
+└ Delete Addon
+  DELETE http://127.0.0.1:8000/api/admin/add-ons/:add_on_id [422 Unprocessable Entity, 448B, 12ms]
+
+□ api / admin / products
+└ List Products
+  GET http://127.0.0.1:8000/api/admin/products [200 OK, 126B, 29ms]
+
+└ Create Product
+  POST http://127.0.0.1:8000/api/admin/products [422 Unprocessable Entity, 408B, 13ms]
+
+□ api / admin / products / {product_id}
+└ Get Product
+  GET http://127.0.0.1:8000/api/admin/products/:product_id [422 Unprocessable Entity, 450B, 8ms]
+
+└ Update Product
+  PUT http://127.0.0.1:8000/api/admin/products/:product_id [422 Unprocessable Entity, 559B, 16ms]
+
+└ Delete Product
+  DELETE http://127.0.0.1:8000/api/admin/products/:product_id [422 Unprocessable Entity, 450B, 13ms]
+
+□ api / admin / products / assign
+└ Assign Product To Service
+  POST http://127.0.0.1:8000/api/admin/products/assign [422 Unprocessable Entity, 597B, 28ms]
+
+□ api / admin / packages
+└ List Packages
+  GET http://127.0.0.1:8000/api/admin/packages [200 OK, 126B, 28ms]
+
+└ Create Package
+  POST http://127.0.0.1:8000/api/admin/packages [422 Unprocessable Entity, 408B, 13ms]
+
+□ api / admin / packages / {package_id}
+└ Get Package
+  GET http://127.0.0.1:8000/api/admin/packages/:package_id [422 Unprocessable Entity, 450B, 6ms]
+
+└ Update Package
+  PUT http://127.0.0.1:8000/api/admin/packages/:package_id [422 Unprocessable Entity, 559B, 11ms]
+
+└ Delete Package
+  DELETE http://127.0.0.1:8000/api/admin/packages/:package_id [422 Unprocessable Entity, 450B, 13ms]
+
+□ api / admin / packages / {package_id} / steps
+└ Add Package Step
+  POST http://127.0.0.1:8000/api/admin/packages/:package_id/steps [422 Unprocessable Entity, 1kB, 12ms]
+
+□ api / admin / packages / steps / {step_id}
+└ Update Package Step
+  PUT http://127.0.0.1:8000/api/admin/packages/steps/:step_id [422 Unprocessable Entity, 995B, 10ms]
+
+└ Delete Package Step
+  DELETE http://127.0.0.1:8000/api/admin/packages/steps/:step_id [422 Unprocessable Entity, 444B, 12ms]
+
+□ api / admin / schedule / workdays
+└ List Workdays
+  GET http://127.0.0.1:8000/api/admin/schedule/workdays [200 OK, 126B, 44ms]
+
+└ Create Workday
+  POST http://127.0.0.1:8000/api/admin/schedule/workdays [422 Unprocessable Entity, 745B, 18ms]
+
+□ api / admin / schedule / workdays / {workday_id}
+└ Update Workday
+  PUT http://127.0.0.1:8000/api/admin/schedule/workdays/:workday_id [422 Unprocessable Entity, 1.03kB, 15ms]
+
+└ Delete Workday
+  DELETE http://127.0.0.1:8000/api/admin/schedule/workdays/:workday_id [422 Unprocessable Entity, 450B, 13ms]
+
+□ api / admin / schedule / special-days
+└ List Special Days
+  GET http://127.0.0.1:8000/api/admin/schedule/special-days [200 OK, 126B, 18ms]
+
+└ Create Special Day
+  POST http://127.0.0.1:8000/api/admin/schedule/special-days [422 Unprocessable Entity, 782B, 13ms]
+
+□ api / admin / schedule / special-days / {day_id}
+└ Update Special Day
+  PUT http://127.0.0.1:8000/api/admin/schedule/special-days/:day_id [422 Unprocessable Entity, 974B, 13ms]
+
+└ Delete Special Day
+  DELETE http://127.0.0.1:8000/api/admin/schedule/special-days/:day_id [422 Unprocessable Entity, 442B, 12ms]
+
+□ api / admin / schedule / blocked-times
+└ List Blocked Times
+  GET http://127.0.0.1:8000/api/admin/schedule/blocked-times [200 OK, 126B, 13ms]
+
+└ Create Blocked Time
+  POST http://127.0.0.1:8000/api/admin/schedule/blocked-times [422 Unprocessable Entity, 1.01kB, 10ms]
+
+□ api / admin / schedule / blocked-times / {block_id}
+└ Update Blocked Time
+  PUT http://127.0.0.1:8000/api/admin/schedule/blocked-times/:block_id [422 Unprocessable Entity, 1.29kB, 11ms]
+
+└ Delete Blocked Time
+  DELETE http://127.0.0.1:8000/api/admin/schedule/blocked-times/:block_id [422 Unprocessable Entity, 446B, 9ms]
+
+□ api / admin / schedule / reserved-times
+└ List Reserved Times
+  GET http://127.0.0.1:8000/api/admin/schedule/reserved-times [200 OK, 126B, 14ms]
+
+└ Create Reserved Time
+  POST http://127.0.0.1:8000/api/admin/schedule/reserved-times [422 Unprocessable Entity, 1.52kB, 10ms]
+
+□ api / admin / schedule / reserved-times / {reserved_id}
+└ Update Reserved Time
+  PUT http://127.0.0.1:8000/api/admin/schedule/reserved-times/:reserved_id [422 Unprocessable Entity, 1.67kB, 15ms]
+
+└ Delete Reserved Time
+  DELETE http://127.0.0.1:8000/api/admin/schedule/reserved-times/:reserved_id [422 Unprocessable Entity, 452B, 13ms]
+
+□ api / admin / schedule / workload
+└ Get Workload
+  GET http://127.0.0.1:8000/api/admin/schedule/workload [200 OK, 153B, 20ms]
+
+□ api / admin / additional-fields
+└ List Admin Additional Fields
+  GET http://127.0.0.1:8000/api/admin/additional-fields?scope=test&service_id=1&active_only=false [200 OK, 126B, 35ms]
+
+└ Create Additional Field
+  POST http://127.0.0.1:8000/api/admin/additional-fields [422 Unprocessable Entity, 448B, 14ms]
+
+□ api / admin / additional-fields / {field_id}
+└ Update Additional Field
+  PUT http://127.0.0.1:8000/api/admin/additional-fields/:field_id [422 Unprocessable Entity, 1.01kB, 13ms]
+
+└ Delete Additional Field
+  DELETE http://127.0.0.1:8000/api/admin/additional-fields/:field_id [422 Unprocessable Entity, 446B, 14ms]
+
+□ api / admin / additional-field-responses
+└ List Admin Field Responses
+  GET http://127.0.0.1:8000/api/admin/additional-field-responses?booking_id=1&client_id=1 [200 OK, 126B, 15ms]
+
+□ api / admin / invoices
+└ List Admin Invoices
+  GET http://127.0.0.1:8000/api/admin/invoices [200 OK, 165B, 38ms]
+
+□ api / admin / invoices / {invoice_id}
+└ Get Admin Invoice
+  GET http://127.0.0.1:8000/api/admin/invoices/:invoice_id [422 Unprocessable Entity, 450B, 13ms]
+
+□ api / admin / invoices / {invoice_id} / status
+└ Update Invoice Status
+  PUT http://127.0.0.1:8000/api/admin/invoices/:invoice_id/status [422 Unprocessable Entity, 598B, 14ms]
+
+□ api / admin / promotions
+└ List Promotions
+  GET http://127.0.0.1:8000/api/admin/promotions [200 OK, 126B, 16ms]
+
+└ Create Promotion
+  POST http://127.0.0.1:8000/api/admin/promotions [422 Unprocessable Entity, 866B, 14ms]
+
+□ api / admin / promotions / {promotion_id}
+└ Update Promotion
+  PUT http://127.0.0.1:8000/api/admin/promotions/:promotion_id [422 Unprocessable Entity, 1.31kB, 11ms]
+
+└ Delete Promotion
+  DELETE http://127.0.0.1:8000/api/admin/promotions/:promotion_id [422 Unprocessable Entity, 454B, 10ms]
+
+□ api / admin / tax-rates
+└ List Tax Rates
+  GET http://127.0.0.1:8000/api/admin/tax-rates [200 OK, 126B, 11ms]
+
+└ Create Tax Rate
+  POST http://127.0.0.1:8000/api/admin/tax-rates [201 Created, 232B, 161ms]
+
+□ api / admin / tax-rates / {tax_rate_id}
+└ Update Tax Rate
+  PUT http://127.0.0.1:8000/api/admin/tax-rates/:tax_rate_id [422 Unprocessable Entity, 736B, 14ms]
+
+└ Delete Tax Rate
+  DELETE http://127.0.0.1:8000/api/admin/tax-rates/:tax_rate_id [422 Unprocessable Entity, 452B, 15ms]
+
+□ api / admin / payment-processor / configs
+└ List Payment Processor Configs
+  GET http://127.0.0.1:8000/api/admin/payment-processor/configs [200 OK, 126B, 19ms]
+
+└ Create Payment Processor Config
+  POST http://127.0.0.1:8000/api/admin/payment-processor/configs [201 Created, 336B, 163ms]
+
+□ api / admin / payment-processor / configs / {config_id}
+└ Update Payment Processor Config
+  PUT http://127.0.0.1:8000/api/admin/payment-processor/configs/:config_id [422 Unprocessable Entity, 584B, 16ms]
+
+□ api / admin / series
+└ List Series
+  GET http://127.0.0.1:8000/api/admin/series [200 OK, 126B, 32ms]
+
+└ Create Series
+  POST http://127.0.0.1:8000/api/admin/series [422 Unprocessable Entity, 1.1kB, 15ms]
+
+□ api / admin / series / {series_id}
+└ Get Series
+  GET http://127.0.0.1:8000/api/admin/series/:series_id [422 Unprocessable Entity, 448B, 12ms]
+
+□ api / admin / webhooks
+└ List Webhooks
+  GET http://127.0.0.1:8000/api/admin/webhooks [200 OK, 146B, 37ms]
+
+└ Create Webhook
+  POST http://127.0.0.1:8000/api/admin/webhooks [400 Bad Request, 517B, 16ms]
+
+□ api / admin / webhooks / {webhook_id}
+└ Update Webhook
+  PUT http://127.0.0.1:8000/api/admin/webhooks/:webhook_id [422 Unprocessable Entity, 588B, 14ms]
+
+└ Delete Webhook
+  DELETE http://127.0.0.1:8000/api/admin/webhooks/:webhook_id [422 Unprocessable Entity, 450B, 14ms]
+
+□ api / admin / webhooks / events
+└ List Supported Events
+  GET http://127.0.0.1:8000/api/admin/webhooks/events [200 OK, 328B, 9ms]
+
+□ api / admin / calendar-notes
+└ List Calendar Notes
+  GET http://127.0.0.1:8000/api/admin/calendar-notes?provider_id=1&date_from=2026-07-13&date_to=2026-07-13 [200 OK, 146B, 31ms]
+
+└ Create Calendar Note
+  POST http://127.0.0.1:8000/api/admin/calendar-notes [422 Unprocessable Entity, 632B, 13ms]
+
+□ api / admin / calendar-notes / {note_id}
+└ Update Calendar Note
+  PUT http://127.0.0.1:8000/api/admin/calendar-notes/:note_id [422 Unprocessable Entity, 831B, 16ms]
+
+└ Delete Calendar Note
+  DELETE http://127.0.0.1:8000/api/admin/calendar-notes/:note_id [422 Unprocessable Entity, 444B, 14ms]
+
+□ api / admin / plugin-states
+└ List Plugin States
+  GET http://127.0.0.1:8000/api/admin/plugin-states [200 OK, 146B, 33ms]
+
+└ Upsert Plugin State
+  POST http://127.0.0.1:8000/api/admin/plugin-states [201 Created, 236B, 167ms]
+
+□ api / admin / plugin-states / {name}
+└ Toggle Plugin State
+  PUT http://127.0.0.1:8000/api/admin/plugin-states/:name [422 Unprocessable Entity, 438B, 11ms]
+
+□ api / admin / gdpr-consents
+└ List Gdpr Consents
+  GET http://127.0.0.1:8000/api/admin/gdpr-consents [200 OK, 146B, 18ms]
+
+□ api / admin / gdpr-consents / {client_id}
+└ List Gdpr Consents For Client
+  GET http://127.0.0.1:8000/api/admin/gdpr-consents/:client_id [422 Unprocessable Entity, 448B, 10ms]
+
+□ api / admin / management-reviews
+└ List Review Requests
+  GET http://127.0.0.1:8000/api/admin/management-reviews?page=1&page_size=25 [200 OK, 189B, 207ms]
+
+□ api / admin / management-reviews / {review_id}
+└ Get Review Request
+  GET http://127.0.0.1:8000/api/admin/management-reviews/:review_id [422 Unprocessable Entity, 448B, 15ms]
+
+□ api / admin / management-reviews / {review_id} / resolve
+└ Resolve Review Request
+  PUT http://127.0.0.1:8000/api/admin/management-reviews/:review_id/resolve [422 Unprocessable Entity, 448B, 18ms]
+
+□ api / admin / business-profile
+└ Get Business Profile
+  GET http://127.0.0.1:8000/api/admin/business-profile [200 OK, 331B, 28ms]
+
+└ Update Business Profile
+  PUT http://127.0.0.1:8000/api/admin/business-profile [422 Unprocessable Entity, 454B, 17ms]
+
+□ api / public / auth / token
+└ Public Login
+  POST http://127.0.0.1:8000/api/public/auth/token [400 Bad Request, 337B, 13ms]
+
+□ api / public / availability
+└ Availability
+  GET http://127.0.0.1:8000/api/public/availability?service_id=1&provider_id=1&date=2026-07-13T10:00:00Z [404 Not Found, 265B, 40ms]
+
+□ api / public / bootstrap
+└ Public Bootstrap
+  GET http://127.0.0.1:8000/api/public/bootstrap [500 Internal Server Error, 325B, 81ms]
+
+□ api / public / bookings
+└ Create Public Booking
+  POST http://127.0.0.1:8000/api/public/bookings [422 Unprocessable Entity, 1.31kB, 38ms]
+
+□ api / public / holds
+└ Create Hold Endpoint
+  POST http://127.0.0.1:8000/api/public/holds [422 Unprocessable Entity, 1.52kB, 31ms]
+
+□ api / public / holds / {hold_id} / confirm
+└ Confirm Hold Endpoint
+  POST http://127.0.0.1:8000/api/public/holds/:hold_id/confirm [422 Unprocessable Entity, 590B, 18ms]
+
+□ api / public / holds / {hold_id}
+└ Cancel Hold Endpoint
+  DELETE http://127.0.0.1:8000/api/public/holds/:hold_id [422 Unprocessable Entity, 444B, 14ms]
+
+□ api / public / waitlist
+└ Add To Waitlist
+  POST http://127.0.0.1:8000/api/public/waitlist [422 Unprocessable Entity, 1.32kB, 35ms]
+
+└ List Waitlist
+  GET http://127.0.0.1:8000/api/public/waitlist?service_id=1 [404 Not Found, 265B, 14ms]
+
+□ api / public / search-availability
+└ Search Availability
+  POST http://127.0.0.1:8000/api/public/search-availability [422 Unprocessable Entity, 1.31kB, 33ms]
+
+□ api / public / ui-config
+└ Get Public Ui Config
+  GET http://127.0.0.1:8000/api/public/ui-config [200 OK, 346B, 24ms]
+
+□ api / public / ui-config / admin
+└ Get Admin Ui Config
+  GET http://127.0.0.1:8000/api/public/ui-config/admin [200 OK, 282B, 13ms]
+
+□ api / public / additional-fields
+└ List Public Additional Fields
+  GET http://127.0.0.1:8000/api/public/additional-fields?scope=test&service_id=1 [404 Not Found, 265B, 21ms]
+
+□ api / public / services / {service_id} / intake-form
+└ Get Public Service Intake Form
+  GET http://127.0.0.1:8000/api/public/services/:service_id/intake-form [422 Unprocessable Entity, 450B, 11ms]
+
+□ api / public / services
+└ List Public Services
+  GET http://127.0.0.1:8000/api/public/services [200 OK, 165B, 34ms]
+
+□ api / public / additional-field-responses
+└ Submit Public Additional Field Responses
+  POST http://127.0.0.1:8000/api/public/additional-field-responses [422 Unprocessable Entity, 1.57kB, 14ms]
+
+□ api / public / quote
+└ Create Quote
+  POST http://127.0.0.1:8000/api/public/quote [422 Unprocessable Entity, 1.5kB, 10ms]
+
+□ api / public / payment-processor / config
+└ Public Payment Processor Config
+  GET http://127.0.0.1:8000/api/public/payment-processor/config [200 OK, 146B, 14ms]
+
+□ api / public / payment-methods
+└ Public Payment Methods
+  GET http://127.0.0.1:8000/api/public/payment-methods [200 OK, 146B, 10ms]
+
+□ api / public / promotions / {code} / validate
+└ Public Validate Promotion
+  GET http://127.0.0.1:8000/api/public/promotions/:code/validate?subtotal=0 [200 OK, 210B, 13ms]
+
+□ api / public / invoices
+└ Create Public Invoice
+  POST http://127.0.0.1:8000/api/public/invoices [422 Unprocessable Entity, 1.86kB, 14ms]
+
+□ api / public / invoices / {invoice_id}
+└ Get Public Invoice
+  GET http://127.0.0.1:8000/api/public/invoices/:invoice_id [422 Unprocessable Entity, 450B, 11ms]
+
+□ api / public / invoices / {invoice_id} / tips
+└ Add Public Tip
+  POST http://127.0.0.1:8000/api/public/invoices/:invoice_id/tips [422 Unprocessable Entity, 593B, 14ms]
+
+□ api / public / checkout / commit
+└ Checkout Commit
+  POST http://127.0.0.1:8000/api/public/checkout/commit [422 Unprocessable Entity, 1.31kB, 20ms]
+
+□ api / public / clients
+└ Create Public Client Contact
+  POST http://127.0.0.1:8000/api/public/clients [422 Unprocessable Entity, 1.05kB, 33ms]
+
+□ api / public / clients / identify
+└ Identify Or Create Client
+  POST http://127.0.0.1:8000/api/public/clients/identify?phone=test&email=test [200 OK, 642B, 174ms]
+
+□ api / public / clients / register
+└ Register Client
+  POST http://127.0.0.1:8000/api/public/clients/register [200 OK, 899B, 494ms]
+
+□ api / public / clients / login
+└ Login Client
+  POST http://127.0.0.1:8000/api/public/clients/login [200 OK, 899B, 317ms]
+
+□ api / public / clients / me
+└ Get My Profile
+  GET http://127.0.0.1:8000/api/public/clients/me [401 Unauthorized, 274B, 14ms]
+
+└ Update My Profile
+  PUT http://127.0.0.1:8000/api/public/clients/me [401 Unauthorized, 274B, 33ms]
+
+□ api / public / clients / password-reset / request
+└ Request Password Reset
+  POST http://127.0.0.1:8000/api/public/clients/password-reset/request [200 OK, 207B, 17ms]
+
+□ api / public / clients / terms
+└ Get Client Terms
+  GET http://127.0.0.1:8000/api/public/clients/terms [200 OK, 276B, 14ms]
+
+□ api / public / providers
+└ List Public Providers
+  GET http://127.0.0.1:8000/api/public/providers [200 OK, 390B, 16ms]
+
+□ api / public / categories
+└ List Public Categories
+  GET http://127.0.0.1:8000/api/public/categories [200 OK, 126B, 13ms]
+
+□ api / public / locations
+└ List Public Locations
+  GET http://127.0.0.1:8000/api/public/locations [200 OK, 196B, 9ms]
+
+□ api / public / timeline / schedule / {provider_id}
+└ Get Provider Schedule
+  GET http://127.0.0.1:8000/api/public/timeline/schedule/:provider_id [422 Unprocessable Entity, 452B, 21ms]
+
+□ api / public / timeline / slots
+└ Get Available Slots
+  GET http://127.0.0.1:8000/api/public/timeline/slots?service_id=1&provider_id=1&date_from=2026-07-13&date_to=2026-07-13 [404 Not Found, 265B, 22ms]
+
+□ api / public / timeline / first-available-day
+└ Get First Available Day
+  GET http://127.0.0.1:8000/api/public/timeline/first-available-day?service_id=1&provider_id=1 [404 Not Found, 265B, 13ms]
+
+□ api / public / gdpr-consent
+└ Record Gdpr Consent
+  POST http://127.0.0.1:8000/api/public/gdpr-consent [422 Unprocessable Entity, 447B, 14ms]
+
+□ api / public / management-reviews
+└ Submit Review Request
+  POST http://127.0.0.1:8000/api/public/management-reviews [422 Unprocessable Entity, 1.11kB, 18ms]
+
+□ api / public / business-profile
+└ Get Public Business Profile
+  GET http://127.0.0.1:8000/api/public/business-profile [200 OK, 302B, 10ms]
+
+□ api / forms / service
+└ Get Service Form
+  GET http://127.0.0.1:8000/api/forms/service [200 OK, 465B, 26ms]
+
+□ api / forms / provider
+└ Get Provider Form
+  GET http://127.0.0.1:8000/api/forms/provider [200 OK, 375B, 9ms]
+
+□ api / forms / booking
+└ Get Booking Form
+  GET http://127.0.0.1:8000/api/forms/booking [200 OK, 760B, 9ms]
+
+□ api / v1 / checkout / deposit-session
+└ Create Deposit Session
+  POST http://127.0.0.1:8000/api/v1/checkout/deposit-session?booking_id=1&amount_cents=1&success_url=test&cancel_url=test [404 Not Found, 265B, 38ms]
+
+□ api / v1 / webhooks / stripe
+└ Stripe Webhook
+  POST http://127.0.0.1:8000/api/v1/webhooks/stripe [400 Bad Request, 267B, 15ms]
+
+□ api / v1 / devices / register
+└ Register Device
+  POST http://127.0.0.1:8000/api/v1/devices/register [422 Unprocessable Entity, 593B, 30ms]
+
+□ notifications
+└ List Notifications
+  GET http://127.0.0.1:8000/notifications?page=1&page_size=25 [400 Bad Request, 359B, 8ms]
+
+└ Create Notification
+  POST http://127.0.0.1:8000/notifications [400 Bad Request, 359B, 12ms]
+
+□ notifications / {notification_id}
+└ Update Notification
+  PUT http://127.0.0.1:8000/notifications/:notification_id [400 Bad Request, 359B, 10ms]
+
+□ notification-templates
+└ List Notification Templates
+  GET http://127.0.0.1:8000/notification-templates?page=1&page_size=25 [400 Bad Request, 359B, 9ms]
+
+└ Create Notification Template
+  POST http://127.0.0.1:8000/notification-templates [400 Bad Request, 359B, 10ms]
+
+□ notification-templates / {template_id}
+└ Update Notification Template
+  PUT http://127.0.0.1:8000/notification-templates/:template_id [400 Bad Request, 359B, 9ms]
+
+└ Delete Notification Template
+  DELETE http://127.0.0.1:8000/notification-templates/:template_id [400 Bad Request, 359B, 6ms]
+
+□ reminder-rules
+└ List Reminder Rules
+  GET http://127.0.0.1:8000/reminder-rules?page=1&page_size=25 [400 Bad Request, 359B, 6ms]
+
+└ Create Reminder Rule
+  POST http://127.0.0.1:8000/reminder-rules [400 Bad Request, 359B, 7ms]
+
+□ reminder-rules / {rule_id}
+└ Update Reminder Rule
+  PUT http://127.0.0.1:8000/reminder-rules/:rule_id [400 Bad Request, 359B, 7ms]
+
+└ Delete Reminder Rule
+  DELETE http://127.0.0.1:8000/reminder-rules/:rule_id [400 Bad Request, 359B, 7ms]
+
+□ health
+└ Health
+  GET http://127.0.0.1:8000/health [200 OK, 136B, 6ms]
+
+□ ready
+└ Readiness
+  GET http://127.0.0.1:8000/ready [200 OK, 136B, 19ms]
+
+□ version
+└ Version
+  GET http://127.0.0.1:8000/version [200 OK, 191B, 10ms]
+
+┌─────────────────────────┬───────────────────┬──────────────────┐
+│                         │          executed │           failed │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│              iterations │                 1 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│                requests │               216 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│            test-scripts │                 0 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│      prerequest-scripts │                 0 │                0 │
+├─────────────────────────┼───────────────────┼──────────────────┤
+│              assertions │                 0 │                0 │
+├─────────────────────────┴───────────────────┴──────────────────┤
+│ total run duration: 50.8s                                      │
+├────────────────────────────────────────────────────────────────┤
+│ total data received: 81.5kB (approx)                           │
+├────────────────────────────────────────────────────────────────┤
+│ average response time: 29ms [min: 6ms, max: 494ms, s.d.: 55ms] │
+└────────────────────────────────────────────────────────────────┘
+[2026-07-12 15:58:32] Sweep finished with Newman exit code 0
+[2026-07-12 15:58:32] JSON report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-155616\authenticated-sweep.json
+[2026-07-12 15:58:32] HTML report: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-155616\authenticated-sweep.html
+[2026-07-12 15:58:32] Summary: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260712-155616\summary.txt
+[2026-07-12 15:58:32] Cleaning up temporary sweep identity and token material.
+Removed 1 temporary sweep user(s)
+[2026-07-12 15:58:35] Stopping the Uvicorn process started by this launcher.

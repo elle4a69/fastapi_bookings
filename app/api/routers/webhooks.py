@@ -57,7 +57,7 @@ def create_webhook(
             status_code=400,
             detail={"error_code": "UNKNOWN_EVENT", "message": f"Unsupported event. Choose from: {sorted(SUPPORTED_EVENTS)}"},
         )
-    hook = WebhookRegistration(**webhook_in.dict())
+    hook = WebhookRegistration(tenant_id=current_user.tenant_id, **webhook_in.dict())
     db.add(hook)
     db.commit()
     db.refresh(hook)
@@ -99,6 +99,6 @@ def delete_webhook(
 
 
 @router.get("/events", tags=["webhooks"])
-def list_supported_events() -> dict:
+def list_supported_events(_admin=Depends(get_current_admin)) -> dict:
     """Return the list of event types available for webhook subscription."""
     return {"ok": True, "data": sorted(SUPPORTED_EVENTS)}

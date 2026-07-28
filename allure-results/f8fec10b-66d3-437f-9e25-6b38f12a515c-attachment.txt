@@ -1,0 +1,43 @@
+{"timestamp": "2026-07-09 12:01:11,891", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:11,920", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:11,934", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:11,949", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:11,967", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:11,983", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:11,999", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,008", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,017", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,027", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,038", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,051", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,066", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,079", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,089", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,104", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,120", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,135", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,148", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,160", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,170", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,183", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,195", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,210", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,225", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,243", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,258", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,273", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,289", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,306", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,319", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,332", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,347", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,363", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,380", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,396", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,410", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,423", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,439", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,452", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,894", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/packages/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:01:12,897", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:01:13,768", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.88s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

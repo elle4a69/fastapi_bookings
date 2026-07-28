@@ -14,6 +14,7 @@ class ProductBase(BaseModel):
     sku: Optional[str] = None
     active: bool = True
     is_visible: bool = True
+    image: Optional[str] = None
 
 
 class ProductCreate(ProductBase):

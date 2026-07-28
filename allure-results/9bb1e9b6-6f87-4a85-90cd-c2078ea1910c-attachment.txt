@@ -1,0 +1,18 @@
+{"timestamp": "2026-07-09 11:56:49,907", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:56:49,929", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:49,939", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:49,969", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:49,999", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,009", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,018", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,028", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,038", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,052", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null%2Cnull/complete \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,066", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/AAA/complete \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,080", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null/complete \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,110", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/false/complete \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,126", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/2.5890419884777833e-42/complete \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,145", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/complete \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,172", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/1/complete \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:50,176", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:56:50,192", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

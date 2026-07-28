@@ -1,0 +1,10 @@
+{"timestamp": "2026-07-09 12:00:21,486", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:21,506", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,520", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,535", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,545", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,557", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,571", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,587", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,619", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/add-ons/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:21,622", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

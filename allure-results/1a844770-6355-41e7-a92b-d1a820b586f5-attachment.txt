@@ -1,0 +1,39 @@
+{"timestamp": "2026-07-09 11:44:19,719", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:44:19,744", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,755", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/resources/requirements \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,763", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/resources/requirements \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,774", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,782", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/resources/requirements \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,791", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/resources/requirements \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,802", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,819", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,833", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,849", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,859", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,874", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,888", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,901", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,916", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,927", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,940", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,950", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,963", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,980", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:19,992", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,005", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,016", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,027", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,039", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,055", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,071", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,086", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,102", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,116", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,133", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,148", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,160", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,176", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,204", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,277", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,328", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/resources/requirements \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:44:20,331", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

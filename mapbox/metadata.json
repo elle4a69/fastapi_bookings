@@ -1,0 +1,4 @@
+{
+  "name": "FastAPI Bookings Front-End",
+  "description": "A tenant-branded booking and operations application that dynamically resolves valid Service, Provider, and Time combinations."
+}

@@ -34,6 +34,7 @@ class Category(Base):
     description = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     is_visible = Column(Boolean, default=True, nullable=False)
+    image = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

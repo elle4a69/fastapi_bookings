@@ -1,0 +1,7 @@
+[2026-07-13 19:06:26] Run directory: F:\Projects\fastapi_bookings\tools\postman-sweep\reports\run-20260713-190626
+[2026-07-13 19:06:29] API is not responding on port 8017. Starting Uvicorn.
+[2026-07-13 19:07:17] ERROR: API did not become healthy within 45 seconds.
+[2026-07-13 19:07:17] Cleaning up temporary sweep identity and token material.
+Removed 0 temporary sweep user(s)
+Removed 0 temporary sweep client(s)
+[2026-07-13 19:07:40] Stopping the Uvicorn process started by this launcher.

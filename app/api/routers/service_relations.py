@@ -7,7 +7,8 @@ and providers, and services and categories.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db
+from ...models.tenant import Tenant
 from ...models import (
     Category as CategoryModel,
     Provider as ProviderModel,
@@ -21,17 +22,22 @@ from ...schemas.provider import Provider as ProviderSchema
 router = APIRouter(prefix="/services", tags=["service-relations"])
 
 
-def get_service_or_404(db: Session, service_id: int) -> ServiceModel:
-    service = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+def get_service_or_404(db: Session, service_id: int, tenant_id: int) -> ServiceModel:
+    service = db.query(ServiceModel).filter(ServiceModel.id == service_id, ServiceModel.tenant_id == tenant_id).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
     return service
 
 
 @router.get("/{service_id}/providers", response_model=list[ProviderSchema])
-def list_service_providers(service_id: int, db: Session = Depends(get_db)) -> list[ProviderSchema]:
+def list_service_providers(
+    service_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> list[ProviderSchema]:
     """List all providers assigned to a service."""
-    service = get_service_or_404(db, service_id)
+    service = get_service_or_404(db, service_id, tenant.id)
     return [sp.provider for sp in service.providers]
 
 
@@ -39,12 +45,13 @@ def list_service_providers(service_id: int, db: Session = Depends(get_db)) -> li
 def assign_provider_to_service(
     service_id: int,
     provider_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
     """Assign a provider to a service."""
-    service = get_service_or_404(db, service_id)
-    provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+    service = get_service_or_404(db, service_id, tenant.id)
+    provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id, ProviderModel.tenant_id == tenant.id).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     existing = db.query(ServiceProvider).filter(
@@ -52,7 +59,7 @@ def assign_provider_to_service(
         ServiceProvider.provider_id == provider.id,
     ).first()
     if not existing:
-        db.add(ServiceProvider(service_id=service.id, provider_id=provider.id))
+        db.add(ServiceProvider(tenant_id=tenant.id, service_id=service.id, provider_id=provider.id))
         db.commit()
 
 
@@ -60,6 +67,7 @@ def assign_provider_to_service(
 def unassign_provider_from_service(
     service_id: int,
     provider_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
@@ -67,6 +75,7 @@ def unassign_provider_from_service(
     assignment = db.query(ServiceProvider).filter(
         ServiceProvider.service_id == service_id,
         ServiceProvider.provider_id == provider_id,
+        ServiceProvider.tenant_id == tenant.id,
     ).first()
     if assignment:
         db.delete(assignment)
@@ -74,9 +83,14 @@ def unassign_provider_from_service(
 
 
 @router.get("/{service_id}/categories", response_model=list[CategoryOut])
-def list_service_categories(service_id: int, db: Session = Depends(get_db)) -> list[CategoryOut]:
+def list_service_categories(
+    service_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> list[CategoryOut]:
     """List all categories assigned to a service."""
-    service = get_service_or_404(db, service_id)
+    service = get_service_or_404(db, service_id, tenant.id)
     return [sc.category for sc in service.categories]
 
 
@@ -84,12 +98,13 @@ def list_service_categories(service_id: int, db: Session = Depends(get_db)) -> l
 def assign_category_to_service(
     service_id: int,
     category_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
     """Assign a category to a service."""
-    service = get_service_or_404(db, service_id)
-    category = db.query(CategoryModel).filter(CategoryModel.id == category_id).first()
+    service = get_service_or_404(db, service_id, tenant.id)
+    category = db.query(CategoryModel).filter(CategoryModel.id == category_id, CategoryModel.tenant_id == tenant.id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     existing = db.query(ServiceCategory).filter(
@@ -97,7 +112,7 @@ def assign_category_to_service(
         ServiceCategory.category_id == category.id,
     ).first()
     if not existing:
-        db.add(ServiceCategory(service_id=service.id, category_id=category.id))
+        db.add(ServiceCategory(tenant_id=tenant.id, service_id=service.id, category_id=category.id))
         db.commit()
 
 
@@ -105,6 +120,7 @@ def assign_category_to_service(
 def unassign_category_from_service(
     service_id: int,
     category_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
@@ -112,6 +128,7 @@ def unassign_category_from_service(
     assignment = db.query(ServiceCategory).filter(
         ServiceCategory.service_id == service_id,
         ServiceCategory.category_id == category_id,
+        ServiceCategory.tenant_id == tenant.id,
     ).first()
     if assignment:
         db.delete(assignment)

@@ -1,0 +1,331 @@
+{"timestamp": "2026-07-13 20:30:18,495", "level": "INFO", "message": "Firebase Admin SDK successfully initialized.", "logger": "app.services.fcm"}
+{"timestamp": "2026-07-13 20:30:18,764", "level": "INFO", "message": "Started server process [2656]", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 20:30:18,790", "level": "INFO", "message": "Waiting for application startup.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 20:30:18,824", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:30:19,531", "level": "INFO", "message": "Application startup complete.", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 20:30:19,533", "level": "INFO", "message": "Uvicorn running on http://127.0.0.1:8018 (Press CTRL+C to quit)", "logger": "uvicorn.error"}
+{"timestamp": "2026-07-13 20:30:20,507", "level": "INFO", "message": "127.0.0.1:60928 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:30:20,593", "level": "INFO", "message": "127.0.0.1:60938 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:44,711", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/auth HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:45,392", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/users HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:45,586", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/services?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:45,883", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/services HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:46,024", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/services/24 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:46,311", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/services/24 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:46,478", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/services/24/providers HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:46,778", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/services/24/providers/4 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:46,932", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/services/24/categories HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:47,318", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/services/24/categories/4 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:47,503", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/providers?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:47,793", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/providers HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:47,923", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/providers/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:48,271", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/providers/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:48,460", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/clients?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:48,817", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/clients HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:48,965", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/clients/77 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:49,262", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/clients/77 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:49,438", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/locations?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:49,726", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/locations HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:49,870", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/locations/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:50,030", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/locations/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:50,401", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/locations/12/providers/26 HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:50,555", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/locations/12/providers HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:50,894", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/locations/12/services/24 HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:51,038", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/locations/12/services HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:51,198", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/locations/12/categories/4 HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:51,353", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/locations/12/categories HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:51,802", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/bookings?status_filter=no_show&client_id=1&provider_id=1&date_from=2026-07-13T10:00:00Z&date_to=2026-07-13T10:00:00Z&page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:52,708", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:52,863", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/bookings/72 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:53,198", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/72/confirm HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:53,606", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/72/cancel HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:54,353", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/public/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:54,703", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/dashboard/bootstrap HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:54,707", "level": "INFO", "message": "Processing outbox event 143 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:55,921", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:55,925", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,309", "level": "ERROR", "message": "Failed to process outbox event 143 (attempt 1): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,312", "level": "INFO", "message": "Processing outbox event 144 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,650", "level": "INFO", "message": "Successfully processed outbox event 144", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,653", "level": "INFO", "message": "Processing outbox event 145 (booking.cancelled)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,928", "level": "INFO", "message": "Successfully processed outbox event 145", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:56,930", "level": "INFO", "message": "Processing outbox event 146 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:57,719", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:57,724", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:57,923", "level": "ERROR", "message": "Failed to process outbox event 146 (attempt 1): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:31:57,948", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/audit-log?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:58,245", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/audit-log HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:58,427", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/payments?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:58,712", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/payments HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:58,991", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/payments/23 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:59,147", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/notifications?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:59,504", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/notifications HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:59,819", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/notifications/36 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:31:59,973", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/notification-templates?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:00,316", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/notification-templates HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:00,617", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/notification-templates/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:00,767", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/reminder-rules?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:01,124", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/reminder-rules HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:01,407", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/reminder-rules/19 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:01,583", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/system/diagnostics HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:01,733", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/system/cleanup?days=365 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,049", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/system/clients/77/anonymize HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,207", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/categories HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,539", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/categories HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,686", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/categories/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,816", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/categories/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:02,936", "level": "INFO", "message": "Processing outbox event 143 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:03,667", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:03,669", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:03,970", "level": "ERROR", "message": "Failed to process outbox event 143 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:03,972", "level": "INFO", "message": "Processing outbox event 146 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:04,667", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:04,669", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:04,835", "level": "ERROR", "message": "Failed to process outbox event 146 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:04,866", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/resources HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:05,157", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/resources HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:05,298", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/resources/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:05,419", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/resources/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:05,690", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/resources/requirements HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:05,832", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/add-ons HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,139", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/add-ons HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,284", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/add-ons/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,430", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/add-ons/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,567", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/products HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,855", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/products HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:06,994", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/products/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:07,288", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/products/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:07,420", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/products/assign HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:07,575", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/packages HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:07,853", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/packages HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:07,998", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/packages/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:08,146", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/packages/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:08,460", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/packages/9/steps HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:08,606", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/packages/steps/2 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:08,763", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/schedule/workdays HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:09,078", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/schedule/workdays HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:09,361", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/schedule/workdays/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:09,508", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/schedule/special-days HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:09,846", "level": "INFO", "message": "Processing outbox event 143 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:10,494", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:10,495", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:10,708", "level": "ERROR", "message": "Failed to process outbox event 143 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:10,710", "level": "INFO", "message": "Processing outbox event 146 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:11,326", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:11,331", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:11,513", "level": "ERROR", "message": "Failed to process outbox event 146 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:11,516", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/schedule/special-days HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:11,671", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/schedule/special-days/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:11,830", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/schedule/blocked-times HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:12,160", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/schedule/blocked-times HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:12,516", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/schedule/blocked-times/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:12,646", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/schedule/reserved-times HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:12,951", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/schedule/reserved-times HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:13,235", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/schedule/reserved-times/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:13,378", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/schedule/workload HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:13,568", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/additional-fields?scope=test&service_id=1&active_only=false HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:13,702", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/additional-fields/1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:13,855", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/additional-field-responses?booking_id=1&client_id=1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:14,049", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/invoices HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:14,207", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/invoices/1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:14,538", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/invoices/1/status HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:14,673", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/promotions HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:15,299", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/promotions HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:15,589", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/promotions/3 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:15,730", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/tax-rates HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:16,038", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/tax-rates HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:16,310", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/tax-rates/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:16,445", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/payment-processor/configs HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:16,530", "level": "INFO", "message": "Processing outbox event 143 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:17,188", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:17,190", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:17,400", "level": "ERROR", "message": "Failed to process outbox event 143 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:17,403", "level": "INFO", "message": "Processing outbox event 146 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:18,076", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:18,082", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:18,283", "level": "ERROR", "message": "Failed to process outbox event 146 (attempt 4): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:18,467", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/payment-processor/configs HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:18,800", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/payment-processor/configs/1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:18,989", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/series HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:19,267", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/series HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:19,426", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/series/23 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:19,590", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/webhooks HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:19,934", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/webhooks HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:20,266", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/webhooks/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:20,399", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/webhooks/events HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:20,558", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/calendar-notes?provider_id=1&date_from=2026-07-13&date_to=2026-07-13 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:20,895", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/calendar-notes HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:20,983", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/calendar-notes/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,137", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/plugin-states HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,294", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/plugin-states HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,424", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/gdpr-consents HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,576", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/gdpr-consents/77 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,760", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/management-reviews?page=1&page_size=25 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:21,896", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/management-reviews/1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:22,051", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/business-profile HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:22,433", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/business-profile HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:22,563", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/auth/token HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:22,700", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/availability?service_id=1&provider_id=1&date=2026-07-13T10:00:00Z HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:22,853", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/bootstrap HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:23,309", "level": "INFO", "message": "Processing outbox event 143 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,025", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,027", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,220", "level": "ERROR", "message": "Failed to process outbox event 143 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,222", "level": "INFO", "message": "Processing outbox event 146 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,931", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:24,934", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:25,164", "level": "ERROR", "message": "Failed to process outbox event 146 (attempt 5): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:25,167", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:25,507", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/waitlist HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:25,621", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/waitlist?service_id=1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:25,825", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/search-availability HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:25,972", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/ui-config HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,093", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/ui-config/admin HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,221", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/additional-fields?scope=test&service_id=1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,349", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/services/24/intake-form HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,501", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/services HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,662", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/quote HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,804", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/payment-processor/config HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:26,931", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/payment-methods HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:27,074", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/promotions/TEST/validate?subtotal=0 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:27,877", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/invoices HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:28,026", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/invoices/22 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:28,321", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/invoices/22/tips HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:29,299", "level": "INFO", "message": "message='Request to Stripe api' method=get url=https://api.stripe.com/v1/checkout/sessions/postman-test-id", "logger": "stripe"}
+{"timestamp": "2026-07-13 20:32:30,300", "level": "INFO", "message": "message='Stripe API response' path=https://api.stripe.com/v1/checkout/sessions/postman-test-id response_code=404", "logger": "stripe"}
+{"timestamp": "2026-07-13 20:32:30,301", "level": "INFO", "message": "error_code=resource_missing error_message='No such checkout.session: postman-test-id' error_param=None error_type=invalid_request_error message='Stripe v1 API error received'", "logger": "stripe"}
+{"timestamp": "2026-07-13 20:32:30,303", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/checkout/commit HTTP/1.1\" 400", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:30,655", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/clients HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:30,792", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/clients/identify?phone=test&email=test HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:31,384", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/clients/register HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:31,824", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/clients/login HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:31,978", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/clients/me HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:32,300", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/public/clients/me HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:32,457", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/clients/password-reset/request HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:32,595", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/clients/terms HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:32,740", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/providers HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:32,883", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/categories HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:33,023", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/locations HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:33,200", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/timeline/schedule/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:33,349", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/timeline/slots?service_id=1&provider_id=1&date_from=2026-07-13&date_to=2026-07-13 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:33,683", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/timeline/first-available-day?service_id=1&provider_id=1 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:33,966", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/gdpr-consent HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:34,104", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/public/business-profile HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:34,326", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/forms/service HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:34,466", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/forms/provider HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:34,609", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/forms/booking HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:34,806", "level": "INFO", "message": "message='Request to Stripe api' method=post url=https://api.stripe.com/v1/checkout/sessions", "logger": "stripe"}
+{"timestamp": "2026-07-13 20:32:35,239", "level": "INFO", "message": "message='Stripe API response' path=https://api.stripe.com/v1/checkout/sessions response_code=200", "logger": "stripe"}
+{"timestamp": "2026-07-13 20:32:35,300", "level": "INFO", "message": "Stripe checkout session created: cs_test_a175P4roVvI6DIKRWC2gTf8BZJ8g5H8pBwieKjjWaZHjw5jvimcWHDZxTX for Booking 1", "logger": "app.services.stripe_service"}
+{"timestamp": "2026-07-13 20:32:35,303", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/v1/checkout/deposit-session?booking_id=1&amount_cents=100&success_url=https://example.com/callback&cancel_url=https://example.com/callback HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:35,456", "level": "WARNING", "message": "STRIPE_WEBHOOK_SECRET not configured. Signature verification bypassed!", "logger": "app.api.routers.stripe_webhooks"}
+{"timestamp": "2026-07-13 20:32:35,457", "level": "ERROR", "message": "Invalid payload: Expecting value: line 1 column 1 (char 0)", "logger": "app.api.routers.stripe_webhooks"}
+{"timestamp": "2026-07-13 20:32:35,458", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/v1/webhooks/stripe HTTP/1.1\" 400", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:35,754", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/v1/devices/register HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:35,891", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /health HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:36,018", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /ready HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:36,160", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /version HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:36,485", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/services/24 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:36,760", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/providers/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:37,102", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/categories/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:37,284", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/relationships/location/12/category/12 HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:37,631", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/booking-forms HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:37,790", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/booking-forms/postman-configurable-form-1783938757/resolve HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:38,144", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/booking-forms/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:38,426", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/booking-forms/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:38,745", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/booking-forms/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:38,980", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/booking-forms/postman-configurable-form-1783938757/resolve HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:39,259", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/booking-forms/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:39,584", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/relationships/service/24/provider/26 HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:39,894", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/relationships/provider/26/service/create-and-connect HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:40,081", "level": "INFO", "message": "127.0.0.1:60958 - \"GET /api/admin/booking-forms/4/preview HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:41,157", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:41,476", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/75/confirm HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:41,849", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/75/complete HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:42,656", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:42,997", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/76/confirm HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:43,422", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/76/noshow HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:44,216", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:45,366", "level": "INFO", "message": "Processing outbox event 147 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,086", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,092", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,302", "level": "ERROR", "message": "Failed to process outbox event 147 (attempt 1): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,307", "level": "INFO", "message": "Processing outbox event 148 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,713", "level": "INFO", "message": "Successfully processed outbox event 148", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,715", "level": "INFO", "message": "Processing outbox event 149 (booking.completed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,912", "level": "INFO", "message": "Successfully processed outbox event 149", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:46,913", "level": "INFO", "message": "Processing outbox event 150 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:47,705", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:47,708", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:47,916", "level": "ERROR", "message": "Failed to process outbox event 150 (attempt 1): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:47,919", "level": "INFO", "message": "Processing outbox event 151 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,086", "level": "INFO", "message": "Successfully processed outbox event 151", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,087", "level": "INFO", "message": "Processing outbox event 152 (booking.no_show)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,271", "level": "INFO", "message": "Successfully processed outbox event 152", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,274", "level": "INFO", "message": "Processing outbox event 153 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,915", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:48,916", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:49,110", "level": "ERROR", "message": "Failed to process outbox event 153 (attempt 1): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:49,113", "level": "INFO", "message": "Processing outbox event 154 (booking.confirmed)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:49,276", "level": "INFO", "message": "Successfully processed outbox event 154", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:49,278", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/77/confirm HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:50,095", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/bookings/77/reschedule HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:50,433", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/plugin-states HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:50,698", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/plugin-states/test-plugin HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:51,054", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/bookings/77 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:51,359", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/admin/additional-fields HTTP/1.1\" 201", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:51,679", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/additional-field-responses HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:52,010", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/management-reviews HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:52,308", "level": "INFO", "message": "127.0.0.1:60958 - \"PUT /api/admin/management-reviews/11/resolve HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:52,664", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/holds HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:53,951", "level": "INFO", "message": "127.0.0.1:60958 - \"POST /api/public/holds/16/confirm HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:54,088", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/services/24/categories/12 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:54,408", "level": "INFO", "message": "Processing outbox event 147 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:55,198", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:55,199", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:55,414", "level": "ERROR", "message": "Failed to process outbox event 147 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:55,417", "level": "INFO", "message": "Processing outbox event 150 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:56,157", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:56,160", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:56,330", "level": "ERROR", "message": "Failed to process outbox event 150 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:56,333", "level": "INFO", "message": "Processing outbox event 153 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,005", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,008", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,179", "level": "ERROR", "message": "Failed to process outbox event 153 (attempt 2): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,182", "level": "INFO", "message": "Processing outbox event 155 (booking.rescheduled)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,339", "level": "INFO", "message": "Successfully processed outbox event 155", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:32:57,340", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/services/24/providers/26 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:57,662", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/locations/12/providers/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:57,994", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/locations/12/services/24 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:58,313", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/notification-templates/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:58,577", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/packages/steps/2 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:58,940", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/reminder-rules/19 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:59,281", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/additional-fields/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:59,605", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/add-ons/8 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:32:59,892", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/schedule/blocked-times/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:00,176", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/calendar-notes/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:00,489", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/categories/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:00,774", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/locations/12 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:01,031", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/packages/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:01,323", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/products/4 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:01,622", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/promotions/3 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:01,932", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/providers/26 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:02,265", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/schedule/reserved-times/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:02,341", "level": "INFO", "message": "Processing outbox event 147 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:03,202", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:03,204", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:03,414", "level": "ERROR", "message": "Failed to process outbox event 147 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:03,418", "level": "INFO", "message": "Processing outbox event 150 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:04,165", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:04,166", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:04,356", "level": "ERROR", "message": "Failed to process outbox event 150 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:04,359", "level": "INFO", "message": "Processing outbox event 153 (booking.created)...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:05,028", "level": "INFO", "message": "Dispatching webhook event booking.created to test", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:05,030", "level": "ERROR", "message": "Webhook dispatch to test failed: Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:05,239", "level": "ERROR", "message": "Failed to process outbox event 153 (attempt 3): Request URL is missing an 'http://' or 'https://' protocol.", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-13 20:33:05,420", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/resources/9 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:05,720", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/services/24 HTTP/1.1\" 200", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:05,979", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/schedule/special-days/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:06,268", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/tax-rates/12 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:06,551", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/webhooks/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}
+{"timestamp": "2026-07-13 20:33:06,862", "level": "INFO", "message": "127.0.0.1:60958 - \"DELETE /api/admin/schedule/workdays/8 HTTP/1.1\" 204", "logger": "uvicorn.access"}

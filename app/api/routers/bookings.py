@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant
+from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
@@ -139,7 +139,7 @@ def create_booking(
 def create_public_booking(
     booking_in: BookingCreate,
     db: Session = Depends(get_db),
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Create a new booking via the public widget.
 

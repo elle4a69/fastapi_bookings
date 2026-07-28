@@ -1,0 +1,51 @@
+{"timestamp": "2026-07-09 12:00:06,354", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:00:06,381", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,397", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,412", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,426", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,441", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,458", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,473", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,489", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,502", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,516", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,530", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,545", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,561", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,575", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,589", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,599", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,613", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,630", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,641", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,652", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,664", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,675", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,689", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,704", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,717", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,732", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,747", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,759", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,773", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,789", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,801", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,817", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,830", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,845", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,856", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,867", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,876", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,890", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,903", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,919", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,935", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,952", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,966", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,982", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:06,999", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:07,012", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:07,026", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:07,040", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:07,068", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/add-ons \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:00:07,072", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

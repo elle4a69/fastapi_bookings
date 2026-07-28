@@ -174,6 +174,8 @@ def update_special_day(
     if special_in.location_id is not None and not get_location_or_none(db, special_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
     for field, value in special_in.dict(exclude_unset=True).items():
+        if field == "date" and value is None:
+            continue
         setattr(day, field, value)
     db.commit()
     db.refresh(day)

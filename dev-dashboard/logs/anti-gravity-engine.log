@@ -1,0 +1,561 @@
+
+--- Started 2026-07-20T04:51:29.784Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Traceback (most recent call last):
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 3, in <module>
+    from anti_gravity_system.storage.database import DatabaseManager
+ModuleNotFoundError: No module named 'anti_gravity_system'
+
+--- Started 2026-07-20T04:51:41.456Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Traceback (most recent call last):
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 3, in <module>
+    from anti_gravity_system.storage.database import DatabaseManager
+ModuleNotFoundError: No module named 'anti_gravity_system'
+
+--- Started 2026-07-20T04:51:42.943Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Traceback (most recent call last):
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 3, in <module>
+    from anti_gravity_system.storage.database import DatabaseManager
+ModuleNotFoundError: No module named 'anti_gravity_system'
+
+--- Started 2026-07-20T04:55:03.650Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_fe_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_fe_01.json
+[task_fe_01] Completed worker execution loop successfully.
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T04:55:35.406Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T04:56:21.497Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_db_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_db_01.json
+[task_db_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T04:57:12.764Z | cmd="python anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_fe_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_fe_01.json
+[task_fe_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:05:04.483Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_db_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_db_01.json
+[task_db_01] Completed worker execution loop successfully.
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T05:05:17.956Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_db_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_db_01.json
+[task_db_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:05:49.718Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_db_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_db_01.json
+[task_db_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:07:08.949Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_fe_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_fe_01.json
+[task_fe_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:14:51.649Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_db_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_db_01.json
+[task_db_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:15:33.228Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[task_fe_01] Artifact successfully created at: E:\Projects\King of Kings\anti_gravity_system\artifacts\artifact_task_task_fe_01.json
+[task_fe_01] Completed worker execution loop successfully.
+
+--- Started 2026-07-20T05:23:21.690Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T05:23:53.211Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+[STATUS] Running: 1 | Pending: 2 | Completed: 1 | Failed: 0  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T06:36:07.915Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+[STATUS] Running: 1 | Pending: 2 | Completed: 1 | Failed: 0  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T06:37:12.931Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T06:39:22.153Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+[STATUS] Running: 1 | Pending: 2 | Completed: 1 | Failed: 0  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-20T07:17:35.403Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Cleared existing SQLite database for a fresh demo run.
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0[STATUS] Running: 2 | Pending: 2 | Completed: 0 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_02' assigned to worker 'default'
+  [OK] Task 'task_db_01' finished with status 'success': Completed task 'task_db_01': Initialize SQLite Schema Tables...
+  [OK] Task 'task_fe_01' finished with status 'success': Completed task 'task_fe_01': Build Console Dashboard Grid UI...
+[STATUS] Running: 1 | Pending: 1 | Completed: 2 | Failed: 0
+[ORCHESTRATION] Found 1 new runnable tasks. Dispatching...
+  --> Submitting task 'task_fe_02' assigned to worker 'default'
+  [OK] Task 'task_db_02' finished with status 'success': Completed task 'task_db_02': Verify Index Performance Constraints...
+[STATUS] Running: 1 | Pending: 0 | Completed: 3 | Failed: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 4
+Completed: 4 | Failed: 0
+============================================================
+
+--- Started 2026-07-22T20:55:42.378Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T21:04:29.671Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-22T21:04:31.049Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:02:08.357Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:02:31.456Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:02:39.712Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:03:20.859Z | cmd="python -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+'python' is not recognized as an internal or external command,
+operable program or batch file.
+
+--- Started 2026-07-25T13:09:25.987Z | cmd="py -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Could not remove old database: [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Projects\\King of Kings\\anti_gravity_system\\storage\\anti_gravity.db'
+Created project 'proj_ag_001'
+Created sub-projects: 'sub_db_001', 'sub_fe_001'
+Database successfully seeded with task dependency tree:
+  task_db_01 [Base Database Task]
+  +-- task_db_02 (depends on task_db_01)
+  task_fe_01 [Base Frontend Task]
+  +-- task_fe_02 (depends on task_db_02, task_fe_01)
+============================================================
+Starting Orchestrator Loop...
+============================================================
+[ENGINE] Anti-Gravity Master Manager Engine Started
+Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db
+============================================================
+
+[ORCHESTRATION] Found 2 new runnable tasks. Dispatching...
+  --> Submitting task 'task_db_01' assigned to worker 'default'
+  --> Submitting task 'task_fe_01' assigned to worker 'default'
+[STATUS] Running: 2 | Pending: 2 | Completed: 66 | Unresolved: 0
+============================================================
+[FINISHED] Execution cycle finished.
+Total tasks: 70
+Completed: 66 | Unresolved: 4
+============================================================

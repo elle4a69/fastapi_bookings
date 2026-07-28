@@ -1,0 +1,17 @@
+{"timestamp": "2026-07-09 11:56:29,797", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:56:29,819", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,828", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,835", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,841", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,847", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,854", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,863", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/bookings/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,873", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,885", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,897", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,909", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,922", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,935", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,954", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:56:29,956", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:56:30,348", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 1.02s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

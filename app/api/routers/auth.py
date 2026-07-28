@@ -121,4 +121,14 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"ok": True, "data": user}
+    return {
+        "ok": True,
+        "data": {
+            "id": user.id,
+            "company": tenant.subdomain,
+            "login": user.login,
+            "role": user.role,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+        },
+    }

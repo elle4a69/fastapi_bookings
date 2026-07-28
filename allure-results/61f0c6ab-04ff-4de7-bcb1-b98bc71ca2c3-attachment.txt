@@ -1,0 +1,12 @@
+{"timestamp": "2026-07-09 11:58:45,737", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:45,751", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,760", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,770", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,780", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,788", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,797", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,806", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/forms/service \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,819", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/forms/service \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,840", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/forms/service \"HTTP/1.1 200 OK\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:45,843", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:48,811", "level": "WARNING", "message": "Transient error HTTPConnectionPool(host='34.129.147.243', port=4318): Max retries exceeded with url: / (Caused by NewConnectionError(\"HTTPConnection(host='34.129.147.243', port=4318): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it\")) encountered while exporting span batch, retrying in 0.84s.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

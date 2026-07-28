@@ -1,0 +1,37 @@
+{"timestamp": "2026-07-09 11:57:00,028", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:57:00,085", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,095", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,106", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,117", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,126", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,136", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,147", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,155", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,165", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null%2Cnull/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,176", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/AAA/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,187", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/null/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,195", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/false/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,207", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/2.5890419884777833e-42/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,218", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,227", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,239", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,251", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,262", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,274", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,286", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,300", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,316", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,332", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,346", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,362", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,378", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,397", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,411", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,431", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,445", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,460", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,476", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,493", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/0/reschedule \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,532", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/admin/bookings/1/reschedule \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:57:00,536", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:57:04,744", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

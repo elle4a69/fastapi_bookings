@@ -7,14 +7,28 @@ Schematizing forms allows changes to be rolled out centrally without
 hard‑coding field definitions in the front‑end.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel
 
 from fastapi import APIRouter
+
+class FormFieldSchema(BaseModel):
+    name: str
+    type: str
+    label: str
+    required: Optional[bool] = None
+    default: Optional[Any] = None
+    items: Optional[Dict[str, Any]] = None
+
+
+class FormSchemaResponse(BaseModel):
+    fields: List[FormFieldSchema]
+
 
 router = APIRouter(prefix="/api/forms", tags=["forms"])
 
 
-@router.get("/service", response_model=Any)
+@router.get("/service", response_model=FormSchemaResponse)
 def get_service_form() -> Dict[str, Any]:
     """Return the form schema for creating/updating a service."""
     schema = {
@@ -29,7 +43,7 @@ def get_service_form() -> Dict[str, Any]:
     return schema
 
 
-@router.get("/provider", response_model=Any)
+@router.get("/provider", response_model=FormSchemaResponse)
 def get_provider_form() -> Dict[str, Any]:
     """Return the form schema for creating/updating a provider."""
     schema = {
@@ -43,7 +57,7 @@ def get_provider_form() -> Dict[str, Any]:
     return schema
 
 
-@router.get("/booking", response_model=Any)
+@router.get("/booking", response_model=FormSchemaResponse)
 def get_booking_form() -> Dict[str, Any]:
     """Return the form schema for creating a booking."""
     schema = {

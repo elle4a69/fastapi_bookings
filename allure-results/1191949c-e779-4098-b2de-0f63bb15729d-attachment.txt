@@ -1,0 +1,39 @@
+{"timestamp": "2026-07-09 11:42:33,954", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:42:33,978", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:33,986", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:33,993", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,002", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,009", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,016", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,022", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,030", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/holds/0/confirm \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,041", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/null%2Cnull/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,052", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/AAA/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,061", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/null/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,070", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/false/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,079", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/2.5890419884777833e-42/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,088", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,098", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,107", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,117", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,128", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,139", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,153", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,163", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,174", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,186", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,196", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,205", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,216", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,225", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,234", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,242", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,251", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,261", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,275", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,285", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/0/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,310", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/1/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,400", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/172/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,460", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/holds/-36415/confirm \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:42:34,464", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:42:37,729", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

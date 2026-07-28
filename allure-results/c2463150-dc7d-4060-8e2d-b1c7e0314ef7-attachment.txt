@@ -1,0 +1,16 @@
+{"timestamp": "2026-07-09 12:06:29,319", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 12:06:29,330", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,337", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,343", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,349", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,355", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,363", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,370", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,380", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/null%2Cnull \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,388", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/AAA \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,397", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/null \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,408", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/false \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,417", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/2.5890419884777833e-42 \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,426", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/0 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,447", "level": "INFO", "message": "HTTP Request: GET http://testserver/api/public/timeline/schedule/1 \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 12:06:29,450", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}

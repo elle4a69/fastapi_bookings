@@ -1,0 +1,61 @@
+{"timestamp": "2026-07-09 11:58:20,559", "level": "INFO", "message": "Outbox worker background loop starting...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:20,581", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,588", "level": "INFO", "message": "HTTP Request: TRACE http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,594", "level": "INFO", "message": "HTTP Request: QUERY http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,601", "level": "INFO", "message": "HTTP Request: PUT http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,608", "level": "INFO", "message": "HTTP Request: PATCH http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,614", "level": "INFO", "message": "HTTP Request: OPTIONS http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,623", "level": "INFO", "message": "HTTP Request: DELETE http://testserver/api/public/waitlist \"HTTP/1.1 405 Method Not Allowed\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,635", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,644", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,655", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,666", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,673", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,680", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,690", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,698", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,709", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,723", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,733", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,743", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,753", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,763", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,777", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,787", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,798", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,807", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,819", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,829", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,840", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,854", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,866", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,873", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,883", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,894", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,908", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,922", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,932", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,940", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,950", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,959", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,968", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,980", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:20,992", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,002", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,012", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,023", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,035", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 422 Unprocessable Entity\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,050", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,062", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,071", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,081", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,091", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,107", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,122", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,136", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,148", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,159", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,173", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,200", "level": "INFO", "message": "HTTP Request: POST http://testserver/api/public/waitlist \"HTTP/1.1 404 Not Found\"", "logger": "httpx"}
+{"timestamp": "2026-07-09 11:58:21,204", "level": "INFO", "message": "Stopping outbox worker background loop...", "logger": "app.services.outbox_worker"}
+{"timestamp": "2026-07-09 11:58:25,144", "level": "ERROR", "message": "Failed to export span batch due to timeout, max retries or shutdown.", "logger": "opentelemetry.exporter.otlp.proto.http.trace_exporter"}

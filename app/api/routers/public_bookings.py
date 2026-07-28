@@ -57,6 +57,12 @@ def create_public_booking(
     if not client_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
+    if client_obj.management_approval_required:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Client requires management approval before booking.",
+        )
+
     # 4. Verify location (if provided) belongs to active tenant
     if booking_in.location_id:
         location_obj = db.query(Location).filter(

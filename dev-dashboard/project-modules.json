@@ -1,0 +1,68 @@
+{
+  "modules": [
+    {
+      "name": "fastapi-bookings-backend",
+      "label": "FastAPI Bookings Backend",
+      "description": "Core SQLite REST API service handling customer databases, reservation records, forms, and session scheduling.",
+      "working_dir": "F:\\Projects\\fastapi_bookings",
+      "command": "cmd.exe /c start.bat",
+      "port": 8000,
+      "health_url": "http://127.0.0.1:8000/health"
+    },
+    {
+      "name": "bookings-mapbox-frontend",
+      "label": "Bookings UI (Mapbox)",
+      "description": "Interactive map dashboard built with React and Mapbox-GL for booking visualization and location management.",
+      "working_dir": "F:\\Projects\\fastapi_bookings\\mapbox",
+      "command": "npm run dev",
+      "port": 5180,
+      "health_url": "http://localhost:5180/"
+    },
+    {
+      "name": "bookings-ai-agent",
+      "label": "Bookings AI Agent Backend",
+      "description": "FastAPI microservice executing autonomous chat responder pipelines, agent bootcamps, and SMS simulation flows.",
+      "working_dir": "F:\\Projects\\bookings_ai_agent",
+      "command": "cmd.exe /c start.bat",
+      "port": 5500,
+      "health_url": "http://localhost:5500/docs"
+    },
+    {
+      "name": "bookings-ai-agent-frontend",
+      "label": "Bookings AI Console UI",
+      "description": "React-based dashboard UI for onboarding interviews, message drafts approvals, and simulation boot camps.",
+      "working_dir": "F:\\Projects\\bookings_ai_agent\\frontend",
+      "command": "npm run dev",
+      "port": 5173,
+      "health_url": "http://localhost:5173/"
+    },
+    {
+      "name": "chatwoot-support-desk",
+      "label": "Chatwoot Support Desk",
+      "description": "Omnichannel customer engagement stack and webhook router for managing booking chat threads.",
+      "working_dir": "E:\\Projects\\chatwoot-source",
+      "command": "pnpm dev",
+      "port": 3000,
+      "health_url": "http://localhost:3000/",
+      "cloud_url": "https://chatwoot-web-208926050296.us-central1.run.app"
+    },
+    {
+      "name": "signoz-apm",
+      "label": "SigNoz APM",
+      "description": "Application Performance Monitoring platform and OpenTelemetry collector UI for tracking booking flow telemetry.",
+      "working_dir": "F:\\Projects\\fastapi_bookings\\signoz\\frontend",
+      "command": "pnpm dev",
+      "port": 3301,
+      "health_url": "http://localhost:3301/"
+    },
+    {
+      "name": "anti-gravity-engine",
+      "label": "Anti-Gravity Engine",
+      "description": "Orchestration core executing Multi-Agent projects and tasks based on SQLite dependency chains.",
+      "working_dir": "E:\\Projects\\King of Kings",
+      "command": "py -u anti_gravity_system/run_demo.py",
+      "port": null,
+      "health_url": null
+    }
+  ]
+}
