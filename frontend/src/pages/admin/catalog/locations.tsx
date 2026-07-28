@@ -74,6 +74,7 @@ interface Provider {
   image?: string;
   color?: string;
   weekly_schedule?: Record<string, DaySchedule>;
+  service_ids?: string[];
 }
 
 const DAYS_OF_WEEK = [
@@ -399,12 +400,12 @@ export default function LocationsPage() {
   const handleAccordionChange = (value: string) => {
     if (value) {
       // Dynamic Left Pane Mode Switching depending on Accordion Tab
-      if (value === "scheduling") {
+      if (value === "scheduling" || value === "services") {
         setLeftPaneMode("providers");
         if (providers.length > 0 && !selectedProviderId) {
           setSelectedProviderId(providers[0].id);
         }
-      } else if (["addons", "resources", "products", "packages"].includes(value)) {
+      } else if (["categories", "addons", "resources", "products", "packages"].includes(value)) {
         setLeftPaneMode("services");
         if (services.length > 0 && !selectedServiceId) {
           setSelectedServiceId(String(services[0].id));
@@ -466,69 +467,7 @@ export default function LocationsPage() {
     handleSaveProviderSchedule(selectedProviderId, updatedSchedule);
   };
 
-  // Service relationships updates
-  const handleSaveServiceAddOns = async (serviceId: string, addonIds: string[]) => {
-    setIsUpdatingRelation(true);
-    try {
-      const service = services.find(s => String(s.id) === String(serviceId));
-      if (!service) return;
-      
-      const payload = {
-        ...service,
-        addon_ids: addonIds.map(Number)
-      };
-      
-      await apiClient.put(`/api/admin/services/${serviceId}`, payload);
-      setServices(services.map(s => String(s.id) === String(serviceId) ? { ...s, addon_ids: addonIds.map(Number) } : s));
-      toast.success("Service add-ons updated successfully.");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update add-ons.");
-    } finally {
-      setIsUpdatingRelation(false);
-    }
-  };
 
-  const handleSaveServiceProducts = async (serviceId: string, productIds: string[]) => {
-    setIsUpdatingRelation(true);
-    try {
-      const service = services.find(s => String(s.id) === String(serviceId));
-      if (!service) return;
-      
-      const payload = {
-        ...service,
-        product_ids: productIds.map(Number)
-      };
-      
-      await apiClient.put(`/api/admin/services/${serviceId}`, payload);
-      setServices(services.map(s => String(s.id) === String(serviceId) ? { ...s, product_ids: productIds.map(Number) } : s));
-      toast.success("Service products updated successfully.");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update products.");
-    } finally {
-      setIsUpdatingRelation(false);
-    }
-  };
-
-  const handleSaveServiceResources = async (serviceId: string, requirements: any[]) => {
-    setIsUpdatingRelation(true);
-    try {
-      const service = services.find(s => String(s.id) === String(serviceId));
-      if (!service) return;
-      
-      const payload = {
-        ...service,
-        requirements: requirements
-      };
-      
-      await apiClient.put(`/api/admin/services/${serviceId}`, payload);
-      setServices(services.map(s => String(s.id) === String(serviceId) ? { ...s, requirements: requirements } : s));
-      toast.success("Service resource requirements updated successfully.");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update resource requirements.");
-    } finally {
-      setIsUpdatingRelation(false);
-    }
-  };
 
   const activeProvider = providers.find(p => String(p.id) === String(selectedProviderId));
   const activeService = services.find(s => String(s.id) === String(selectedServiceId));
@@ -1061,25 +1000,49 @@ export default function LocationsPage() {
                       Provider Services
                     </AccordionTrigger>
                     <AccordionContent className="pt-2 pb-6">
-                      <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {services.length > 0 ? services.map(service => (
-                          <div key={service.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
-                            <Label htmlFor={`service-${service.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
-                              <Box className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <span className="text-sm">{service.name}</span>
-                            </Label>
-                            <Checkbox 
-                              id={`service-${service.id}`} 
-                              disabled={!isEditing}
-                              checked={(formData.service_ids || []).includes(String(service.id))}
-                              onCheckedChange={(checked) => handleCheckboxChange('service_ids', service.id, checked as boolean)}
-                              className="h-5 w-5 rounded-md"
-                            />
-                          </div>
-                        )) : (
-                          <p className="text-sm text-muted-foreground italic p-4">No services found.</p>
-                        )}
-                      </div>
+                      {activeProvider ? (
+                        <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {services.length > 0 ? services.map(service => (
+                            <div key={service.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
+                              <Label htmlFor={`service-${service.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
+                                <Box className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="text-sm">{service.name}</span>
+                              </Label>
+                              <Checkbox 
+                                id={`service-${service.id}`} 
+                                checked={(activeProvider.service_ids || []).includes(String(service.id))}
+                                onCheckedChange={async (checked) => {
+                                  const currentServices = activeProvider.service_ids || [];
+                                  const updatedList = checked 
+                                    ? [...currentServices, String(service.id)] 
+                                    : currentServices.filter(id => String(id) !== String(service.id));
+                                  
+                                  setProviders(providers.map(p => p.id === activeProvider.id ? { ...p, service_ids: updatedList } : p));
+                                  
+                                  try {
+                                    await apiClient.put(`/api/admin/providers/${activeProvider.id}`, {
+                                      name: activeProvider.name,
+                                      active: activeProvider.active,
+                                      service_ids: updatedList
+                                    });
+                                    toast.success("Provider services updated");
+                                  } catch (error: any) {
+                                    toast.error(error.message || "Failed to update provider services");
+                                    setProviders(providers.map(p => p.id === activeProvider.id ? { ...p, service_ids: currentServices } : p));
+                                  }
+                                }}
+                                className="h-5 w-5 rounded-md"
+                              />
+                            </div>
+                          )) : (
+                            <p className="text-sm text-muted-foreground italic p-4">No services found.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center border border-dashed rounded-lg">
+                          <p className="text-sm text-muted-foreground">Please select a provider from the left pane to edit their services.</p>
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
 
@@ -1089,25 +1052,49 @@ export default function LocationsPage() {
                       Service Categories
                     </AccordionTrigger>
                     <AccordionContent className="pt-2 pb-6">
-                      <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {categories.length > 0 ? categories.map(category => (
-                          <div key={category.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
-                            <Label htmlFor={`category-${category.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
-                              <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <span className="text-sm">{category.name}</span>
-                            </Label>
-                            <Checkbox 
-                              id={`category-${category.id}`} 
-                              disabled={!isEditing}
-                              checked={(formData.category_ids || []).includes(String(category.id))}
-                              onCheckedChange={(checked) => handleCheckboxChange('category_ids', category.id, checked as boolean)}
-                              className="h-5 w-5 rounded-md"
-                            />
-                          </div>
-                        )) : (
-                          <p className="text-sm text-muted-foreground italic p-4">No categories found.</p>
-                        )}
-                      </div>
+                      {activeService ? (
+                        <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {categories.length > 0 ? categories.map(category => (
+                            <div key={category.id} className="flex items-center justify-between p-3.5 hover:bg-muted/10 transition-colors">
+                              <Label htmlFor={`category-${category.id}`} className="flex items-center gap-3 cursor-pointer font-medium flex-1">
+                                <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span className="text-sm">{category.name}</span>
+                              </Label>
+                              <Checkbox 
+                                id={`category-${category.id}`} 
+                                checked={(activeService.category_ids || []).includes(String(category.id))}
+                                onCheckedChange={async (checked) => {
+                                  const currentCategories = activeService.category_ids || [];
+                                  const updatedList = checked 
+                                    ? [...currentCategories, String(category.id)] 
+                                    : currentCategories.filter((id: string) => String(id) !== String(category.id));
+                                  
+                                  setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, category_ids: updatedList } : s));
+                                  
+                                  try {
+                                    await apiClient.put(`/api/admin/services/${activeService.id}`, {
+                                      name: activeService.name,
+                                      duration: activeService.duration,
+                                      category_ids: updatedList
+                                    });
+                                    toast.success("Service categories updated");
+                                  } catch (error: any) {
+                                    toast.error(error.message || "Failed to update service categories");
+                                    setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, category_ids: currentCategories } : s));
+                                  }
+                                }}
+                                className="h-5 w-5 rounded-md"
+                              />
+                            </div>
+                          )) : (
+                            <p className="text-sm text-muted-foreground italic p-4">No categories found.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center border border-dashed rounded-lg">
+                          <p className="text-sm text-muted-foreground">Please select a service from the left pane to edit its categories.</p>
+                        </div>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
 
@@ -1121,15 +1108,6 @@ export default function LocationsPage() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b pb-2">
                             <span className="font-semibold text-sm">Add-ons for: {activeService.name}</span>
-                            <Button 
-                              size="xs" 
-                              onClick={() => handleSaveServiceAddOns(activeService.id, activeService.addon_ids || [])} 
-                              disabled={isUpdatingRelation}
-                              className="text-xs min-h-[30px]"
-                            >
-                              {isUpdatingRelation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                              Update Add-ons
-                            </Button>
                           </div>
                           
                           <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
@@ -1142,12 +1120,25 @@ export default function LocationsPage() {
                                 <Checkbox 
                                   id={`addons-rel-${addon.id}`} 
                                   checked={(activeService.addon_ids || []).includes(Number(addon.id))}
-                                  onCheckedChange={(checked) => {
+                                  onCheckedChange={async (checked) => {
                                     const currentAddons = activeService.addon_ids || [];
                                     const updated = checked 
                                       ? [...currentAddons, Number(addon.id)] 
                                       : currentAddons.filter((id: number) => id !== Number(addon.id));
+                                    
                                     setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, addon_ids: updated } : s));
+                                    
+                                    try {
+                                      await apiClient.put(`/api/admin/services/${activeService.id}`, {
+                                        name: activeService.name,
+                                        duration: activeService.duration,
+                                        addon_ids: updated
+                                      });
+                                      toast.success("Service add-ons updated");
+                                    } catch (error: any) {
+                                      toast.error(error.message || "Failed to update service add-ons");
+                                      setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, addon_ids: currentAddons } : s));
+                                    }
                                   }}
                                   className="h-5 w-5 rounded-md"
                                 />
@@ -1175,15 +1166,6 @@ export default function LocationsPage() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b pb-2">
                             <span className="font-semibold text-sm">Resource Requirements: {activeService.name}</span>
-                            <Button 
-                              size="xs" 
-                              onClick={() => handleSaveServiceResources(activeService.id, activeService.requirements || [])} 
-                              disabled={isUpdatingRelation}
-                              className="text-xs min-h-[30px]"
-                            >
-                              {isUpdatingRelation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                              Update Requirements
-                            </Button>
                           </div>
                           
                           <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
@@ -1198,12 +1180,25 @@ export default function LocationsPage() {
                                     <Checkbox 
                                       id={`resource-req-${type}`}
                                       checked={isChecked}
-                                      onCheckedChange={(checked) => {
+                                      onCheckedChange={async (checked) => {
                                         const currentReqs = activeService.requirements || [];
                                         const updated = checked 
                                           ? [...currentReqs, { resource_type: type, quantity: 1 }]
                                           : currentReqs.filter((req: any) => req.resource_type !== type);
+                                        
                                         setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, requirements: updated } : s));
+                                        
+                                        try {
+                                          await apiClient.put(`/api/admin/services/${activeService.id}`, {
+                                            name: activeService.name,
+                                            duration: activeService.duration,
+                                            requirements: updated
+                                          });
+                                          toast.success("Service resource requirements updated");
+                                        } catch (error: any) {
+                                          toast.error(error.message || "Failed to update resource requirements");
+                                          setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, requirements: currentReqs } : s));
+                                        }
                                       }}
                                       className="h-5 w-5 rounded-md"
                                     />
@@ -1217,11 +1212,24 @@ export default function LocationsPage() {
                                         type="number"
                                         min="1"
                                         value={quantity}
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                           const val = parseInt(e.target.value) || 1;
                                           const currentReqs = activeService.requirements || [];
                                           const updated = currentReqs.map((req: any) => req.resource_type === type ? { ...req, quantity: val } : req);
+                                          
                                           setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, requirements: updated } : s));
+                                          
+                                          try {
+                                            await apiClient.put(`/api/admin/services/${activeService.id}`, {
+                                              name: activeService.name,
+                                              duration: activeService.duration,
+                                              requirements: updated
+                                            });
+                                            toast.success("Service resource requirements updated");
+                                          } catch (error: any) {
+                                            toast.error(error.message || "Failed to update resource requirements");
+                                            setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, requirements: currentReqs } : s));
+                                          }
                                         }}
                                         className="w-[60px] h-[30px] text-center text-xs p-1"
                                       />
@@ -1253,15 +1261,6 @@ export default function LocationsPage() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-between border-b pb-2">
                             <span className="font-semibold text-sm">Products for: {activeService.name}</span>
-                            <Button 
-                              size="xs" 
-                              onClick={() => handleSaveServiceProducts(activeService.id, activeService.product_ids || [])} 
-                              disabled={isUpdatingRelation}
-                              className="text-xs min-h-[30px]"
-                            >
-                              {isUpdatingRelation ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                              Update Products
-                            </Button>
                           </div>
                           
                           <div className="border rounded-lg overflow-hidden divide-y divide-border/40">
@@ -1274,12 +1273,25 @@ export default function LocationsPage() {
                                 <Checkbox 
                                   id={`products-rel-${prod.id}`} 
                                   checked={(activeService.product_ids || []).includes(Number(prod.id))}
-                                  onCheckedChange={(checked) => {
+                                  onCheckedChange={async (checked) => {
                                     const currentProds = activeService.product_ids || [];
                                     const updated = checked 
                                       ? [...currentProds, Number(prod.id)] 
                                       : currentProds.filter((id: number) => id !== Number(prod.id));
+                                    
                                     setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, product_ids: updated } : s));
+                                    
+                                    try {
+                                      await apiClient.put(`/api/admin/services/${activeService.id}`, {
+                                        name: activeService.name,
+                                        duration: activeService.duration,
+                                        product_ids: updated
+                                      });
+                                      toast.success("Service products updated");
+                                    } catch (error: any) {
+                                      toast.error(error.message || "Failed to update service products");
+                                      setServices(services.map(s => String(s.id) === String(activeService.id) ? { ...s, product_ids: currentProds } : s));
+                                    }
                                   }}
                                   className="h-5 w-5 rounded-md"
                                 />
