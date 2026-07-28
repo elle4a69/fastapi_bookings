@@ -111,8 +111,8 @@ export default function LocationsPage() {
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   
-  // Sidebar modes & listings
-  const [sidebarMode, setSidebarMode] = useState<'locations' | 'providers' | 'services'>('locations');
+  // Left pane modes & listings
+  const [leftPaneMode, setLeftPaneMode] = useState<'locations' | 'providers' | 'services'>('locations');
   const [providers, setProviders] = useState<Provider[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<Provider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -176,7 +176,7 @@ export default function LocationsPage() {
         services.filter(svc => svc && svc.name && svc.name.toLowerCase().includes(lowerQuery))
       );
     }
-  }, [searchQuery, locations, providers, services, sidebarMode]);
+  }, [searchQuery, locations, providers, services, leftPaneMode]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -398,19 +398,19 @@ export default function LocationsPage() {
 
   const handleAccordionChange = (value: string) => {
     if (value) {
-      // Dynamic Left Sidebar Switching depending on Accordion Tab
+      // Dynamic Left Pane Mode Switching depending on Accordion Tab
       if (value === "scheduling") {
-        setSidebarMode("providers");
+        setLeftPaneMode("providers");
         if (providers.length > 0 && !selectedProviderId) {
           setSelectedProviderId(providers[0].id);
         }
       } else if (["addons", "resources", "products", "packages"].includes(value)) {
-        setSidebarMode("services");
+        setLeftPaneMode("services");
         if (services.length > 0 && !selectedServiceId) {
           setSelectedServiceId(String(services[0].id));
         }
       } else {
-        setSidebarMode("locations");
+        setLeftPaneMode("locations");
       }
 
       setTimeout(() => {
@@ -555,9 +555,9 @@ export default function LocationsPage() {
         <div className="p-4 flex flex-col gap-4 border-b bg-card">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-tight font-heading">
-              {sidebarMode === 'locations' ? 'Locations' : sidebarMode === 'providers' ? 'Providers List' : 'Services List'}
+              {leftPaneMode === 'locations' ? 'Locations' : leftPaneMode === 'providers' ? 'Providers List' : 'Services List'}
             </h2>
-            {sidebarMode === 'locations' ? (
+            {leftPaneMode === 'locations' ? (
               <Button size="sm" onClick={handleCreateNew} className="min-h-[40px] px-4 rounded-full">
                 <Plus className="mr-1 h-4 w-4" /> Add Location
               </Button>
@@ -565,7 +565,7 @@ export default function LocationsPage() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => setSidebarMode('locations')} 
+                onClick={() => setLeftPaneMode('locations')} 
                 className="text-xs text-primary font-medium hover:bg-primary/5 min-h-[36px] px-3 border border-primary/20 rounded-lg"
               >
                 ← Back to Locations
@@ -576,7 +576,7 @@ export default function LocationsPage() {
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder={`Search ${sidebarMode}...`}
+              placeholder={`Search ${leftPaneMode}...`}
               className="pl-10 bg-background min-h-[40px] text-sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -585,7 +585,7 @@ export default function LocationsPage() {
         </div>
         <ScrollArea className="flex-1 bg-muted/5">
           <div className="p-4 pb-20 md:pb-4 flex flex-col gap-2">
-            {sidebarMode === 'locations' && filteredLocations.map(location => (
+            {leftPaneMode === 'locations' && filteredLocations.map(location => (
               <button
                 key={location.id}
                 onClick={() => handleSelectLocation(location)}
@@ -603,7 +603,7 @@ export default function LocationsPage() {
               </button>
             ))}
 
-            {sidebarMode === 'providers' && filteredProviders.map(provider => (
+            {leftPaneMode === 'providers' && filteredProviders.map(provider => (
               <button
                 key={provider.id}
                 onClick={() => setSelectedProviderId(provider.id)}
@@ -626,7 +626,7 @@ export default function LocationsPage() {
               </button>
             ))}
 
-            {sidebarMode === 'services' && filteredServices.map(service => (
+            {leftPaneMode === 'services' && filteredServices.map(service => (
               <button
                 key={service.id}
                 onClick={() => setSelectedServiceId(String(service.id))}
@@ -644,11 +644,11 @@ export default function LocationsPage() {
               </button>
             ))}
 
-            {((sidebarMode === 'locations' && filteredLocations.length === 0) ||
-              (sidebarMode === 'providers' && filteredProviders.length === 0) ||
-              (sidebarMode === 'services' && filteredServices.length === 0)) && (
+            {((leftPaneMode === 'locations' && filteredLocations.length === 0) ||
+              (leftPaneMode === 'providers' && filteredProviders.length === 0) ||
+              (leftPaneMode === 'services' && filteredServices.length === 0)) && (
               <div className="p-8 text-center text-sm text-muted-foreground">
-                No {sidebarMode} found.
+                No {leftPaneMode} found.
               </div>
             )}
           </div>
@@ -1049,7 +1049,7 @@ export default function LocationsPage() {
                         </div>
                       ) : (
                         <div className="p-6 text-center border border-dashed rounded-lg">
-                          <p className="text-sm text-muted-foreground">Please select a provider from the left sidebar to edit their working schedule.</p>
+                          <p className="text-sm text-muted-foreground">Please select a provider from the left pane to edit their working schedule.</p>
                         </div>
                       )}
                     </AccordionContent>
@@ -1159,7 +1159,7 @@ export default function LocationsPage() {
                         </div>
                       ) : (
                         <div className="p-6 text-center border border-dashed rounded-lg">
-                          <p className="text-sm text-muted-foreground">Please select a service from the left sidebar to edit its service add-ons.</p>
+                          <p className="text-sm text-muted-foreground">Please select a service from the left pane to edit its service add-ons.</p>
                         </div>
                       )}
                     </AccordionContent>
@@ -1237,7 +1237,7 @@ export default function LocationsPage() {
                         </div>
                       ) : (
                         <div className="p-6 text-center border border-dashed rounded-lg">
-                          <p className="text-sm text-muted-foreground">Please select a service from the left sidebar to edit its resource requirements.</p>
+                          <p className="text-sm text-muted-foreground">Please select a service from the left pane to edit its resource requirements.</p>
                         </div>
                       )}
                     </AccordionContent>
@@ -1291,7 +1291,7 @@ export default function LocationsPage() {
                         </div>
                       ) : (
                         <div className="p-6 text-center border border-dashed rounded-lg">
-                          <p className="text-sm text-muted-foreground">Please select a service from the left sidebar to edit its service products.</p>
+                          <p className="text-sm text-muted-foreground">Please select a service from the left pane to edit its service products.</p>
                         </div>
                       )}
                     </AccordionContent>
