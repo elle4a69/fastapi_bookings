@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, CalendarRange, Sparkles, Layers, Box, ShoppingBag, Gift, Clock } from "lucide-react";
+import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Sparkles, Layers, Box, ShoppingBag, Gift, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useAutoSave } from "@/hooks/use-auto-save";
