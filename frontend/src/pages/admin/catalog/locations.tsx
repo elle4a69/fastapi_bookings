@@ -161,23 +161,57 @@ export default function LocationsPage() {
   }, []);
 
   useEffect(() => {
+    let baseProviders = providers;
+    let baseServices = services;
+
+    if (selectedLocation) {
+      // Filter providers: only those assigned to the selected location
+      const locationProviderIds = formData.provider_ids || [];
+      baseProviders = providers.filter(p => locationProviderIds.includes(String(p.id)));
+
+      // Filter services: only those performable by the providers assigned to the selected location
+      const activeLocationProviders = providers.filter(p => locationProviderIds.includes(String(p.id)));
+      const locationServiceIds = Array.from(
+        new Set(activeLocationProviders.flatMap(p => p.service_ids || []).map(String))
+      );
+      baseServices = services.filter(s => locationServiceIds.includes(String(s.id)));
+    }
+
     if (searchQuery.trim() === "") {
       setFilteredLocations(locations);
-      setFilteredProviders(providers);
-      setFilteredServices(services);
+      setFilteredProviders(baseProviders);
+      setFilteredServices(baseServices);
     } else {
       const lowerQuery = searchQuery.toLowerCase();
       setFilteredLocations(
         locations.filter(loc => loc && loc.name && loc.name.toLowerCase().includes(lowerQuery))
       );
       setFilteredProviders(
-        providers.filter(prov => prov && prov.name && prov.name.toLowerCase().includes(lowerQuery))
+        baseProviders.filter(prov => prov && prov.name && prov.name.toLowerCase().includes(lowerQuery))
       );
       setFilteredServices(
-        services.filter(svc => svc && svc.name && svc.name.toLowerCase().includes(lowerQuery))
+        baseServices.filter(svc => svc && svc.name && svc.name.toLowerCase().includes(lowerQuery))
       );
     }
-  }, [searchQuery, locations, providers, services, leftPaneMode]);
+  }, [searchQuery, locations, providers, services, leftPaneMode, selectedLocation, formData.provider_ids]);
+
+  // Ensure valid selection within filtered scopes
+  useEffect(() => {
+    if (leftPaneMode === 'providers' && filteredProviders.length > 0) {
+      if (!selectedProviderId || !filteredProviders.some(p => String(p.id) === String(selectedProviderId))) {
+        setSelectedProviderId(filteredProviders[0].id);
+      }
+    }
+  }, [filteredProviders, leftPaneMode, selectedProviderId]);
+
+  useEffect(() => {
+    if (leftPaneMode === 'services' && filteredServices.length > 0) {
+      if (!selectedServiceId || !filteredServices.some(s => String(s.id) === String(selectedServiceId))) {
+        setSelectedServiceId(String(filteredServices[0].id));
+      }
+    }
+  }, [filteredServices, leftPaneMode, selectedServiceId]);
+
 
   const fetchData = async () => {
     setIsLoading(true);
