@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAutoSave } from '@/hooks/use-auto-save';
+import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -9,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,7 +47,7 @@ interface Service {
   image: string | null;
 }
 
-interface Category { id: string; name: string; }
+interface Category { id: string; name: string; description?: string; active: boolean; }
 interface Provider { id: string; name: string; }
 interface Addon { id: string; name: string; }
 interface Product { id: string; name: string; }
@@ -120,11 +123,34 @@ export default function ServicesPage() {
   const [isListView, setIsListView] = useState(true);
   
   const [openSection, setOpenSection] = useState<string>('details');
+  const [rightPaneType, setRightPaneType] = useState<"service" | "category">("service");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState<{ name: string; description: string; active: boolean }>({ name: "", description: "", active: true });
+  const [isCategoryEditing, setIsCategoryEditing] = useState(false);
+  const [isCategoryCreating, setIsCategoryCreating] = useState(false);
+
   const [newEntityDialog, setNewEntityDialog] = useState<{type: string, open: boolean}>({type: '', open: false});
   const [newEntityName, setNewEntityName] = useState('');
 
   const [draggedServiceId, setDraggedServiceId] = useState<string | null>(null);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+
+  const { saveState, triggerSave, retry } = useAutoSave({
+    onSave: async (updatedData: any) => {
+      const targetId = selectedServiceId;
+      if (!targetId) return;
+      try {
+        const res = await apiClient.put<any>(`/api/admin/services/${targetId}`, updatedData);
+        const dataObj = res?.data || res;
+        const returnedService = { ...updatedData, ...dataObj, id: String(dataObj.id || targetId) };
+        setServices(prev => prev.map(s => s.id === targetId ? returnedService : s));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save service");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
 
   const defaultFormData: Omit<Service, 'id'> = {
     name: '',
@@ -211,7 +237,7 @@ export default function ServicesPage() {
   const handleSelectService = (svc: Service) => {
     setSelectedServiceId(svc.id);
     setIsCreating(false);
-    setIsEditing(false);
+    setIsEditing(true);
     setOpenSection('details');
     setFormData({
       name: svc.name || '',
@@ -341,6 +367,50 @@ export default function ServicesPage() {
         return { ...prev, [key]: [...arr, id] };
       }
     });
+  };
+
+  const handleSaveCategory = async () => {
+    if (!categoryFormData.name.trim()) {
+      toast.error('Category Name is required');
+      return;
+    }
+
+    try {
+      if (isCategoryCreating) {
+        const newCat = await apiClient.post<Category>('/api/admin/categories', categoryFormData);
+        setCategories(prev => [...prev, newCat]);
+        toast.success('Category created successfully');
+        setSelectedCategoryId(newCat.id);
+        setCategoryFormData({ name: newCat.name, description: newCat.description || "", active: newCat.active });
+        setIsCategoryCreating(false);
+        setIsCategoryEditing(false);
+      } else if (selectedCategoryId) {
+        const updatedCat = await apiClient.put<Category>(`/api/admin/categories/${selectedCategoryId}`, categoryFormData);
+        setCategories(prev => prev.map(c => c.id === selectedCategoryId ? updatedCat : c));
+        toast.success('Category updated successfully');
+        setCategoryFormData({ name: updatedCat.name, description: updatedCat.description || "", active: updatedCat.active });
+        setIsCategoryEditing(false);
+      }
+    } catch (error) {
+      toast.error('Failed to save category');
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!selectedCategoryId) return;
+    if (!window.confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      await apiClient.delete(`/api/admin/categories/${selectedCategoryId}`);
+      setCategories(prev => prev.filter(c => c.id !== selectedCategoryId));
+      toast.success('Category deleted successfully');
+      setRightPaneType("service");
+      setSelectedCategoryId(null);
+      setIsCategoryEditing(false);
+      setIsCategoryCreating(false);
+    } catch (error) {
+      toast.error('Failed to delete category');
+    }
   };
 
   const addRequirementRow = () => {
@@ -475,7 +545,13 @@ export default function ServicesPage() {
           <Button 
             variant="outline" 
             size="icon" 
-            onClick={() => navigate('/admin/catalog/categories', { state: { returnToServiceId: selectedServiceId || "new", section: "categories" } })} 
+            onClick={() => {
+              setRightPaneType("category");
+              isCategoryCreating || setIsCategoryCreating(true);
+              isCategoryEditing || setIsCategoryEditing(true);
+              setSelectedCategoryId(null);
+              setCategoryFormData({ name: "New Category", description: "", active: true });
+            }} 
             className="min-h-[44px] min-w-[44px] shrink-0" 
             title="Add Category"
           >
@@ -490,7 +566,16 @@ export default function ServicesPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button variant="outline" size="icon" onClick={handleCreateNew} className="min-h-[44px] min-w-[44px] shrink-0" title="Add Service">
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => {
+              setRightPaneType("service");
+              handleCreateNew();
+            }} 
+            className="min-h-[44px] min-w-[44px] shrink-0" 
+            title="Add Service"
+          >
             <Plus className="w-5 h-5" />
           </Button>
         </div>
@@ -513,14 +598,42 @@ export default function ServicesPage() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleDropCategory(e, cat.id)}
                 >
-                  <div className="flex items-center gap-2">
-                    <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
-                    <h3 
-                      className="text-sm font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-primary transition-colors"
-                      onClick={() => setOpenSection('categories')}
+                  <div className="flex items-center justify-between pr-2">
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab active:cursor-grabbing" />
+                      <h3 
+                        className="text-sm font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => {
+                          setRightPaneType("category");
+                          setIsCategoryCreating(false);
+                          setIsCategoryEditing(false);
+                          setSelectedCategoryId(cat.id);
+                          setCategoryFormData({
+                            name: cat.name,
+                            description: cat.description || "",
+                            active: cat.active
+                          });
+                        }}
+                      >
+                        {cat.name}
+                      </h3>
+                    </div>
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-6 w-6 p-0 hover:bg-muted text-muted-foreground hover:text-foreground rounded-md shrink-0" 
+                      title="Add Service to Category"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRightPaneType("service");
+                        setIsCreating(true);
+                        setIsEditing(true);
+                        setSelectedServiceId(null);
+                        setFormData({ ...defaultFormData, category_ids: [cat.id] });
+                      }}
                     >
-                      {cat.name}
-                    </h3>
+                      <Plus className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                   <div className={isListView ? "space-y-2" : "grid grid-cols-2 gap-2"}>
                     {groupedServices[cat.id].map(svc => (
@@ -530,7 +643,10 @@ export default function ServicesPage() {
                         onDragStart={(e) => handleDragStartService(e, svc.id)}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => handleDropService(e, svc.id)}
-                        onClick={() => handleSelectService(svc)}
+                        onClick={() => {
+                          setRightPaneType("service");
+                          handleSelectService(svc);
+                        }}
                         className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                           selectedServiceId === svc.id 
                             ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
@@ -603,7 +719,10 @@ export default function ServicesPage() {
                         onDragStart={(e) => handleDragStartService(e, svc.id)}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={(e) => handleDropService(e, svc.id)}
-                        onClick={() => handleSelectService(svc)}
+                        onClick={() => {
+                          setRightPaneType("service");
+                          handleSelectService(svc);
+                        }}
                         className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                           selectedServiceId === svc.id 
                             ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
@@ -665,435 +784,624 @@ export default function ServicesPage() {
       </div>
 
       {/* Right Pane - Detail / Form */}
-      <div className={`md:w-[65%] flex flex-col md:pl-4 transition-all duration-300 h-full ${selectedServiceId || isCreating ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
-        {!selectedServiceId && !isCreating ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            Select a service to view details or create a new one.
-          </div>
-        ) : isCreating ? (
-          <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
-            <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 md:pb-4 sticky top-0">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-                <div>
-                  <CardTitle className="text-2xl font-bold font-heading">Add New Service</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">Create a new service offering for your clients</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div className="space-y-2">
-                <Label className="text-base font-semibold">Service Name</Label>
-                <Input 
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Signature Massage"
-                />
-                <p className="text-sm text-muted-foreground">This will be displayed to clients when booking</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-base font-semibold">Description</Label>
-                <Textarea 
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the service..."
-                  rows={4}
-                />
-                <p className="text-sm text-muted-foreground">Provide details about what clients can expect</p>
-              </div>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-base font-semibold">Duration (mins)</Label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      type="number"
-                      className="pl-9"
-                      value={formData.duration}
-                      onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
-                    />
+      <div className={`md:w-[65%] flex flex-col md:pl-4 transition-all duration-300 h-full ${(selectedServiceId || isCreating || (rightPaneType === "category" && (selectedCategoryId || isCategoryCreating))) ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
+        {rightPaneType === "category" ? (
+          !selectedCategoryId && !isCategoryCreating ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground bg-card/10 rounded-xl border border-dashed p-8">
+              Select a category to view details or create a new one.
+            </div>
+          ) : isCategoryCreating || isCategoryEditing ? (
+            <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
+              <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 md:pb-4 sticky top-0">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setIsCategoryCreating(false); setIsCategoryEditing(false); }}>
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-2xl font-bold font-heading">
+                      {isCategoryCreating ? 'Add New Category' : 'Edit Category'}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {isCategoryCreating ? 'Create a new service category' : 'Update category details'}
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">How long the service takes</p>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Category Name *</Label>
+                  <Input 
+                    value={categoryFormData.name}
+                    onChange={e => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                    placeholder="e.g. Massages, Facials"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-base font-semibold">Price ($)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
-                    <Input 
-                      type="number"
-                      className="pl-7"
-                      value={formData.price}
-                      onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                    />
+                  <Label className="text-base font-semibold">Description</Label>
+                  <Textarea 
+                    value={categoryFormData.description}
+                    onChange={e => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                    placeholder="Describe the category..."
+                    rows={4}
+                  />
+                </div>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Switch 
+                    id="category-active" 
+                    checked={categoryFormData.active}
+                    onCheckedChange={checked => setCategoryFormData({ ...categoryFormData, active: checked })}
+                  />
+                  <Label htmlFor="category-active" className="text-base font-semibold cursor-pointer">Active Status</Label>
+                </div>
+              </CardContent>
+              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
+                <Button variant="outline" onClick={() => { setIsCategoryCreating(false); setIsCategoryEditing(false); }} className="min-h-[44px]">Cancel</Button>
+                <Button onClick={handleSaveCategory} className="min-h-[44px]">Save</Button>
+              </CardFooter>
+            </Card>
+          ) : (
+            <Card className="flex-1 flex flex-col h-full overflow-hidden shadow-none md:shadow-sm border-0 md:border py-0 gap-0">
+              <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b sticky top-0 p-4 md:p-6">
+                <div className="flex items-center gap-3 flex-1">
+                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => setSelectedCategoryId(null)}>
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <div className="flex-1">
+                    <CardTitle className="text-xl font-heading">Category Details</CardTitle>
                   </div>
-                  <p className="text-sm text-muted-foreground">The cost of this service</p>
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
-              <Button variant="outline" onClick={handleCancel} className="min-h-[44px]">Cancel</Button>
-              <Button onClick={handleSave} className="min-h-[44px]">Save</Button>
-            </CardFooter>
-          </Card>
-        ) : (
-          <Card className="flex-1 flex flex-col h-full overflow-hidden shadow-none md:shadow-sm border-0 md:border py-0 gap-0">
-            <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b sticky top-0 p-4 md:p-6">
-              <div className="flex items-center gap-3 flex-1">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-                <div className="flex-1">
-                  <CardTitle className="text-xl font-heading">Service Details</CardTitle>
-                </div>
-              </div>
-              {!isCreating && !isEditing && (
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="min-h-[44px]">
+                  <Button variant="outline" size="sm" onClick={() => setIsCategoryEditing(true)} className="min-h-[44px]">
                     <Edit className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Edit</span>
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(selectedServiceId!)} className="min-h-[44px]">
+                  <Button variant="destructive" size="sm" onClick={handleDeleteCategory} className="min-h-[44px]">
                     <Trash2 className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Delete</span>
                   </Button>
                 </div>
-              )}
-            </CardHeader>
-            
-            <CardContent className="flex-1 overflow-y-auto p-4 md:p-6 relative z-0">
-              <Accordion 
-                type="single" 
-                collapsible 
-                className="w-full space-y-2" 
-                value={openSection} 
-                onValueChange={(val) => setOpenSection(val || 'details')}
-              >
-                {/* 1. Service Details */}
-                <AccordionItem value="details" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Service Details</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-2 pb-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="service_name">Service Name *</Label>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Category Name</div>
+                  <div className="text-xl font-bold flex items-center gap-3">
+                    {categoryFormData.name}
+                    <Badge variant={categoryFormData.active ? "default" : "secondary"}>
+                      {categoryFormData.active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="space-y-1 pt-2">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Description</div>
+                  <div className="text-sm bg-muted/20 p-3 rounded-lg border min-h-[80px] whitespace-pre-wrap">
+                    {categoryFormData.description || <span className="text-muted-foreground italic">No description provided.</span>}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        ) : (
+          !selectedServiceId && !isCreating ? (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              Select a service to view details or create a new one.
+            </div>
+          ) : isCreating ? (
+            <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
+              <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 md:pb-4 sticky top-0">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-2xl font-bold font-heading">Add New Service</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Create a new service offering for your clients</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Service Name</Label>
+                  <Input 
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. Signature Massage"
+                  />
+                  <p className="text-sm text-muted-foreground">This will be displayed to clients when booking</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Description</Label>
+                  <Textarea 
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Describe the service..."
+                    rows={4}
+                  />
+                  <p className="text-sm text-muted-foreground">Provide details about what clients can expect</p>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Duration (mins)</Label>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input 
-                        id="service_name" 
-                        value={formData.name} 
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        disabled={!isEditing}
-                        placeholder="e.g. Signature Massage"
-                        className="min-h-[44px]"
+                        type="number"
+                        className="pl-9"
+                        value={formData.duration}
+                        onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Image</Label>
-                      <ImageUpload 
-                        imagePreview={formData.image} 
-                        onImageSelect={(file) => setFormData({ ...formData, image: file })} 
-                        onImageRemove={() => setFormData({ ...formData, image: null })} 
-                        disabled={!isEditing} 
+                    <p className="text-sm text-muted-foreground">How long the service takes</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Price ($)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                      <Input 
+                        type="number"
+                        className="pl-7"
+                        value={formData.price}
+                        onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea 
-                        id="description" 
-                        value={formData.description} 
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        disabled={!isEditing}
-                        placeholder="Detailed description of the service..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="price">Price</Label>
-                        <Input 
-                          id="price" 
-                          type="number"
-                          value={formData.price} 
-                          onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="deposit_amount">Deposit Amount</Label>
-                        <Input 
-                          id="deposit_amount" 
-                          type="number"
-                          value={formData.deposit_amount} 
-                          onChange={(e) => setFormData({ ...formData, deposit_amount: parseFloat(e.target.value) || 0 })}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                      <div className="space-y-2 col-span-2">
-                        <Label htmlFor="tax_rate_id">Tax Rate</Label>
-                        <Select 
-                          disabled={!isEditing} 
-                          value={formData.tax_rate_id || "none"}
-                          onValueChange={(val) => setFormData({ ...formData, tax_rate_id: val === "none" ? null : val })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select tax rate" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            <SelectItem value="gst_10">GST 10%</SelectItem>
-                            <SelectItem value="gst_free">GST-free</SelectItem>
-                            <SelectItem value="pst_5">PST 5%</SelectItem>
-                            <SelectItem value="hst_13">HST 13%</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-[10px] text-muted-foreground">Tax rates are configured in Settings &gt; Tax Rates</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                      <div className="space-y-2">
-                        <Label htmlFor="duration">Duration (mins)</Label>
-                        <Input 
-                          id="duration" 
-                          type="number"
-                          value={formData.duration} 
-                          onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="buffer_before">Buffer Before (mins)</Label>
-                        <Input 
-                          id="buffer_before" 
-                          type="number"
-                          value={formData.buffer_before} 
-                          onChange={(e) => setFormData({ ...formData, buffer_before: parseInt(e.target.value) || 0 })}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="buffer_after">Buffer After (mins)</Label>
-                        <Input 
-                          id="buffer_after" 
-                          type="number"
-                          value={formData.buffer_after} 
-                          onChange={(e) => setFormData({ ...formData, buffer_after: parseInt(e.target.value) || 0 })}
-                          disabled={!isEditing}
-                        />
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 3. Fixed Start Times & Groups */}
-                <AccordionItem value="fixed_times" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Service Schedule</AccordionTrigger>
-                  <AccordionContent className="space-y-6 pt-2 pb-4">
-                    <div className="space-y-4">
-                      <h4 className="font-semibold text-sm">Fixed Start Times</h4>
-                      <div className="space-y-2">
-                        <Label htmlFor="fixed_start_times">Times (comma-separated)</Label>
-                        <div className="flex gap-2">
-                          <Input 
-                            id="fixed_start_times" 
-                            value={formData.fixed_start_times} 
-                            onChange={(e) => setFormData({ ...formData, fixed_start_times: e.target.value })}
-                            disabled={!isEditing}
-                            placeholder="e.g. 09:00, 13:00, 15:30"
-                          />
-                          {isEditing && (
-                            <Button variant="outline" onClick={() => {
-                              const v = window.prompt('Add a time (HH:MM)');
-                              if (v) {
-                                const current = formData.fixed_start_times.trim();
-                                setFormData({ ...formData, fixed_start_times: current ? current + ', ' + v : v });
-                              }
-                            }}>Add Time</Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4 pt-4 border-t">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-sm">Groups</h4>
-                        <div className="flex items-center space-x-2">
-                          <Switch 
-                            checked={formData.has_groups} 
-                            onCheckedChange={(c) => setFormData({ ...formData, has_groups: c })}
-                            disabled={!isEditing}
-                          />
-                          <Label>Enable Groups</Label>
-                        </div>
-                      </div>
-                      {formData.has_groups && (
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="min_group_size">Min Group Size</Label>
-                            <Input 
-                              id="min_group_size" 
-                              type="number"
-                              value={formData.min_group_size} 
-                              onChange={(e) => setFormData({ ...formData, min_group_size: parseInt(e.target.value) || 1 })}
-                              disabled={!isEditing}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="max_group_size">Max Group Size</Label>
-                            <Input 
-                              id="max_group_size" 
-                              type="number"
-                              value={formData.max_group_size} 
-                              onChange={(e) => setFormData({ ...formData, max_group_size: parseInt(e.target.value) || 1 })}
-                              disabled={!isEditing}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 4. Categories */}
-                <AccordionItem value="categories" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-3">
-                    {categories.length > 0 && (
-                      <div className="flex flex-col gap-2.5">
-                        {categories.map(c => (
-                          <div key={c.id} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`cat-${c.id}`} 
-                              checked={formData.category_ids.includes(c.id)}
-                              onCheckedChange={() => toggleArrayItem('category_ids', c.id)}
-                              disabled={!isEditing}
-                            />
-                            <Label htmlFor={`cat-${c.id}`} className="font-normal">{c.name}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {categories.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No categories available.</p>
-                    )}
-                    {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/categories', 'categories')}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Category
-                      </Button>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 5. Providers */}
-                <AccordionItem value="providers" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-3">
-                    <p className="text-xs text-muted-foreground italic">
-                      Note: If no providers are selected, this service will be available with all providers by default.
-                    </p>
-                    {providers.length > 0 && (
-                      <div className="flex flex-col gap-2.5">
-                        {providers.map(p => (
-                          <div key={p.id} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`prov-${p.id}`} 
-                              checked={formData.provider_ids.includes(p.id)}
-                              onCheckedChange={() => toggleArrayItem('provider_ids', p.id)}
-                              disabled={!isEditing}
-                            />
-                            <Label htmlFor={`prov-${p.id}`} className="font-normal">{p.name}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {providers.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No providers available.</p>
-                    )}
-                    {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/providers', 'providers')}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Provider
-                      </Button>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 7. Products */}
-                <AccordionItem value="products" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-3">
-                    {products.length > 0 && (
-                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {products.map(p => (
-                          <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                            <div className="flex items-center space-x-2 flex-1 min-w-0">
-                              <Checkbox 
-                                id={`prod-${p.id}`} 
-                                checked={formData.product_ids.includes(p.id)}
-                                onCheckedChange={() => toggleArrayItem('product_ids', p.id)}
-                                disabled={!isEditing}
-                              />
-                              <Label htmlFor={`prod-${p.id}`} className="font-normal truncate">{p.name}</Label>
-                            </div>
-                            <div className="shrink-0 text-xs font-medium text-foreground pl-4 w-16 text-right">
-                              ${p.price || '0.00'}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {products.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No products available.</p>
-                    )}
-                    {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/products', 'products')}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Product
-                      </Button>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 6. Add-ons */}
-                <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-3">
-                    {addons.length > 0 && (
-                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {addons.map(a => (
-                          <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                            <div className="flex items-center space-x-2 flex-1 min-w-0">
-                              <Checkbox 
-                                id={`addon-${a.id}`} 
-                                checked={formData.addon_ids.includes(a.id)}
-                                onCheckedChange={() => toggleArrayItem('addon_ids', a.id)}
-                                disabled={!isEditing}
-                              />
-                              <Label htmlFor={`addon-${a.id}`} className="font-normal truncate">{a.name}</Label>
-                            </div>
-                            <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-4">
-                              <span className="w-20 text-right">{a.duration > 0 ? `+${a.duration} mins` : ''}</span>
-                              <span className="w-16 text-right font-medium text-foreground">${a.price || '0.00'}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {addons.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No add-ons available.</p>
-                    )}
-                    {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Add-on
-                      </Button>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </CardContent>
-
-            {isEditing && (
+                    <p className="text-sm text-muted-foreground">The cost of this service</p>
+                  </div>
+                </div>
+              </CardContent>
               <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
                 <Button variant="outline" onClick={handleCancel} className="min-h-[44px]">Cancel</Button>
                 <Button onClick={handleSave} className="min-h-[44px]">Save</Button>
               </CardFooter>
-            )}
-          </Card>
+            </Card>
+          ) : (
+            <Card className="flex-1 flex flex-col h-full overflow-hidden shadow-none md:shadow-sm border-0 md:border py-0 gap-0">
+              <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b sticky top-0 p-4 md:p-6">
+                <div className="flex items-center gap-3 flex-1">
+                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <div className="flex-1">
+                    <CardTitle className="text-xl font-heading">Service Details</CardTitle>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {rightPaneType === "service" && selectedServiceId && (
+                    <AutoSaveStatus state={saveState} onRetry={retry} />
+                  )}
+                  <Button variant="destructive" size="sm" onClick={() => handleDelete(selectedServiceId!)} className="min-h-[44px]">
+                    <Trash2 className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Delete</span>
+                  </Button>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
+                <Accordion 
+                  type="single" 
+                  collapsible 
+                  className="w-full space-y-2" 
+                  value={openSection} 
+                  onValueChange={(val) => setOpenSection(val || 'details')}
+                >
+                  <AccordionItem value="details" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Service Details</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-2 pb-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="service_name">Service Name *</Label>
+                        <Input 
+                          id="service_name" 
+                          value={formData.name} 
+                          onChange={(e) => {
+                            const next = { ...formData, name: e.target.value };
+                            setFormData(next);
+                            triggerSave(next);
+                          }}
+                          disabled={!isEditing}
+                          placeholder="e.g. Signature Massage"
+                          className="min-h-[44px]"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Image</Label>
+                        <ImageUpload 
+                          imagePreview={formData.image} 
+                          onImageSelect={(file) => {
+                            const next = { ...formData, image: file };
+                            setFormData(next);
+                            triggerSave(next, true);
+                          }} 
+                          onImageRemove={() => {
+                            const next = { ...formData, image: null };
+                            setFormData(next);
+                            triggerSave(next, true);
+                          }} 
+                          disabled={!isEditing} 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Description</Label>
+                        <Textarea 
+                          id="description" 
+                          value={formData.description} 
+                          onChange={(e) => {
+                            const next = { ...formData, description: e.target.value };
+                            setFormData(next);
+                            triggerSave(next);
+                          }}
+                          disabled={!isEditing}
+                          placeholder="Detailed description of the service..."
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="price">Price</Label>
+                          <Input 
+                            id="price" 
+                            type="number"
+                            value={formData.price} 
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              const next = { ...formData, price: val };
+                              setFormData(next);
+                              triggerSave(next);
+                            }}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="deposit_amount">Deposit Amount</Label>
+                          <Input 
+                            id="deposit_amount" 
+                            type="number"
+                            value={formData.deposit_amount} 
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              const next = { ...formData, deposit_amount: val };
+                              setFormData(next);
+                              triggerSave(next);
+                            }}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <Label htmlFor="tax_rate_id">Tax Rate</Label>
+                          <Select 
+                            disabled={!isEditing} 
+                            value={formData.tax_rate_id || "none"}
+                            onValueChange={(val) => {
+                              const next = { ...formData, tax_rate_id: val === "none" ? null : val };
+                              setFormData(next);
+                              triggerSave(next, true);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select tax rate" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">None</SelectItem>
+                              <SelectItem value="gst_10">GST 10%</SelectItem>
+                              <SelectItem value="gst_free">GST-free</SelectItem>
+                              <SelectItem value="pst_5">PST 5%</SelectItem>
+                              <SelectItem value="hst_13">HST 13%</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] text-muted-foreground">Tax rates are configured in Settings &gt; Tax Rates</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                        <div className="space-y-2">
+                          <Label htmlFor="duration">Duration (mins)</Label>
+                          <Input 
+                            id="duration" 
+                            type="number"
+                            value={formData.duration} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              const next = { ...formData, duration: val };
+                              setFormData(next);
+                              triggerSave(next);
+                            }}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="buffer_before">Buffer Before (mins)</Label>
+                          <Input 
+                            id="buffer_before" 
+                            type="number"
+                            value={formData.buffer_before} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              const next = { ...formData, buffer_before: val };
+                              setFormData(next);
+                              triggerSave(next);
+                            }}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="buffer_after">Buffer After (mins)</Label>
+                          <Input 
+                            id="buffer_after" 
+                            type="number"
+                            value={formData.buffer_after} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              const next = { ...formData, buffer_after: val };
+                              setFormData(next);
+                              triggerSave(next);
+                            }}
+                            disabled={!isEditing}
+                          />
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Service Schedule */}
+                  <AccordionItem value="fixed_times" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Service Schedule</AccordionTrigger>
+                    <AccordionContent className="space-y-6 pt-2 pb-4">
+                      <div className="space-y-4">
+                        <h4 className="font-semibold text-sm">Fixed Start Times</h4>
+                        <div className="space-y-2">
+                          <Label htmlFor="fixed_start_times">Times (comma-separated)</Label>
+                          <div className="flex gap-2">
+                            <Input 
+                              id="fixed_start_times" 
+                              value={formData.fixed_start_times} 
+                              onChange={(e) => {
+                                const next = { ...formData, fixed_start_times: e.target.value };
+                                setFormData(next);
+                                triggerSave(next);
+                              }}
+                              disabled={!isEditing}
+                              placeholder="e.g. 09:00, 13:00, 15:30"
+                            />
+                            {isEditing && (
+                              <Button variant="outline" onClick={() => {
+                                const v = window.prompt('Add a time (HH:MM)');
+                                if (v) {
+                                  const current = formData.fixed_start_times.trim();
+                                  const nextTimes = current ? current + ', ' + v : v;
+                                  const next = { ...formData, fixed_start_times: nextTimes };
+                                  setFormData(next);
+                                  triggerSave(next, true);
+                                }
+                              }}>Add Time</Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4 pt-4 border-t">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-sm">Groups</h4>
+                          <div className="flex items-center space-x-2">
+                            <Switch 
+                              checked={formData.has_groups} 
+                              onCheckedChange={(c) => {
+                                const next = { ...formData, has_groups: c };
+                                setFormData(next);
+                                triggerSave(next, true);
+                              }}
+                              disabled={!isEditing}
+                            />
+                            <Label>Enable Groups</Label>
+                          </div>
+                        </div>
+                        {formData.has_groups && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="min_group_size">Min Group Size</Label>
+                              <Input 
+                                id="min_group_size" 
+                                type="number"
+                                value={formData.min_group_size} 
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 1;
+                                  const next = { ...formData, min_group_size: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="max_group_size">Max Group Size</Label>
+                              <Input 
+                                id="max_group_size" 
+                                type="number"
+                                value={formData.max_group_size} 
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 1;
+                                  const next = { ...formData, max_group_size: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Service Categories */}
+                  <AccordionItem value="categories" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4 space-y-3">
+                      {categories.length > 0 && (
+                        <div className="flex flex-col gap-2.5">
+                          {categories.map(c => (
+                            <div key={c.id} className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`cat-${c.id}`} 
+                                checked={formData.category_ids.includes(c.id)}
+                                onCheckedChange={(checked) => {
+                                  const current = formData.category_ids || [];
+                                  const updated = checked 
+                                    ? [...current, c.id]
+                                    : current.filter(id => id !== c.id);
+                                  const next = { ...formData, category_ids: updated };
+                                  setFormData(next);
+                                  triggerSave(next, true);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <Label htmlFor={`cat-${c.id}`} className="font-normal">{c.name}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {categories.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No categories available.</p>
+                      )}
+                      {isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/categories', 'categories')}>
+                          <Plus className="w-4 h-4 mr-2" /> Add Category
+                        </Button>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Service Providers */}
+                  <AccordionItem value="providers" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4 space-y-3">
+                      <p className="text-xs text-muted-foreground italic">
+                        Note: If no providers are selected, this service will be available with all providers by default.
+                      </p>
+                      {providers.length > 0 && (
+                        <div className="flex flex-col gap-2.5">
+                          {providers.map(p => (
+                            <div key={p.id} className="flex items-center space-x-2">
+                              <Checkbox 
+                                id={`prov-${p.id}`} 
+                                checked={formData.provider_ids.includes(p.id)}
+                                onCheckedChange={(checked) => {
+                                  const current = formData.provider_ids || [];
+                                  const updated = checked 
+                                    ? [...current, p.id]
+                                    : current.filter(id => id !== p.id);
+                                  const next = { ...formData, provider_ids: updated };
+                                  setFormData(next);
+                                  triggerSave(next, true);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <Label htmlFor={`prov-${p.id}`} className="font-normal">{p.name}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {providers.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No providers available.</p>
+                      )}
+                      {isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/providers', 'providers')}>
+                          <Plus className="w-4 h-4 mr-2" /> Add Provider
+                        </Button>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Products */}
+                  <AccordionItem value="products" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4 space-y-3">
+                      {products.length > 0 && (
+                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {products.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                <Checkbox 
+                                  id={`prod-${p.id}`} 
+                                  checked={formData.product_ids.includes(p.id)}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.product_ids || [];
+                                    const updated = checked 
+                                      ? [...current, p.id]
+                                      : current.filter(id => id !== p.id);
+                                    const next = { ...formData, product_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                                <Label htmlFor={`prod-${p.id}`} className="font-normal truncate">{p.name}</Label>
+                              </div>
+                              <div className="shrink-0 text-xs font-medium text-foreground pl-4 w-16 text-right">
+                                ${p.price || '0.00'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {products.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No products available.</p>
+                      )}
+                      {isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/products', 'products')}>
+                          <Plus className="w-4 h-4 mr-2" /> Add Product
+                        </Button>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Add-ons */}
+                  <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
+                    <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-4 space-y-3">
+                      {addons.length > 0 && (
+                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {addons.map(a => (
+                            <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                                <Checkbox 
+                                  id={`addon-${a.id}`} 
+                                  checked={formData.addon_ids.includes(a.id)}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.addon_ids || [];
+                                    const updated = checked 
+                                      ? [...current, a.id]
+                                      : current.filter(id => id !== a.id);
+                                    const next = { ...formData, addon_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                                <Label htmlFor={`addon-${a.id}`} className="font-normal truncate">{a.name}</Label>
+                              </div>
+                              <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-4">
+                                <span className="w-20 text-right">{a.duration > 0 ? `+${a.duration} mins` : ''}</span>
+                                <span className="w-16 text-right font-medium text-foreground">${a.price || '0.00'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {addons.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No add-ons available.</p>
+                      )}
+                      {isEditing && (
+                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
+                          <Plus className="w-4 h-4 mr-2" /> Add Add-on
+                        </Button>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+
+              {isCreating && (
+                <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
+                  <Button variant="outline" onClick={handleCancel} className="min-h-[44px]">Cancel</Button>
+                  <Button onClick={handleSave} className="min-h-[44px]">Save</Button>
+                </CardFooter>
+              )}
+            </Card>
         )}
       </div>
 
