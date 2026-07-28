@@ -30,6 +30,36 @@ class Location(Base):
         "Resource", back_populates="location", cascade="all, delete-orphan", lazy="joined"
     )
 
+    # Join table relationships
+    location_providers = relationship(
+        "LocationProvider", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+    )
+    location_services = relationship(
+        "LocationService", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+    )
+    location_categories = relationship(
+        "LocationCategory", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+    )
+    location_products = relationship(
+        "LocationProduct", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+    )
+
+    @property
+    def provider_ids(self) -> list[int]:
+        return [lp.provider_id for lp in self.location_providers]
+
+    @property
+    def service_ids(self) -> list[int]:
+        return [ls.service_id for ls in self.location_services]
+
+    @property
+    def category_ids(self) -> list[int]:
+        return [lc.category_id for lc in self.location_categories]
+
+    @property
+    def product_ids(self) -> list[int]:
+        return [lp.product_id for lp in self.location_products]
+
     def __repr__(self) -> str:
         return f"<Location id={self.id} name={self.name}>"
 
@@ -43,7 +73,7 @@ class LocationProvider(Base):
     provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False, index=True)
     
     tenant = relationship("Tenant")
-    location = relationship("Location")
+    location = relationship("Location", back_populates="location_providers")
     provider = relationship("Provider")
 
 
@@ -56,7 +86,7 @@ class LocationService(Base):
     service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True)
 
     tenant = relationship("Tenant")
-    location = relationship("Location")
+    location = relationship("Location", back_populates="location_services")
     service = relationship("Service")
 
 
@@ -69,7 +99,7 @@ class LocationCategory(Base):
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), nullable=False, index=True)
 
     tenant = relationship("Tenant")
-    location = relationship("Location")
+    location = relationship("Location", back_populates="location_categories")
     category = relationship("Category")
 
 
@@ -83,6 +113,6 @@ class LocationProduct(Base):
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
 
     tenant = relationship("Tenant")
-    location = relationship("Location")
+    location = relationship("Location", back_populates="location_products")
     product = relationship("Product")
 
