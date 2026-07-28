@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, Edit, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, ArrowLeft, Layers, Circle, CircleSlash } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { useAutoSave } from '@/hooks/use-auto-save';
+import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
 interface Category {
   id: string;
@@ -37,6 +39,43 @@ export default function CategoriesPage() {
     description: '',
     active: true,
   });
+
+  const { saveState, triggerSave, retry } = useAutoSave({
+    onSave: async (updatedData: any) => {
+      const targetId = selectedCategoryId;
+      if (!targetId) return;
+      try {
+        const res = await apiClient.put<any>(`/api/admin/categories/${targetId}`, updatedData);
+        const dataObj = res?.data || res;
+        const returnedCategory = { ...updatedData, ...dataObj, id: String(dataObj.id || targetId) };
+        setCategories(prev => prev.map(c => c.id === targetId ? returnedCategory : c));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save category");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
+
+  const handleToggleCategoryActive = async (cat: Category) => {
+    try {
+      const nextActive = !cat.active;
+      const res = await apiClient.put<any>(`/api/admin/categories/${cat.id}`, {
+        name: cat.name,
+        description: cat.description || '',
+        active: nextActive,
+      });
+      const dataObj = res?.data || res;
+      const returnedCategory = { ...cat, ...dataObj, active: nextActive };
+      setCategories(prev => prev.map(c => c.id === cat.id ? returnedCategory : c));
+      if (selectedCategoryId === cat.id) {
+        setFormData(prev => ({ ...prev, active: nextActive }));
+      }
+      toast.success(`Category ${nextActive ? 'activated' : 'deactivated'}`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to toggle category state");
+    }
+  };
 
   const fetchCategories = async () => {
     setLoading(true);
@@ -70,7 +109,7 @@ export default function CategoriesPage() {
   const handleSelectCategory = (cat: Category) => {
     setSelectedCategoryId(cat.id);
     setIsCreating(false);
-    setIsEditing(false);
+    setIsEditing(true);
     setFormData({
       name: cat.name,
       description: cat.description || '',
@@ -204,21 +243,36 @@ export default function CategoriesPage() {
                 <div 
                   key={category.id}
                   onClick={() => handleSelectCategory(category)}
-                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center min-h-[60px] ${
+                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center ${
                     selectedCategoryId === category.id 
-                      ? 'border-primary bg-gradient-to-r from-primary/10 via-primary/5 to-transparent' 
-                      : 'border-border/60 hover:bg-muted/50 dark:bg-card dark:border-border/60'
+                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
                   }`}
                 >
-                  <div>
-                    <div className="font-medium font-heading">{category.name}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                      {category.description || 'No description'}
+                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                      <Layers className="w-4 h-4 opacity-35" />
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                      <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={category.name}>{category.name}</span>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate text-left">{category.description || 'No description'}</div>
+                    </div>
+                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleToggleCategoryActive(category)} 
+                          className="p-0.5 hover:bg-muted rounded transition-colors"
+                          title={category.active ? 'Deactivate category' : 'Activate category'}
+                        >
+                          {category.active ? (
+                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                          ) : (
+                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <Badge variant={category.active ? 'default' : 'secondary'}>
-                    {category.active ? 'Active' : 'Inactive'}
-                  </Badge>
                 </div>
               ))}
             </div>
@@ -240,22 +294,20 @@ export default function CategoriesPage() {
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div>
-                  <CardTitle className="font-heading text-xl">{isCreating ? 'Create Category' : isEditing ? 'Edit Category' : 'Category Details'}</CardTitle>
+                  <CardTitle className="font-heading text-xl">{isCreating ? 'Create Category' : 'Category Details'}</CardTitle>
                   <CardDescription>
                     {isCreating ? 'Fill out the form below to create a new category.' : 'View and manage category details.'}
                   </CardDescription>
                 </div>
               </div>
-              {!isCreating && !isEditing && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleEdit}>
-                    <Edit className="w-4 h-4 mr-2" /> Edit
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => handleDelete(selectedCategoryId!)}>
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {selectedCategoryId && (
+                  <AutoSaveStatus state={saveState} onRetry={retry} />
+                )}
+                <Button variant="destructive" size="sm" onClick={() => handleDelete(selectedCategoryId!)}>
+                  <Trash2 className="w-4 h-4 md:mr-2" /> Delete
+                </Button>
+              </div>
             </CardHeader>
             
             <CardContent className="flex-1 space-y-6">
@@ -264,7 +316,13 @@ export default function CategoriesPage() {
                 <Input 
                   id="name" 
                   value={formData.name} 
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => {
+                    const next = { ...formData, name: e.target.value };
+                    setFormData(next);
+                    if (selectedCategoryId) {
+                      triggerSave(next);
+                    }
+                  }}
                   disabled={!isEditing}
                   placeholder="e.g. Guided Tours"
                 />
@@ -275,7 +333,13 @@ export default function CategoriesPage() {
                 <Textarea 
                   id="description" 
                   value={formData.description} 
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => {
+                    const next = { ...formData, description: e.target.value };
+                    setFormData(next);
+                    if (selectedCategoryId) {
+                      triggerSave(next);
+                    }
+                  }}
                   disabled={!isEditing}
                   placeholder="A brief description of this category..."
                   rows={4}
@@ -286,15 +350,21 @@ export default function CategoriesPage() {
                 <Switch 
                   id="active" 
                   checked={formData.active} 
-                  onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
+                  onCheckedChange={(checked) => {
+                    const next = { ...formData, active: checked };
+                    setFormData(next);
+                    if (selectedCategoryId) {
+                      triggerSave(next, true);
+                    }
+                  }}
                   disabled={!isEditing}
                 />
                 <Label htmlFor="active">Active (visible in catalog)</Label>
               </div>
             </CardContent>
 
-            {isEditing && (
-              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto sticky bottom-0 bg-background z-10 md:static shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
+            {isCreating && (
+              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 md:static shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
                 <Button variant="outline" onClick={handleCancel} className="min-h-[44px]">Cancel</Button>
                 <Button onClick={handleSave} className="min-h-[44px]">Save</Button>
               </CardFooter>

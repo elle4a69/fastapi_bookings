@@ -562,16 +562,24 @@ export default function LocationsPage() {
               <button
                 key={location.id}
                 onClick={() => handleSelectLocation(location)}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3.5 text-left text-sm transition-all duration-200 hover:scale-[1.01] hover:shadow-md min-h-[60px] border ${
+                className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                   selectedLocation?.id === location.id 
-                    ? "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent text-foreground border-primary" 
-                    : "bg-card text-muted-foreground hover:bg-muted/50 border-transparent hover:border-border/60"
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                    : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
                 }`}
               >
-                <MapPin className="h-4 w-4 shrink-0 text-primary" />
-                <div className="flex flex-col overflow-hidden">
-                  <span className="truncate font-semibold text-foreground">{location.name}</span>
-                  {location.address && <span className="truncate text-xs opacity-75 mt-0.5">{location.address}</span>}
+                <div className="flex gap-3 items-start min-w-0 w-full relative">
+                  {location.image ? (
+                    <img src={location.image} alt={location.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                      <MapPin className="w-4 h-4 opacity-35" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                    <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={location.name}>{location.name}</span>
+                    {location.address && <div className="text-xs text-muted-foreground mt-0.5 truncate text-left">{location.address}</div>}
+                  </div>
                 </div>
               </button>
             ))}
@@ -864,7 +872,37 @@ export default function LocationsPage() {
                     </AccordionContent>
                   </AccordionItem>
 
-
+                  {/* Accordion 2: Location Providers */}
+                  <AccordionItem value="providers" id="item-providers" className="border rounded-lg px-4 bg-card mt-4">
+                    <AccordionTrigger className="text-base font-semibold py-4 hover:no-underline font-heading">
+                      Location Providers
+                    </AccordionTrigger>
+                    <AccordionContent className="pt-2 pb-6">
+                      {providers.length === 0 ? (
+                        <div className="text-muted-foreground text-sm py-2">No providers available.</div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
+                          {providers.map((provider) => {
+                            const isChecked = (formData.provider_ids || []).includes(String(provider.id));
+                            return (
+                              <div key={provider.id} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
+                                <Checkbox
+                                  id={`provider-${provider.id}`}
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) => {
+                                    handleCheckboxChange('provider_ids', provider.id, !!checked);
+                                  }}
+                                />
+                                <Label htmlFor={`provider-${provider.id}`} className="text-sm font-normal cursor-pointer w-full">
+                                  {provider.name}
+                                </Label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
 
                 </Accordion>
               </div>

@@ -4,7 +4,7 @@ import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, Edit, Upload, X, Circle, ImageIcon, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, Upload, X, Circle, ImageIcon, ArrowLeft, CircleSlash } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAutoSave } from '@/hooks/use-auto-save';
+import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
 interface Service {
   id: string;
@@ -108,6 +110,32 @@ export default function ProductsPage() {
     image: null,
   });
 
+  const { saveState, triggerSave, retry } = useAutoSave({
+    onSave: async (updatedData: any) => {
+      const targetId = selectedId;
+      if (!targetId) return;
+      
+      const payload: any = {
+        name: updatedData.name,
+        description: updatedData.description,
+        price: updatedData.price,
+        sku: updatedData.sku,
+        active: updatedData.active,
+        image: updatedData.image,
+        location_ids: updatedData.location_ids,
+      };
+
+      try {
+        await apiClient.put(`/api/admin/products/${targetId}`, payload);
+        setProducts(prev => prev.map(p => p.id === targetId ? { ...p, ...updatedData, id: targetId } : p));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save product");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -163,7 +191,7 @@ export default function ProductsPage() {
 
   const handleSelect = (product: Product) => {
     setSelectedId(product.id);
-    setIsEditing(false);
+    setIsEditing(true);
     setIsCreating(false);
     
     // Derive service_ids from loaded services array having this product id in product_ids
@@ -254,19 +282,25 @@ export default function ProductsPage() {
   const toggleService = (serviceId: string) => {
     const current = (formData.service_ids || []).map(String);
     const target = String(serviceId);
-    if (current.includes(target)) {
-      setFormData({ ...formData, service_ids: current.filter(id => id !== target) });
-    } else {
-      setFormData({ ...formData, service_ids: [...current, target] });
+    const nextList = current.includes(target)
+      ? current.filter(id => id !== target)
+      : [...current, target];
+    const nextData = { ...formData, service_ids: nextList };
+    setFormData(nextData);
+    if (selectedId) {
+      triggerSave(nextData, true);
     }
   };
 
   const toggleLocation = (locationId: string) => {
     const current = formData.location_ids || [];
-    if (current.includes(locationId)) {
-      setFormData({ ...formData, location_ids: current.filter(id => id !== locationId) });
-    } else {
-      setFormData({ ...formData, location_ids: [...current, locationId] });
+    const nextList = current.includes(locationId)
+      ? current.filter(id => id !== locationId)
+      : [...current, locationId];
+    const nextData = { ...formData, location_ids: nextList };
+    setFormData(nextData);
+    if (selectedId) {
+      triggerSave(nextData, true);
     }
   };
 
@@ -313,34 +347,40 @@ export default function ProductsPage() {
               {filteredProducts.map((product) => (
                 <div
                   key={product.id}
-                  className={`flex items-start justify-between p-4 rounded-xl cursor-pointer transition-all duration-200 hover:scale-[1.01] hover:shadow-md border min-h-[60px] ${
-                    selectedId === product.id
-                      ? 'bg-gradient-to-r from-primary/10 via-primary/5 to-transparent text-primary border-primary'
-                      : 'border-border/60 hover:bg-muted/50 dark:hover:bg-card'
-                  }`}
                   onClick={() => handleSelect(product)}
+                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center ${
+                    selectedId === product.id 
+                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                  }`}
                 >
-                  <div className="flex gap-3 items-start">
+                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-[80px] h-[80px] object-cover rounded-md shrink-0" />
+                      <img src={product.image} alt={product.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
                     ) : (
-                      <div className="w-[80px] h-[80px] bg-muted rounded-md flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-6 h-6 opacity-20"/></div>
+                      <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                        <ImageIcon className="w-4 h-4 opacity-35" />
+                      </div>
                     )}
-                    <div className="flex flex-col gap-1 mt-1">
-                      <span className="font-medium leading-none">{product.name}</span>
-                      <span className="text-xs text-muted-foreground line-clamp-2">{product.description}</span>
-                      <div className="text-xs text-muted-foreground mt-1">{product.sku || 'No SKU'} &bull; ${product.price}</div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                      <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={product.name}>{product.name}</span>
+                      <div className="text-xs text-muted-foreground mt-0.5 text-left">{product.sku || 'No SKU'} &bull; ${product.price}</div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button onClick={() => updateProductQuick(product.id, { active: !product.active })} className="p-2 hover:bg-muted rounded-full">
-                          <Circle className={`w-4 h-4 ${product.active ? 'fill-emerald-500 text-emerald-500' : 'text-muted-foreground/40'}`} />
+                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => updateProductQuick(product.id, { active: !product.active })} 
+                          className="p-0.5 hover:bg-muted rounded transition-colors"
+                          title={product.active ? 'Deactivate product' : 'Activate product'}
+                        >
+                          {product.active ? (
+                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                          ) : (
+                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
+                          )}
                         </button>
-                      </TooltipTrigger>
-                      <TooltipContent>{product.active ? 'Active' : 'Inactive'}</TooltipContent>
-                    </Tooltip>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -375,18 +415,15 @@ export default function ProductsPage() {
                   </CardDescription>
                 </div>
               </div>
-              {!isCreating && !isEditing && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="min-h-[44px]">
-                    <Edit className="h-4 w-4 md:mr-2" />
-                    <span className="hidden md:inline">Edit</span>
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => selectedId && handleDelete(selectedId)} className="min-h-[44px]">
-                    <Trash2 className="h-4 w-4 md:mr-2" />
-                    <span className="hidden md:inline">Delete</span>
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {selectedId && (
+                  <AutoSaveStatus state={saveState} onRetry={retry} />
+                )}
+                <Button variant="destructive" size="sm" onClick={() => selectedId && handleDelete(selectedId)} className="min-h-[44px]">
+                  <Trash2 className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Delete</span>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6 p-4 md:p-6 flex-1 overflow-auto">
               <div className="grid grid-cols-2 gap-4">
@@ -394,8 +431,16 @@ export default function ProductsPage() {
                   <Label>Image</Label>
                   <ImageUpload 
                     imagePreview={formData.image || null} 
-                    onImageSelect={(file) => setFormData({ ...formData, image: file })} 
-                    onImageRemove={() => setFormData({ ...formData, image: null })} 
+                    onImageSelect={(file) => {
+                      const next = { ...formData, image: file };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next, true);
+                    }} 
+                    onImageRemove={() => {
+                      const next = { ...formData, image: null };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next, true);
+                    }} 
                     disabled={!isEditing} 
                   />
                 </div>
@@ -403,7 +448,11 @@ export default function ProductsPage() {
                   <Label>Name</Label>
                   <Input
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      const next = { ...formData, name: e.target.value };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next);
+                    }}
                     disabled={!isEditing}
                     placeholder="e.g. Premium Massage Oil"
                   />
@@ -412,7 +461,11 @@ export default function ProductsPage() {
                   <Label>Description</Label>
                   <Textarea
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) => {
+                      const next = { ...formData, description: e.target.value };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next);
+                    }}
                     disabled={!isEditing}
                     placeholder="Describe this product..."
                   />
@@ -421,7 +474,11 @@ export default function ProductsPage() {
                   <Label>SKU</Label>
                   <Input
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    onChange={(e) => {
+                      const next = { ...formData, sku: e.target.value };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next);
+                    }}
                     disabled={!isEditing}
                     placeholder="e.g. OIL-001"
                   />
@@ -432,7 +489,11 @@ export default function ProductsPage() {
                     type="number"
                     step="0.01"
                     value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const next = { ...formData, price: parseFloat(e.target.value) || 0 };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next);
+                    }}
                     disabled={!isEditing}
                   />
                 </div>
@@ -445,7 +506,11 @@ export default function ProductsPage() {
                   </div>
                   <Switch
                     checked={formData.active}
-                    onCheckedChange={(c) => setFormData({ ...formData, active: c })}
+                    onCheckedChange={(c) => {
+                      const next = { ...formData, active: c };
+                      setFormData(next);
+                      if (selectedId) triggerSave(next, true);
+                    }}
                     disabled={!isEditing}
                   />
                 </div>
@@ -511,7 +576,7 @@ export default function ProductsPage() {
                 </div>
               </div>
             </CardContent>
-            {isEditing && (
+            {isCreating && (
               <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none shrink-0">
                 <Button variant="ghost" className="min-h-[44px]" onClick={() => {
                   if (location.state?.returnToServiceId) {
@@ -523,14 +588,7 @@ export default function ProductsPage() {
                     });
                     return;
                   }
-                  if (isCreating) {
-                    setIsCreating(false);
-                  } else {
-                    setIsEditing(false);
-                    // Reset
-                    const item = products.find(p => p.id === selectedId);
-                    if (item) handleSelect(item);
-                  }
+                  setIsCreating(false);
                 }}>
                   Cancel
                 </Button>

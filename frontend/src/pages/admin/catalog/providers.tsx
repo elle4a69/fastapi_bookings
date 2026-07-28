@@ -6,11 +6,13 @@ import {
   Link, Image as ImageIcon, Video, Code, HelpCircle, 
   X, Check,
   ChevronDown, Link2, Upload,
-  Eye, EyeOff, Loader2
+  Eye, EyeOff, Loader2, Circle, CircleSlash, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '@/lib/api';
+import { useAutoSave } from '@/hooks/use-auto-save';
+import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -97,6 +99,95 @@ export default function ProvidersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [rightPaneType, setRightPaneType] = useState<'provider' | 'location'>('provider');
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [isLocationCreating, setIsLocationCreating] = useState(false);
+  const [locationFormData, setLocationFormData] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    contact_person: '',
+    timezone: 'Australia/Melbourne',
+  });
+
+  const { saveState, triggerSave, retry } = useAutoSave({
+    onSave: async (updatedData: any) => {
+      const targetId = selectedProvider?.id;
+      if (!targetId) return;
+      
+      const payload: any = {
+        name: updatedData.name || '',
+        email: updatedData.email || null,
+        phone: updatedData.phone || null,
+        active: updatedData.active ?? true,
+        is_visible: updatedData.is_visible ?? true,
+        capacity: updatedData.capacity || 1,
+        color: updatedData.color || null,
+        description: updatedData.description || null,
+        ignore_company_hours: updatedData.ignore_company_hours ?? false,
+      };
+
+      try {
+        const res = await apiClient.put<any>(`/api/admin/providers/${targetId}`, payload);
+        const dataObj = res?.data || res;
+        const returnedProvider = { ...updatedData, ...dataObj, id: String(dataObj.id || targetId) };
+        setProviders(prev => prev.map(p => p.id === targetId ? returnedProvider : p));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save provider");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
+
+  const { saveState: locSaveState, triggerSave: triggerLocSave, retry: retryLoc } = useAutoSave({
+    onSave: async (updatedData: any) => {
+      const targetId = selectedLocationId;
+      if (!targetId) return;
+      try {
+        const res = await apiClient.put<any>(`/api/admin/locations/${targetId}`, updatedData);
+        const dataObj = res?.data || res;
+        const returnedLocation = { ...updatedData, ...dataObj, id: String(dataObj.id || targetId) };
+        setLocations(prev => prev.map(l => String(l.id) === String(targetId) ? returnedLocation : l));
+      } catch (error: any) {
+        toast.error(error.message || "Failed to auto-save location");
+        throw error;
+      }
+    },
+    debounceMs: 500
+  });
+
+  const handleSaveLocationManual = async () => {
+    if (!locationFormData.name.trim()) {
+      toast.error('Location Name is required');
+      return;
+    }
+    try {
+      const res = await apiClient.post<any>('/api/admin/locations', locationFormData);
+      const dataObj = res?.data || res;
+      const newLoc = { ...locationFormData, ...dataObj, id: String(dataObj.id) };
+      setLocations(prev => [...prev, newLoc]);
+      toast.success('Location created successfully');
+      setSelectedLocationId(newLoc.id);
+      setIsLocationCreating(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create location');
+    }
+  };
+
+  const handleDeleteLocation = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this location?')) return;
+    try {
+      await apiClient.delete(`/api/admin/locations/${id}`);
+      setLocations(prev => prev.filter(l => String(l.id) !== id));
+      setSelectedLocationId(null);
+      setRightPaneType('provider');
+      toast.success('Location deleted successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete location');
+    }
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeMobileTab, setActiveMobileTab] = useState('monday');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -180,7 +271,8 @@ export default function ProvidersPage() {
     setSelectedProvider(null);
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (initialProps?: Partial<Provider>) => {
+    setRightPaneType('provider');
     const defaultData = {
       name: 'New Provider',
       active: true,
@@ -189,6 +281,7 @@ export default function ProvidersPage() {
       capacity: 1,
       color: '#34bbf1',
       description: '',
+      locations: initialProps?.locations || [],
     };
     
     let createdProvider: Provider | null = null;
@@ -211,13 +304,13 @@ export default function ProvidersPage() {
           },
           special_days: [],
           services: [],
-          locations: []
+          locations: initialProps?.locations || []
         };
       }
     } catch (err) {
       console.warn("Backend create notice, using local provider:", err);
     }
-
+ 
     if (!createdProvider) {
       createdProvider = {
         id: `prov-${Date.now()}`,
@@ -233,13 +326,52 @@ export default function ProvidersPage() {
         },
         special_days: [],
         services: [],
-        locations: []
+        locations: initialProps?.locations || []
       };
     }
-
+ 
     setProviders(prev => [...prev, createdProvider!]);
     setSelectedProvider(createdProvider);
     toast.success('Provider created successfully');
+  };
+
+  const handleAssignProviderToLocation = async (providerId: string, locationId: string) => {
+    const prov = providers.find(p => p.id === providerId);
+    if (!prov) return;
+    const currentLocs = prov.locations || [];
+    if (currentLocs.includes(locationId)) return;
+    const nextLocs = [...currentLocs, locationId];
+    
+    // Optimistic update
+    const updatedProvider = { ...prov, locations: nextLocs };
+    setProviders(prev => prev.map(p => p.id === providerId ? updatedProvider : p));
+    if (selectedProvider?.id === providerId) {
+      setSelectedProvider(updatedProvider);
+    }
+    
+    try {
+      const payload: any = {
+        name: prov.name || '',
+        email: prov.email || null,
+        phone: prov.phone || null,
+        active: prov.active ?? true,
+        is_visible: prov.is_visible ?? true,
+        capacity: prov.capacity || 1,
+        color: prov.color || null,
+        description: prov.description || null,
+        ignore_company_hours: prov.ignore_company_hours ?? false,
+        locations: nextLocs,
+      };
+      await apiClient.put(`/api/admin/providers/${providerId}`, payload);
+      toast.success(`Assigned ${prov.name} to location`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update provider assignment");
+      // Rollback
+      setProviders(prev => prev.map(p => p.id === providerId ? prov : p));
+      if (selectedProvider?.id === providerId) {
+        setSelectedProvider(prov);
+      }
+    }
   };
 
   const handleUpdate = async () => {
@@ -319,32 +451,76 @@ export default function ProvidersPage() {
     toast.success('Provider deleted');
   };
 
-  const toggleProviderVisibility = (id: string, e: React.MouseEvent) => {
+  const toggleProviderVisibility = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setProviders(prev => prev.map(p => {
-      if (p.id === id) {
-        const nextVis = !p.is_visible;
-        if (selectedProvider?.id === id) {
-          setSelectedProvider({ ...selectedProvider, is_visible: nextVis });
-        }
-        toast.success(`Provider ${nextVis ? 'visible on' : 'hidden from'} booking page`);
-        return { ...p, is_visible: nextVis };
+    const prov = providers.find(p => p.id === id);
+    if (!prov) return;
+    const nextVis = !prov.is_visible;
+    const updated = { ...prov, is_visible: nextVis };
+    
+    // Update local state
+    setProviders(prev => prev.map(p => p.id === id ? updated : p));
+    if (selectedProvider?.id === id) {
+      setSelectedProvider(updated);
+    }
+    
+    try {
+      const payload: any = {
+        name: prov.name || '',
+        email: prov.email || null,
+        phone: prov.phone || null,
+        active: prov.active ?? true,
+        is_visible: nextVis,
+        capacity: prov.capacity || 1,
+        color: prov.color || null,
+        description: prov.description || null,
+        ignore_company_hours: prov.ignore_company_hours ?? false,
+      };
+      await apiClient.put(`/api/admin/providers/${id}`, payload);
+      toast.success(`Provider ${nextVis ? 'visible on' : 'hidden from'} booking page`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update provider visibility");
+      // Rollback
+      setProviders(prev => prev.map(p => p.id === id ? prov : p));
+      if (selectedProvider?.id === id) {
+        setSelectedProvider(prov);
       }
-      return p;
-    }));
+    }
   };
 
-  const toggleProviderActive = (id: string, active: boolean) => {
-    setProviders(prev => prev.map(p => {
-      if (p.id === id) {
-        if (selectedProvider?.id === id) {
-          setSelectedProvider({ ...selectedProvider, active });
-        }
-        toast.success(`Provider status set to ${active ? 'Active' : 'Inactive'}`);
-        return { ...p, active };
+  const toggleProviderActive = async (id: string, active: boolean) => {
+    const prov = providers.find(p => p.id === id);
+    if (!prov) return;
+    const updated = { ...prov, active };
+    
+    // Update local state
+    setProviders(prev => prev.map(p => p.id === id ? updated : p));
+    if (selectedProvider?.id === id) {
+      setSelectedProvider(updated);
+    }
+    
+    try {
+      const payload: any = {
+        name: prov.name || '',
+        email: prov.email || null,
+        phone: prov.phone || null,
+        active,
+        is_visible: prov.is_visible ?? true,
+        capacity: prov.capacity || 1,
+        color: prov.color || null,
+        description: prov.description || null,
+        ignore_company_hours: prov.ignore_company_hours ?? false,
+      };
+      await apiClient.put(`/api/admin/providers/${id}`, payload);
+      toast.success(`Provider status set to ${active ? 'Active' : 'Inactive'}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update provider status");
+      // Rollback
+      setProviders(prev => prev.map(p => p.id === id ? prov : p));
+      if (selectedProvider?.id === id) {
+        setSelectedProvider(prov);
       }
-      return p;
-    }));
+    }
   };
 
   const filteredProviders = providers.filter((p) =>
@@ -359,9 +535,11 @@ export default function ProvidersPage() {
       .substring(0, 2)
       .toUpperCase();
 
-  const handleProviderChange = (field: keyof Provider, value: any) => {
+  const handleProviderChange = (field: keyof Provider, value: any, immediate = false) => {
     if (!selectedProvider) return;
-    setSelectedProvider({ ...selectedProvider, [field]: value });
+    const next = { ...selectedProvider, [field]: value };
+    setSelectedProvider(next);
+    triggerSave(next, immediate);
   };
 
   const handleServicesToggle = async (updatedServices: string[]) => {
@@ -487,26 +665,58 @@ export default function ProvidersPage() {
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)] bg-background font-sans">
       {/* Left Panel - Master */}
-      <div className={`md:w-[35%] border-r flex flex-col transition-all duration-300 ${selectedProvider ? 'hidden md:flex' : 'flex w-full'}`}>
+      {/* Left Panel - Master */}
+      <div className={`md:w-[35%] border-r flex flex-col transition-all duration-300 ${(selectedProvider || selectedLocationId || isLocationCreating) ? 'hidden md:flex' : 'flex w-full'}`}>
         <div className="p-4 border-b flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <h1 className="text-xl font-semibold font-heading">Providers</h1>
-            <Button onClick={handleCreate} size="sm" className="min-h-[44px]">
-              <Plus className="h-4 w-4 mr-2" /> Add Provider
-            </Button>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search providers..."
-              className="pl-10 min-h-[44px]"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex gap-2 items-center">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={() => {
+                setRightPaneType("location");
+                setIsLocationCreating(true);
+                setSelectedLocationId(null);
+                setLocationFormData({
+                  name: "New Location",
+                  address: "",
+                  phone: "",
+                  contact_person: "",
+                  timezone: "Australia/Melbourne"
+                });
+              }} 
+              className="min-h-[44px] min-w-[44px] shrink-0" 
+              title="Add Location"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search providers..."
+                className="pl-10 min-h-[44px]"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={() => {
+                setRightPaneType("provider");
+                handleCreate();
+              }} 
+              className="min-h-[44px] min-w-[44px] shrink-0" 
+              title="Add Provider"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-2">
+        <div className="flex-1 overflow-auto p-2 space-y-4">
           {loading ? (
             <div className="p-4 space-y-4">
               {[1, 2, 3].map((i) => (
@@ -519,66 +729,311 @@ export default function ProvidersPage() {
                 </div>
               ))}
             </div>
-          ) : filteredProviders.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No providers found.
-            </div>
           ) : (
-            <ul className="space-y-2">
-              {filteredProviders.map((provider, index) => (
-                <li
-                  key={provider.id || `prov-${index}`}
-                  className={`p-3 rounded-xl cursor-pointer hover:bg-muted/50 border transition-all duration-200 hover:scale-[1.01] ${
-                    selectedProvider?.id === provider.id ? 'bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary' : 'border-border/60'
-                  }`}
-                  onClick={() => setSelectedProvider({ ...provider })}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Avatar style={{ backgroundColor: provider.color || '#e2e8f0' }}>
-                        <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover" />
-                        <AvatarFallback className="text-white bg-transparent font-medium">
-                          {getInitials(provider.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-sm">{provider.name}</div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`inline-block w-2 h-2 rounded-full ${provider.active ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
-                          <span className="text-[11px] text-muted-foreground">{provider.active ? 'Active' : 'Inactive'}</span>
-                          {provider.is_visible && (
-                            <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.2 rounded font-medium ml-1">Visible</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        title={provider.is_visible ? "Visible on booking page (Click to hide)" : "Hidden from booking page (Click to show)"}
-                        onClick={(e) => toggleProviderVisibility(provider.id, e)}
+            <>
+              {/* Dynamic Locations Group */}
+              {locations.map((loc) => {
+                const locProviders = filteredProviders.filter(p => p.locations?.includes(String(loc.id)));
+                return (
+                  <div 
+                    key={loc.id} 
+                    className="space-y-2"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async (e) => {
+                      const providerId = e.dataTransfer.getData("text/plain");
+                      handleAssignProviderToLocation(providerId, String(loc.id));
+                    }}
+                  >
+                    <div className="flex items-center justify-between pr-2">
+                      <h3 
+                        className="text-sm font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:text-primary transition-colors pl-2"
+                        onClick={() => {
+                          setRightPaneType("location");
+                          setIsLocationCreating(false);
+                          setSelectedLocationId(String(loc.id));
+                          setLocationFormData({
+                            name: loc.name,
+                            address: loc.address || "",
+                            phone: loc.phone || "",
+                            contact_person: loc.contact_person || "",
+                            timezone: loc.timezone || "Australia/Melbourne"
+                          });
+                        }}
                       >
-                        {provider.is_visible ? <Eye className="h-4 w-4 text-primary" /> : <EyeOff className="h-4 w-4 text-muted-foreground/40" />}
+                        {loc.name}
+                      </h3>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-6 w-6 p-0 hover:bg-muted text-muted-foreground hover:text-foreground rounded-md shrink-0" 
+                        title="Add Provider to Location"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCreate({ locations: [String(loc.id)] });
+                        }}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
                       </Button>
-                      <Switch
-                        checked={provider.active}
-                        onCheckedChange={(checked) => toggleProviderActive(provider.id, checked)}
-                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {locProviders.map((provider) => (
+                        <div 
+                          key={`${loc.id}-${provider.id}`}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData("text/plain", provider.id)}
+                          onClick={() => {
+                            setRightPaneType("provider");
+                            setSelectedProvider({ ...provider });
+                          }}
+                          className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                            selectedProvider?.id === provider.id 
+                              ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                              : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                          }`}
+                        >
+                          <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                            <Avatar className="w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: provider.color || '#e2e8f0' }}>
+                              <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
+                              <AvatarFallback className="text-white bg-transparent font-medium rounded-lg">
+                                {getInitials(provider.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                              <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={provider.name}>{provider.name}</span>
+                              <div className="text-xs text-muted-foreground mt-0.5 text-left truncate">{provider.email || 'No email'}</div>
+                            </div>
+                            <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                              <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleProviderVisibility(provider.id, e); }} 
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title={provider.is_visible ? 'Hide from booking page' : 'Show on booking page'}
+                                >
+                                  {provider.is_visible ? (
+                                    <Eye className="w-3.5 h-3.5 text-emerald-500" />
+                                  ) : (
+                                    <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                                  )}
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleProviderActive(provider.id, !provider.active); }} 
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title={provider.active ? 'Deactivate provider' : 'Activate provider'}
+                                >
+                                  {provider.active ? (
+                                    <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                                  ) : (
+                                    <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+
+              {/* Unassigned Group */}
+              {(() => {
+                const unassigned = filteredProviders.filter(p => !p.locations || p.locations.length === 0);
+                if (unassigned.length === 0) return null;
+                return (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pl-2">
+                      Unassigned
+                    </h3>
+                    <div className="space-y-2">
+                      {unassigned.map((provider) => (
+                        <div 
+                          key={`unassigned-${provider.id}`}
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData("text/plain", provider.id)}
+                          onClick={() => {
+                            setRightPaneType("provider");
+                            setSelectedProvider({ ...provider });
+                          }}
+                          className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                            selectedProvider?.id === provider.id 
+                              ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                              : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                          }`}
+                        >
+                          <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                            <Avatar className="w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: provider.color || '#e2e8f0' }}>
+                              <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
+                              <AvatarFallback className="text-white bg-transparent font-medium rounded-lg">
+                                {getInitials(provider.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                              <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={provider.name}>{provider.name}</span>
+                              <div className="text-xs text-muted-foreground mt-0.5 text-left truncate">{provider.email || 'No email'}</div>
+                            </div>
+                            <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                              <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleProviderVisibility(provider.id, e); }} 
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title={provider.is_visible ? 'Hide from booking page' : 'Show on booking page'}
+                                >
+                                  {provider.is_visible ? (
+                                    <Eye className="w-3.5 h-3.5 text-emerald-500" />
+                                  ) : (
+                                    <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                                  )}
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleProviderActive(provider.id, !provider.active); }} 
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title={provider.active ? 'Deactivate provider' : 'Activate provider'}
+                                >
+                                  {provider.active ? (
+                                    <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                                  ) : (
+                                    <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
           )}
         </div>
       </div>
 
       {/* Right Panel - Details */}
-      <div className={`md:w-[65%] flex flex-col transition-all duration-300 ${selectedProvider ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
-        {selectedProvider ? (
+      <div className={`md:w-[65%] flex flex-col transition-all duration-300 ${(selectedProvider || selectedLocationId || isLocationCreating) ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
+        {rightPaneType === "location" ? (
+          <>
+            <div className="p-4 border-b flex justify-between items-center bg-card sticky top-0 z-10">
+              <div className="flex items-center gap-3">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" 
+                  onClick={() => { setSelectedLocationId(null); setIsLocationCreating(false); }}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <h2 className="text-xl font-semibold">
+                  {isLocationCreating ? 'New Location' : locationFormData.name || 'Location Details'}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isLocationCreating && selectedLocationId && (
+                  <>
+                    <AutoSaveStatus state={locSaveState} onRetry={retryLoc} />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleDeleteLocation(selectedLocationId)} 
+                      className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 md:p-8 w-full space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="loc-name">Location Name *</Label>
+                <Input 
+                  id="loc-name"
+                  value={locationFormData.name}
+                  onChange={(e) => {
+                    const next = { ...locationFormData, name: e.target.value };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
+                  placeholder="e.g. Downtown Office"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="loc-address">Address</Label>
+                <Input 
+                  id="loc-address"
+                  value={locationFormData.address}
+                  onChange={(e) => {
+                    const next = { ...locationFormData, address: e.target.value };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
+                  placeholder="e.g. 123 Main St"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="loc-phone">Phone</Label>
+                <Input 
+                  id="loc-phone"
+                  value={locationFormData.phone}
+                  onChange={(e) => {
+                    const next = { ...locationFormData, phone: e.target.value };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
+                  placeholder="e.g. +61 3 9999 9999"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="loc-contact">Contact Person</Label>
+                <Input 
+                  id="loc-contact"
+                  value={locationFormData.contact_person}
+                  onChange={(e) => {
+                    const next = { ...locationFormData, contact_person: e.target.value };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
+                  placeholder="e.g. John Doe"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="loc-timezone">Timezone</Label>
+                <Input 
+                  id="loc-timezone"
+                  value={locationFormData.timezone}
+                  onChange={(e) => {
+                    const next = { ...locationFormData, timezone: e.target.value };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
+                  placeholder="e.g. Australia/Melbourne"
+                />
+              </div>
+            </div>
+
+            {isLocationCreating && (
+              <div className="p-4 border-t flex justify-end gap-2 bg-card">
+                <Button 
+                  variant="outline" 
+                  onClick={() => { setIsLocationCreating(false); setSelectedLocationId(null); }} 
+                  className="min-h-[44px]"
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveLocationManual} className="min-h-[44px]">
+                  Save Location
+                </Button>
+              </div>
+            )}
+          </>
+        ) : selectedProvider ? (
           <>
             {/* Toolbar Header */}
             <div className="p-4 border-b flex justify-between items-center bg-card sticky top-0 z-10">
@@ -588,23 +1043,20 @@ export default function ProvidersPage() {
                 </Button>
                 <h2 className="text-xl font-semibold">{selectedProvider.name || 'Editing Provider'}</h2>
               </div>
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm" className="min-h-[44px] rounded-md hidden sm:flex">
-                  <Copy className="h-4 w-4 mr-2" /> Clone
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDelete(selectedProvider.id)} className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md hidden sm:flex">
+              <div className="flex items-center space-x-2">
+                <AutoSaveStatus state={saveState} onRetry={retry} />
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleDelete(selectedProvider.id)} 
+                  className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md"
+                >
                   <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleCancel} className="min-h-[44px] rounded-md">
-                  Cancel
-                </Button>
-                <Button size="sm" onClick={handleUpdate} className="min-h-[44px] rounded-full px-6 bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Save className="h-4 w-4 mr-2" /> Save & Close
                 </Button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-4 md:p-8 w-full">
+            <div className="flex-1 overflow-auto p-4 md:p-8 w-full bg-background">
               <Accordion type="multiple" defaultValue={['details']} className="w-full space-y-4">
                 
                 {/* Accordion 1: Service provider's details * */}
@@ -621,7 +1073,7 @@ export default function ProvidersPage() {
                         </Label>
                         <Input
                           value={selectedProvider.name || ''}
-                          onChange={(e) => handleProviderChange('name', e.target.value)}
+                          onChange={(e) => handleProviderChange('name', e.target.value, true)}
                           required
                           className="bg-muted/30"
                         />
@@ -636,7 +1088,7 @@ export default function ProvidersPage() {
                           </Button>
                           <Input
                             value={selectedProvider.phone || ''}
-                            onChange={(e) => handleProviderChange('phone', e.target.value)}
+                            onChange={(e) => handleProviderChange('phone', e.target.value, true)}
                             className="rounded-l-none bg-muted/30"
                           />
                         </div>
@@ -650,7 +1102,7 @@ export default function ProvidersPage() {
                         <Input
                           type="email"
                           value={selectedProvider.email || ''}
-                          onChange={(e) => handleProviderChange('email', e.target.value)}
+                          onChange={(e) => handleProviderChange('email', e.target.value, true)}
                           className="bg-muted/30"
                         />
                       </div>
@@ -661,37 +1113,9 @@ export default function ProvidersPage() {
                           Service provider description
                         </Label>
                         <div className="border rounded-md overflow-hidden bg-background">
-                          {/* Toolbar */}
-                          <div className="flex items-center gap-1 p-2 border-b bg-muted/20 flex-wrap">
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><Wand2 className="h-4 w-4" /></Button>
-                            <div className="w-px h-4 bg-border mx-1" />
-                            <Button variant="ghost" size="icon" className="h-8 w-8 font-serif font-bold">B</Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 font-serif italic">I</Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 font-serif underline">U</Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 font-serif line-through">S</Button>
-                            <div className="w-px h-4 bg-border mx-1" />
-                            <Button variant="ghost" className="h-8 px-2 text-xs flex items-center gap-1">Open Sans <ChevronDown className="h-3 w-3" /></Button>
-                            <Button variant="ghost" className="h-8 px-2 text-xs flex items-center gap-1">14 <ChevronDown className="h-3 w-3" /></Button>
-                            <Button variant="ghost" className="h-8 w-8 relative flex items-center justify-center">
-                              <span className="font-bold">A</span>
-                              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-yellow-400" />
-                            </Button>
-                            <div className="w-px h-4 bg-border mx-1" />
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><List className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><ListOrdered className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><AlignLeft className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><AlignCenter className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><AlignRight className="h-4 w-4" /></Button>
-                            <div className="w-px h-4 bg-border mx-1" />
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><Link className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><Code className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><HelpCircle className="h-4 w-4" /></Button>
-                          </div>
                           <Textarea
                             value={selectedProvider.description || ''}
-                            onChange={(e) => handleProviderChange('description', e.target.value)}
+                            onChange={(e) => handleProviderChange('description', e.target.value, true)}
                             rows={4}
                             className="border-0 rounded-none resize-none focus-visible:ring-0 shadow-none"
                           />
@@ -719,8 +1143,8 @@ export default function ProvidersPage() {
                                  size="icon" 
                                  className="h-7 w-7 rounded-full shadow-md z-10"
                                  onClick={() => {
-                                   handleProviderChange('avatar', '');
-                                   handleProviderChange('image', '');
+                                   handleProviderChange('avatar', '', true);
+                                   handleProviderChange('image', '', true);
                                    toast.success("Image removed");
                                  }}
                                >
@@ -768,20 +1192,19 @@ export default function ProvidersPage() {
                             }}
                             className="shrink-0"
                           >
-                            <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy Link
+                            Copy Link
                           </Button>
                         </div>
-                        <p className="text-xs text-muted-foreground">Direct URL clients can use to bypass selection and book this provider directly.</p>
                       </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* Accordion 2: Service provider schedule */}
+                {/* Accordion 2: Weekly schedule, attached to this service provider */}
                 <AccordionItem value="schedule" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     <div className="flex items-center justify-between w-full pr-4">
-                      <span>Provider Scheduling</span>
+                      <span>Weekly Schedule</span>
                       {saveStatus === 'saving' && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal animate-pulse">
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -796,8 +1219,8 @@ export default function ProvidersPage() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
-                    {/* Desktop Grid Layout */}
-                    <div className="flex md:flex-row gap-2 w-full overflow-x-auto pb-4 scrollbar-thin max-md:hidden items-start">
+                    {/* Desktop Week Grid */}
+                    <div className="hidden md:grid grid-cols-7 gap-4">
                       {DAYS_OF_WEEK.map((day) => {
                         const sched = selectedProvider.weekly_schedule?.[day.key] || {
                           is_working: false,
@@ -809,9 +1232,9 @@ export default function ProvidersPage() {
                         const activeSlots = sched.active_slots || [];
 
                         return (
-                          <div 
-                            key={day.key} 
-                            className={`border border-border/40 backdrop-blur-md rounded-2xl p-3 flex flex-col gap-3 bg-card/65 transition-all duration-200 min-w-[200px] flex-1 ${
+                          <div
+                            key={day.key}
+                            className={`flex flex-col gap-3 p-3 border rounded-2xl transition-all duration-200 ${
                               !isActive ? 'opacity-50 bg-muted/5' : 'shadow-xs hover:border-border/80'
                             }`}
                           >
@@ -820,26 +1243,18 @@ export default function ProvidersPage() {
                               <h3 className="font-bold text-sm text-foreground tracking-tight text-center">
                                 {day.label}
                               </h3>
-
-                              {/* Vertical Stack Toggles */}
-                              <div className="flex flex-col gap-2.5 mt-1 bg-muted/20 p-2 rounded-xl border border-border/20">
-                                <div className="flex items-center justify-between gap-2">
-                                  <Label htmlFor={`accordion-${day.key}-active`} className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer">
-                                    Active Status
-                                  </Label>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] font-semibold text-muted-foreground">Active</Label>
                                   <Switch
-                                    id={`accordion-${day.key}-active`}
                                     checked={isActive}
                                     onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'is_working', val)}
                                     className="scale-85"
                                   />
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <Label htmlFor={`accordion-${day.key}-recurring`} className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer">
-                                    Recurring
-                                  </Label>
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] font-semibold text-muted-foreground">Recurring</Label>
                                   <Switch
-                                    id={`accordion-${day.key}-recurring`}
                                     checked={isRecurring}
                                     onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'recurring', val)}
                                     className="scale-85"
@@ -847,9 +1262,7 @@ export default function ProvidersPage() {
                                 </div>
                               </div>
                             </div>
-
-                            {/* Time Slots Grid (Vertical Column Scrollable) */}
-                            <div className="grid grid-cols-2 gap-1 max-h-[400px] overflow-y-auto pr-1 select-none scrollbar-thin">
+                            <div className="grid grid-cols-2 gap-1 max-h-[300px] overflow-y-auto">
                               {HALF_HOUR_SLOTS.map((slot) => {
                                 const isSlotActive = activeSlots.includes(slot);
                                 return (
@@ -858,10 +1271,10 @@ export default function ProvidersPage() {
                                     type="button"
                                     onClick={() => toggleSlot(day.key, slot)}
                                     disabled={!isActive}
-                                    className={`w-full py-0.5 px-1 rounded-md text-[9px] font-medium transition-all text-center border ${
+                                    className={`w-full py-0.5 rounded-md text-[9px] font-medium border ${
                                       isSlotActive && isActive
-                                        ? 'bg-primary text-primary-foreground border-primary font-semibold shadow-sm'
-                                        : 'bg-muted/10 text-muted-foreground border-border/20 hover:bg-muted/30 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed'
+                                        ? 'bg-primary text-primary-foreground border-primary'
+                                        : 'bg-muted/10 text-muted-foreground border-border/20'
                                     }`}
                                   >
                                     {slot}
@@ -873,190 +1286,73 @@ export default function ProvidersPage() {
                         );
                       })}
                     </div>
-
-                    {/* Mobile Tabs Layout */}
-                    <div className="md:hidden w-full border border-border/40 backdrop-blur-md bg-card/65 p-4 rounded-2xl shadow-xs">
-                      {/* Day Tabs */}
-                      <div className="flex border-b border-border/30 pb-2 mb-4 overflow-x-auto gap-1 scrollbar-none">
-                        {DAYS_OF_WEEK.map((day) => {
-                          const isTabActive = activeMobileTab === day.key;
-                          return (
-                            <button
-                              key={day.key}
-                              type="button"
-                              onClick={() => setActiveMobileTab(day.key)}
-                              className={`flex-1 min-w-[40px] py-1.5 text-center text-xs font-semibold rounded-xl transition-all duration-200 ${
-                                isTabActive
-                                  ? 'bg-primary text-primary-foreground shadow-sm'
-                                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/60'
-                              }`}
-                            >
-                              {day.short}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Selected Day View */}
-                      {(() => {
-                        const day = DAYS_OF_WEEK.find((d) => d.key === activeMobileTab)!;
-                        const sched = selectedProvider.weekly_schedule?.[day.key] || {
-                          is_working: false,
-                          recurring: false,
-                          active_slots: [],
-                        };
-                        const isActive = sched.is_working;
-                        const isRecurring = sched.recurring;
-                        const activeSlots = sched.active_slots || [];
-
-                        return (
-                          <div className="flex flex-col gap-4">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border/20 pb-3 gap-3">
-                              <h3 className="font-bold text-lg text-foreground">{day.label} Schedule</h3>
-                              
-                              {/* Vertical Stack Toggles */}
-                              <div className="flex flex-col gap-2.5 bg-muted/20 p-3 rounded-xl border border-border/20 w-full sm:w-56">
-                                <div className="flex items-center justify-between gap-4">
-                                  <Label htmlFor={`mobile-accordion-${day.key}-active`} className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer">
-                                    Active Status
-                                  </Label>
-                                  <Switch
-                                    id={`mobile-accordion-${day.key}-active`}
-                                    checked={isActive}
-                                    onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'is_working', val)}
-                                  />
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                  <Label htmlFor={`mobile-accordion-${day.key}-recurring`} className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer">
-                                    Recurring
-                                  </Label>
-                                  <Switch
-                                    id={`mobile-accordion-${day.key}-recurring`}
-                                    checked={isRecurring}
-                                    onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'recurring', val)}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Time Slots Grid (2 Columns on Mobile for better tap targets) */}
-                            <div className="grid grid-cols-2 gap-1 max-h-[300px] overflow-y-auto pr-1 select-none">
-                              {HALF_HOUR_SLOTS.map((slot) => {
-                                const isSlotActive = activeSlots.includes(slot);
-                                return (
-                                  <button
-                                    key={slot}
-                                    type="button"
-                                    onClick={() => toggleSlot(day.key, slot)}
-                                    disabled={!isActive}
-                                    className={`w-full py-0.5 px-1 rounded-md text-[9px] font-medium transition-all text-center border ${
-                                      isSlotActive && isActive
-                                        ? 'bg-primary text-primary-foreground border-primary font-semibold shadow-sm'
-                                        : 'bg-muted/10 text-muted-foreground border-border/20 hover:bg-muted/30 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed'
-                                    }`}
-                                  >
-                                    {slot}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* Accordion 3: Services, attached to this service provider */}
+                {/* Accordion 3: Provider Services */}
                 <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
-                    <div className="flex items-center justify-between w-full pr-4">
-                      <span>Provider Services</span>
-                      {servicesSaveStatus === 'saving' && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal animate-pulse">
-                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                          Saving...
-                        </span>
-                      )}
-                      {servicesSaveStatus === 'saved' && (
-                        <span className="text-xs text-emerald-500 font-medium font-normal">
-                          Saved
-                        </span>
-                      )}
-                    </div>
+                    Provider Services
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
-                    {services.length === 0 ? (
-                      <div className="text-muted-foreground text-sm py-4">No services available.</div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
-                        {(services || []).map((service, sIndex) => {
-                          const isAttached = (selectedProvider.services || []).includes(service.id);
-                          return (
-                            <div 
-                              key={service.id || `service-${sIndex}`} 
-                              className="flex items-center justify-between p-3 border rounded-lg bg-card/45 transition-all hover:border-border/85"
-                            >
-                              <Label htmlFor={`service-${service.id}`} className="text-sm font-medium cursor-pointer select-none pr-2">
-                                {service.name}
-                              </Label>
-                              <Switch
-                                id={`service-${service.id}`}
-                                checked={isAttached}
-                                onCheckedChange={(checked) => {
-                                  const current = selectedProvider.services || [];
-                                  let updatedServices;
-                                  if (checked) {
-                                    updatedServices = [...current, service.id];
-                                  } else {
-                                    updatedServices = current.filter((id) => id !== service.id);
-                                  }
-                                  handleServicesToggle(updatedServices);
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
+                      {(services || []).map((service, sIndex) => {
+                        const isAttached = (selectedProvider.services || []).includes(service.id);
+                        return (
+                          <div 
+                            key={service.id || `service-${sIndex}`} 
+                            className="flex items-center justify-between p-3 border rounded-lg bg-card/45"
+                          >
+                            <Label htmlFor={`service-${service.id}`} className="text-sm font-medium">{service.name}</Label>
+                            <Switch
+                              id={`service-${service.id}`}
+                              checked={isAttached}
+                              onCheckedChange={(checked) => {
+                                const current = selectedProvider.services || [];
+                                let updatedServices = checked 
+                                  ? [...current, service.id] 
+                                  : current.filter((id) => id !== service.id);
+                                handleServicesToggle(updatedServices);
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* Accordion 4: Service provider's locations */}
+                {/* Accordion 4: Provider Locations */}
                 <AccordionItem value="locations" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Provider Locations
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
-                    {locations.length === 0 ? (
-                      <div className="text-muted-foreground text-sm py-4">No locations available.</div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
-                        {locations.map((loc, lIndex) => (
-                          <div key={loc.id || `location-${lIndex}`} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
-                            <Checkbox
-                              id={`location-${loc.id}`}
-                              checked={(selectedProvider.locations || []).includes(loc.id)}
-                              onCheckedChange={(checked) => {
-                                const current = selectedProvider.locations || [];
-                                if (checked) {
-                                  handleProviderChange('locations', [...current, loc.id]);
-                                } else {
-                                  handleProviderChange('locations', current.filter((id) => id !== loc.id));
-                                }
-                              }}
-                            />
-                            <Label htmlFor={`location-${loc.id}`} className="text-sm font-normal cursor-pointer w-full">
-                              {loc.name}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
+                      {locations.map((loc, lIndex) => (
+                        <div key={loc.id || `location-${lIndex}`} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
+                          <Checkbox
+                            id={`location-${loc.id}`}
+                            checked={(selectedProvider.locations || []).includes(loc.id)}
+                            onCheckedChange={(checked) => {
+                              const current = selectedProvider.locations || [];
+                              if (checked) {
+                                handleProviderChange('locations', [...current, loc.id], true);
+                              } else {
+                                handleProviderChange('locations', current.filter((id) => id !== loc.id), true);
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`location-${loc.id}`} className="text-sm font-normal cursor-pointer w-full">
+                            {loc.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* Accordion 5: More options */}
+                {/* Accordion 5: Options */}
                 <AccordionItem value="options" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Provider Colour Coding
@@ -1065,7 +1361,7 @@ export default function ProvidersPage() {
                     <div className="w-full flex flex-col space-y-6 max-w-full">
                       <div className="space-y-4">
                         <Label className="flex items-center gap-2">
-                          Provider's color coding settings <Info className="h-4 w-4 text-muted-foreground" />
+                          Provider's color coding settings
                         </Label>
                         <div className="flex flex-wrap gap-3 items-center">
                           {COLOR_SWATCHES.map((color, cIndex) => (
@@ -1073,23 +1369,16 @@ export default function ProvidersPage() {
                               key={color || `color-${cIndex}`}
                               className={`w-10 h-10 rounded-md flex items-center justify-center transition-all shadow-sm border ${selectedProvider.color === color ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'border-black/10 hover:scale-105'}`}
                               style={{ backgroundColor: color }}
-                              onClick={() => handleProviderChange('color', color)}
+                              onClick={() => handleProviderChange('color', color, true)}
                             >
                               {selectedProvider.color === color && <Check className="h-5 w-5 text-white/90 drop-shadow-sm" />}
                             </button>
                           ))}
-                          <button
-                            className="w-10 h-10 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground transition-colors ml-2"
-                            onClick={() => {}}
-                          >
-                            <Plus className="h-5 w-5" />
-                          </button>
                         </div>
                       </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
-
               </Accordion>
             </div>
           </>
