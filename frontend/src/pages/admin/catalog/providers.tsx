@@ -610,7 +610,7 @@ export default function ProvidersPage() {
                 {/* Accordion 1: Service provider's details * */}
                 <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
-                    Service provider's details *
+                    Service Provider Details
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
                     <div className="w-full flex flex-col space-y-6 max-w-full">
@@ -781,7 +781,7 @@ export default function ProvidersPage() {
                 <AccordionItem value="schedule" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     <div className="flex items-center justify-between w-full pr-4">
-                      <span>Service provider schedule</span>
+                      <span>Provider Scheduling</span>
                       {saveStatus === 'saving' && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal animate-pulse">
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -971,7 +971,7 @@ export default function ProvidersPage() {
                 <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     <div className="flex items-center justify-between w-full pr-4">
-                      <span>Services, attached to this service provider</span>
+                      <span>Provider Services</span>
                       {servicesSaveStatus === 'saving' && (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal animate-pulse">
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
@@ -1025,7 +1025,7 @@ export default function ProvidersPage() {
                 {/* Accordion 4: Service provider's locations */}
                 <AccordionItem value="locations" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
-                    Service provider's locations
+                    Provider Locations
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
                     {locations.length === 0 ? (
@@ -1059,7 +1059,7 @@ export default function ProvidersPage() {
                 {/* Accordion 5: More options */}
                 <AccordionItem value="options" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
-                    More options
+                    Provider Colour Coding
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
                     <div className="w-full flex flex-col space-y-6 max-w-full">
@@ -1085,12 +1085,6 @@ export default function ProvidersPage() {
                             <Plus className="h-5 w-5" />
                           </button>
                         </div>
-                      </div>
-
-                      <div className="pt-4">
-                        <a href="#" className="inline-flex items-center text-primary hover:underline text-sm font-medium gap-2">
-                          Calendar sync options <Info className="h-4 w-4 text-muted-foreground" />
-                        </a>
                       </div>
                     </div>
                   </AccordionContent>

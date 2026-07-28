@@ -751,7 +751,7 @@ export default function ServicesPage() {
               >
                 {/* 1. Service Details */}
                 <AccordionItem value="details" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">1. Basic Info</AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">Service Details</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2 pb-4">
                     <div className="space-y-2">
                       <Label htmlFor="service_name">Service Name *</Label>
@@ -865,7 +865,7 @@ export default function ServicesPage() {
 
                 {/* 3. Fixed Start Times & Groups */}
                 <AccordionItem value="fixed_times" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">3. Fixed Start Times &amp; Groups</AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">Service Schedule</AccordionTrigger>
                   <AccordionContent className="space-y-6 pt-2 pb-4">
                     <div className="space-y-4">
                       <h4 className="font-semibold text-sm">Fixed Start Times</h4>
@@ -934,7 +934,7 @@ export default function ServicesPage() {
 
                 {/* 4. Categories */}
                 <AccordionItem value="categories" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">4. Categories</AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
                     {categories.length > 0 && (
                       <div className="flex flex-col gap-2.5">
@@ -964,7 +964,7 @@ export default function ServicesPage() {
 
                 {/* 5. Providers */}
                 <AccordionItem value="providers" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">5. Providers</AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
                     <p className="text-xs text-muted-foreground italic">
                       Note: If no providers are selected, this service will be available with all providers by default.
@@ -995,45 +995,9 @@ export default function ServicesPage() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 6. Add-ons */}
-                <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">6. Add-ons</AccordionTrigger>
-                  <AccordionContent className="pt-2 pb-4 space-y-3">
-                    {addons.length > 0 && (
-                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {addons.map(a => (
-                          <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                            <div className="flex items-center space-x-2 flex-1 min-w-0">
-                              <Checkbox 
-                                id={`addon-${a.id}`} 
-                                checked={formData.addon_ids.includes(a.id)}
-                                onCheckedChange={() => toggleArrayItem('addon_ids', a.id)}
-                                disabled={!isEditing}
-                              />
-                              <Label htmlFor={`addon-${a.id}`} className="font-normal truncate">{a.name}</Label>
-                            </div>
-                            <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-4">
-                              <span className="w-20 text-right">{a.duration > 0 ? `+${a.duration} mins` : ''}</span>
-                              <span className="w-16 text-right font-medium text-foreground">${a.price || '0.00'}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {addons.length === 0 && (
-                      <p className="text-sm text-muted-foreground">No add-ons available.</p>
-                    )}
-                    {isEditing && (
-                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Add-on
-                      </Button>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
                 {/* 7. Products */}
                 <AccordionItem value="products" className="border rounded-lg px-4 bg-card">
-                  <AccordionTrigger className="hover:no-underline">7. Products</AccordionTrigger>
+                  <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
                   <AccordionContent className="pt-2 pb-4 space-y-3">
                     {products.length > 0 && (
                       <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
@@ -1066,70 +1030,38 @@ export default function ServicesPage() {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 8. Resource Requirements */}
-                <AccordionItem value="resources" className="border rounded-lg px-4 bg-card relative z-50">
-                  <AccordionTrigger className="hover:no-underline">8. Resource Requirements</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-2 pb-4 overflow-visible">
-                    {formData.requirements.map((req, idx) => (
-                      <div key={idx} className="flex gap-2 items-end">
-                        <div className="space-y-2 flex-1">
-                          <Label>Resource Type</Label>
-                          {isEditing ? (
-                            <Select 
-                              value={req.resource_type} 
-                              onValueChange={(val) => updateRequirement(idx, 'resource_type', val)}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder={distinctResourceTypes.length > 0 ? "Select resource type" : "No resource types configured"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {distinctResourceTypes.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input 
-                              value={req.resource_type}
-                              disabled={true}
-                              placeholder="e.g. Room, Equipment"
-                            />
-                          )}
-                        </div>
-                        <div className="space-y-2 w-24">
-                          <Label>Qty</Label>
-                          <Input 
-                            type="number"
-                            value={req.quantity}
-                            onChange={(e) => updateRequirement(idx, 'quantity', parseInt(e.target.value) || 1)}
-                            disabled={!isEditing}
-                          />
-                        </div>
-                        {isEditing && (
-                          <Button variant="ghost" size="icon" onClick={() => removeRequirement(idx)} className="text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                    {isEditing && (
-                      <div className="space-y-3">
-                        {distinctResourceTypes.length === 0 && (
-                          <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded border border-amber-200/50">
-                            No resource groups found. Please define resource groups on the Resources page first.
-                          </p>
-                        )}
-                        <div className="relative z-50">
-                          <Button variant="outline" size="sm" onClick={addRequirementRow} disabled={distinctResourceTypes.length === 0}>
-                            <Plus className="w-4 h-4 mr-2" /> Add Requirement
-                          </Button>
-                        </div>
+                {/* 6. Add-ons */}
+                <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
+                  <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
+                  <AccordionContent className="pt-2 pb-4 space-y-3">
+                    {addons.length > 0 && (
+                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                        {addons.map(a => (
+                          <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                            <div className="flex items-center space-x-2 flex-1 min-w-0">
+                              <Checkbox 
+                                id={`addon-${a.id}`} 
+                                checked={formData.addon_ids.includes(a.id)}
+                                onCheckedChange={() => toggleArrayItem('addon_ids', a.id)}
+                                disabled={!isEditing}
+                              />
+                              <Label htmlFor={`addon-${a.id}`} className="font-normal truncate">{a.name}</Label>
+                            </div>
+                            <div className="flex items-center gap-6 text-xs text-muted-foreground shrink-0 pl-4">
+                              <span className="w-20 text-right">{a.duration > 0 ? `+${a.duration} mins` : ''}</span>
+                              <span className="w-16 text-right font-medium text-foreground">${a.price || '0.00'}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    {formData.requirements.length === 0 && !isEditing && (
-                      <p className="text-sm text-muted-foreground">No resource requirements.</p>
+                    {addons.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No add-ons available.</p>
+                    )}
+                    {isEditing && (
+                      <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Add-on
+                      </Button>
                     )}
                   </AccordionContent>
                 </AccordionItem>
