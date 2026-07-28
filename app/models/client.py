@@ -37,9 +37,18 @@ class Client(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+    management_approval_required = Column(Boolean, default=False, nullable=False)
+    restriction_reason = Column(String, nullable=True)
+    restricted_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    restricted_at = Column(DateTime(timezone=True), nullable=True)
+    restriction_cleared_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    restriction_cleared_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relationships
     tenant = relationship("Tenant")
     bookings = relationship("Booking", back_populates="client")
+    restricted_by = relationship("User", foreign_keys=[restricted_by_id])
+    restriction_cleared_by = relationship("User", foreign_keys=[restriction_cleared_by_id])
 
     def __repr__(self) -> str:
         return f"<Client id={self.id} name={self.name}>"

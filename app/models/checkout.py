@@ -40,6 +40,7 @@ class Invoice(Base):
     status = Column(String, default="draft", nullable=False)
     promotion_code = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    idempotency_key = Column(String, unique=True, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

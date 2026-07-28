@@ -32,13 +32,16 @@ class ServicePackage(Base):
     __tablename__ = "service_packages"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     price = Column(Numeric(10, 2), nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
+    tenant = relationship("Tenant")
     steps = relationship(
         "PackageStep",
         back_populates="package",

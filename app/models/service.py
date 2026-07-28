@@ -31,9 +31,11 @@ class Service(Base):
 
     is_visible = Column(Boolean, default=True, nullable=False)
     deposit_amount = Column(Numeric(10, 2), default=0.0, nullable=False)
+    max_advance_days = Column(Integer, nullable=True)
     tax_rate_id = Column(Integer, ForeignKey("tax_rates.id", ondelete="SET NULL"), nullable=True)
     min_group_size = Column(Integer, default=1, nullable=False)
     max_group_size = Column(Integer, nullable=True)
+    image = Column(String, nullable=True)
 
     # Relationships
     tenant = relationship("Tenant")
@@ -63,7 +65,7 @@ class Service(Base):
 
     # Add‑ons available for this service
     add_ons = relationship(
-        "AddOn",
+        "ServiceAddOn",
         back_populates="service",
         cascade="all, delete-orphan",
     )
@@ -74,6 +76,26 @@ class Service(Base):
         back_populates="service",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def category_ids(self) -> list[int]:
+        return [sc.category_id for sc in self.categories]
+
+    @property
+    def provider_ids(self) -> list[int]:
+        return [sp.provider_id for sp in self.providers]
+
+    @property
+    def addon_ids(self) -> list[int]:
+        return [sa.add_on_id for sa in self.add_ons]
+
+    @property
+    def product_ids(self) -> list[int]:
+        return [sp.product_id for sp in self.products]
+
+    @property
+    def requirements(self):
+        return self.resource_requirements
 
     def __repr__(self) -> str:
         return f"<Service id={self.id} name={self.name}>"

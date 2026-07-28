@@ -36,7 +36,7 @@ class Hold(Base):
             "start_time",
             unique=True,
             sqlite_where=text("status = 'pending'"),
-            postgresql_where=text("status = 'pending'"),
+            postgresql_where=text("status = 'PENDING'::holdstatus"),
         ),
     )
 

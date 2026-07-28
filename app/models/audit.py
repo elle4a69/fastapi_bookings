@@ -19,6 +19,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False)
     target_type = Column(String, nullable=True)
@@ -27,6 +28,7 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
+    tenant = relationship("Tenant")
     user = relationship("User", back_populates="audit_logs")
 
     def __repr__(self) -> str:

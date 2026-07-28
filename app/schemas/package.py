@@ -12,6 +12,7 @@ class PackageBase(BaseModel):
     description: Optional[str] = None
     price: Optional[Decimal] = None
     active: bool = True
+    is_visible: bool = True
 
 
 class PackageCreate(PackageBase):
@@ -24,6 +25,7 @@ class PackageUpdate(PackageBase):
 
 class PackageOut(PackageBase):
     id: int
+    tenant_id: int
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

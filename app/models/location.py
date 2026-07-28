@@ -5,7 +5,7 @@ have their own working hours and time zone. They are linked to
 bookings.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -20,6 +20,8 @@ class Location(Base):
     address = Column(String, nullable=True)
     timezone = Column(String, nullable=True)
     image = Column(String, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
 
     # Relationships
     tenant = relationship("Tenant")

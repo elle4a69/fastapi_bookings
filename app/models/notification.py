@@ -17,6 +17,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
     recipient_email = Column(String, nullable=True)
     type = Column(String, nullable=False, default="email")
@@ -25,6 +26,7 @@ class Notification(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    tenant = relationship("Tenant")
     booking = relationship("Booking")
     logs = relationship("NotificationLog", back_populates="notification")
 
@@ -38,6 +40,7 @@ class NotificationTemplate(Base):
     __tablename__ = "notification_templates"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     code = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
     channel = Column(String, nullable=False, default="email")
@@ -48,6 +51,7 @@ class NotificationTemplate(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    tenant = relationship("Tenant")
     rules = relationship("ReminderRule", back_populates="template")
     logs = relationship("NotificationLog", back_populates="template")
 
@@ -58,6 +62,7 @@ class ReminderRule(Base):
     __tablename__ = "reminder_rules"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     event_type = Column(String, nullable=False, default="booking.start")
     channel = Column(String, nullable=False, default="email")
@@ -70,6 +75,7 @@ class ReminderRule(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    tenant = relationship("Tenant")
     template = relationship("NotificationTemplate", back_populates="rules")
     logs = relationship("NotificationLog", back_populates="rule")
 

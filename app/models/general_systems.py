@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -18,11 +18,15 @@ class PluginState(Base):
     """
 
     __tablename__ = "plugin_states"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_plugin_state_tenant_name"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, index=True, nullable=False)
     is_enabled = Column(Boolean, default=True, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return f"<PluginState name={self.name} is_enabled={self.is_enabled}>"

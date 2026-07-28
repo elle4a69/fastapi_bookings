@@ -24,7 +24,7 @@ class Booking(Base):
             "start_time",
             unique=True,
             sqlite_where=text("status != 'cancelled'"),
-            postgresql_where=text("status != 'cancelled'"),
+            postgresql_where=text("status != 'CANCELLED'::bookingstatus"),
         ),
     )
 
@@ -39,6 +39,7 @@ class Booking(Base):
     end_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(Enum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     notes = Column(Text, nullable=True)
+    idempotency_key = Column(String, unique=True, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

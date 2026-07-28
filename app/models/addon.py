@@ -9,7 +9,7 @@ add‑ons when booking a service.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -32,16 +32,32 @@ class AddOn(Base):
     __tablename__ = "add_ons"
 
     id = Column(Integer, primary_key=True, index=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     price = Column(Numeric(10, 2), nullable=True)
     duration = Column(Integer, default=0, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
-    service = relationship("Service", back_populates="add_ons")
+    tenant = relationship("Tenant")
+    services = relationship("ServiceAddOn", back_populates="add_on", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
-        return f"<AddOn id={self.id} name={self.name} service_id={self.service_id}>"
+        return f"<AddOn id={self.id} name={self.name}>"
+
+
+class ServiceAddOn(Base):
+    __tablename__ = "service_add_ons"
+    __table_args__ = (UniqueConstraint("tenant_id", "service_id", "add_on_id", name="uq_service_add_ons_pair"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True)
+    add_on_id = Column(Integer, ForeignKey("add_ons.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    tenant = relationship("Tenant")
+    service = relationship("Service", back_populates="add_ons")
+    add_on = relationship("AddOn", back_populates="services")

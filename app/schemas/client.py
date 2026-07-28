@@ -20,6 +20,12 @@ class ClientBase(BaseModel):
     accepts_marketing: bool = False
     notes: Optional[str] = None
     active: bool = True
+    management_approval_required: bool = False
+    restriction_reason: Optional[str] = None
+    restricted_by_id: Optional[int] = None
+    restricted_at: Optional[datetime] = None
+    restriction_cleared_by_id: Optional[int] = None
+    restriction_cleared_at: Optional[datetime] = None
 
 
 class ClientCreate(ClientBase):
@@ -75,6 +81,12 @@ class ClientUpdate(BaseModel):
     accepts_marketing: Optional[bool] = None
     notes: Optional[str] = None
     active: Optional[bool] = None
+    management_approval_required: Optional[bool] = None
+    restriction_reason: Optional[str] = None
+    restricted_by_id: Optional[int] = None
+    restricted_at: Optional[datetime] = None
+    restriction_cleared_by_id: Optional[int] = None
+    restriction_cleared_at: Optional[datetime] = None
 
 
 class ClientInDBBase(ClientBase):

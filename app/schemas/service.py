@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from .resource import ServiceResourceRequirementOut, ServiceResourceRequirementCreate
 
 
 class ServiceBase(BaseModel):
@@ -17,10 +18,16 @@ class ServiceBase(BaseModel):
     tax_rate_id: Optional[int] = Field(None, description="Identifier of the associated tax rate")
     min_group_size: int = Field(1, ge=1, description="Minimum spots/people for group booking")
     max_group_size: Optional[int] = Field(None, ge=1, description="Maximum spots/people for group booking")
+    max_advance_days: Optional[int] = Field(None, description="Service-specific booking horizon override in days")
+    image: Optional[str] = Field(None, description="Image URL or Base64 data")
 
 
 class ServiceCreate(ServiceBase):
-    pass
+    category_ids: Optional[list[int]] = None
+    provider_ids: Optional[list[int]] = None
+    addon_ids: Optional[list[int]] = None
+    product_ids: Optional[list[int]] = None
+    requirements: Optional[list[ServiceResourceRequirementCreate]] = None
 
 
 class ServiceUpdate(BaseModel):
@@ -34,6 +41,13 @@ class ServiceUpdate(BaseModel):
     tax_rate_id: Optional[int] = None
     min_group_size: Optional[int] = Field(None, ge=1)
     max_group_size: Optional[int] = Field(None, ge=1)
+    max_advance_days: Optional[int] = None
+    image: Optional[str] = None
+    category_ids: Optional[list[int]] = None
+    provider_ids: Optional[list[int]] = None
+    addon_ids: Optional[list[int]] = None
+    product_ids: Optional[list[int]] = None
+    requirements: Optional[list[ServiceResourceRequirementCreate]] = None
 
 
 class ServiceInDBBase(ServiceBase):
@@ -42,7 +56,11 @@ class ServiceInDBBase(ServiceBase):
 
 
 class Service(ServiceInDBBase):
-    pass
+    category_ids: list[int] = []
+    provider_ids: list[int] = []
+    addon_ids: list[int] = []
+    product_ids: list[int] = []
+    requirements: list[ServiceResourceRequirementOut] = []
 
 
 class ServiceListResponse(BaseModel):

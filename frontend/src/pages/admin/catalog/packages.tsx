@@ -4,20 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, Edit, ArrowUp, ArrowDown, Circle, CircleSlash, ArrowLeft, Layers } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Circle, CircleSlash, Eye, EyeOff, GripVertical, Package as PackageIcon } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAutoSave } from '@/hooks/use-auto-save';
 import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
-interface Service {
-  id: string;
-  name: string;
-}
+interface Service { id: string; name: string; }
 
 interface PackageStep {
   id?: string;
@@ -33,487 +31,333 @@ interface Package {
   description: string;
   price: number;
   active: boolean;
+  is_visible: boolean;
   steps?: PackageStep[];
 }
 
 export default function PackagesPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  
-  const [formData, setFormData] = useState<Omit<Package, 'id'>>({
-    name: '',
-    description: '',
-    price: 0,
-    active: true,
-    steps: [],
-  });
+
+  const defaultForm: Omit<Package, 'id'> = { name: '', description: '', price: 0, active: true, is_visible: true, steps: [] };
+  const [formData, setFormData] = useState(defaultForm);
 
   const { saveState, triggerSave, retry } = useAutoSave({
     onSave: async (updatedData: any) => {
-      const targetId = selectedId;
-      if (!targetId) return;
-      
-      const payload: any = {
-        name: updatedData.name,
-        description: updatedData.description,
-        price: updatedData.price,
-        active: updatedData.active,
-        steps: updatedData.steps,
-      };
-
+      if (!selectedId) return;
       try {
-        await apiClient.put(`/api/admin/packages/${targetId}`, payload);
-        setPackages(prev => prev.map(p => p.id === targetId ? { ...p, ...updatedData, id: targetId } : p));
+        const res = await apiClient.put<any>(`/api/admin/packages/${selectedId}`, updatedData);
+        const dataObj = res?.data || res;
+        setPackages(prev => prev.map(p => p.id === selectedId ? { ...p, ...dataObj } : p));
       } catch (error: any) {
-        toast.error(error.message || "Failed to auto-save package");
+        toast.error(error.message || 'Failed to auto-save package');
         throw error;
       }
     },
-    debounceMs: 500
+    debounceMs: 500,
   });
+
+  const updateQuick = async (id: string, updates: Partial<Package>) => {
+    try {
+      setPackages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      await apiClient.put(`/api/admin/packages/${id}`, updates);
+    } catch {
+      toast.error('Failed to update package');
+      fetchData();
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [packagesData, servicesData] = await Promise.all([
-        apiClient.get<Package[]>('/api/admin/packages'),
-        apiClient.get<Service[]>('/api/admin/services')
+      const [pkgRes, svcRes] = await Promise.all([
+        apiClient.get<any>('/api/admin/packages').catch(() => ({ data: [] })),
+        apiClient.get<any>('/api/admin/services').catch(() => ({ data: [] })),
       ]);
-      setPackages(packagesData);
-      setServices(servicesData);
-    } catch (error) {
+      setPackages(Array.isArray(pkgRes) ? pkgRes : (pkgRes?.data ?? []));
+      setServices(Array.isArray(svcRes) ? svcRes : (svcRes?.data ?? []));
+    } catch {
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const handleCreateNew = () => {
-    setIsCreating(true);
-    setIsEditing(true);
-    setSelectedId(null);
-    setFormData({
-      name: '',
-      description: '',
-      price: 0,
-      active: true,
-      steps: [],
-    });
-  };
+  useEffect(() => { fetchData(); }, []);
 
   const handleSelect = (pkg: Package) => {
     setSelectedId(pkg.id);
-    setIsEditing(true);
     setIsCreating(false);
     setFormData({
-      name: pkg.name || '',
+      name: pkg.name,
       description: pkg.description || '',
       price: pkg.price || 0,
       active: pkg.active ?? true,
-      steps: pkg.steps ? [...pkg.steps] : [],
+      is_visible: pkg.is_visible ?? true,
+      steps: pkg.steps || [],
     });
   };
 
   const handleSave = async () => {
-    if (!formData.name) {
-      toast.error('Name is required');
-      return;
-    }
-    
+    if (!formData.name.trim()) { toast.error('Name is required'); return; }
     try {
       if (isCreating) {
-        await apiClient.post('/api/admin/packages', formData);
-        toast.success('Package created successfully');
+        const newPkg = await apiClient.post<Package>('/api/admin/packages', formData);
+        setPackages(prev => [...prev, newPkg]);
+        toast.success('Package created');
+        handleSelect(newPkg);
       } else if (selectedId) {
-        await apiClient.put(`/api/admin/packages/${selectedId}`, formData);
-        toast.success('Package updated successfully');
+        const updated = await apiClient.put<Package>(`/api/admin/packages/${selectedId}`, formData);
+        setPackages(prev => prev.map(p => p.id === selectedId ? updated : p));
+        toast.success('Package updated');
+        handleSelect(updated);
       }
-      setIsEditing(false);
-      setIsCreating(false);
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to save package');
-    }
+    } catch { toast.error('Failed to save package'); }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this package?')) return;
+    if (!confirm('Delete this package?')) return;
     try {
       await apiClient.delete(`/api/admin/packages/${id}`);
+      setPackages(prev => prev.filter(p => p.id !== id));
+      if (selectedId === id) { setSelectedId(null); setIsCreating(false); }
       toast.success('Package deleted');
-      if (selectedId === id) {
-        setSelectedId(null);
-        setIsEditing(false);
-        setIsCreating(false);
-      }
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to delete package');
-    }
+    } catch { toast.error('Failed to delete package'); }
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; };
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+    setPackages(prev => {
+      const list = [...prev];
+      const src = list.findIndex(p => p.id === draggedId);
+      const dst = list.findIndex(p => p.id === targetId);
+      if (src === -1 || dst === -1) return prev;
+      const [moved] = list.splice(src, 1);
+      list.splice(dst, 0, moved);
+      return list;
+    });
+    setDraggedId(null);
   };
 
   const addStep = () => {
-    const currentSteps = formData.steps || [];
-    const nextSteps = [
-      ...currentSteps,
-      {
-        service_id: '',
-        offset_days: 0,
-        price: 0,
-        active: true
-      }
-    ];
-    const nextData = { ...formData, steps: nextSteps };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
+    const newStep: PackageStep = { service_id: services[0]?.id || '', offset_days: 0, price: 0, active: true };
+    setFormData(prev => ({ ...prev, steps: [...(prev.steps || []), newStep] }));
   };
 
   const removeStep = (index: number) => {
-    const currentSteps = formData.steps || [];
-    const newSteps = [...currentSteps];
-    newSteps.splice(index, 1);
-    const nextData = { ...formData, steps: newSteps };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
+    setFormData(prev => {
+      const steps = [...(prev.steps || [])];
+      steps.splice(index, 1);
+      return { ...prev, steps };
+    });
   };
 
-  const updateStep = (index: number, field: keyof PackageStep, value: any) => {
-    const currentSteps = formData.steps || [];
-    const newSteps = [...currentSteps];
-    newSteps[index] = { ...newSteps[index], [field]: value };
-    const nextData = { ...formData, steps: newSteps };
-    setFormData(nextData);
-    if (selectedId) {
-      const immediate = field === 'service_id' || field === 'active';
-      triggerSave(nextData, immediate);
-    }
+  const updateStep = (index: number, updates: Partial<PackageStep>) => {
+    setFormData(prev => {
+      const steps = [...(prev.steps || [])];
+      steps[index] = { ...steps[index], ...updates };
+      const next = { ...prev, steps };
+      if (selectedId) triggerSave(next);
+      return next;
+    });
   };
 
-  const moveStep = (index: number, direction: 'up' | 'down') => {
-    const currentSteps = formData.steps || [];
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === currentSteps.length - 1) return;
-    
-    const newSteps = [...currentSteps];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    
-    const temp = newSteps[index];
-    newSteps[index] = newSteps[targetIndex];
-    newSteps[targetIndex] = temp;
-    
-    const nextData = { ...formData, steps: newSteps };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
-  };
-
-  const filteredPackages = packages.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = packages.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const selectedPackage = packages.find(p => p.id === selectedId);
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-65px)] font-sans">
-      {/* Left Sidebar */}
-      <div className={`md:w-[35%] border-r flex flex-col bg-muted/10 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
-        <div className="p-4 border-b flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold font-heading">Packages</h2>
-            <Button size="sm" onClick={handleCreateNew} className="min-h-[44px] px-4">
-              <Plus className="h-4 w-4 mr-2" />
-              New Package
-            </Button>
+    <div className="flex flex-col md:flex-row h-full w-full md:gap-4 overflow-hidden font-sans">
+      {/* Left Pane */}
+      <div className={`md:w-[35%] flex flex-col gap-4 border-r md:pr-4 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
+        <div className="flex gap-2 items-center px-4 md:px-0">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 md:top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search packages..." className="pl-10 min-h-[44px]" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search packages..."
-              className="pl-10 min-h-[44px]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <Button variant="outline" size="icon" onClick={() => { setIsCreating(true); setSelectedId(null); setFormData(defaultForm); }} className="min-h-[44px] min-w-[44px] shrink-0" title="Add Package">
+            <Plus className="w-5 h-5" />
+          </Button>
         </div>
-        
-        <div className="flex-1 overflow-auto p-4 pb-20 md:pb-4">
+
+        <div className="flex items-center gap-2 px-4 md:px-0">
+          <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Packages</span>
+          <Badge variant="secondary">{filtered.length}</Badge>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 pb-12">
           {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : filteredPackages.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-sm">
-              No packages found.
-            </div>
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No packages found</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
-              {filteredPackages.map((pkg) => (
-                <div
-                  key={pkg.id}
-                  onClick={() => handleSelect(pkg)}
-                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center ${
-                    selectedId === pkg.id 
-                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
-                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
-                  }`}
-                >
-                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
-                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                      <Layers className="w-4 h-4 opacity-35" />
+            filtered.map(pkg => (
+              <div
+                key={pkg.id}
+                draggable
+                onDragStart={e => handleDragStart(e, pkg.id)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => handleDrop(e, pkg.id)}
+                onClick={() => handleSelect(pkg)}
+                className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                  selectedId === pkg.id
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                    : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                }`}
+              >
+                <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                    <PackageIcon className="w-4 h-4 opacity-35" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                    <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={pkg.name}>{pkg.name}</span>
+                    <div className="text-xs text-muted-foreground mt-0.5 text-left">${pkg.price} &bull; {(pkg.steps || []).length} step{(pkg.steps || []).length !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                    <div className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5" onClick={e => e.stopPropagation()}>
+                      <GripVertical className="w-3.5 h-3.5" />
                     </div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
-                      <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={pkg.name}>{pkg.name}</span>
-                      <div className="text-xs text-muted-foreground mt-0.5 text-left">${pkg.price} &bull; {pkg.steps?.length || 0} steps</div>
-                    </div>
-                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
-                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => {
-                            const nextActive = !pkg.active;
-                            setPackages(prev => prev.map(p => p.id === pkg.id ? { ...p, active: nextActive } : p));
-                            apiClient.put(`/api/admin/packages/${pkg.id}`, { ...pkg, active: nextActive }).catch(() => {});
-                          }} 
-                          className="p-0.5 hover:bg-muted rounded transition-colors"
-                          title={pkg.active ? 'Deactivate package' : 'Activate package'}
-                        >
-                          {pkg.active ? (
-                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
-                          ) : (
-                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
-                          )}
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => updateQuick(pkg.id, { active: !pkg.active, ...(!pkg.active ? {} : { is_visible: false }) })} className="p-0.5 hover:bg-muted rounded transition-colors" title={pkg.active ? 'Deactivate' : 'Activate'}>
+                        {pkg.active ? <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" /> : <CircleSlash className="w-3.5 h-3.5 text-rose-500" />}
+                      </button>
+                      <button disabled={!pkg.active} onClick={() => pkg.active && updateQuick(pkg.id, { is_visible: !pkg.is_visible })} className={`p-0.5 rounded transition-colors ${pkg.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`} title={!pkg.active ? 'Deactivated' : (pkg.is_visible ? 'Hide' : 'Show')}>
+                        {pkg.is_visible && pkg.active ? <Eye className="w-3.5 h-3.5 text-emerald-500" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Right Content */}
-      <div className={`md:w-[65%] flex flex-col bg-background overflow-auto p-0 md:p-6 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 md:relative md:z-auto' : 'hidden md:flex'}`}>
-        {(!selectedId && !isCreating) ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+      {/* Right Pane */}
+      <div className={`md:w-[65%] flex flex-col md:pl-4 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
+        {!selectedId && !isCreating ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-muted/20">
             <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Plus className="h-8 w-8 text-muted-foreground/50" />
+              <Search className="h-8 w-8 opacity-50" />
             </div>
-            <p>Select a package to view details or create a new one.</p>
-            <Button variant="outline" className="mt-4" onClick={handleCreateNew}>
-              Create New Package
-            </Button>
+            <p>Select a package from the list or create a new one.</p>
           </div>
         ) : (
-          <Card className="max-w-3xl w-full mx-auto shadow-none md:shadow-sm border-0 md:border min-h-full md:min-h-0 rounded-none md:rounded-xl flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-background z-10 border-b md:border-none p-4 md:p-6 shrink-0">
+          <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
+            <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 sticky top-0">
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); setIsEditing(false); }}>
+                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); }}>
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div>
-                  <CardTitle className="font-heading text-xl">{isCreating ? 'New Package' : 'Package Details'}</CardTitle>
-                  <CardDescription className="hidden md:block">
-                    {isCreating ? 'Create a multi-service package' : 'Manage package settings'}
-                  </CardDescription>
+                  <CardTitle className="text-2xl font-bold font-heading">{isCreating ? 'New Package' : (selectedPackage?.name || 'Package Details')}</CardTitle>
+                  <CardDescription className="mt-1">{isCreating ? 'Create a new service package' : 'Auto-saving changes'}</CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {selectedId && <AutoSaveStatus state={saveState} onRetry={retry} />}
                 {selectedId && (
-                  <AutoSaveStatus state={saveState} onRetry={retry} />
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(selectedId)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 )}
-                <Button variant="destructive" size="sm" onClick={() => selectedId && handleDelete(selectedId)} className="min-h-[44px]">
-                  <Trash2 className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Delete</span>
-                </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 p-4 md:p-6 flex-1 overflow-auto bg-background">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => {
-                      const next = { ...formData, name: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="e.g. 6-Month Care Plan"
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => {
-                      const next = { ...formData, description: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="Describe this package..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Total Package Price ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => {
-                      const next = { ...formData, price: parseFloat(e.target.value) || 0 };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg col-span-2">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Active Status</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Enable or disable this package across the platform.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={formData.active}
-                    onCheckedChange={(c) => {
-                      const next = { ...formData, active: c };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-              </div>
 
-              {/* Package Steps / Services Sequence */}
-              <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base">Services Sequence (Steps)</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Define services and interval offsets for this package.</p>
-                  </div>
-                  {isEditing && (
-                    <Button type="button" variant="outline" size="sm" onClick={addStep} className="min-h-[44px]">
-                      <Plus className="h-4 w-4 mr-2" /> Add Step
-                    </Button>
-                  )}
-                </div>
+            <CardContent className="flex-1 overflow-y-auto p-6">
+              <Accordion type="multiple" defaultValue={['details', 'status']} className="space-y-3">
 
-                <div className="space-y-3">
-                  {(formData.steps || []).length === 0 ? (
-                    <div className="text-center py-6 border border-dashed rounded-lg text-sm text-muted-foreground">
-                      No steps defined yet. Click "Add Step" to begin.
+                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Package Details</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Name *</Label>
+                        <Input value={formData.name} onChange={e => { const next = { ...formData, name: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="e.g. Starter Pack" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Description</Label>
+                        <Textarea value={formData.description} onChange={e => { const next = { ...formData, description: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="Brief description..." rows={3} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Package Price ($)</Label>
+                        <Input type="number" min={0} step={0.01} value={formData.price} onChange={e => { const next = { ...formData, price: parseFloat(e.target.value) || 0 }; setFormData(next); if (selectedId) triggerSave(next); }} />
+                      </div>
                     </div>
-                  ) : (
-                    (formData.steps || []).map((step, index) => (
-                      <div key={index} className="p-4 border rounded-lg bg-card/40 relative space-y-4">
-                        <div className="flex items-center justify-between border-b pb-2">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Step {index + 1}</span>
-                          <div className="flex items-center gap-1">
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="icon" 
-                              disabled={index === 0 || !isEditing} 
-                              onClick={() => moveStep(index, 'up')}
-                              className="h-8 w-8"
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="ghost" 
-                              size="icon" 
-                              disabled={index === (formData.steps || []).length - 1 || !isEditing} 
-                              onClick={() => moveStep(index, 'down')}
-                              className="h-8 w-8"
-                            >
-                              <ArrowDown className="h-4 w-4" />
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="steps" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Package Steps ({(formData.steps || []).length})</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-3">
+                      {(formData.steps || []).map((step, index) => (
+                        <div key={index} className="p-4 border rounded-lg bg-card/45 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-muted-foreground">Step {index + 1}</span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeStep(index)}>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-12 gap-3 items-end">
-                          <div className="col-span-5 space-y-1">
+                          <div className="space-y-2">
                             <Label className="text-xs">Service</Label>
-                            <Select 
-                              disabled={!isEditing} 
-                              value={step.service_id} 
-                              onValueChange={(val) => updateStep(index, 'service_id', val)}
-                            >
-                              <SelectTrigger className="h-10">
-                                <SelectValue placeholder="Select service" />
-                              </SelectTrigger>
+                            <Select value={step.service_id} onValueChange={val => updateStep(index, { service_id: val })}>
+                              <SelectTrigger className="h-9"><SelectValue placeholder="Select service" /></SelectTrigger>
                               <SelectContent>
-                                {(services || []).map(svc => (
-                                  <SelectItem key={svc.id} value={String(svc.id)}>{svc.name}</SelectItem>
-                                ))}
+                                {services.map(svc => <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
-
-                          <div className="col-span-3 space-y-1">
-                            <Label className="text-xs">Interval (Days Offset)</Label>
-                            <Input 
-                              type="number" 
-                              disabled={!isEditing}
-                              value={step.offset_days}
-                              onChange={(e) => updateStep(index, 'offset_days', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          
-                          <div className="col-span-3 space-y-1">
-                            <Label className="text-xs">Price ($)</Label>
-                            <Input 
-                              type="number" 
-                              step="0.01"
-                              disabled={!isEditing}
-                              value={step.price}
-                              onChange={(e) => updateStep(index, 'price', parseFloat(e.target.value) || 0)}
-                            />
-                          </div>
-
-                          <div className="col-span-1 pb-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStep(index)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Offset (days)</Label>
+                              <Input type="number" min={0} value={step.offset_days} className="h-9" onChange={e => updateStep(index, { offset_days: parseInt(e.target.value) || 0 })} />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Price ($)</Label>
+                              <Input type="number" min={0} step={0.01} value={step.price} className="h-9" onChange={e => updateStep(index, { price: parseFloat(e.target.value) || 0 })} />
+                            </div>
                           </div>
                         </div>
+                      ))}
+                      <Button variant="outline" size="sm" onClick={addStep} className="w-full" disabled={services.length === 0}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Step
+                      </Button>
+                      {services.length === 0 && <p className="text-xs text-muted-foreground text-center">Create services first to add steps.</p>}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="status" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Visibility &amp; Status</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="pkg-active" className="text-sm font-medium">Active</Label>
+                        <Switch id="pkg-active" checked={formData.active} onCheckedChange={checked => { const next = { ...formData, active: checked, ...(!checked ? { is_visible: false } : {}) }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="pkg-visible" className="text-sm font-medium">Visible to clients</Label>
+                        <Switch id="pkg-visible" checked={formData.is_visible} disabled={!formData.active} onCheckedChange={checked => { const next = { ...formData, is_visible: checked }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+              </Accordion>
             </CardContent>
+
             {isCreating && (
-              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none shrink-0">
-                <Button variant="ghost" className="min-h-[44px]" onClick={() => {
-                  setIsCreating(false);
-                }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} className="min-h-[44px]">
-                  Save Changes
-                </Button>
+              <CardFooter className="flex justify-end gap-2 border-t p-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)]">
+                <Button variant="outline" onClick={() => { setIsCreating(false); setSelectedId(null); }} className="min-h-[44px]">Cancel</Button>
+                <Button onClick={handleSave} className="min-h-[44px]">Create Package</Button>
               </CardFooter>
             )}
           </Card>

@@ -9,6 +9,7 @@ class CategoryBase(BaseModel):
     name: str
     description: Optional[str] = None
     active: bool = True
+    is_visible: bool = True
 
 
 class CategoryCreate(CategoryBase):

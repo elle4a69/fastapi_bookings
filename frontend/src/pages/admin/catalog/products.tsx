@@ -1,29 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, Edit, Upload, X, Circle, ImageIcon, ArrowLeft, CircleSlash } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Search, Trash2, ArrowLeft, Circle, CircleSlash, Eye, EyeOff, GripVertical, ShoppingBag } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { toast } from 'sonner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAutoSave } from '@/hooks/use-auto-save';
 import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
-interface Service {
-  id: string;
-  name: string;
-}
-
-interface Location {
-  id: string;
-  name: string;
-}
+interface Service { id: string; name: string; }
 
 interface Product {
   id: string;
@@ -32,575 +23,305 @@ interface Product {
   price: number;
   sku: string;
   active: boolean;
+  is_visible: boolean;
   service_ids?: string[];
-  location_ids?: string[];
-  image?: string | null;
-}
-
-function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: { imagePreview: string | null; onImageSelect: (file: string) => void; onImageRemove: () => void; disabled?: boolean }) {
-  const handleDrop = (e: React.DragEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) handleFile(file);
-  };
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (disabled) return;
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) handleFile(file);
-  };
-  const handleFile = (file: File) => {
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
-    const reader = new FileReader();
-    reader.onload = (e) => onImageSelect(e.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div 
-      onDragOver={e => e.preventDefault()} 
-      onDrop={handleDrop}
-      className={`relative h-[160px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 hover:bg-muted/40 transition-colors flex items-center justify-center overflow-hidden ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-      onClick={() => !disabled && document.getElementById('img-upload-input')?.click()}
-    >
-      <input id="img-upload-input" type="file" accept="image/jpeg, image/png, image/gif" className="hidden" onChange={handleChange} disabled={disabled} />
-      {imagePreview ? (
-        <>
-          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-          {!disabled && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </>
-      ) : (
-        <div className="flex flex-col items-center text-muted-foreground pointer-events-none">
-          <Upload className="w-8 h-8 mb-2 opacity-50" />
-          <span className="text-sm">Drag & drop image here or click to upload</span>
-          <span className="text-xs opacity-70">JPG, PNG, GIF up to 5MB</span>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
-  const navigate = useNavigate();
-  const location = useLocation();
-  
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  
-  const [formData, setFormData] = useState<Omit<Product, 'id'>>({
-    name: '',
-    description: '',
-    price: 0,
-    sku: '',
-    active: true,
-    service_ids: [],
-    location_ids: [],
-    image: null,
-  });
+
+  const defaultForm = { name: '', description: '', price: 0, sku: '', active: true, is_visible: true, service_ids: [] as string[] };
+  const [formData, setFormData] = useState(defaultForm);
 
   const { saveState, triggerSave, retry } = useAutoSave({
     onSave: async (updatedData: any) => {
-      const targetId = selectedId;
-      if (!targetId) return;
-      
-      const payload: any = {
-        name: updatedData.name,
-        description: updatedData.description,
-        price: updatedData.price,
-        sku: updatedData.sku,
-        active: updatedData.active,
-        image: updatedData.image,
-        location_ids: updatedData.location_ids,
-      };
-
+      if (!selectedId) return;
       try {
-        await apiClient.put(`/api/admin/products/${targetId}`, payload);
-        setProducts(prev => prev.map(p => p.id === targetId ? { ...p, ...updatedData, id: targetId } : p));
+        const res = await apiClient.put<any>(`/api/admin/products/${selectedId}`, updatedData);
+        const dataObj = res?.data || res;
+        setProducts(prev => prev.map(p => p.id === selectedId ? { ...p, ...dataObj } : p));
       } catch (error: any) {
-        toast.error(error.message || "Failed to auto-save product");
+        toast.error(error.message || 'Failed to auto-save product');
         throw error;
       }
     },
-    debounceMs: 500
+    debounceMs: 500,
   });
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [productsData, servicesData, locationsData] = await Promise.all([
-        apiClient.get<Product[]>('/api/admin/products'),
-        apiClient.get<any>('/api/admin/services'),
-        apiClient.get<Location[]>('/api/admin/locations')
-      ]);
-      setProducts(productsData);
-      setServices(Array.isArray(servicesData) ? servicesData : (servicesData?.data ?? []));
-      setLocations(Array.isArray(locationsData) ? locationsData : (locationsData?.data ?? []));
-    } catch (error) {
-      toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    if (location.state?.returnToServiceId) {
-      setIsCreating(true);
-      setIsEditing(true);
-      setSelectedId(null);
-      setFormData({
-        name: '',
-        description: '',
-        price: 0,
-        sku: '',
-        active: true,
-        service_ids: [String(location.state.returnToServiceId)],
-        location_ids: [],
-        image: null,
-      });
-    }
-  }, [location.state]);
-
-  const handleCreateNew = () => {
-    setIsCreating(true);
-    setIsEditing(true);
-    setSelectedId(null);
-    setFormData({
-      name: '',
-      description: '',
-      price: 0,
-      sku: '',
-      active: true,
-      service_ids: [],
-      location_ids: [],
-      image: null,
-    });
-  };
-
-  const handleSelect = (product: Product) => {
-    setSelectedId(product.id);
-    setIsEditing(true);
-    setIsCreating(false);
-    
-    // Derive service_ids from loaded services array having this product id in product_ids
-    const associatedServiceIds = (services || [])
-      .filter(svc => (svc.product_ids || []).map(String).includes(String(product.id)))
-      .map(svc => String(svc.id));
-
-    setFormData({
-      name: product.name || '',
-      description: product.description || '',
-      price: product.price || 0,
-      sku: product.sku || '',
-      active: product.active ?? true,
-      service_ids: associatedServiceIds,
-      location_ids: product.location_ids || [],
-      image: product.image || null,
-    });
-  };
-
-  const handleSave = async () => {
-    if (!formData.name) {
-      toast.error('Name is required');
-      return;
-    }
-    
-    try {
-      let createdProduct: any = null;
-      if (isCreating) {
-        createdProduct = await apiClient.post('/api/admin/products', formData);
-        toast.success('Product created successfully');
-      } else if (selectedId) {
-        await apiClient.put(`/api/admin/products/${selectedId}`, formData);
-        toast.success('Product updated successfully');
-      }
-
-      // If we came from a service, assign this product to that service
-      if (isCreating && createdProduct && location.state?.returnToServiceId) {
-        await apiClient.post('/api/admin/products/assign', {
-          service_id: parseInt(location.state.returnToServiceId),
-          product_id: parseInt(createdProduct.id)
-        });
-      }
-
-      setIsEditing(false);
-      setIsCreating(false);
-      fetchData();
-
-      if (location.state?.returnToServiceId) {
-        navigate('/admin/catalog/services', {
-          state: {
-            selectServiceId: location.state.returnToServiceId,
-            openSection: location.state.section
-          }
-        });
-      }
-    } catch (error) {
-      toast.error('Failed to save product');
-    }
-  };
-
-  const updateProductQuick = async (id: string, updates: Partial<Product>) => {
+  const updateQuick = async (id: string, updates: Partial<Product>) => {
     try {
       setProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
       await apiClient.put(`/api/admin/products/${id}`, updates);
-      toast.success('Product updated');
     } catch {
       toast.error('Failed to update product');
       fetchData();
     }
   };
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [prodRes, svcRes] = await Promise.all([
+        apiClient.get<any>('/api/admin/products').catch(() => ({ data: [] })),
+        apiClient.get<any>('/api/admin/services').catch(() => ({ data: [] })),
+      ]);
+      setProducts(Array.isArray(prodRes) ? prodRes : (prodRes?.data ?? []));
+      setServices(Array.isArray(svcRes) ? svcRes : (svcRes?.data ?? []));
+    } catch {
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSelect = (product: Product) => {
+    setSelectedId(product.id);
+    setIsCreating(false);
+    setFormData({
+      name: product.name,
+      description: product.description || '',
+      price: product.price || 0,
+      sku: product.sku || '',
+      active: product.active ?? true,
+      is_visible: product.is_visible ?? true,
+      service_ids: product.service_ids || [],
+    });
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) { toast.error('Name is required'); return; }
+    try {
+      if (isCreating) {
+        const newProd = await apiClient.post<Product>('/api/admin/products', formData);
+        setProducts(prev => [...prev, newProd]);
+        toast.success('Product created');
+        handleSelect(newProd);
+      } else if (selectedId) {
+        const updated = await apiClient.put<Product>(`/api/admin/products/${selectedId}`, formData);
+        setProducts(prev => prev.map(p => p.id === selectedId ? updated : p));
+        toast.success('Product updated');
+        handleSelect(updated);
+      }
+    } catch { toast.error('Failed to save product'); }
+  };
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    if (!confirm('Delete this product?')) return;
     try {
       await apiClient.delete(`/api/admin/products/${id}`);
+      setProducts(prev => prev.filter(p => p.id !== id));
+      if (selectedId === id) { setSelectedId(null); setIsCreating(false); }
       toast.success('Product deleted');
-      if (selectedId === id) {
-        setSelectedId(null);
-        setIsEditing(false);
-        setIsCreating(false);
-      }
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to delete product');
-    }
+    } catch { toast.error('Failed to delete product'); }
   };
 
-  const toggleService = (serviceId: string) => {
-    const current = (formData.service_ids || []).map(String);
-    const target = String(serviceId);
-    const nextList = current.includes(target)
-      ? current.filter(id => id !== target)
-      : [...current, target];
-    const nextData = { ...formData, service_ids: nextList };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
+  const handleDragStart = (e: React.DragEvent, id: string) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; };
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+    setProducts(prev => {
+      const list = [...prev];
+      const src = list.findIndex(p => p.id === draggedId);
+      const dst = list.findIndex(p => p.id === targetId);
+      if (src === -1 || dst === -1) return prev;
+      const [moved] = list.splice(src, 1);
+      list.splice(dst, 0, moved);
+      return list;
+    });
+    setDraggedId(null);
   };
 
-  const toggleLocation = (locationId: string) => {
-    const current = formData.location_ids || [];
-    const nextList = current.includes(locationId)
-      ? current.filter(id => id !== locationId)
-      : [...current, locationId];
-    const nextData = { ...formData, location_ids: nextList };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
-  };
-
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())));
+  const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const selectedProduct = products.find(p => p.id === selectedId);
 
   return (
-    <TooltipProvider>
-    <div className="flex flex-col md:flex-row h-[calc(100vh-65px)] font-sans">
-      {/* Left Sidebar */}
-      <div className={`md:w-[35%] border-r flex flex-col bg-muted/10 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
-        <div className="p-4 border-b flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold font-heading">Products</h2>
-            <Button size="sm" onClick={handleCreateNew} className="min-h-[44px] px-4">
-              <Plus className="h-4 w-4 mr-2" />
-              New Product
-            </Button>
+    <div className="flex flex-col md:flex-row h-full w-full md:gap-4 overflow-hidden font-sans">
+      {/* Left Pane */}
+      <div className={`md:w-[35%] flex flex-col gap-4 border-r md:pr-4 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
+        <div className="flex gap-2 items-center px-4 md:px-0">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 md:top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search products..." className="pl-10 min-h-[44px]" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search products..."
-              className="pl-10 min-h-[44px]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <Button variant="outline" size="icon" onClick={() => { setIsCreating(true); setSelectedId(null); setFormData(defaultForm); }} className="min-h-[44px] min-w-[44px] shrink-0" title="Add Product">
+            <Plus className="w-5 h-5" />
+          </Button>
         </div>
-        
-        <div className="flex-1 overflow-auto p-4 pb-20 md:pb-4">
+
+        <div className="flex items-center gap-2 px-4 md:px-0">
+          <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Products</span>
+          <Badge variant="secondary">{filtered.length}</Badge>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 pb-12">
           {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-sm">
-              No products found.
-            </div>
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No products found</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  onClick={() => handleSelect(product)}
-                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center ${
-                    selectedId === product.id 
-                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
-                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
-                  }`}
-                >
-                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
-                    {product.image ? (
-                      <img src={product.image} alt={product.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                        <ImageIcon className="w-4 h-4 opacity-35" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
-                      <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={product.name}>{product.name}</span>
-                      <div className="text-xs text-muted-foreground mt-0.5 text-left">{product.sku || 'No SKU'} &bull; ${product.price}</div>
+            filtered.map(product => (
+              <div
+                key={product.id}
+                draggable
+                onDragStart={e => handleDragStart(e, product.id)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => handleDrop(e, product.id)}
+                onClick={() => handleSelect(product)}
+                className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                  selectedId === product.id
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                    : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                }`}
+              >
+                <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                    <ShoppingBag className="w-4 h-4 opacity-35" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                    <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={product.name}>{product.name}</span>
+                    <div className="text-xs text-muted-foreground mt-0.5 text-left">${product.price}{product.sku ? ` \u2022 SKU: ${product.sku}` : ''}</div>
+                  </div>
+                  <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                    <div className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5" onClick={e => e.stopPropagation()}>
+                      <GripVertical className="w-3.5 h-3.5" />
                     </div>
-                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
-                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => updateProductQuick(product.id, { active: !product.active })} 
-                          className="p-0.5 hover:bg-muted rounded transition-colors"
-                          title={product.active ? 'Deactivate product' : 'Activate product'}
-                        >
-                          {product.active ? (
-                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
-                          ) : (
-                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
-                          )}
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => updateQuick(product.id, { active: !product.active, ...(!product.active ? {} : { is_visible: false }) })} className="p-0.5 hover:bg-muted rounded transition-colors" title={product.active ? 'Deactivate' : 'Activate'}>
+                        {product.active ? <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" /> : <CircleSlash className="w-3.5 h-3.5 text-rose-500" />}
+                      </button>
+                      <button disabled={!product.active} onClick={() => product.active && updateQuick(product.id, { is_visible: !product.is_visible })} className={`p-0.5 rounded transition-colors ${product.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`} title={!product.active ? 'Deactivated' : (product.is_visible ? 'Hide' : 'Show')}>
+                        {product.is_visible && product.active ? <Eye className="w-3.5 h-3.5 text-emerald-500" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Right Content */}
-      <div className={`md:w-[65%] flex flex-col bg-background overflow-auto p-0 md:p-6 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 md:relative md:z-auto' : 'hidden md:flex'}`}>
-        {(!selectedId && !isCreating) ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+      {/* Right Pane */}
+      <div className={`md:w-[65%] flex flex-col md:pl-4 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
+        {!selectedId && !isCreating ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-muted/20">
             <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Plus className="h-8 w-8 text-muted-foreground/50" />
+              <Search className="h-8 w-8 opacity-50" />
             </div>
-            <p>Select a product to view details or create a new one.</p>
-            <Button variant="outline" className="mt-4" onClick={handleCreateNew}>
-              Create New Product
-            </Button>
+            <p>Select a product from the list or create a new one.</p>
           </div>
         ) : (
-          <Card className="max-w-2xl w-full mx-auto shadow-none md:shadow-sm border-0 md:border min-h-full md:min-h-0 rounded-none md:rounded-xl flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-background z-10 border-b md:border-none p-4 md:p-6 shrink-0">
+          <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
+            <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 sticky top-0">
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); setIsEditing(false); }}>
+                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); }}>
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div>
-                  <CardTitle className="font-heading text-xl">{isCreating ? 'New Product' : 'Product Details'}</CardTitle>
-                  <CardDescription className="hidden md:block">
-                    {isCreating ? 'Create a new product to sell' : 'Manage product settings'}
-                  </CardDescription>
+                  <CardTitle className="text-2xl font-bold font-heading">{isCreating ? 'New Product' : (selectedProduct?.name || 'Product Details')}</CardTitle>
+                  <CardDescription className="mt-1">{isCreating ? 'Create a new product' : 'Auto-saving changes'}</CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {selectedId && <AutoSaveStatus state={saveState} onRetry={retry} />}
                 {selectedId && (
-                  <AutoSaveStatus state={saveState} onRetry={retry} />
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(selectedId)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 )}
-                <Button variant="destructive" size="sm" onClick={() => selectedId && handleDelete(selectedId)} className="min-h-[44px]">
-                  <Trash2 className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Delete</span>
-                </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 p-4 md:p-6 flex-1 overflow-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label>Image</Label>
-                  <ImageUpload 
-                    imagePreview={formData.image || null} 
-                    onImageSelect={(file) => {
-                      const next = { ...formData, image: file };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }} 
-                    onImageRemove={() => {
-                      const next = { ...formData, image: null };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }} 
-                    disabled={!isEditing} 
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => {
-                      const next = { ...formData, name: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="e.g. Premium Massage Oil"
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => {
-                      const next = { ...formData, description: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="Describe this product..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>SKU</Label>
-                  <Input
-                    value={formData.sku}
-                    onChange={(e) => {
-                      const next = { ...formData, sku: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="e.g. OIL-001"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Price ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => {
-                      const next = { ...formData, price: parseFloat(e.target.value) || 0 };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-                <div className="col-span-2 flex items-center justify-between p-3 border rounded-lg">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Active Status</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Enable or disable this product across the platform.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={formData.active}
-                    onCheckedChange={(c) => {
-                      const next = { ...formData, active: c };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-1">
-                  <Label className="text-base">Associated Services</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Select which services this product can be associated with.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  {(services || []).map(service => (
-                    <div key={service.id} className="flex items-center space-x-2 border p-3 rounded-md">
-                      <Checkbox 
-                        id={`service-${service.id}`}
-                        checked={(formData.service_ids || []).map(String).includes(String(service.id))}
-                        onCheckedChange={() => toggleService(String(service.id))}
-                        disabled={!isEditing}
-                      />
-                      <label
-                        htmlFor={`service-${service.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {service.name}
-                      </label>
-                    </div>
-                  ))}
-                  {services.length === 0 && (
-                    <div className="text-sm text-muted-foreground col-span-2">No services found.</div>
-                  )}
-                </div>
-              </div>
+            <CardContent className="flex-1 overflow-y-auto p-6">
+              <Accordion type="multiple" defaultValue={['details', 'status']} className="space-y-3">
 
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-1">
-                  <Label className="text-base">Available Locations</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Select which locations sell this product.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  {(locations || []).map(location => (
-                    <div key={location.id} className="flex items-center space-x-2 border p-3 rounded-md">
-                      <Checkbox 
-                        id={`loc-${location.id}`}
-                        checked={(formData.location_ids || []).includes(location.id)}
-                        onCheckedChange={() => toggleLocation(location.id)}
-                        disabled={!isEditing}
-                      />
-                      <label
-                        htmlFor={`loc-${location.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {location.name}
-                      </label>
+                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Product Details</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Name *</Label>
+                        <Input value={formData.name} onChange={e => { const next = { ...formData, name: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="e.g. Conditioning Oil" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Description</Label>
+                        <Textarea value={formData.description} onChange={e => { const next = { ...formData, description: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="Brief description..." rows={3} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-base font-semibold">Price ($)</Label>
+                          <Input type="number" min={0} step={0.01} value={formData.price} onChange={e => { const next = { ...formData, price: parseFloat(e.target.value) || 0 }; setFormData(next); if (selectedId) triggerSave(next); }} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-base font-semibold">SKU</Label>
+                          <Input value={formData.sku} onChange={e => { const next = { ...formData, sku: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="e.g. OIL-001" />
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                  {locations.length === 0 && (
-                    <div className="text-sm text-muted-foreground col-span-2">No locations found.</div>
-                  )}
-                </div>
-              </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {!isCreating && services.length > 0 && (
+                  <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Linked Services</AccordionTrigger>
+                    <AccordionContent className="p-6">
+                      <div className="space-y-2">
+                        {services.map(svc => {
+                          const linked = (formData.service_ids || []).includes(svc.id);
+                          return (
+                            <div key={svc.id} className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                              <Label htmlFor={`svc-${svc.id}`} className="text-sm font-medium">{svc.name}</Label>
+                              <Switch id={`svc-${svc.id}`} checked={linked} onCheckedChange={checked => {
+                                const current = formData.service_ids || [];
+                                const next = { ...formData, service_ids: checked ? [...current, svc.id] : current.filter(id => id !== svc.id) };
+                                setFormData(next);
+                                if (selectedId) triggerSave(next, true);
+                              }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
+
+                <AccordionItem value="status" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Visibility &amp; Status</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="prod-active" className="text-sm font-medium">Active</Label>
+                        <Switch id="prod-active" checked={formData.active} onCheckedChange={checked => { const next = { ...formData, active: checked, ...(!checked ? { is_visible: false } : {}) }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="prod-visible" className="text-sm font-medium">Visible to clients</Label>
+                        <Switch id="prod-visible" checked={formData.is_visible} disabled={!formData.active} onCheckedChange={checked => { const next = { ...formData, is_visible: checked }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+              </Accordion>
             </CardContent>
+
             {isCreating && (
-              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none shrink-0">
-                <Button variant="ghost" className="min-h-[44px]" onClick={() => {
-                  if (location.state?.returnToServiceId) {
-                    navigate('/admin/catalog/services', {
-                      state: {
-                        selectServiceId: location.state.returnToServiceId,
-                        openSection: location.state.section
-                      }
-                    });
-                    return;
-                  }
-                  setIsCreating(false);
-                }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} className="min-h-[44px]">
-                  Save Changes
-                </Button>
+              <CardFooter className="flex justify-end gap-2 border-t p-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)]">
+                <Button variant="outline" onClick={() => { setIsCreating(false); setSelectedId(null); }} className="min-h-[44px]">Cancel</Button>
+                <Button onClick={handleSave} className="min-h-[44px]">Create Product</Button>
               </CardFooter>
             )}
           </Card>
         )}
       </div>
     </div>
-    </TooltipProvider>
   );
 }

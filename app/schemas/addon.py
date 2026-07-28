@@ -8,23 +8,24 @@ from pydantic import BaseModel, ConfigDict
 
 
 class AddOnBase(BaseModel):
-    service_id: int
     name: str
     description: Optional[str] = None
     price: Optional[Decimal] = None
     duration: int = 0
     active: bool = True
+    is_visible: bool = True
 
 
 class AddOnCreate(AddOnBase):
-    pass
+    service_id: Optional[int] = None
 
 
 class AddOnUpdate(AddOnBase):
-    pass
+    service_id: Optional[int] = None
 
 
 class AddOnOut(AddOnBase):
     id: int
+    service_id: Optional[int] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)

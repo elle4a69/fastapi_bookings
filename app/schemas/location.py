@@ -10,6 +10,8 @@ class LocationBase(BaseModel):
     address: Optional[str] = Field(None, description="Physical address")
     timezone: Optional[str] = Field(None, description="IANA time zone identifier")
     image: Optional[str] = None
+    active: bool = Field(True, description="Whether location is active")
+    is_visible: bool = Field(True, description="Whether location is visible")
 
 
 class LocationCreate(LocationBase):
@@ -24,6 +26,8 @@ class LocationUpdate(BaseModel):
     address: Optional[str] = None
     timezone: Optional[str] = None
     image: Optional[str] = None
+    active: Optional[bool] = None
+    is_visible: Optional[bool] = None
     provider_ids: Optional[list[int]] = None
     service_ids: Optional[list[int]] = None
     category_ids: Optional[list[int]] = None

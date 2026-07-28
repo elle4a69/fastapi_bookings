@@ -23,6 +23,7 @@ class PluginStateUpdate(BaseModel):
 
 class PluginStateOut(PluginStateBase):
     id: int
+    tenant_id: int
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

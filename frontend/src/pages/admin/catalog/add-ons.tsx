@@ -4,21 +4,18 @@ import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Search, Trash2, Edit, Upload, X, Circle, ImageIcon, ArrowLeft, CircleSlash } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Search, Trash2, ArrowLeft, Circle, CircleSlash, Eye, EyeOff, GripVertical, Gift } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { toast } from 'sonner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAutoSave } from '@/hooks/use-auto-save';
 import { AutoSaveStatus } from '@/components/ui/auto-save-status';
 
-interface Service {
-  id: string;
-  name: string;
-}
+interface Service { id: string; name: string; }
 
 interface AddOn {
   id: string;
@@ -27,525 +24,305 @@ interface AddOn {
   price: number;
   duration: number;
   active: boolean;
+  is_visible: boolean;
   service_ids?: string[];
-  image?: string | null;
-}
-
-function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: { imagePreview: string | null; onImageSelect: (file: string) => void; onImageRemove: () => void; disabled?: boolean }) {
-  const handleDrop = (e: React.DragEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) handleFile(file);
-  };
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (disabled) return;
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) handleFile(file);
-  };
-  const handleFile = (file: File) => {
-    if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
-    const reader = new FileReader();
-    reader.onload = (e) => onImageSelect(e.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div 
-      onDragOver={e => e.preventDefault()} 
-      onDrop={handleDrop}
-      className={`relative h-[160px] w-full rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/20 hover:bg-muted/40 transition-colors flex items-center justify-center overflow-hidden ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-      onClick={() => !disabled && document.getElementById('img-upload-input')?.click()}
-    >
-      <input id="img-upload-input" type="file" accept="image/jpeg, image/png, image/gif" className="hidden" onChange={handleChange} disabled={disabled} />
-      {imagePreview ? (
-        <>
-          <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-          {!disabled && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </>
-      ) : (
-        <div className="flex flex-col items-center text-muted-foreground pointer-events-none">
-          <Upload className="w-8 h-8 mb-2 opacity-50" />
-          <span className="text-sm">Drag & drop image here or click to upload</span>
-          <span className="text-xs opacity-70">JPG, PNG, GIF up to 5MB</span>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function AddOnsPage() {
-  const [addOns, setAddOns] = useState<AddOn[]>([]);
+  const [addons, setAddons] = useState<AddOn[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  
-  const navigate = useNavigate();
-  const location = useLocation();
-  
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  
-  const [formData, setFormData] = useState<Omit<AddOn, 'id'>>({
-    name: '',
-    description: '',
-    price: 0,
-    duration: 0,
-    active: true,
-    service_ids: [],
-    image: null,
-  });
+
+  const defaultForm = { name: '', description: '', price: 0, duration: 0, active: true, is_visible: true, service_ids: [] as string[] };
+  const [formData, setFormData] = useState(defaultForm);
 
   const { saveState, triggerSave, retry } = useAutoSave({
     onSave: async (updatedData: any) => {
-      const targetId = selectedId;
-      if (!targetId) return;
-      
-      const payload: any = {
-        name: updatedData.name,
-        description: updatedData.description,
-        price: updatedData.price,
-        duration: updatedData.duration,
-        active: updatedData.active,
-        image: updatedData.image,
-      };
-
-      if (updatedData.service_ids && updatedData.service_ids.length > 0) {
-        payload.service_id = parseInt(updatedData.service_ids[0]);
-      }
-
+      if (!selectedId) return;
       try {
-        await apiClient.put(`/api/admin/add-ons/${targetId}`, payload);
-        setAddOns(prev => prev.map(a => a.id === targetId ? { ...a, ...updatedData, id: targetId } : a));
+        const res = await apiClient.put<any>(`/api/admin/add-ons/${selectedId}`, updatedData);
+        const dataObj = res?.data || res;
+        setAddons(prev => prev.map(a => a.id === selectedId ? { ...a, ...dataObj } : a));
       } catch (error: any) {
-        toast.error(error.message || "Failed to auto-save add-on");
+        toast.error(error.message || 'Failed to auto-save add-on');
         throw error;
       }
     },
-    debounceMs: 500
+    debounceMs: 500,
   });
 
-  const fetchData = async () => {
-    setLoading(true);
+  const updateQuick = async (id: string, updates: Partial<AddOn>) => {
     try {
-      const [addonsData, servicesData] = await Promise.all([
-        apiClient.get<AddOn[]>('/api/admin/add-ons'),
-        apiClient.get<any>('/api/admin/services')
-      ]);
-      setAddOns(addonsData);
-      setServices(Array.isArray(servicesData) ? servicesData : (servicesData?.data ?? []));
-    } catch (error) {
-      toast.error('Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    if (location.state?.returnToServiceId) {
-      setIsCreating(true);
-      setIsEditing(true);
-      setSelectedId(null);
-      setFormData({
-        name: '',
-        description: '',
-        price: 0,
-        duration: 15,
-        active: true,
-        service_ids: [String(location.state.returnToServiceId)],
-        image: null,
-      });
-    }
-  }, [location.state]);
-
-  const handleCreateNew = () => {
-    setIsCreating(true);
-    setIsEditing(true);
-    setSelectedId(null);
-    setFormData({
-      name: '',
-      description: '',
-      price: 0,
-      duration: 0,
-      active: true,
-      service_ids: [],
-      image: null,
-    });
-  };
-
-  const handleSelect = (addon: AddOn) => {
-    setSelectedId(addon.id);
-    setIsEditing(true);
-    setIsCreating(false);
-    setFormData({
-      name: addon.name || '',
-      description: addon.description || '',
-      price: addon.price || 0,
-      duration: addon.duration || 0,
-      active: addon.active ?? true,
-      service_ids: addon.service_id ? [String(addon.service_id)] : (addon as any).service_ids || [],
-      image: addon.image || null,
-    });
-  };
-
-  const handleSave = async () => {
-    if (!formData.name) {
-      toast.error('Name is required');
-      return;
-    }
-    
-    try {
-      const payload: any = {
-        name: formData.name,
-        description: formData.description,
-        price: formData.price,
-        duration: formData.duration,
-        active: formData.active,
-        image: formData.image,
-      };
-
-      if (location.state?.returnToServiceId) {
-        payload.service_id = parseInt(location.state.returnToServiceId);
-      } else if (formData.service_ids && formData.service_ids.length > 0) {
-        payload.service_id = parseInt(formData.service_ids[0]);
-      }
-
-      if (isCreating) {
-        await apiClient.post('/api/admin/add-ons', payload);
-        toast.success('Add-on created successfully');
-      } else if (selectedId) {
-        await apiClient.put(`/api/admin/add-ons/${selectedId}`, payload);
-        toast.success('Add-on updated successfully');
-      }
-      setIsEditing(false);
-      setIsCreating(false);
-      fetchData();
-
-      if (location.state?.returnToServiceId) {
-        navigate('/admin/catalog/services', {
-          state: {
-            selectServiceId: location.state.returnToServiceId,
-            openSection: location.state.section
-          }
-        });
-      }
-    } catch (error) {
-      toast.error('Failed to save add-on');
-    }
-  };
-
-  const updateAddonQuick = async (id: string, updates: Partial<AddOn>) => {
-    try {
-      setAddOns(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+      setAddons(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
       await apiClient.put(`/api/admin/add-ons/${id}`, updates);
-      toast.success('Add-on updated');
     } catch {
       toast.error('Failed to update add-on');
       fetchData();
     }
   };
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [addonRes, svcRes] = await Promise.all([
+        apiClient.get<any>('/api/admin/add-ons').catch(() => ({ data: [] })),
+        apiClient.get<any>('/api/admin/services').catch(() => ({ data: [] })),
+      ]);
+      setAddons(Array.isArray(addonRes) ? addonRes : (addonRes?.data ?? []));
+      setServices(Array.isArray(svcRes) ? svcRes : (svcRes?.data ?? []));
+    } catch {
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSelect = (addon: AddOn) => {
+    setSelectedId(addon.id);
+    setIsCreating(false);
+    setFormData({
+      name: addon.name,
+      description: addon.description || '',
+      price: addon.price || 0,
+      duration: addon.duration || 0,
+      active: addon.active ?? true,
+      is_visible: addon.is_visible ?? true,
+      service_ids: addon.service_ids || [],
+    });
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) { toast.error('Name is required'); return; }
+    try {
+      if (isCreating) {
+        const newAddon = await apiClient.post<AddOn>('/api/admin/add-ons', formData);
+        setAddons(prev => [...prev, newAddon]);
+        toast.success('Add-on created');
+        handleSelect(newAddon);
+      } else if (selectedId) {
+        const updated = await apiClient.put<AddOn>(`/api/admin/add-ons/${selectedId}`, formData);
+        setAddons(prev => prev.map(a => a.id === selectedId ? updated : a));
+        toast.success('Add-on updated');
+        handleSelect(updated);
+      }
+    } catch { toast.error('Failed to save add-on'); }
+  };
+
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this add-on?')) return;
+    if (!confirm('Delete this add-on?')) return;
     try {
       await apiClient.delete(`/api/admin/add-ons/${id}`);
+      setAddons(prev => prev.filter(a => a.id !== id));
+      if (selectedId === id) { setSelectedId(null); setIsCreating(false); }
       toast.success('Add-on deleted');
-      if (selectedId === id) {
-        setSelectedId(null);
-        setIsEditing(false);
-        setIsCreating(false);
-      }
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to delete add-on');
-    }
+    } catch { toast.error('Failed to delete add-on'); }
   };
 
-  const toggleService = (serviceId: string) => {
-    const current = (formData.service_ids || []).map(String);
-    const target = String(serviceId);
-    const nextList = current.includes(target)
-      ? current.filter(id => id !== target)
-      : [...current, target];
-    const nextData = { ...formData, service_ids: nextList };
-    setFormData(nextData);
-    if (selectedId) {
-      triggerSave(nextData, true);
-    }
+  const handleDragStart = (e: React.DragEvent, id: string) => { setDraggedId(id); e.dataTransfer.effectAllowed = 'move'; };
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) return;
+    setAddons(prev => {
+      const list = [...prev];
+      const src = list.findIndex(a => a.id === draggedId);
+      const dst = list.findIndex(a => a.id === targetId);
+      if (src === -1 || dst === -1) return prev;
+      const [moved] = list.splice(src, 1);
+      list.splice(dst, 0, moved);
+      return list;
+    });
+    setDraggedId(null);
   };
-  const filteredAddOns = addOns.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+
+  const filtered = addons.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
+  const selectedAddon = addons.find(a => a.id === selectedId);
 
   return (
-    <TooltipProvider>
-    <div className="flex flex-col md:flex-row h-[calc(100vh-65px)] font-sans">
-      {/* Left Sidebar */}
-      <div className={`md:w-[35%] border-r flex flex-col bg-muted/10 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
-        <div className="p-4 border-b flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold font-heading">Add-ons</h2>
-            <Button size="sm" onClick={handleCreateNew} className="min-h-[44px] px-4">
-              <Plus className="h-4 w-4 mr-2" />
-              New Add-on
-            </Button>
+    <div className="flex flex-col md:flex-row h-full w-full md:gap-4 overflow-hidden font-sans">
+      {/* Left Pane */}
+      <div className={`md:w-[35%] flex flex-col gap-4 border-r md:pr-4 transition-all duration-300 ${selectedId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
+        <div className="flex gap-2 items-center px-4 md:px-0">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 md:top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search add-ons..." className="pl-10 min-h-[44px]" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search add-ons..."
-              className="pl-10 min-h-[44px]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <Button variant="outline" size="icon" onClick={() => { setIsCreating(true); setSelectedId(null); setFormData(defaultForm); }} className="min-h-[44px] min-w-[44px] shrink-0" title="Add Add-on">
+            <Plus className="w-5 h-5" />
+          </Button>
         </div>
-        
-        <div className="flex-1 overflow-auto p-4 pb-20 md:pb-4">
+
+        <div className="flex items-center gap-2 px-4 md:px-0">
+          <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Add-ons</span>
+          <Badge variant="secondary">{filtered.length}</Badge>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 pb-12">
           {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : filteredAddOns.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-sm">
-              No add-ons found.
-            </div>
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
+          ) : filtered.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">No add-ons found</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
-              {filteredAddOns.map((addon) => (
-                <div
-                  key={addon.id}
-                  onClick={() => handleSelect(addon)}
-                  className={`p-3 rounded-xl cursor-pointer border transition-all duration-200 hover:scale-[1.01] hover:shadow-md flex justify-between items-center ${
-                    selectedId === addon.id 
-                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
-                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
-                  }`}
-                >
-                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
-                    {addon.image ? (
-                      <img src={addon.image} alt={addon.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
-                        <ImageIcon className="w-4 h-4 opacity-35" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
-                      <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={addon.name}>{addon.name}</span>
-                      <div className="text-xs text-muted-foreground mt-0.5 text-left">${addon.price} &bull; {addon.duration} mins</div>
+            filtered.map(addon => (
+              <div
+                key={addon.id}
+                draggable
+                onDragStart={e => handleDragStart(e, addon.id)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => handleDrop(e, addon.id)}
+                onClick={() => handleSelect(addon)}
+                className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                  selectedId === addon.id
+                    ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
+                    : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                }`}
+              >
+                <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                  <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0">
+                    <Gift className="w-4 h-4 opacity-35" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                    <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={addon.name}>{addon.name}</span>
+                    <div className="text-xs text-muted-foreground mt-0.5 text-left">${addon.price} &bull; {addon.duration} mins</div>
+                  </div>
+                  <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                    <div className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5" onClick={e => e.stopPropagation()}>
+                      <GripVertical className="w-3.5 h-3.5" />
                     </div>
-                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
-                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => updateAddonQuick(addon.id, { active: !addon.active })} 
-                          className="p-0.5 hover:bg-muted rounded transition-colors"
-                          title={addon.active ? 'Deactivate add-on' : 'Activate add-on'}
-                        >
-                          {addon.active ? (
-                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
-                          ) : (
-                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
-                          )}
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => updateQuick(addon.id, { active: !addon.active, ...(!addon.active ? {} : { is_visible: false }) })} className="p-0.5 hover:bg-muted rounded transition-colors" title={addon.active ? 'Deactivate' : 'Activate'}>
+                        {addon.active ? <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" /> : <CircleSlash className="w-3.5 h-3.5 text-rose-500" />}
+                      </button>
+                      <button disabled={!addon.active} onClick={() => addon.active && updateQuick(addon.id, { is_visible: !addon.is_visible })} className={`p-0.5 rounded transition-colors ${addon.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`} title={!addon.active ? 'Deactivated' : (addon.is_visible ? 'Hide' : 'Show')}>
+                        {addon.is_visible && addon.active ? <Eye className="w-3.5 h-3.5 text-emerald-500" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Right Content */}
-      <div className={`md:w-[65%] flex flex-col bg-background overflow-auto p-0 md:p-6 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 md:relative md:z-auto' : 'hidden md:flex'}`}>
-        {(!selectedId && !isCreating) ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
+      {/* Right Pane */}
+      <div className={`md:w-[65%] flex flex-col md:pl-4 transition-all duration-300 h-full ${selectedId || isCreating ? 'flex w-full absolute inset-0 z-50 bg-background md:relative md:z-auto' : 'hidden md:flex'}`}>
+        {!selectedId && !isCreating ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-muted/20">
             <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Plus className="h-8 w-8 text-muted-foreground/50" />
+              <Search className="h-8 w-8 opacity-50" />
             </div>
-            <p>Select an add-on to view details or create a new one.</p>
-            <Button variant="outline" className="mt-4" onClick={handleCreateNew}>
-              Create New Add-on
-            </Button>
+            <p>Select an add-on from the list or create a new one.</p>
           </div>
         ) : (
-          <Card className="max-w-2xl w-full mx-auto shadow-none md:shadow-sm border-0 md:border min-h-full md:min-h-0 rounded-none md:rounded-xl flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-background z-10 border-b md:border-none p-4 md:p-6 shrink-0">
+          <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
+            <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 sticky top-0">
               <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); setIsEditing(false); }}>
+                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedId(null); setIsCreating(false); }}>
                   <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div>
-                  <CardTitle className="font-heading text-xl">{isCreating ? 'New Add-on' : 'Add-on Details'}</CardTitle>
-                  <CardDescription className="hidden md:block">
-                    {isCreating ? 'Create a new add-on for your services' : 'Manage add-on settings'}
-                  </CardDescription>
+                  <CardTitle className="text-2xl font-bold font-heading">{isCreating ? 'New Add-on' : (selectedAddon?.name || 'Add-on Details')}</CardTitle>
+                  <CardDescription className="mt-1">{isCreating ? 'Create a new service add-on' : 'Auto-saving changes'}</CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {selectedId && <AutoSaveStatus state={saveState} onRetry={retry} />}
                 {selectedId && (
-                  <AutoSaveStatus state={saveState} onRetry={retry} />
+                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(selectedId)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 )}
-                <Button variant="destructive" size="sm" onClick={() => selectedId && handleDelete(selectedId)} className="min-h-[44px]">
-                  <Trash2 className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Delete</span>
-                </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 p-4 md:p-6 flex-1 overflow-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 space-y-2">
-                  <Label>Image</Label>
-                  <ImageUpload 
-                    imagePreview={formData.image || null} 
-                    onImageSelect={(file) => {
-                      const next = { ...formData, image: file };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }} 
-                    onImageRemove={() => {
-                      const next = { ...formData, image: null };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }} 
-                    disabled={!isEditing} 
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={formData.name}
-                    onChange={(e) => {
-                      const next = { ...formData, name: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="e.g. Extra Massage Time"
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => {
-                      const next = { ...formData, description: e.target.value };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                    placeholder="Describe this add-on..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Price ($)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => {
-                      const next = { ...formData, price: parseFloat(e.target.value) || 0 };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Duration (mins)</Label>
-                  <Input
-                    type="number"
-                    value={formData.duration}
-                    onChange={(e) => {
-                      const next = { ...formData, duration: parseInt(e.target.value) || 0 };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-                <div className="col-span-2 flex items-center justify-between p-3 border rounded-lg">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Active Status</Label>
-                    <div className="text-sm text-muted-foreground">
-                      Enable or disable this add-on across the platform.
-                    </div>
-                  </div>
-                  <Switch
-                    checked={formData.active}
-                    onCheckedChange={(c) => {
-                      const next = { ...formData, active: c };
-                      setFormData(next);
-                      if (selectedId) triggerSave(next, true);
-                    }}
-                    disabled={!isEditing}
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-3 pt-4 border-t">
-                <div className="space-y-1">
-                  <Label className="text-base">Associated Services</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Select which services this add-on can be applied to.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  {(services || []).map(service => (
-                    <div key={service.id} className="flex items-center space-x-2 border p-3 rounded-md">
-                      <Checkbox 
-                        id={`service-${service.id}`}
-                        checked={(formData.service_ids || []).map(String).includes(String(service.id))}
-                        onCheckedChange={() => toggleService(String(service.id))}
-                        disabled={!isEditing}
-                      />
-                      <label
-                        htmlFor={`service-${service.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {service.name}
-                      </label>
+            <CardContent className="flex-1 overflow-y-auto p-6">
+              <Accordion type="multiple" defaultValue={['details', 'status']} className="space-y-3">
+
+                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Add-on Details</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Name *</Label>
+                        <Input value={formData.name} onChange={e => { const next = { ...formData, name: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="e.g. Deep Conditioning" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Description</Label>
+                        <Textarea value={formData.description} onChange={e => { const next = { ...formData, description: e.target.value }; setFormData(next); if (selectedId) triggerSave(next); }} placeholder="Brief description..." rows={3} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-base font-semibold">Price ($)</Label>
+                          <Input type="number" min={0} step={0.01} value={formData.price} onChange={e => { const next = { ...formData, price: parseFloat(e.target.value) || 0 }; setFormData(next); if (selectedId) triggerSave(next); }} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-base font-semibold">Duration (mins)</Label>
+                          <Input type="number" min={0} value={formData.duration} onChange={e => { const next = { ...formData, duration: parseInt(e.target.value) || 0 }; setFormData(next); if (selectedId) triggerSave(next); }} />
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                  {services.length === 0 && (
-                    <div className="text-sm text-muted-foreground col-span-2">No services found.</div>
-                  )}
-                </div>
-              </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                {!isCreating && services.length > 0 && (
+                  <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                    <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Linked Services</AccordionTrigger>
+                    <AccordionContent className="p-6">
+                      <div className="space-y-2">
+                        {services.map(svc => {
+                          const linked = (formData.service_ids || []).includes(svc.id);
+                          return (
+                            <div key={svc.id} className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                              <Label htmlFor={`svc-${svc.id}`} className="text-sm font-medium">{svc.name}</Label>
+                              <Switch id={`svc-${svc.id}`} checked={linked} onCheckedChange={checked => {
+                                const current = formData.service_ids || [];
+                                const next = { ...formData, service_ids: checked ? [...current, svc.id] : current.filter(id => id !== svc.id) };
+                                setFormData(next);
+                                if (selectedId) triggerSave(next, true);
+                              }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
+
+                <AccordionItem value="status" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Visibility &amp; Status</AccordionTrigger>
+                  <AccordionContent className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="addon-active" className="text-sm font-medium">Active</Label>
+                        <Switch id="addon-active" checked={formData.active} onCheckedChange={checked => { const next = { ...formData, active: checked, ...(!checked ? { is_visible: false } : {}) }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/45">
+                        <Label htmlFor="addon-visible" className="text-sm font-medium">Visible to clients</Label>
+                        <Switch id="addon-visible" checked={formData.is_visible} disabled={!formData.active} onCheckedChange={checked => { const next = { ...formData, is_visible: checked }; setFormData(next); if (selectedId) triggerSave(next, true); }} />
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+              </Accordion>
             </CardContent>
+
             {isCreating && (
-              <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none shrink-0">
-                <Button variant="ghost" className="min-h-[44px]" onClick={() => {
-                  if (location.state?.returnToServiceId) {
-                    navigate('/admin/catalog/services', {
-                      state: {
-                        selectServiceId: location.state.returnToServiceId,
-                        openSection: location.state.section
-                      }
-                    });
-                    return;
-                  }
-                  setIsCreating(false);
-                }}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} className="min-h-[44px]">
-                  Save Changes
-                </Button>
+              <CardFooter className="flex justify-end gap-2 border-t p-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)]">
+                <Button variant="outline" onClick={() => { setIsCreating(false); setSelectedId(null); }} className="min-h-[44px]">Cancel</Button>
+                <Button onClick={handleSave} className="min-h-[44px]">Create Add-on</Button>
               </CardFooter>
             )}
           </Card>
         )}
       </div>
     </div>
-    </TooltipProvider>
   );
 }

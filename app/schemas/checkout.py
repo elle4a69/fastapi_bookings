@@ -194,3 +194,20 @@ class PaymentProcessorConfigOut(PaymentProcessorConfigBase):
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class CheckoutCommitRequest(BaseModel):
+    stripe_session_id: str
+    client_id: int
+    provider_id: int
+    service_id: int
+    start_time: datetime
+    end_time: datetime
+    location_id: Optional[int] = None
+    notes: Optional[str] = None
+    idempotency_key: str
+
+
+class CheckoutCommitResponse(BaseModel):
+    ok: bool
+    data: dict

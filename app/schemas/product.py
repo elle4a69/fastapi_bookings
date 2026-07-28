@@ -13,6 +13,7 @@ class ProductBase(BaseModel):
     price: Decimal
     sku: Optional[str] = None
     active: bool = True
+    is_visible: bool = True
 
 
 class ProductCreate(ProductBase):

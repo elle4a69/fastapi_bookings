@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Sparkles, Layers, Box, ShoppingBag, Gift, Clock } from "lucide-react";
+import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Sparkles, Layers, Box, ShoppingBag, Gift, Clock, GripVertical, Eye, EyeOff, Circle, CircleSlash } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useAutoSave } from "@/hooks/use-auto-save";
@@ -35,6 +35,8 @@ interface Location {
   contact_person?: string;
   image?: string;
   timezone?: string;
+  active?: boolean;
+  is_visible?: boolean;
   provider_ids?: string[];
   service_ids?: string[];
   category_ids?: string[];
@@ -155,6 +157,19 @@ export default function LocationsPage() {
     },
     debounceMs: 500
   });
+
+  const updateLocationQuick = async (id: string, updates: Partial<Location>) => {
+    try {
+      setLocations(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      if (selectedLocation && selectedLocation.id === id) {
+        setSelectedLocation(prev => prev ? { ...prev, ...updates } : prev);
+      }
+      await apiClient.put(`/api/admin/locations/${id}`, updates);
+    } catch {
+      toast.error('Failed to update location');
+      fetchData();
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -559,8 +574,10 @@ export default function LocationsPage() {
         <ScrollArea className="flex-1 bg-muted/5">
           <div className="p-4 pb-20 md:pb-4 flex flex-col gap-2">
             {leftPaneMode === 'locations' && filteredLocations.map(location => (
-              <button
+              <div
                 key={location.id}
+                draggable
+                onDragOver={e => e.preventDefault()}
                 onClick={() => handleSelectLocation(location)}
                 className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
                   selectedLocation?.id === location.id 
@@ -568,7 +585,7 @@ export default function LocationsPage() {
                     : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
                 }`}
               >
-                <div className="flex gap-3 items-start min-w-0 w-full relative">
+                <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                   {location.image ? (
                     <img src={location.image} alt={location.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
                   ) : (
@@ -580,8 +597,30 @@ export default function LocationsPage() {
                     <span className="text-sm font-semibold text-foreground leading-tight truncate block text-left" title={location.name}>{location.name}</span>
                     {location.address && <div className="text-xs text-muted-foreground mt-0.5 truncate text-left">{location.address}</div>}
                   </div>
+                  <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                    <div className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5" onClick={e => e.stopPropagation()}>
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => updateLocationQuick(location.id, { active: !(location.active ?? true), ...((location.active ?? true) ? { is_visible: false } : {}) })}
+                        className="p-0.5 hover:bg-muted rounded transition-colors"
+                        title={(location.active ?? true) ? 'Deactivate' : 'Activate'}
+                      >
+                        {(location.active ?? true) ? <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" /> : <CircleSlash className="w-3.5 h-3.5 text-rose-500" />}
+                      </button>
+                      <button
+                        disabled={!(location.active ?? true)}
+                        onClick={() => (location.active ?? true) && updateLocationQuick(location.id, { is_visible: !(location.is_visible ?? true) })}
+                        className={`p-0.5 rounded transition-colors ${(location.active ?? true) ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
+                        title={!(location.active ?? true) ? 'Deactivated' : ((location.is_visible ?? true) ? 'Hide' : 'Show')}
+                      >
+                        {(location.is_visible ?? true) && (location.active ?? true) ? <Eye className="w-3.5 h-3.5 text-emerald-500" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </button>
+              </div>
             ))}
 
             {leftPaneMode === 'providers' && filteredProviders.map(provider => (

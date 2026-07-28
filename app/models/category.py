@@ -9,7 +9,7 @@ to zero or more categories via the association table defined in
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -29,9 +29,11 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
@@ -40,6 +42,7 @@ class Category(Base):
         back_populates="category",
         cascade="all, delete-orphan",
     )
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return f"<Category id={self.id} name={self.name}>"
@@ -55,13 +58,17 @@ class ServiceCategory(Base):
 
     __tablename__ = "service_categories"
 
+    __table_args__ = (UniqueConstraint("tenant_id", "service_id", "category_id", name="uq_service_categories_pair"),)
+
     id = Column(Integer, primary_key=True, index=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Relationships
     service = relationship("Service", back_populates="categories")
     category = relationship("Category", back_populates="services")
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return (

@@ -9,7 +9,7 @@ products is defined in the ``ServiceProduct`` association table.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -30,12 +30,18 @@ class Product(Base):
 
     __tablename__ = "products"
 
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
-    sku = Column(String, nullable=True, unique=True)
+    sku = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    is_visible = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
@@ -44,6 +50,7 @@ class Product(Base):
         back_populates="product",
         cascade="all, delete-orphan",
     )
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} name={self.name}>"
@@ -59,13 +66,17 @@ class ServiceProduct(Base):
 
     __tablename__ = "service_products"
 
+    __table_args__ = (UniqueConstraint("tenant_id", "service_id", "product_id", name="uq_service_products_pair"),)
+
     id = Column(Integer, primary_key=True, index=True)
-    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Relationships
     service = relationship("Service", back_populates="products")
     product = relationship("Product", back_populates="services")
+    tenant = relationship("Tenant")
 
     def __repr__(self) -> str:
         return (
