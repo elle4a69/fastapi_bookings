@@ -5,7 +5,7 @@ import {
   List, ListOrdered, AlignLeft, AlignCenter, AlignRight, 
   Link, Image as ImageIcon, Video, Code, HelpCircle, 
   X, Check,
-  ChevronDown, Link2, Upload,
+  ChevronDown, Link2, Upload, ExternalLink,
   Eye, EyeOff, Loader2, Circle, CircleSlash, Layers, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -1108,6 +1108,18 @@ export default function ProvidersPage() {
                 <AutoSaveStatus state={saveState} onRetry={retry} />
                 <Button 
                   variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    const deepUrl = `${window.location.origin}/book/standard?provider_id=${selectedProvider.id}`;
+                    navigator.clipboard.writeText(deepUrl);
+                    toast.success("Provider deep link copied to clipboard!");
+                  }}
+                  className="min-h-[44px]"
+                >
+                  <Copy className="h-4 w-4 mr-1.5" /> Booking Link
+                </Button>
+                <Button 
+                  variant="outline" 
                   size="sm" 
                   onClick={() => handleDelete(selectedProvider.id)} 
                   className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md"
@@ -1181,6 +1193,45 @@ export default function ProvidersPage() {
                             className="border-0 rounded-none resize-none focus-visible:ring-0 shadow-none"
                           />
                         </div>
+                      </div>
+
+                      {/* 5. Direct Provider Deep Link */}
+                      <div className="space-y-2 pt-2 border-t">
+                        <Label className="flex items-center gap-2 font-bold text-xs">
+                          Direct Provider Booking Deep Link <Info className="h-4 w-4 text-muted-foreground" />
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={`${window.location.origin}/book/standard?provider_id=${selectedProvider.id}`}
+                            className="bg-muted/30 font-mono text-xs"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            className="shrink-0 gap-1.5 min-h-[40px]"
+                            onClick={() => {
+                              const url = `${window.location.origin}/book/standard?provider_id=${selectedProvider.id}`;
+                              navigator.clipboard.writeText(url);
+                              toast.success("Provider deep link copied to clipboard!");
+                            }}
+                          >
+                            <Copy className="h-4 w-4" /> Copy
+                          </Button>
+                          <a
+                            href={`/book/standard?provider_id=${selectedProvider.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button variant="outline" size="sm" type="button" className="shrink-0 gap-1.5 min-h-[40px]">
+                              <ExternalLink className="h-4 w-4" /> Open
+                            </Button>
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Share this link for this provider's personal website. Clients opening this link will have this provider pre-selected and bypassed automatically.
+                        </p>
                       </div>
 
                       {/* 5. Image & Avatar Dropzone */}
