@@ -9,7 +9,6 @@ import { AutoSaveStatus } from "@/components/ui/auto-save-status";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -920,21 +919,34 @@ export default function LocationsPage() {
                       {providers.length === 0 ? (
                         <div className="text-muted-foreground text-sm py-2">No providers available.</div>
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 py-2 w-full">
                           {providers.map((provider) => {
                             const isChecked = (formData.provider_ids || []).includes(String(provider.id));
                             return (
-                              <div key={provider.id} className="flex items-center space-x-2 bg-muted/10 p-3 rounded-md border">
-                                <Checkbox
+                              <div
+                                key={provider.id}
+                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                                  isChecked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
+                                }`}
+                              >
+                                <Avatar className="h-8 w-8 shrink-0 border" style={{ backgroundColor: provider.color || '#e2e8f0' }}>
+                                  <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover" />
+                                  <AvatarFallback className="text-xs font-bold bg-transparent text-white">
+                                    {provider.name ? provider.name[0].toUpperCase() : 'P'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{provider.name}</p>
+                                  {provider.email && <p className="text-[10px] text-muted-foreground truncate">{provider.email}</p>}
+                                </div>
+                                <Switch
                                   id={`provider-${provider.id}`}
                                   checked={isChecked}
+                                  disabled={!isEditing}
                                   onCheckedChange={(checked) => {
-                                    handleCheckboxChange('provider_ids', provider.id, !!checked);
+                                    handleCheckboxChange('provider_ids', provider.id, checked);
                                   }}
                                 />
-                                <Label htmlFor={`provider-${provider.id}`} className="text-sm font-normal cursor-pointer w-full">
-                                  {provider.name}
-                                </Label>
                               </div>
                             );
                           })}
