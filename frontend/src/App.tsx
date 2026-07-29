@@ -40,6 +40,7 @@ import PluginsSettings from "@/pages/admin/settings/plugins"
 import GDPRPage from "@/pages/admin/compliance/gdpr"
 import AuditLogsPage from "@/pages/admin/audit"
 import SystemPage from "@/pages/admin/system"
+import PublicBookingPage from "@/pages/public/booking-page"
 
 const adminRoutes = navigation.flatMap((section) =>
   section.items.flatMap((item) => {
@@ -135,6 +136,9 @@ function App() {
           ))}
           <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
         </Route>
+        <Route path="/book/:slug" element={<PublicBookingPage />} />
+        <Route path="/book" element={<PublicBookingPage />} />
+        <Route path="/booking" element={<PublicBookingPage />} />
         <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
         <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
         <Route path="/" element={<Navigate to="/admin" replace />} />
