@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant
 from ...models.tenant import Tenant
@@ -39,7 +39,12 @@ def list_bookings(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Return a paginated list of bookings with optional filters."""
-    query = db.query(BookingModel).filter(BookingModel.tenant_id == current_user.tenant_id)
+    query = db.query(BookingModel).options(
+        joinedload(BookingModel.client),
+        joinedload(BookingModel.provider),
+        joinedload(BookingModel.service),
+        joinedload(BookingModel.location)
+    ).filter(BookingModel.tenant_id == current_user.tenant_id)
     if status_filter:
         query = query.filter(BookingModel.status == status_filter)
     if client_id:

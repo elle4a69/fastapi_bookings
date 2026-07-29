@@ -31,6 +31,34 @@ class BookingUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+from decimal import Decimal
+
+class BookingClientInfo(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class BookingProviderInfo(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    color: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class BookingServiceInfo(BaseModel):
+    id: int
+    name: str
+    duration: int
+    price: Optional[Decimal] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class BookingLocationInfo(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
 class BookingInDBBase(BookingBase):
     id: int
     status: BookingStatus
@@ -40,7 +68,10 @@ class BookingInDBBase(BookingBase):
 
 
 class Booking(BookingInDBBase):
-    pass
+    client: Optional[BookingClientInfo] = None
+    provider: Optional[BookingProviderInfo] = None
+    service: Optional[BookingServiceInfo] = None
+    location: Optional[BookingLocationInfo] = None
 
 
 class BookingListResponse(BaseModel):

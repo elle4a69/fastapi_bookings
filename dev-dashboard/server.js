@@ -11,25 +11,54 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = 2310;
 const MODULES_CONFIG_PATH = path.join(__dirname, 'project-modules.json');
 const LOGS_DIR = path.join(__dirname, 'logs');
+const STATE_FILE = path.join(__dirname, 'pids.json');
 
 if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
 
-// Memory of running processes
-const runningProcesses = new Map(); // name -> childProcess
+// Global process state memory
+let trackedPids = {};
 const activeLogStreams = new Map(); // name -> writeStream
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// JSON Load/Save helpers
+function loadJson(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJson(filePath, payload) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.error('Error saving state JSON:', err);
+  }
+}
+
+function loadState() {
+  trackedPids = loadJson(STATE_FILE, {});
+}
+loadState();
+
+function persistPids() {
+  saveJson(STATE_FILE, trackedPids);
+}
 
 // Load modules config
 let modulesConfig = { modules: [] };
@@ -44,12 +73,61 @@ function loadConfig() {
 }
 loadConfig();
 
+// Helper to inject critical binaries to PATH
+function buildSpawnEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const existing = (env.PATH || '').toLowerCase();
+  
+  const inject = [
+    'C:\\Windows',
+    'C:\\Windows\\System32',
+    path.dirname(process.execPath),
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'npm') : '',
+    'C:\\python',
+    'C:\\Python311',
+    'C:\\Python312',
+    'C:\\Program Files\\Python312',
+    'C:\\Program Files\\Python311',
+    process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '.local', 'bin') : '',
+    process.env.APPDATA ? path.join(process.env.APPDATA, 'uv', 'bin') : '',
+  ].filter(Boolean);
+
+  for (const dir of inject) {
+    if (dir && !existing.includes(dir.toLowerCase()) && fs.existsSync(dir)) {
+      env.PATH = dir + sep + (env.PATH || '');
+    }
+  }
+  return env;
+}
+
+// Clear port using exact netstat pattern matching and LISTENING filter
+async function clearPort(port) {
+  if (!port) return;
+  try {
+    const { stdout } = await execAsync(`netstat -ano | findstr ":${port} " | findstr "LISTENING"`);
+    const pids = new Set();
+    for (const line of stdout.split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      const pid = parts[parts.length - 1];
+      if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+    }
+    for (const pid of pids) {
+      try {
+        console.log(`[Dashboard] Forcefully killing zombie process PID ${pid} listening on port ${port}`);
+        await execAsync(`taskkill /PID ${pid} /F`);
+      } catch {}
+    }
+    if (pids.size > 0) await sleep(800); // Give the OS time to free the socket
+  } catch {}
+}
+
 // Helper to check if port is active
 function checkTcpPort(port) {
   if (!port) return Promise.resolve(false);
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    socket.setTimeout(300);
+    socket.setTimeout(250);
     socket.once('connect', () => {
       socket.destroy();
       resolve(true);
@@ -104,10 +182,20 @@ function checkLogErrors(name) {
   return false;
 }
 
+function isPidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Get runtime status of a module
 async function getModuleRuntime(mod) {
-  const processEntry = runningProcesses.get(mod.name);
-  const isProcessAlive = processEntry ? isPidAlive(processEntry.pid) : false;
+  const tracked = trackedPids[mod.name];
+  const isProcessAlive = tracked && tracked.pid ? isPidAlive(tracked.pid) : false;
   
   const portUp = await checkTcpPort(mod.port);
   const healthy = await checkHealth(mod.health_url);
@@ -136,18 +224,8 @@ async function getModuleRuntime(mod) {
     health_url: mod.health_url || null,
     running,
     status,
-    pid: isProcessAlive ? processEntry.pid : null
+    pid: isProcessAlive ? tracked.pid : null
   };
-}
-
-function isPidAlive(pid) {
-  if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Get status of all modules
@@ -164,18 +242,21 @@ async function getFullStatus() {
   };
 }
 
-// Spawn process
+// Spawn process using hidden PowerShell -EncodedCommand wrapper
 async function startModuleProcess(name) {
   loadConfig();
   const mod = modulesConfig.modules.find(m => m.name === name);
   if (!mod) return { ok: false, error: 'Module not found' };
 
-  if (runningProcesses.has(name)) {
-    const proc = runningProcesses.get(name);
-    if (isPidAlive(proc.pid)) {
-      return { ok: false, error: 'Module already running' };
-    }
+  // Kill existing processes on the port and clear tracked PID tree first
+  if (mod.port) await clearPort(mod.port);
+
+  const tracked = trackedPids[name];
+  if (tracked && tracked.pid) {
+    try { await execAsync(`taskkill /PID ${tracked.pid} /T /F`); } catch {}
   }
+  delete trackedPids[name];
+  persistPids();
 
   const cwd = path.resolve(mod.working_dir);
   if (!fs.existsSync(cwd)) {
@@ -186,87 +267,88 @@ async function startModuleProcess(name) {
   fs.appendFileSync(logFile, `\n--- Started ${new Date().toISOString()} | cmd="${mod.command}" | cwd="${cwd}" ---\n`);
 
   const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-  activeLogStreams.set(name, logStream);
+
+  if (activeLogStreams.has(name)) {
+    try { activeLogStreams.get(name).end(); } catch {}
+    activeLogStreams.delete(name);
+  }
 
   console.log(`[Dashboard] Spawning: ${mod.command} in ${cwd}`);
 
-  // Spawn inside a shell for compatibility on Windows
-  const child = spawn(mod.command, [], {
+  // Base64 encode the startup command in UTF-16LE for PowerShell
+  const encodedCommand = Buffer
+    .from(`$ErrorActionPreference='Continue'; ${mod.command}`, 'utf16le')
+    .toString('base64');
+
+  const windowsPowerShell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const pwshPath = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe');
+  const shellExe = fs.existsSync(windowsPowerShell)
+    ? windowsPowerShell
+    : (fs.existsSync(pwshPath) ? pwshPath : 'powershell.exe');
+
+  const child = spawn(shellExe, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCommand], {
     cwd,
-    shell: true,
-    env: { ...process.env, PORT: mod.port ? String(mod.port) : undefined }
+    detached: false,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: buildSpawnEnv({ PORT: mod.port ? String(mod.port) : undefined })
   });
 
-  child.stdout.pipe(logStream);
-  child.stderr.pipe(logStream);
+  child.stdout.pipe(logStream, { end: false });
+  child.stderr.pipe(logStream, { end: false });
+  activeLogStreams.set(name, logStream);
 
-  runningProcesses.set(name, child);
-
-  child.on('close', (code) => {
-    console.log(`[Dashboard] Process ${name} exited with code ${code}`);
-    runningProcesses.delete(name);
-    logStream.end();
+  child.on('exit', () => {
+    try { logStream.end(); } catch {}
     activeLogStreams.delete(name);
     broadcastStatus();
   });
 
+  child.on('error', (error) => {
+    fs.appendFileSync(logFile, `\n[spawn-error] ${error.message}\n`);
+    try { logStream.end(); } catch {}
+    activeLogStreams.delete(name);
+    delete trackedPids[name];
+    persistPids();
+  });
+
+  trackedPids[name] = {
+    pid: child.pid,
+    startedAt: new Date().toISOString(),
+    cwd,
+    command: mod.command
+  };
+  persistPids();
+
   return { ok: true, pid: child.pid };
 }
 
-// Kill process tree on Windows
+// Stop module process tree and release port
 async function stopModuleProcess(name) {
-  const proc = runningProcesses.get(name);
-  if (!proc) {
-    // If not tracked by us, check if the port is in use and kill it
-    loadConfig();
-    const mod = modulesConfig.modules.find(m => m.name === name);
-    if (mod && mod.port) {
-      const killed = await clearPort(mod.port);
-      if (killed) return { ok: true, message: 'Port cleared' };
-    }
-    return { ok: false, error: 'Module process not running' };
-  }
+  loadConfig();
+  const mod = modulesConfig.modules.find(m => m.name === name);
+  const tracked = trackedPids[name];
 
-  const pid = proc.pid;
-  try {
-    console.log(`[Dashboard] Killing process tree for PID ${pid}`);
-    await execAsync(`taskkill /PID ${pid} /T /F`);
-    runningProcesses.delete(name);
-    return { ok: true };
-  } catch (err) {
-    console.error(`Error killing PID ${pid}:`, err);
-    // Fallback direct kill
+  if (tracked && tracked.pid) {
     try {
-      proc.kill();
+      console.log(`[Dashboard] Killing process tree for PID ${tracked.pid}`);
+      await execAsync(`taskkill /PID ${tracked.pid} /T /F`);
     } catch {}
-    runningProcesses.delete(name);
-    return { ok: true, warning: 'Forced kill invoked' };
   }
-}
 
-// Clean up port on Windows
-async function clearPort(port) {
-  try {
-    const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
-    const lines = stdout.split('\n').filter(Boolean);
-    let killed = false;
-    for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      const proto = parts[0];
-      const localAddr = parts[1];
-      const state = parts[parts.length - 2];
-      const pidStr = parts[parts.length - 1];
-      const pid = parseInt(pidStr, 10);
-      if (pid && pid !== process.pid && (localAddr.endsWith(`:${port}`) || localAddr.endsWith(`.0.0.0.0:${port}`))) {
-        console.log(`[Dashboard] Forcefully killing zombie process PID ${pid} listening on port ${port}`);
-        await execAsync(`taskkill /PID ${pid} /T /F`);
-        killed = true;
-      }
-    }
-    return killed;
-  } catch {
-    return false;
+  if (activeLogStreams.has(name)) {
+    try { activeLogStreams.get(name).end(); } catch {}
+    activeLogStreams.delete(name);
   }
+
+  if (mod && mod.port) {
+    await clearPort(mod.port);
+  }
+
+  delete trackedPids[name];
+  persistPids();
+
+  return { ok: true, message: 'Stopped' };
 }
 
 // Express endpoints
@@ -289,7 +371,7 @@ app.post('/api/modules/:name/stop', async (req, res) => {
 
 app.post('/api/modules/:name/restart', async (req, res) => {
   await stopModuleProcess(req.params.name);
-  await new Promise(r => setTimeout(r, 1000));
+  await sleep(1000);
   const result = await startModuleProcess(req.params.name);
   await broadcastStatus();
   res.json(result);
@@ -319,7 +401,6 @@ const wss = new WebSocketServer({ server });
 const clients = new Set();
 wss.on('connection', async (ws) => {
   clients.add(ws);
-  // Send initial status immediately
   try {
     const status = await getFullStatus();
     ws.send(JSON.stringify({ type: 'status', data: status }));
