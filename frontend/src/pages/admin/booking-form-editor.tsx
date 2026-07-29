@@ -7,7 +7,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Save, ArrowLeft, GripVertical, Eye, Code, ExternalLink, FileInput, Lock, Filter, CheckCircle2, Sliders } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -98,9 +97,62 @@ export default function BookingFormEditorPage() {
     }
   };
 
+  // ── Auto-generate Form Name and URL Slug ────────────────────────────
+
+  const updateAutoNameAndSlug = (locId: string, provId: string, svcId: string) => {
+    const partsName: string[] = [];
+    const partsSlug: string[] = [];
+
+    if (locId !== "none") {
+      const loc = locations.find(l => String(l.id) === locId);
+      if (loc) {
+        partsName.push(loc.name);
+        partsSlug.push(loc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+      }
+    }
+
+    if (provId !== "none") {
+      const prov = providers.find(p => String(p.id) === provId);
+      if (prov) {
+        partsName.push(prov.name);
+        partsSlug.push(prov.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+      }
+    }
+
+    if (svcId !== "none") {
+      const svc = services.find(s => String(s.id) === svcId);
+      if (svc) {
+        partsName.push(svc.name);
+        partsSlug.push(svc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+      }
+    }
+
+    if (partsName.length > 0) {
+      setFormName(partsName.join(" - "));
+      setFormSlug(partsSlug.join("/"));
+    }
+  };
+
+  const handleLocationPresetChange = (locId: string) => {
+    setPresetLocationId(locId);
+    setPresetProviderId("none");
+    setPresetServiceId("none");
+    updateAutoNameAndSlug(locId, "none", "none");
+  };
+
+  const handleProviderPresetChange = (provId: string) => {
+    setPresetProviderId(provId);
+    setPresetServiceId("none");
+    updateAutoNameAndSlug(presetLocationId, provId, "none");
+  };
+
+  const handleServicePresetChange = (svcId: string) => {
+    setPresetServiceId(svcId);
+    updateAutoNameAndSlug(presetLocationId, presetProviderId, svcId);
+  };
+
   // ── Setup Relational Cascading Filters ──────────────────────────────
 
-  // Providers available in Setup based on selected preset Location
   const setupAvailableProviders = providers.filter(p => {
     if (presetLocationId !== "none") {
       const loc = locations.find(l => String(l.id) === presetLocationId);
@@ -111,7 +163,6 @@ export default function BookingFormEditorPage() {
     return true;
   });
 
-  // Services available in Setup based on selected preset Provider and Location
   const setupAvailableServices = services.filter(s => {
     if (presetProviderId !== "none") {
       const prov = providers.find(p => String(p.id) === presetProviderId);
@@ -168,7 +219,7 @@ export default function BookingFormEditorPage() {
         await apiClient.post("/api/admin/booking-forms", payload);
       }
 
-      toast.success("Booking form setup saved with relational pre-selections!");
+      toast.success("Booking form setup saved!");
       navigate("/admin/booking-forms");
     } catch (err: any) {
       toast.error(err.message || "Failed to save form.");
@@ -185,7 +236,6 @@ export default function BookingFormEditorPage() {
     );
   }
 
-  // Pre-selected entity names for preview indicator
   const lockedLocName = presetLocationId !== "none" ? locations.find(l => String(l.id) === presetLocationId)?.name : null;
   const lockedProvName = presetProviderId !== "none" ? providers.find(p => String(p.id) === presetProviderId)?.name : null;
   const lockedSvcName = presetServiceId !== "none" ? services.find(s => String(s.id) === presetServiceId)?.name : null;
@@ -320,109 +370,116 @@ export default function BookingFormEditorPage() {
         </div>
 
         {/* Right Column: Pre-selections & Settings */}
-        <div className="w-80 border-l bg-card p-5 overflow-y-auto shrink-0 space-y-6">
-          {/* ── Pre-selections Section ──────────────────────────── */}
-          <div className="space-y-4">
-            <h2 className="font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Sliders className="w-4 h-4 text-primary" /> Relational Pre-selections
-            </h2>
-            <p className="text-[11px] text-muted-foreground">
-              Pre-select values to lock this form for a specific provider page, branch location, or service. Selecting a value cascades and filters the downstream options below.
-            </p>
+        <div className="w-80 border-l bg-card p-5 overflow-y-auto shrink-0 space-y-6 flex flex-col justify-between">
+          <div className="space-y-6">
+            {/* ── Pre-selections Section ──────────────────────────── */}
+            <div className="space-y-4">
+              <h2 className="font-bold text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-primary" /> Relational Pre-selections
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                Pre-select a Location, Provider, or Service. Selecting a location automatically filters providers at that location and generates the form name and slug.
+              </p>
 
-            {/* Step 1: Pre-select Location */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-foreground">1. Pre-select Location</Label>
-              <Select value={presetLocationId} onValueChange={(val) => {
-                setPresetLocationId(val);
-                setPresetProviderId("none");
-                setPresetServiceId("none");
-              }}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Customer chooses)</SelectItem>
-                  {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {/* Step 1: Pre-select Location */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">1. Pre-select Location</Label>
+                <Select value={presetLocationId} onValueChange={handleLocationPresetChange}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Customer chooses)</SelectItem>
+                    {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Step 2: Pre-select Provider */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-bold text-foreground">2. Pre-select Provider</Label>
+                  <Badge variant="outline" className="text-[9px]">{setupAvailableProviders.length} Available</Badge>
+                </div>
+                <Select value={presetProviderId} onValueChange={handleProviderPresetChange}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Customer chooses)</SelectItem>
+                    {setupAvailableProviders.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Step 3: Pre-select Service */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-bold text-foreground">3. Pre-select Service</Label>
+                  <Badge variant="outline" className="text-[9px]">{setupAvailableServices.length} Available</Badge>
+                </div>
+                <Select value={presetServiceId} onValueChange={handleServicePresetChange}>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Customer chooses)</SelectItem>
+                    {setupAvailableServices.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Step 2: Pre-select Provider (filtered by setup Location) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs font-bold text-foreground">2. Pre-select Provider</Label>
-                <Badge variant="outline" className="text-[9px]">{setupAvailableProviders.length} Available</Badge>
-              </div>
-              <Select value={presetProviderId} onValueChange={(val) => {
-                setPresetProviderId(val);
-                setPresetServiceId("none");
-              }}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Customer chooses)</SelectItem>
-                  {setupAvailableProviders.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* General Form Options */}
+            <div className="border-t pt-5 space-y-4">
+              <h2 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
+                General Form Options
+              </h2>
 
-            {/* Step 3: Pre-select Service (filtered by setup Provider & Location) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs font-bold text-foreground">3. Pre-select Service</Label>
-                <Badge variant="outline" className="text-[9px]">{setupAvailableServices.length} Available</Badge>
+              <div className="space-y-1.5">
+                <Label htmlFor="ed_name" className="text-xs font-semibold">Form Name (Auto-generated)</Label>
+                <Input
+                  id="ed_name"
+                  value={formName}
+                  onChange={e => setFormName(e.target.value)}
+                  className="h-9 text-xs"
+                />
               </div>
-              <Select value={presetServiceId} onValueChange={setPresetServiceId}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="None (Customer chooses)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Customer chooses)</SelectItem>
-                  {setupAvailableServices.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ed_slug" className="text-xs font-semibold">URL Slug (Auto-generated)</Label>
+                <div className="flex">
+                  <span className="inline-flex items-center px-2.5 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-xs font-mono">
+                    /book/
+                  </span>
+                  <Input
+                    id="ed_slug"
+                    className="rounded-l-none h-9 text-xs font-mono"
+                    value={formSlug}
+                    onChange={e => setFormSlug(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ed_widget" className="text-xs font-semibold">Widget Display Mode</Label>
+                <select
+                  id="ed_widget"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-2xs"
+                  value={widgetType}
+                  onChange={e => setWidgetType(e.target.value as any)}
+                >
+                  <option value="full">Full Page (Standard)</option>
+                  <option value="modal">Modal Popup</option>
+                  <option value="inline">Inline Embedded Form</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="border-t pt-5 space-y-4">
-            <h2 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-              General Form Options
-            </h2>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ed_name" className="text-xs font-semibold">Form Name</Label>
-              <Input
-                id="ed_name"
-                value={formName}
-                onChange={e => setFormName(e.target.value)}
-                className="h-9 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ed_slug" className="text-xs font-semibold">URL Slug</Label>
-              <div className="flex">
-                <span className="inline-flex items-center px-2.5 rounded-l-md border border-r-0 bg-muted text-muted-foreground text-xs font-mono">
-                  /book/
-                </span>
-                <Input
-                  id="ed_slug"
-                  className="rounded-l-none h-9 text-xs font-mono"
-                  value={formSlug}
-                  onChange={e => setFormSlug(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="ed_widget" className="text-xs font-semibold">Widget Display Mode</Label>
-              <select
-                id="ed_widget"
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-2xs"
-                value={widgetType}
-                onChange={e => setWidgetType(e.target.value as any)}
-              >
-                <option value="full">Full Page (Standard)</option>
-                <option value="modal">Modal Popup</option>
-                <option value="inline">Inline Embedded Form</option>
-              </select>
-            </div>
+          {/* ── Save Form Setup Button at Bottom ──────────────────── */}
+          <div className="pt-6 border-t mt-6 shrink-0">
+            <Button
+              onClick={handleSaveForm}
+              disabled={saving}
+              className="w-full h-11 text-sm font-bold gap-2 bg-primary text-primary-foreground shadow-md hover:shadow-lg transition-all"
+            >
+              <Save className="w-4 h-4" /> {saving ? "Saving Setup..." : "Save Form Setup"}
+            </Button>
           </div>
         </div>
       </div>

@@ -136,7 +136,7 @@ function App() {
           ))}
           <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
         </Route>
-        <Route path="/book/:slug" element={<PublicBookingPage />} />
+        <Route path="/book/*" element={<PublicBookingPage />} />
         <Route path="/book" element={<PublicBookingPage />} />
         <Route path="/booking" element={<PublicBookingPage />} />
         <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />

@@ -53,8 +53,8 @@ class BookingFormBase(BaseModel):
     @model_validator(mode="after")
     def validate_configuration(self) -> "BookingFormBase":
         self.slug = self.slug.strip().lower()
-        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", self.slug):
-            raise ValueError("slug must contain lowercase letters, numbers, and single hyphens only")
+        if not re.fullmatch(r"[a-z0-9]+(?:[-/][a-z0-9]+)*", self.slug):
+            raise ValueError("slug must contain lowercase letters, numbers, hyphens, and forward slashes only")
         if len(self.module_order) != len(set(self.module_order)):
             raise ValueError("module_order contains duplicates")
         if set(self.module_order) != set(DEFAULT_MODULE_ORDER):
