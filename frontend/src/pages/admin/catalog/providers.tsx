@@ -190,6 +190,21 @@ export default function ProvidersPage() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleAccordionChange = (openValues: string[]) => {
+    const lastVal = openValues[openValues.length - 1];
+    if (!lastVal) return;
+    setTimeout(() => {
+      const container = rightScrollRef.current;
+      const el = document.getElementById(`acc-prov-${lastVal}`);
+      if (el && container) {
+        const offset = el.offsetTop - container.offsetTop;
+        container.scrollTo({ top: offset - 8, behavior: 'smooth' });
+      }
+    }, 60);
+  };
+
   const [activeMobileTab, setActiveMobileTab] = useState('monday');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [servicesSaveStatus, setServicesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -1097,16 +1112,11 @@ export default function ProvidersPage() {
                   onClick={() => handleDelete(selectedProvider.id)} 
                   className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-auto p-4 md:p-8 w-full bg-background">
-              <Accordion type="multiple" defaultValue={['details']} className="w-full space-y-4">
+<div className="flex-1 overflow-auto p-4 md:p-8 w-full bg-background" ref={rightScrollRef}>
+              <Accordion type="multiple" defaultValue={['details']} className="w-full space-y-4" onValueChange={handleAccordionChange}>
                 
                 {/* Accordion 1: Service provider's details * */}
-                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-prov-details" value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Service Provider Details
                   </AccordionTrigger>
@@ -1247,7 +1257,7 @@ export default function ProvidersPage() {
                 </AccordionItem>
 
                 {/* Accordion 2: Weekly schedule, attached to this service provider */}
-                <AccordionItem value="schedule" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-prov-schedule" value="schedule" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     <div className="flex items-center justify-between w-full pr-4">
                       <span>Weekly Schedule</span>
@@ -1335,7 +1345,7 @@ export default function ProvidersPage() {
                 </AccordionItem>
 
                 {/* Accordion 3: Provider Services */}
-                <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-prov-services" value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Provider Services
                   </AccordionTrigger>
@@ -1368,7 +1378,7 @@ export default function ProvidersPage() {
                 </AccordionItem>
 
                 {/* Accordion 4: Provider Locations */}
-                <AccordionItem value="locations" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-prov-locations" value="locations" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Provider Locations
                   </AccordionTrigger>
@@ -1389,7 +1399,7 @@ export default function ProvidersPage() {
                 </AccordionItem>
 
                 {/* Accordion 5: Options */}
-                <AccordionItem value="options" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-prov-options" value="options" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
                     Provider Colour Coding
                   </AccordionTrigger>
