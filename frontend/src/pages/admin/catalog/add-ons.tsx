@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,6 +71,21 @@ export default function AddOnsPage() {
 
   const defaultForm = { name: '', description: '', price: 0, duration: 0, active: true, is_visible: true, image: null as string | null, service_ids: [] as string[] };
   const [formData, setFormData] = useState(defaultForm);
+
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleAccordionChange = (openValues: string[]) => {
+    const lastVal = openValues[openValues.length - 1];
+    if (!lastVal) return;
+    setTimeout(() => {
+      const container = rightScrollRef.current;
+      const el = document.getElementById(`acc-svc-${lastVal}`);
+      if (el && container) {
+        const offset = el.offsetTop - container.offsetTop;
+        container.scrollTo({ top: offset - 8, behavior: 'smooth' });
+      }
+    }, 60);
+  };
 
   const { saveState, triggerSave, retry } = useAutoSave({
     onSave: async (updatedData: any) => {
@@ -278,10 +293,10 @@ export default function AddOnsPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="flex-1 overflow-y-auto p-6">
-              <Accordion type="multiple" defaultValue={['details']} className="space-y-3">
+            <CardContent ref={rightScrollRef} className="flex-1 overflow-y-auto p-6">
+              <Accordion type="multiple" defaultValue={['details']} className="space-y-3" onValueChange={handleAccordionChange}>
 
-                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-svc-details" value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Add-on Details</AccordionTrigger>
                   <AccordionContent className="p-6">
                     <div className="space-y-4">
@@ -316,7 +331,7 @@ export default function AddOnsPage() {
                 </AccordionItem>
 
                 {!isCreating && services.length > 0 && (
-                  <AccordionItem value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                  <AccordionItem id="acc-svc-services" value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                     <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Linked Services</AccordionTrigger>
                     <AccordionContent className="p-6">
                       <div className="space-y-2">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,21 @@ export default function CategoriesPage() {
 
   const defaultForm = { name: '', description: '', active: true, is_visible: true, image: null as string | null };
   const [formData, setFormData] = useState(defaultForm);
+
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleAccordionChange = (openValues: string[]) => {
+    const lastVal = openValues[openValues.length - 1];
+    if (!lastVal) return;
+    setTimeout(() => {
+      const container = rightScrollRef.current;
+      const el = document.getElementById(`acc-svc-${lastVal}`);
+      if (el && container) {
+        const offset = el.offsetTop - container.offsetTop;
+        container.scrollTo({ top: offset - 8, behavior: 'smooth' });
+      }
+    }, 60);
+  };
 
   const { saveState, triggerSave, retry } = useAutoSave({
     onSave: async (updatedData: any) => {
@@ -291,10 +306,10 @@ export default function CategoriesPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="flex-1 overflow-y-auto p-6">
-              <Accordion type="multiple" defaultValue={['details']} className="space-y-3">
+            <CardContent ref={rightScrollRef} className="flex-1 overflow-y-auto p-6">
+              <Accordion type="multiple" defaultValue={['details']} className="space-y-3" onValueChange={handleAccordionChange}>
 
-                <AccordionItem value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
+                <AccordionItem id="acc-svc-details" value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Category Details</AccordionTrigger>
                   <AccordionContent className="p-6">
                     <div className="space-y-4">
