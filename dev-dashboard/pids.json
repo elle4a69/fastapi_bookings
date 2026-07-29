@@ -1,10 +1,4 @@
 {
-  "fastapi-bookings-backend": {
-    "pid": 8020,
-    "startedAt": "2026-07-29T14:15:30.923Z",
-    "cwd": "F:\\Projects\\fastapi_bookings",
-    "command": "cmd.exe /c start.bat"
-  },
   "bookings-ai-agent-frontend": {
     "pid": 42800,
     "startedAt": "2026-07-29T14:16:37.908Z",
@@ -17,16 +11,28 @@
     "cwd": "F:\\Projects\\fastapi_bookings\\mapbox",
     "command": "npm run dev"
   },
-  "chatwoot-support-desk": {
-    "pid": 28916,
-    "startedAt": "2026-07-29T14:18:03.896Z",
-    "cwd": "E:\\Projects\\chatwoot-source",
-    "command": "pnpm dev"
-  },
   "signoz-apm": {
     "pid": 28072,
     "startedAt": "2026-07-29T14:18:06.064Z",
     "cwd": "F:\\Projects\\fastapi_bookings\\signoz\\frontend",
+    "command": "pnpm dev"
+  },
+  "fastapi-bookings-backend": {
+    "pid": 35048,
+    "startedAt": "2026-07-29T23:16:55.283Z",
+    "cwd": "F:\\Projects\\fastapi_bookings",
+    "command": "cmd.exe /c start.bat"
+  },
+  "bookings-ai-agent": {
+    "pid": 31804,
+    "startedAt": "2026-07-29T23:17:06.151Z",
+    "cwd": "F:\\Projects\\bookings_ai_agent",
+    "command": "cmd.exe /c start.bat"
+  },
+  "chatwoot-support-desk": {
+    "pid": 30980,
+    "startedAt": "2026-07-29T23:17:15.408Z",
+    "cwd": "E:\\Projects\\chatwoot-source",
     "command": "pnpm dev"
   }
 }

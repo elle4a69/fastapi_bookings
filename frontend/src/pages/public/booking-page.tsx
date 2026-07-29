@@ -12,6 +12,7 @@ import {
   CalendarCheck,
   RotateCcw,
   AlertCircle,
+  Lock,
   Building
 } from "lucide-react";
 import { toast } from "sonner";
@@ -61,7 +62,7 @@ export default function PublicBookingPage() {
   const [allProviders, setAllProviders] = useState<ProviderItem[]>([]);
   const [allLocations, setAllLocations] = useState<LocationItem[]>([]);
 
-  // Stepper state: 1 = Selections, 2 = Date & Time, 3 = Client Info, 4 = Confirmation
+  // Stepper state: 1 = Selections (or Service selection if provider is locked), 2 = Date & Time, 3 = Client Info, 4 = Confirmation
   const [step, setStep] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -69,6 +70,11 @@ export default function PublicBookingPage() {
   const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderItem | null>(null);
+
+  // Lock status (from form predefined_values or URL params)
+  const [isLocationLocked, setIsLocationLocked] = useState(false);
+  const [isProviderLocked, setIsProviderLocked] = useState(false);
+  const [isServiceLocked, setIsServiceLocked] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [selectedTime, setSelectedTime] = useState<string>("10:00");
@@ -105,22 +111,6 @@ export default function PublicBookingPage() {
       setAllProviders(providersArr);
       setAllLocations(locationsArr);
 
-      const defaultSvc = servicesArr.length > 0 ? servicesArr[0] : null;
-      setSelectedService(defaultSvc);
-
-      if (defaultSvc) {
-        const matchingProv = providersArr.find((p: ProviderItem) => 
-          !defaultSvc.provider_ids || defaultSvc.provider_ids.length === 0 || defaultSvc.provider_ids.includes(p.id)
-        ) || (providersArr.length > 0 ? providersArr[0] : null);
-        setSelectedProvider(matchingProv);
-      } else if (providersArr.length > 0) {
-        setSelectedProvider(providersArr[0]);
-      }
-
-      if (locationsArr.length > 0) {
-        setSelectedLocation(locationsArr[0]);
-      }
-
       const matched = formsArr.find((f: any) => f.slug === formSlug) || {
         name: formSlug === 'quick-consult' ? 'Quick Consult' : 'Standard Booking',
         slug: formSlug,
@@ -128,6 +118,44 @@ export default function PublicBookingPage() {
       };
 
       setFormData(matched);
+
+      // Extract predefined values from backend setup or URL parameters
+      const pv = matched.predefined_values || {};
+      const paramLocId = searchParams.get("location_id") || pv.location_id;
+      const paramProvId = searchParams.get("provider_id") || pv.provider_id;
+      const paramSvcId = searchParams.get("service_id") || pv.service_id;
+
+      let activeLoc: LocationItem | null = locationsArr.length > 0 ? locationsArr[0] : null;
+      let activeProv: ProviderItem | null = providersArr.length > 0 ? providersArr[0] : null;
+      let activeSvc: ServiceItem | null = servicesArr.length > 0 ? servicesArr[0] : null;
+
+      if (paramLocId) {
+        const found = locationsArr.find((l: LocationItem) => String(l.id) === String(paramLocId));
+        if (found) {
+          activeLoc = found;
+          setIsLocationLocked(true);
+        }
+      }
+
+      if (paramProvId) {
+        const found = providersArr.find((p: ProviderItem) => String(p.id) === String(paramProvId));
+        if (found) {
+          activeProv = found;
+          setIsProviderLocked(true);
+        }
+      }
+
+      if (paramSvcId) {
+        const found = servicesArr.find((s: ServiceItem) => String(s.id) === String(paramSvcId));
+        if (found) {
+          activeSvc = found;
+          setIsServiceLocked(true);
+        }
+      }
+
+      setSelectedLocation(activeLoc);
+      setSelectedProvider(activeProv);
+      setSelectedService(activeSvc);
 
       if (matched.widget_type === 'modal') {
         setModalOpen(true);
@@ -141,7 +169,6 @@ export default function PublicBookingPage() {
 
   // ── Relational Calculation Filters ──────────────────────────────────
 
-  // 1. Locations available given selectedService and selectedProvider
   const availableLocations = allLocations.filter(loc => {
     if (selectedService && loc.service_ids && loc.service_ids.length > 0) {
       if (!loc.service_ids.includes(selectedService.id)) return false;
@@ -152,7 +179,6 @@ export default function PublicBookingPage() {
     return true;
   });
 
-  // 2. Services available given selectedLocation and selectedProvider
   const availableServices = allServices.filter(svc => {
     if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
       if (!selectedLocation.service_ids.includes(svc.id)) return false;
@@ -168,7 +194,6 @@ export default function PublicBookingPage() {
     return true;
   });
 
-  // 3. Providers available given selectedService and selectedLocation
   const availableProviders = allProviders.filter(prov => {
     if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
       if (!selectedLocation.provider_ids.includes(prov.id)) return false;
@@ -184,57 +209,42 @@ export default function PublicBookingPage() {
     return true;
   });
 
-  // ── Handlers for Relational Selections ──────────────────────────────
-
   const handleSelectService = (svc: ServiceItem) => {
     setSelectedService(svc);
 
-    // Compute updated providers for this service
-    const validProvidersForSvc = allProviders.filter(prov => {
-      if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
-        if (!selectedLocation.provider_ids.includes(prov.id)) return false;
-      }
-      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
-      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
-      return true;
-    });
+    if (!isProviderLocked) {
+      const validProvidersForSvc = allProviders.filter(prov => {
+        if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
+          if (!selectedLocation.provider_ids.includes(prov.id)) return false;
+        }
+        if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
+        if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
+        return true;
+      });
 
-    if (selectedProvider && !validProvidersForSvc.some(p => p.id === selectedProvider.id)) {
-      setSelectedProvider(validProvidersForSvc.length > 0 ? validProvidersForSvc[0] : null);
-    } else if (!selectedProvider && validProvidersForSvc.length > 0) {
-      setSelectedProvider(validProvidersForSvc[0]);
+      if (selectedProvider && !validProvidersForSvc.some(p => p.id === selectedProvider.id)) {
+        setSelectedProvider(validProvidersForSvc.length > 0 ? validProvidersForSvc[0] : null);
+      }
     }
   };
 
   const handleSelectProvider = (prov: ProviderItem) => {
     setSelectedProvider(prov);
 
-    // Compute updated services for this provider
-    const validServicesForProv = allServices.filter(svc => {
-      if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
-        if (!selectedLocation.service_ids.includes(svc.id)) return false;
+    if (!isServiceLocked) {
+      const validServicesForProv = allServices.filter(svc => {
+        if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
+          if (!selectedLocation.service_ids.includes(svc.id)) return false;
+        }
+        if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
+        if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
+        return true;
+      });
+
+      if (selectedService && !validServicesForProv.some(s => s.id === selectedService.id)) {
+        setSelectedService(validServicesForProv.length > 0 ? validServicesForProv[0] : null);
       }
-      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
-      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
-      return true;
-    });
-
-    if (selectedService && !validServicesForProv.some(s => s.id === selectedService.id)) {
-      setSelectedService(validServicesForProv.length > 0 ? validServicesForProv[0] : null);
-    } else if (!selectedService && validServicesForProv.length > 0) {
-      setSelectedService(validServicesForProv[0]);
     }
-  };
-
-  const handleSelectLocation = (loc: LocationItem) => {
-    setSelectedLocation(loc);
-  };
-
-  const handleResetFilters = () => {
-    setSelectedLocation(allLocations.length > 0 ? allLocations[0] : null);
-    setSelectedService(allServices.length > 0 ? allServices[0] : null);
-    setSelectedProvider(allProviders.length > 0 ? allProviders[0] : null);
-    toast.info("Selections reset to default.");
   };
 
   const handleCreateBookingSubmit = async () => {
@@ -313,12 +323,30 @@ export default function PublicBookingPage() {
 
   const renderBookingWizardContent = () => (
     <div className="space-y-6">
-      {/* Wizard Progress Stepper */}
+      {/* Locked Presets Banner */}
+      {(isLocationLocked || isProviderLocked || isServiceLocked) && (
+        <div className="p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-bold block">Pre-configured Booking Session</span>
+              <span className="text-[11px] opacity-90">
+                {isProviderLocked && `Locked Provider: ${selectedProvider?.name}`}
+                {isLocationLocked && ` • Location: ${selectedLocation?.name}`}
+                {isServiceLocked && ` • Service: ${selectedService?.name}`}
+              </span>
+            </div>
+          </div>
+          <Badge className="bg-amber-600 text-white font-bold text-[10px]">Pre-selected</Badge>
+        </div>
+      )}
+
+      {/* Wizard Stepper */}
       {step < 4 && (
         <div className="flex items-center justify-between border-b pb-4">
           <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? "text-primary" : "text-muted-foreground"}`}>
             <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">1</span>
-            <span>Relational Selection</span>
+            <span>{isServiceLocked ? "Service Confirmed" : "Select Service"}</span>
           </div>
           <div className="h-0.5 w-8 bg-muted" />
           <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? "text-primary" : "text-muted-foreground"}`}>
@@ -328,7 +356,7 @@ export default function PublicBookingPage() {
           <div className="h-0.5 w-8 bg-muted" />
           <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? "text-primary" : "text-muted-foreground"}`}>
             <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">3</span>
-            <span>Client Info</span>
+            <span>Client Details</span>
           </div>
         </div>
       )}
@@ -336,58 +364,39 @@ export default function PublicBookingPage() {
       {/* Step 1: Relational Service & Provider Selection */}
       {step === 1 && (
         <div className="space-y-6">
-          {/* Location Selector if multiple locations exist */}
-          {allLocations.length > 1 && (
+          {/* Location Selector if not locked */}
+          {!isLocationLocked && allLocations.length > 1 && (
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label className="text-sm font-bold flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-primary" /> Location
-                </Label>
-                <Badge variant="outline" className="text-[10px]">
-                  {availableLocations.length} Available
-                </Badge>
-              </div>
+              <Label className="text-xs font-bold text-foreground">Location</Label>
               <Select
                 value={selectedLocation ? String(selectedLocation.id) : ""}
                 onValueChange={(val) => {
                   const found = allLocations.find(l => String(l.id) === val);
-                  if (found) handleSelectLocation(found);
+                  if (found) setSelectedLocation(found);
                 }}
               >
-                <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent>
-                  {allLocations.map(l => (
-                    <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
-                  ))}
+                  {allLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          {/* Services List (relational) */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Select Service ({availableServices.length})
-              </h3>
-              {selectedProvider && (
-                <span className="text-xs text-primary font-semibold">
-                  Filtered by {selectedProvider.name}
-                </span>
-              )}
-            </div>
-
-            {availableServices.length === 0 ? (
-              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>No services match your provider/location selection.</span>
-                </div>
-                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleResetFilters}>
-                  <RotateCcw className="w-3 h-3" /> Reset
-                </Button>
+          {/* Services List */}
+          {!isServiceLocked && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Available Services ({availableServices.length})
+                </h3>
+                {isProviderLocked && (
+                  <span className="text-xs text-primary font-semibold">
+                    Offered by {selectedProvider?.name}
+                  </span>
+                )}
               </div>
-            ) : (
+
               <div className="grid gap-3 max-h-[260px] overflow-y-auto pr-1">
                 {availableServices.map((svc) => {
                   const isSelected = selectedService?.id === svc.id;
@@ -415,33 +424,18 @@ export default function PublicBookingPage() {
                   );
                 })}
               </div>
-            )}
-          </div>
-
-          {/* Providers List (relational) */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Select Provider ({availableProviders.length})
-              </h3>
-              {selectedService && (
-                <span className="text-xs text-primary font-semibold">
-                  Eligible for {selectedService.name}
-                </span>
-              )}
             </div>
+          )}
 
-            {availableProviders.length === 0 ? (
-              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>No providers offer this specific service.</span>
-                </div>
-                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleResetFilters}>
-                  <RotateCcw className="w-3 h-3" /> Reset
-                </Button>
+          {/* Provider Selection (only if not pre-locked) */}
+          {!isProviderLocked && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Select Service Provider ({availableProviders.length})
+                </h3>
               </div>
-            ) : (
+
               <div className="grid grid-cols-2 gap-3 max-h-[200px] overflow-y-auto pr-1">
                 {availableProviders.map((p) => {
                   const isSelected = selectedProvider?.id === p.id;
@@ -463,8 +457,8 @@ export default function PublicBookingPage() {
                   );
                 })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <Button
             className="w-full h-11 text-sm font-bold gap-2 mt-4"
@@ -476,7 +470,7 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* Step 2: Date & Time Slot */}
+      {/* Step 2: Date & Time */}
       {step === 2 && (
         <div className="space-y-5">
           <div>
@@ -503,11 +497,10 @@ export default function PublicBookingPage() {
 
           <div className="p-4 rounded-xl bg-muted/40 border text-xs space-y-1.5">
             <div className="font-bold flex items-center gap-2 text-foreground">
-              <CalendarCheck className="w-4 h-4 text-primary" /> Relational Reservation Summary
+              <CalendarCheck className="w-4 h-4 text-primary" /> Reservation Details
             </div>
             <div className="text-muted-foreground">{selectedService?.name} with {selectedProvider?.name}</div>
             <div className="text-foreground font-semibold pt-1">{selectedDate} at {selectedTime} ({selectedService?.duration} mins)</div>
-            {selectedLocation && <div className="text-muted-foreground">Location: {selectedLocation.name}</div>}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -521,7 +514,7 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* Step 3: Client Details */}
+      {/* Step 3: Client Info */}
       {step === 3 && (
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -541,7 +534,7 @@ export default function PublicBookingPage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="pub_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
-            <Textarea id="pub_notes" placeholder="Notes for your service provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
+            <Textarea id="pub_notes" placeholder="Notes for your provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -580,10 +573,6 @@ export default function PublicBookingPage() {
               <span className="font-semibold text-foreground">{completedBooking.provider}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block">Location</span>
-              <span className="font-semibold text-foreground">{completedBooking.location}</span>
-            </div>
-            <div>
               <span className="text-muted-foreground block">Date & Time</span>
               <span className="font-semibold text-primary">{completedBooking.date} at {completedBooking.time}</span>
             </div>
@@ -608,7 +597,7 @@ export default function PublicBookingPage() {
             </div>
             <div>
               <h1 className="font-bold text-lg leading-tight">{formData?.name || "Book an Appointment"}</h1>
-              <p className="text-xs text-muted-foreground">Relational Intake Booking Engine</p>
+              <p className="text-xs text-muted-foreground">Pre-configured Booking Intake Engine</p>
             </div>
           </div>
           {isModalWidget && (
@@ -628,7 +617,7 @@ export default function PublicBookingPage() {
               <CardTitle className="text-xl font-bold flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-primary" /> {formData?.name || "Standard Booking Intake"}
               </CardTitle>
-              <CardDescription>Select your desired service, provider, and appointment time.</CardDescription>
+              <CardDescription>Select your desired service and appointment time.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 md:p-8">
               {renderBookingWizardContent()}
