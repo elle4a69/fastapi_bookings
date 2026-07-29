@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -184,6 +184,21 @@ export default function ServicesPage() {
     },
     debounceMs: 500
   });
+
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+
+  const handleAccordionOpen = (val: string) => {
+    const section = val || 'details';
+    setOpenSection(section);
+    setTimeout(() => {
+      const container = rightScrollRef.current;
+      const el = document.getElementById(`acc-${section}`);
+      if (el && container) {
+        const offset = el.offsetTop - container.offsetTop;
+        container.scrollTo({ top: offset - 8, behavior: 'smooth' });
+      }
+    }, 60);
+  };
 
   const defaultFormData: Omit<Service, 'id'> = {
     name: '',
@@ -1004,15 +1019,15 @@ export default function ServicesPage() {
                 </div>
               </CardHeader>
               
-              <CardContent className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
+              <CardContent ref={rightScrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
                 <Accordion 
                   type="single" 
                   collapsible 
                   className="w-full space-y-2" 
                   value={openSection} 
-                  onValueChange={(val) => setOpenSection(val || 'details')}
+                  onValueChange={handleAccordionOpen}
                 >
-                  <AccordionItem value="details" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-details" value="details" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Details</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-2 pb-4">
                       <div className="space-y-2">
@@ -1171,7 +1186,7 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Service Schedule */}
-                  <AccordionItem value="fixed_times" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-fixed_times" value="fixed_times" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Schedule</AccordionTrigger>
                     <AccordionContent className="space-y-6 pt-2 pb-4">
                       <div className="space-y-3">
@@ -1283,7 +1298,7 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Service Categories */}
-                  <AccordionItem value="categories" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-categories" value="categories" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
                       {categories.length === 0 && (
@@ -1334,7 +1349,7 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Service Providers */}
-                  <AccordionItem value="providers" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-providers" value="providers" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
                       <p className="text-xs text-muted-foreground italic">
@@ -1387,7 +1402,7 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Products */}
-                  <AccordionItem value="products" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-products" value="products" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
                       {products.length === 0 && (
@@ -1423,7 +1438,7 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Add-ons */}
-                  <AccordionItem value="addons" className="border rounded-lg px-4 bg-card">
+                  <AccordionItem id="acc-addons" value="addons" className="border rounded-lg px-4 bg-card">
                     <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
                     <AccordionContent className="pt-2 pb-4 space-y-3">
                       {addons.length === 0 && (
