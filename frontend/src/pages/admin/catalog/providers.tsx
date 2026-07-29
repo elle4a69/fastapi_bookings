@@ -1264,9 +1264,8 @@ export default function ProvidersPage() {
                       )}
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="p-6">
-                    {/* Desktop Week Grid */}
-                    <div className="hidden md:grid grid-cols-7 gap-4">
+                  <AccordionContent className="px-6 pb-6 pt-2">
+                    <div className="space-y-4">
                       {DAYS_OF_WEEK.map((day) => {
                         const sched = selectedProvider.weekly_schedule?.[day.key] || {
                           is_working: false,
@@ -1275,40 +1274,38 @@ export default function ProvidersPage() {
                         };
                         const isActive = sched.is_working;
                         const isRecurring = sched.recurring;
-                        const activeSlots = sched.active_slots || [];
+                        const activeSlots: string[] = sched.active_slots || [];
 
                         return (
                           <div
                             key={day.key}
-                            className={`flex flex-col gap-3 p-3 border rounded-2xl transition-all duration-200 ${
-                              !isActive ? 'opacity-50 bg-muted/5' : 'shadow-xs hover:border-border/80'
+                            className={`rounded-xl border transition-all duration-200 overflow-hidden ${
+                              isActive ? 'border-border' : 'border-border/40 opacity-60'
                             }`}
                           >
-                            {/* Day Header */}
-                            <div className="border-b border-border/40 pb-3 flex flex-col gap-2">
-                              <h3 className="font-bold text-sm text-foreground tracking-tight text-center">
-                                {day.label}
-                              </h3>
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-[10px] font-semibold text-muted-foreground">Active</Label>
-                                  <Switch
-                                    checked={isActive}
-                                    onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'is_working', val)}
-                                    className="scale-85"
-                                  />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <Label className="text-[10px] font-semibold text-muted-foreground">Recurring</Label>
-                                  <Switch
-                                    checked={isRecurring}
-                                    onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'recurring', val)}
-                                    className="scale-85"
-                                  />
-                                </div>
+                            {/* Day header row */}
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/40">
+                              <div className="flex items-center gap-3">
+                                <Switch
+                                  checked={isActive}
+                                  onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'is_working', val)}
+                                  className="scale-90"
+                                />
+                                <span className="font-semibold text-sm text-foreground">{day.label}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs text-muted-foreground">Recurring</Label>
+                                <Switch
+                                  checked={isRecurring}
+                                  onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'recurring', val)}
+                                  disabled={!isActive}
+                                  className="scale-90"
+                                />
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-1 max-h-[300px] overflow-y-auto">
+
+                            {/* Time pill grid — 6 columns */}
+                            <div className="grid grid-cols-6 gap-1.5 p-3">
                               {HALF_HOUR_SLOTS.map((slot) => {
                                 const isSlotActive = activeSlots.includes(slot);
                                 return (
@@ -1317,11 +1314,11 @@ export default function ProvidersPage() {
                                     type="button"
                                     onClick={() => toggleSlot(day.key, slot)}
                                     disabled={!isActive}
-                                    className={`w-full py-0.5 rounded-md text-[9px] font-medium border ${
+                                    className={`py-1 rounded-md text-[10px] font-medium border text-center transition-colors ${
                                       isSlotActive && isActive
                                         ? 'bg-primary text-primary-foreground border-primary'
-                                        : 'bg-muted/10 text-muted-foreground border-border/20'
-                                    }`}
+                                        : 'bg-background text-muted-foreground border-border/40 hover:border-border'
+                                    } disabled:cursor-not-allowed disabled:opacity-40`}
                                   >
                                     {slot}
                                   </button>
@@ -1333,6 +1330,7 @@ export default function ProvidersPage() {
                       })}
                     </div>
                   </AccordionContent>
+
                 </AccordionItem>
 
                 {/* Accordion 3: Provider Services */}
