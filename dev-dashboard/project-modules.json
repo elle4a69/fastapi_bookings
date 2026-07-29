@@ -24,8 +24,8 @@
       "description": "FastAPI microservice executing autonomous chat responder pipelines, agent bootcamps, and SMS simulation flows.",
       "working_dir": "F:\\Projects\\bookings_ai_agent",
       "command": "cmd.exe /c start.bat",
-      "port": 5500,
-      "health_url": "http://localhost:5500/docs"
+      "port": 5505,
+      "health_url": "http://localhost:5505/docs"
     },
     {
       "name": "bookings-ai-agent-frontend",

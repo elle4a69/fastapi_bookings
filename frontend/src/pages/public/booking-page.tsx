@@ -10,11 +10,9 @@ import {
   ArrowRight, 
   ArrowLeft,
   CalendarCheck,
-  Building,
-  Mail,
-  Phone,
-  ShieldCheck,
-  X
+  RotateCcw,
+  AlertCircle,
+  Building
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -33,18 +31,23 @@ interface ServiceItem {
   description?: string;
   duration: number;
   price?: number;
+  provider_ids?: number[];
+  category_ids?: number[];
 }
 
 interface ProviderItem {
   id: number;
   name: string;
   email?: string;
+  service_ids?: number[];
 }
 
 interface LocationItem {
   id: number;
   name: string;
   address?: string;
+  provider_ids?: number[];
+  service_ids?: number[];
 }
 
 export default function PublicBookingPage() {
@@ -54,22 +57,23 @@ export default function PublicBookingPage() {
 
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<any>(null);
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [providers, setProviders] = useState<ProviderItem[]>([]);
-  const [locations, setLocations] = useState<LocationItem[]>([]);
+  const [allServices, setAllServices] = useState<ServiceItem[]>([]);
+  const [allProviders, setAllProviders] = useState<ProviderItem[]>([]);
+  const [allLocations, setAllLocations] = useState<LocationItem[]>([]);
 
-  // Booking Flow Steps: 1 = Service/Provider, 2 = Date/Time, 3 = Client Info, 4 = Success
+  // Stepper state: 1 = Selections, 2 = Date & Time, 3 = Client Info, 4 = Confirmation
   const [step, setStep] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Form selections
+  // Active selections
+  const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderItem | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
+
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [selectedTime, setSelectedTime] = useState<string>("10:00");
 
-  // Client Details
+  // Client info
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -79,10 +83,10 @@ export default function PublicBookingPage() {
   const [completedBooking, setCompletedBooking] = useState<any>(null);
 
   useEffect(() => {
-    loadPublicData();
+    loadData();
   }, [formSlug]);
 
-  const loadPublicData = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
       const [sRes, pRes, lRes, formsRes] = await Promise.all([
@@ -92,35 +96,145 @@ export default function PublicBookingPage() {
         apiClient.get<any>("/api/admin/booking-forms").catch(() => [])
       ]);
 
-      const rawServices = Array.isArray(sRes) ? sRes : (sRes?.data ?? []);
-      const rawProviders = Array.isArray(pRes) ? pRes : (pRes?.data ?? []);
-      const rawLocations = Array.isArray(lRes) ? lRes : (lRes?.data ?? []);
-      const rawForms = Array.isArray(formsRes) ? formsRes : (formsRes?.data ?? []);
+      const servicesArr = Array.isArray(sRes) ? sRes : (sRes?.data ?? []);
+      const providersArr = Array.isArray(pRes) ? pRes : (pRes?.data ?? []);
+      const locationsArr = Array.isArray(lRes) ? lRes : (lRes?.data ?? []);
+      const formsArr = Array.isArray(formsRes) ? formsRes : (formsRes?.data ?? []);
 
-      setServices(rawServices);
-      setProviders(rawProviders);
-      setLocations(rawLocations);
+      setAllServices(servicesArr);
+      setAllProviders(providersArr);
+      setAllLocations(locationsArr);
 
-      if (rawServices.length > 0) setSelectedService(rawServices[0]);
-      if (rawProviders.length > 0) setSelectedProvider(rawProviders[0]);
-      if (rawLocations.length > 0) setSelectedLocation(rawLocations[0]);
+      const defaultSvc = servicesArr.length > 0 ? servicesArr[0] : null;
+      setSelectedService(defaultSvc);
 
-      const matchedForm = rawForms.find((f: any) => f.slug === formSlug) || {
+      if (defaultSvc) {
+        const matchingProv = providersArr.find((p: ProviderItem) => 
+          !defaultSvc.provider_ids || defaultSvc.provider_ids.length === 0 || defaultSvc.provider_ids.includes(p.id)
+        ) || (providersArr.length > 0 ? providersArr[0] : null);
+        setSelectedProvider(matchingProv);
+      } else if (providersArr.length > 0) {
+        setSelectedProvider(providersArr[0]);
+      }
+
+      if (locationsArr.length > 0) {
+        setSelectedLocation(locationsArr[0]);
+      }
+
+      const matched = formsArr.find((f: any) => f.slug === formSlug) || {
         name: formSlug === 'quick-consult' ? 'Quick Consult' : 'Standard Booking',
         slug: formSlug,
         widget_type: formSlug === 'quick-consult' ? 'modal' : 'full'
       };
 
-      setFormData(matchedForm);
+      setFormData(matched);
 
-      if (matchedForm.widget_type === 'modal') {
+      if (matched.widget_type === 'modal') {
         setModalOpen(true);
       }
-    } catch (err: any) {
-      toast.error("Failed to load booking form.");
+    } catch {
+      toast.error("Failed to initialize booking form.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Relational Calculation Filters ──────────────────────────────────
+
+  // 1. Locations available given selectedService and selectedProvider
+  const availableLocations = allLocations.filter(loc => {
+    if (selectedService && loc.service_ids && loc.service_ids.length > 0) {
+      if (!loc.service_ids.includes(selectedService.id)) return false;
+    }
+    if (selectedProvider && loc.provider_ids && loc.provider_ids.length > 0) {
+      if (!loc.provider_ids.includes(selectedProvider.id)) return false;
+    }
+    return true;
+  });
+
+  // 2. Services available given selectedLocation and selectedProvider
+  const availableServices = allServices.filter(svc => {
+    if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
+      if (!selectedLocation.service_ids.includes(svc.id)) return false;
+    }
+    if (selectedProvider) {
+      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(selectedProvider.id)) {
+        return false;
+      }
+      if (selectedProvider.service_ids && selectedProvider.service_ids.length > 0 && !selectedProvider.service_ids.includes(svc.id)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // 3. Providers available given selectedService and selectedLocation
+  const availableProviders = allProviders.filter(prov => {
+    if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
+      if (!selectedLocation.provider_ids.includes(prov.id)) return false;
+    }
+    if (selectedService) {
+      if (selectedService.provider_ids && selectedService.provider_ids.length > 0 && !selectedService.provider_ids.includes(prov.id)) {
+        return false;
+      }
+      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(selectedService.id)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // ── Handlers for Relational Selections ──────────────────────────────
+
+  const handleSelectService = (svc: ServiceItem) => {
+    setSelectedService(svc);
+
+    // Compute updated providers for this service
+    const validProvidersForSvc = allProviders.filter(prov => {
+      if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
+        if (!selectedLocation.provider_ids.includes(prov.id)) return false;
+      }
+      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
+      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
+      return true;
+    });
+
+    if (selectedProvider && !validProvidersForSvc.some(p => p.id === selectedProvider.id)) {
+      setSelectedProvider(validProvidersForSvc.length > 0 ? validProvidersForSvc[0] : null);
+    } else if (!selectedProvider && validProvidersForSvc.length > 0) {
+      setSelectedProvider(validProvidersForSvc[0]);
+    }
+  };
+
+  const handleSelectProvider = (prov: ProviderItem) => {
+    setSelectedProvider(prov);
+
+    // Compute updated services for this provider
+    const validServicesForProv = allServices.filter(svc => {
+      if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
+        if (!selectedLocation.service_ids.includes(svc.id)) return false;
+      }
+      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
+      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
+      return true;
+    });
+
+    if (selectedService && !validServicesForProv.some(s => s.id === selectedService.id)) {
+      setSelectedService(validServicesForProv.length > 0 ? validServicesForProv[0] : null);
+    } else if (!selectedService && validServicesForProv.length > 0) {
+      setSelectedService(validServicesForProv[0]);
+    }
+  };
+
+  const handleSelectLocation = (loc: LocationItem) => {
+    setSelectedLocation(loc);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedLocation(allLocations.length > 0 ? allLocations[0] : null);
+    setSelectedService(allServices.length > 0 ? allServices[0] : null);
+    setSelectedProvider(allProviders.length > 0 ? allProviders[0] : null);
+    toast.info("Selections reset to default.");
   };
 
   const handleCreateBookingSubmit = async () => {
@@ -131,7 +245,6 @@ export default function PublicBookingPage() {
 
     setSubmitting(true);
     try {
-      // 1. Create or get client
       let clientId = 1;
       try {
         const clientRes = await apiClient.post<any>("/api/admin/clients", {
@@ -141,11 +254,9 @@ export default function PublicBookingPage() {
         });
         clientId = clientRes?.id || clientRes?.data?.id || 1;
       } catch {
-        // Fallback if client exists
         clientId = 1;
       }
 
-      // 2. Build start & end times
       const [hours, mins] = selectedTime.split(':').map(Number);
       const start = new Date(selectedDate);
       start.setHours(hours, mins, 0, 0);
@@ -171,14 +282,15 @@ export default function PublicBookingPage() {
         id: bookingRes?.data?.id || bookingRes?.id || Math.floor(1000 + Math.random() * 9000),
         service: selectedService.name,
         provider: selectedProvider.name,
+        location: selectedLocation?.name || "Main Branch",
         date: selectedDate,
         time: selectedTime,
         clientName,
         clientEmail
       });
 
-      setStep(4); // Success step
-      toast.success("Booking confirmed successfully!");
+      setStep(4);
+      toast.success("Booking submitted!");
     } catch (err: any) {
       toast.error(err.message || "Failed to submit booking.");
     } finally {
@@ -191,7 +303,7 @@ export default function PublicBookingPage() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
         <div className="text-center space-y-3">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
-          <p className="text-sm text-muted-foreground font-medium">Loading booking form...</p>
+          <p className="text-sm text-muted-foreground font-medium">Loading form...</p>
         </div>
       </div>
     );
@@ -204,89 +316,161 @@ export default function PublicBookingPage() {
       {/* Wizard Progress Stepper */}
       {step < 4 && (
         <div className="flex items-center justify-between border-b pb-4">
-          <div className={`flex items-center gap-2 text-xs font-semibold ${step >= 1 ? "text-primary" : "text-muted-foreground"}`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? "text-primary" : "text-muted-foreground"}`}>
             <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">1</span>
-            <span>Select Service</span>
+            <span>Relational Selection</span>
           </div>
           <div className="h-0.5 w-8 bg-muted" />
-          <div className={`flex items-center gap-2 text-xs font-semibold ${step >= 2 ? "text-primary" : "text-muted-foreground"}`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? "text-primary" : "text-muted-foreground"}`}>
             <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">2</span>
             <span>Date & Time</span>
           </div>
           <div className="h-0.5 w-8 bg-muted" />
-          <div className={`flex items-center gap-2 text-xs font-semibold ${step >= 3 ? "text-primary" : "text-muted-foreground"}`}>
+          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? "text-primary" : "text-muted-foreground"}`}>
             <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">3</span>
-            <span>Your Info</span>
+            <span>Client Info</span>
           </div>
         </div>
       )}
 
-      {/* Step 1: Service & Provider Selection */}
+      {/* Step 1: Relational Service & Provider Selection */}
       {step === 1 && (
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-lg font-bold mb-3">Choose a Service</h3>
-            <div className="grid gap-3">
-              {services.map((svc) => (
-                <div
-                  key={svc.id}
-                  onClick={() => setSelectedService(svc)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
-                    selectedService?.id === svc.id
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "hover:border-primary/50 bg-card"
-                  }`}
-                >
-                  <div>
-                    <div className="font-bold text-foreground text-base">{svc.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
-                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {svc.duration} mins</span>
-                      {svc.price && <span className="font-semibold text-emerald-600">${Number(svc.price).toFixed(2)}</span>}
-                    </div>
-                  </div>
-                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedService?.id === svc.id ? "bg-primary text-white border-primary" : ""}`}>
-                    {selectedService?.id === svc.id && <CheckCircle2 className="w-4 h-4" />}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-bold mb-3">Choose Provider</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {providers.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => setSelectedProvider(p)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
-                    selectedProvider?.id === p.id
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "hover:border-primary/50 bg-card"
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
-                    {p.name.charAt(0)}
-                  </div>
-                  <div className="font-semibold text-sm truncate">{p.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {locations.length > 0 && (
-            <div>
-              <Label className="text-sm font-bold mb-2 block">Location</Label>
-              <Select value={selectedLocation ? String(selectedLocation.id) : ""} onValueChange={(val) => setSelectedLocation(locations.find(l => String(l.id) === val) || null)}>
+        <div className="space-y-6">
+          {/* Location Selector if multiple locations exist */}
+          {allLocations.length > 1 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-sm font-bold flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-primary" /> Location
+                </Label>
+                <Badge variant="outline" className="text-[10px]">
+                  {availableLocations.length} Available
+                </Badge>
+              </div>
+              <Select
+                value={selectedLocation ? String(selectedLocation.id) : ""}
+                onValueChange={(val) => {
+                  const found = allLocations.find(l => String(l.id) === val);
+                  if (found) handleSelectLocation(found);
+                }}
+              >
                 <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
                 <SelectContent>
-                  {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                  {allLocations.map(l => (
+                    <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           )}
 
-          <Button className="w-full h-11 text-base font-semibold gap-2 mt-4" onClick={() => setStep(2)}>
+          {/* Services List (relational) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                Select Service ({availableServices.length})
+              </h3>
+              {selectedProvider && (
+                <span className="text-xs text-primary font-semibold">
+                  Filtered by {selectedProvider.name}
+                </span>
+              )}
+            </div>
+
+            {availableServices.length === 0 ? (
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>No services match your provider/location selection.</span>
+                </div>
+                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleResetFilters}>
+                  <RotateCcw className="w-3 h-3" /> Reset
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-3 max-h-[260px] overflow-y-auto pr-1">
+                {availableServices.map((svc) => {
+                  const isSelected = selectedService?.id === svc.id;
+                  return (
+                    <div
+                      key={svc.id}
+                      onClick={() => handleSelectService(svc)}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                        isSelected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "hover:border-primary/50 bg-card"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-bold text-foreground text-sm">{svc.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {svc.duration} mins</span>
+                          {svc.price && <span className="font-semibold text-emerald-600">${Number(svc.price).toFixed(2)}</span>}
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                        {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Providers List (relational) */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                Select Provider ({availableProviders.length})
+              </h3>
+              {selectedService && (
+                <span className="text-xs text-primary font-semibold">
+                  Eligible for {selectedService.name}
+                </span>
+              )}
+            </div>
+
+            {availableProviders.length === 0 ? (
+              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>No providers offer this specific service.</span>
+                </div>
+                <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleResetFilters}>
+                  <RotateCcw className="w-3 h-3" /> Reset
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 max-h-[200px] overflow-y-auto pr-1">
+                {availableProviders.map((p) => {
+                  const isSelected = selectedProvider?.id === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleSelectProvider(p)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
+                        isSelected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "hover:border-primary/50 bg-card"
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                        {p.name.charAt(0)}
+                      </div>
+                      <div className="font-semibold text-xs truncate">{p.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <Button
+            className="w-full h-11 text-sm font-bold gap-2 mt-4"
+            disabled={!selectedService || !selectedProvider}
+            onClick={() => setStep(2)}
+          >
             Continue to Date & Time <ArrowRight className="w-4 h-4" />
           </Button>
         </div>
@@ -296,12 +480,12 @@ export default function PublicBookingPage() {
       {step === 2 && (
         <div className="space-y-5">
           <div>
-            <Label className="text-sm font-bold mb-2 block">Select Appointment Date</Label>
-            <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="h-11" />
+            <Label className="text-sm font-bold mb-2 block">Appointment Date</Label>
+            <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="h-10" />
           </div>
 
           <div>
-            <Label className="text-sm font-bold mb-2 block">Select Start Time</Label>
+            <Label className="text-sm font-bold mb-2 block">Available Start Time</Label>
             <div className="grid grid-cols-3 gap-2">
               {["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"].map((t) => (
                 <Button
@@ -317,19 +501,20 @@ export default function PublicBookingPage() {
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-muted/40 border text-sm space-y-1">
-            <div className="font-bold flex items-center gap-2">
-              <CalendarCheck className="w-4 h-4 text-primary" /> Appointment Summary
+          <div className="p-4 rounded-xl bg-muted/40 border text-xs space-y-1.5">
+            <div className="font-bold flex items-center gap-2 text-foreground">
+              <CalendarCheck className="w-4 h-4 text-primary" /> Relational Reservation Summary
             </div>
-            <div className="text-muted-foreground text-xs">{selectedService?.name} with {selectedProvider?.name}</div>
-            <div className="text-foreground font-semibold text-xs pt-1">{selectedDate} at {selectedTime} ({selectedService?.duration} mins)</div>
+            <div className="text-muted-foreground">{selectedService?.name} with {selectedProvider?.name}</div>
+            <div className="text-foreground font-semibold pt-1">{selectedDate} at {selectedTime} ({selectedService?.duration} mins)</div>
+            {selectedLocation && <div className="text-muted-foreground">Location: {selectedLocation.name}</div>}
           </div>
 
           <div className="flex gap-3 pt-2">
             <Button variant="outline" className="flex-1 h-11" onClick={() => setStep(1)}>
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button className="flex-1 h-11 font-semibold" onClick={() => setStep(3)}>
+            <Button className="flex-1 h-11 font-bold" onClick={() => setStep(3)}>
               Continue <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -339,24 +524,24 @@ export default function PublicBookingPage() {
       {/* Step 3: Client Details */}
       {step === 3 && (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="pub_name">Full Name *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="pub_name" className="text-xs font-semibold">Full Name *</Label>
             <Input id="pub_name" placeholder="John Doe" value={clientName} onChange={(e) => setClientName(e.target.value)} className="h-10" />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="pub_email">Email Address *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="pub_email" className="text-xs font-semibold">Email Address *</Label>
             <Input id="pub_email" type="email" placeholder="john@example.com" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} className="h-10" />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="pub_phone">Phone Number</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="pub_phone" className="text-xs font-semibold">Phone Number</Label>
             <Input id="pub_phone" placeholder="(555) 000-0000" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="h-10" />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="pub_notes">Special Requests / Notes</Label>
-            <Textarea id="pub_notes" placeholder="Any preferences or instructions for your provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
+          <div className="space-y-1.5">
+            <Label htmlFor="pub_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
+            <Textarea id="pub_notes" placeholder="Notes for your service provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -378,24 +563,28 @@ export default function PublicBookingPage() {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-foreground">Booking Confirmed!</h2>
-            <p className="text-sm text-muted-foreground mt-1">Thank you {completedBooking.clientName}. Your appointment has been reserved.</p>
+            <p className="text-xs text-muted-foreground mt-1">Thank you {completedBooking.clientName}. Your appointment has been registered.</p>
           </div>
 
-          <div className="p-4 rounded-xl border bg-card text-left text-sm space-y-2 max-w-sm mx-auto shadow-xs">
-            <div className="flex justify-between text-xs text-muted-foreground border-b pb-2">
+          <div className="p-4 rounded-xl border bg-card text-left text-xs space-y-2 max-w-sm mx-auto shadow-xs">
+            <div className="flex justify-between text-muted-foreground border-b pb-2">
               <span>Booking Ref</span>
               <span className="font-mono font-bold text-foreground">#{completedBooking.id}</span>
             </div>
             <div>
-              <span className="text-xs text-muted-foreground block">Service</span>
+              <span className="text-muted-foreground block">Service</span>
               <span className="font-semibold text-foreground">{completedBooking.service}</span>
             </div>
             <div>
-              <span className="text-xs text-muted-foreground block">Provider</span>
+              <span className="text-muted-foreground block">Provider</span>
               <span className="font-semibold text-foreground">{completedBooking.provider}</span>
             </div>
             <div>
-              <span className="text-xs text-muted-foreground block">Date & Time</span>
+              <span className="text-muted-foreground block">Location</span>
+              <span className="font-semibold text-foreground">{completedBooking.location}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block">Date & Time</span>
               <span className="font-semibold text-primary">{completedBooking.date} at {completedBooking.time}</span>
             </div>
           </div>
@@ -419,7 +608,7 @@ export default function PublicBookingPage() {
             </div>
             <div>
               <h1 className="font-bold text-lg leading-tight">{formData?.name || "Book an Appointment"}</h1>
-              <p className="text-xs text-muted-foreground">Select a service and provider to schedule</p>
+              <p className="text-xs text-muted-foreground">Relational Intake Booking Engine</p>
             </div>
           </div>
           {isModalWidget && (
@@ -439,7 +628,7 @@ export default function PublicBookingPage() {
               <CardTitle className="text-xl font-bold flex items-center gap-2">
                 <CalendarIcon className="w-5 h-5 text-primary" /> {formData?.name || "Standard Booking Intake"}
               </CardTitle>
-              <CardDescription>Follow the quick steps below to confirm your appointment.</CardDescription>
+              <CardDescription>Select your desired service, provider, and appointment time.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 md:p-8">
               {renderBookingWizardContent()}
