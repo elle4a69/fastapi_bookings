@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
@@ -151,14 +151,26 @@ export default function RelationshipsPage() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-4 flex flex-wrap h-auto gap-2">
-          {TABS.map(tab => (
-            <TabsTrigger key={tab.id} value={tab.id} className="flex-1 sm:flex-none">
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
+        <div className="flex flex-wrap gap-2 pb-2 border-b mb-6">
+          {TABS.map(tab => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all duration-150 ${
+                  isActive 
+                    ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold' 
+                    : 'bg-card text-muted-foreground border-border/60 hover:text-foreground hover:bg-muted/30'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
         
         <TabsContent value={activeTab} className="mt-0 outline-none">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[700px]">
