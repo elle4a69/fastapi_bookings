@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface BaseItem {
   id: number | string;
@@ -186,19 +187,29 @@ export default function RelationshipsPage() {
                     ) : filteredLeft.length === 0 ? (
                       <p className="text-center text-muted-foreground text-sm py-4">No items found.</p>
                     ) : (
-                      filteredLeft.map(item => (
-                        <button
-                          key={item.id}
-                          onClick={() => setSelectedLeftId(item.id)}
-                          className={`w-full text-left px-4 py-3 rounded-md transition-colors text-sm font-medium border ${
-                            selectedLeftId === item.id 
-                              ? 'bg-primary/10 border-primary/20 text-primary' 
-                              : 'bg-card hover:bg-muted border-transparent'
-                          }`}
-                        >
-                          {item.name || `Unnamed (ID: ${item.id})`}
-                        </button>
-                      ))
+                      filteredLeft.map(item => {
+                        const isSelected = selectedLeftId === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => setSelectedLeftId(item.id)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200 hover:scale-[1.01] hover:shadow-sm ${
+                              isSelected 
+                                ? 'ring-1 ring-primary/20 border-primary bg-primary/5 text-primary font-semibold' 
+                                : 'border-border bg-card text-foreground'
+                            }`}
+                          >
+                            <Avatar className="h-8 w-8 shrink-0 border bg-muted/40 flex items-center justify-center">
+                              <AvatarFallback className={`text-xs font-bold bg-transparent ${isSelected ? 'text-primary' : 'text-foreground/80'}`}>
+                                {item.name ? item.name[0].toUpperCase() : 'S'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{item.name || `Unnamed (ID: ${item.id})`}</p>
+                            </div>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </ScrollArea>
@@ -251,7 +262,7 @@ export default function RelationshipsPage() {
                     ) : filteredRight.length === 0 ? (
                       <p className="text-center text-muted-foreground text-sm py-4">No targets found.</p>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {filteredRight.map(item => {
                           const isAssigned = assignedRightIds.has(item.id);
                           const isUpdating = updatingIds.has(item.id);
@@ -259,32 +270,29 @@ export default function RelationshipsPage() {
                           return (
                             <div 
                               key={item.id} 
-                              className={`flex items-center space-x-3 p-3 rounded-lg border bg-card transition-colors ${
-                                isAssigned ? 'border-primary/50 bg-primary/5' : 'border-border'
-                              } ${isUpdating ? 'opacity-70 pointer-events-none' : 'hover:border-primary/30'}`}
+                              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors bg-card ${
+                                isAssigned ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border'
+                              } ${isUpdating ? 'opacity-70 pointer-events-none' : 'hover:border-primary/20'}`}
                             >
-                              <div className="relative flex items-center justify-center w-5 h-5">
+                              <Avatar className="h-8 w-8 shrink-0 border bg-muted/40 flex items-center justify-center">
+                                <AvatarFallback className="text-xs font-bold bg-transparent text-foreground/80">
+                                  {item.name ? item.name[0].toUpperCase() : 'T'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{item.name || `Unnamed (ID: ${item.id})`}</p>
+                              </div>
+                              <div className="shrink-0 flex items-center justify-center w-8">
                                 {isUpdating ? (
-                                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin absolute" />
+                                  <Loader2 className="w-4 h-4 text-primary animate-spin" />
                                 ) : (
-                                  <Checkbox
+                                  <Switch
                                     id={`target-${item.id}`}
                                     checked={isAssigned}
                                     onCheckedChange={() => toggleMapping(item.id, isAssigned)}
                                   />
                                 )}
                               </div>
-                              <div className="grid gap-1.5 leading-none flex-1">
-                                <label
-                                  htmlFor={`target-${item.id}`}
-                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                >
-                                  {item.name || `Unnamed (ID: ${item.id})`}
-                                </label>
-                              </div>
-                              {isAssigned && !isUpdating && (
-                                <Badge variant="secondary" className="ml-auto text-xs">Assigned</Badge>
-                              )}
                             </div>
                           );
                         })}
