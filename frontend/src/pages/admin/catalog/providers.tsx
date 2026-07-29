@@ -1112,7 +1112,12 @@ export default function ProvidersPage() {
                   onClick={() => handleDelete(selectedProvider.id)} 
                   className="min-h-[44px] text-destructive hover:bg-destructive/10 hover:text-destructive rounded-md"
                 >
-<div className="flex-1 overflow-auto p-4 md:p-8 w-full bg-background" ref={rightScrollRef}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 md:p-8 w-full bg-background" ref={rightScrollRef}>
               <Accordion type="multiple" defaultValue={['details']} className="w-full space-y-4" onValueChange={handleAccordionChange}>
                 
                 {/* Accordion 1: Service provider's details * */}
