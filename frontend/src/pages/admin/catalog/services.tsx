@@ -1191,7 +1191,7 @@ export default function ServicesPage() {
                             </button>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-1 max-h-[300px] overflow-y-auto pr-0.5">
+                        <div className="grid grid-cols-2 gap-[3px] sm:flex sm:flex-wrap sm:gap-[3px] max-h-[300px] overflow-y-auto pr-0.5">
                           {HALF_HOUR_SLOTS.map((slot) => {
                             const selectedSlots = parseSelectedSlots(formData.fixed_start_times);
                             const isSelected = selectedSlots.includes(slot);
@@ -1205,13 +1205,12 @@ export default function ServicesPage() {
                                   const updated = isSelected
                                     ? current.filter(s => s !== slot)
                                     : [...current, slot];
-                                  // Store as 24h comma string for backend compatibility
                                   const csv = updated.map(to24h).join(', ');
                                   const next = { ...formData, fixed_start_times: csv };
                                   setFormData(next);
                                   triggerSave(next, true);
                                 }}
-                                className={`w-full py-0.5 rounded-md text-[9px] font-medium border transition-colors ${
+                                className={`py-0.5 rounded-md text-[9px] font-medium border transition-colors text-center w-full sm:w-[4.5rem] shrink-0 ${
                                   isSelected && isEditing
                                     ? 'bg-primary text-primary-foreground border-primary'
                                     : 'bg-muted/10 text-muted-foreground border-border/20'

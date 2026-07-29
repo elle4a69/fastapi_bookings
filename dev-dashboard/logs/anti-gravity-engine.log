@@ -559,3 +559,49 @@ Database Path: E:\Projects\King of Kings\anti_gravity_system\storage\anti_gravit
 Total tasks: 70
 Completed: 66 | Unresolved: 4
 ============================================================
+
+--- Started 2026-07-28T15:25:55.215Z | cmd="py -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Could not remove old database: [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Projects\\King of Kings\\anti_gravity_system\\storage\\anti_gravity.db'
+Traceback (most recent call last):
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 95, in <module>
+    main()
+    ~~~~^^
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 82, in main
+    db = seed_database()
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 27, in seed_database
+    db.create_project(proj_id, "Project Anti-Gravity")
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\Projects\King of Kings\anti_gravity_system\storage\database.py", line 36, in create_project
+    conn.execute(
+    ~~~~~~~~~~~~^
+        "INSERT INTO projects (project_id, name, status, codebase_path) VALUES (?, ?, ?, ?);",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (project_id, name, status, codebase_path)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+sqlite3.IntegrityError: UNIQUE constraint failed: projects.project_id
+
+--- Started 2026-07-28T15:26:48.790Z | cmd="py -u anti_gravity_system/run_demo.py" | cwd="E:\Projects\King of Kings" ---
+Seeding database...
+Could not remove old database: [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Projects\\King of Kings\\anti_gravity_system\\storage\\anti_gravity.db'
+Traceback (most recent call last):
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 95, in <module>
+    main()
+    ~~~~^^
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 82, in main
+    db = seed_database()
+  File "E:\Projects\King of Kings\anti_gravity_system\run_demo.py", line 27, in seed_database
+    db.create_project(proj_id, "Project Anti-Gravity")
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\Projects\King of Kings\anti_gravity_system\storage\database.py", line 36, in create_project
+    conn.execute(
+    ~~~~~~~~~~~~^
+        "INSERT INTO projects (project_id, name, status, codebase_path) VALUES (?, ?, ?, ?);",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (project_id, name, status, codebase_path)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+sqlite3.IntegrityError: UNIQUE constraint failed: projects.project_id
