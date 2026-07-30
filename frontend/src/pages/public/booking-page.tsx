@@ -54,7 +54,13 @@ interface LocationItem {
 export default function PublicBookingPage() {
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams] = useSearchParams();
-  const formSlug = slug || searchParams.get("form") || "standard";
+
+  // Extract path slug
+  const currentPath = window.location.pathname;
+  const pathSlug = currentPath.startsWith("/book/") 
+    ? currentPath.replace(/^\/book\//, "").replace(/\/$/, "")
+    : "";
+  const formSlug = pathSlug || slug || searchParams.get("form") || "standard";
 
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<any>(null);
@@ -62,7 +68,7 @@ export default function PublicBookingPage() {
   const [allProviders, setAllProviders] = useState<ProviderItem[]>([]);
   const [allLocations, setAllLocations] = useState<LocationItem[]>([]);
 
-  // Stepper state: 1 = Selections (or Service selection if provider is locked), 2 = Date & Time, 3 = Client Info, 4 = Confirmation
+  // Stepper state: 1 = Selections, 2 = Date & Time, 3 = Client Info, 4 = Confirmation
   const [step, setStep] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -111,7 +117,11 @@ export default function PublicBookingPage() {
       setAllProviders(providersArr);
       setAllLocations(locationsArr);
 
-      const matched = formsArr.find((f: any) => f.slug === formSlug) || {
+      const normalizeSlug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const matched = formsArr.find((f: any) => 
+        f.slug === formSlug || 
+        normalizeSlug(f.slug) === normalizeSlug(formSlug)
+      ) || {
         name: formSlug === 'quick-consult' ? 'Quick Consult' : 'Standard Booking',
         slug: formSlug,
         widget_type: formSlug === 'quick-consult' ? 'modal' : 'full'
@@ -125,6 +135,10 @@ export default function PublicBookingPage() {
       const paramProvId = searchParams.get("provider_id") || pv.provider_id;
       const paramSvcId = searchParams.get("service_id") || pv.service_id;
 
+      let locLocked = false;
+      let provLocked = false;
+      let svcLocked = false;
+
       let activeLoc: LocationItem | null = locationsArr.length > 0 ? locationsArr[0] : null;
       let activeProv: ProviderItem | null = providersArr.length > 0 ? providersArr[0] : null;
       let activeSvc: ServiceItem | null = servicesArr.length > 0 ? servicesArr[0] : null;
@@ -133,6 +147,7 @@ export default function PublicBookingPage() {
         const found = locationsArr.find((l: LocationItem) => String(l.id) === String(paramLocId));
         if (found) {
           activeLoc = found;
+          locLocked = true;
           setIsLocationLocked(true);
         }
       }
@@ -141,6 +156,7 @@ export default function PublicBookingPage() {
         const found = providersArr.find((p: ProviderItem) => String(p.id) === String(paramProvId));
         if (found) {
           activeProv = found;
+          provLocked = true;
           setIsProviderLocked(true);
         }
       }
@@ -149,6 +165,7 @@ export default function PublicBookingPage() {
         const found = servicesArr.find((s: ServiceItem) => String(s.id) === String(paramSvcId));
         if (found) {
           activeSvc = found;
+          svcLocked = true;
           setIsServiceLocked(true);
         }
       }
@@ -156,6 +173,11 @@ export default function PublicBookingPage() {
       setSelectedLocation(activeLoc);
       setSelectedProvider(activeProv);
       setSelectedService(activeSvc);
+
+      // Auto-advance to Step 2 (Date & Time) if Location, Provider, and Service are pre-selected
+      if ((locLocked || locationsArr.length <= 1) && (provLocked || providersArr.length <= 1) && activeSvc) {
+        setStep(2);
+      }
 
       if (matched.widget_type === 'modal') {
         setModalOpen(true);
@@ -331,7 +353,7 @@ export default function PublicBookingPage() {
             <div>
               <span className="font-bold block">Pre-configured Booking Session</span>
               <span className="text-[11px] opacity-90">
-                {isProviderLocked && `Locked Provider: ${selectedProvider?.name}`}
+                {isProviderLocked && `Provider: ${selectedProvider?.name}`}
                 {isLocationLocked && ` • Location: ${selectedLocation?.name}`}
                 {isServiceLocked && ` • Service: ${selectedService?.name}`}
               </span>
@@ -361,10 +383,10 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* Step 1: Relational Service & Provider Selection */}
+      {/* Step 1: Relational Service Selection Only (Location and Provider selections are COMPLETELY OMITTED when pre-selected) */}
       {step === 1 && (
         <div className="space-y-6">
-          {/* Location Selector if not locked */}
+          {/* Location Selector (ONLY if NOT pre-selected/locked) */}
           {!isLocationLocked && allLocations.length > 1 && (
             <div className="space-y-2">
               <Label className="text-xs font-bold text-foreground">Location</Label>
@@ -383,7 +405,7 @@ export default function PublicBookingPage() {
             </div>
           )}
 
-          {/* Services List */}
+          {/* Services List (ONLY if NOT pre-selected/locked) */}
           {!isServiceLocked && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -397,7 +419,7 @@ export default function PublicBookingPage() {
                 )}
               </div>
 
-              <div className="grid gap-3 max-h-[260px] overflow-y-auto pr-1">
+              <div className="grid gap-3 max-h-[280px] overflow-y-auto pr-1">
                 {availableServices.map((svc) => {
                   const isSelected = selectedService?.id === svc.id;
                   return (
@@ -427,7 +449,7 @@ export default function PublicBookingPage() {
             </div>
           )}
 
-          {/* Provider Selection (only if not pre-locked) */}
+          {/* Provider Selection (ONLY if NOT pre-selected/locked) */}
           {!isProviderLocked && (
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between">
@@ -504,9 +526,11 @@ export default function PublicBookingPage() {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button variant="outline" className="flex-1 h-11" onClick={() => setStep(1)}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Back
-            </Button>
+            {!isLocationLocked && !isProviderLocked && (
+              <Button variant="outline" className="flex-1 h-11" onClick={() => setStep(1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
             <Button className="flex-1 h-11 font-bold" onClick={() => setStep(3)}>
               Continue <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
