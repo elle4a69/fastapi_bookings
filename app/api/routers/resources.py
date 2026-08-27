@@ -44,6 +44,14 @@ def create_resource(
     db.refresh(resource)
     return ResourceOut.from_orm(resource)
 
+@router.get("/requirements", response_model=List[ServiceResourceRequirementOut])
+def list_requirements(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin),
+) -> List[ServiceResourceRequirementOut]:
+    requirements = db.query(SRRModel).all()
+    return [ServiceResourceRequirementOut.from_orm(r) for r in requirements]
+
 
 @router.get("/{resource_id}", response_model=ResourceOut)
 def get_resource(
@@ -112,14 +120,6 @@ def create_service_resource_requirement(
     db.refresh(requirement)
     return ServiceResourceRequirementOut.from_orm(requirement)
 
-
-@router.get("/requirements", response_model=List[ServiceResourceRequirementOut])
-def list_requirements(
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
-) -> List[ServiceResourceRequirementOut]:
-    requirements = db.query(SRRModel).all()
-    return [ServiceResourceRequirementOut.from_orm(r) for r in requirements]
 
 
 @router.delete("/requirements/{requirement_id}", response_model=None, status_code=204)

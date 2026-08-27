@@ -5,8 +5,8 @@ from pydantic import BaseModel
 class SmsConversationResponse(BaseModel):
     id: int
     tenant_id: int
-    provider_id: int
-    sms_account_id: int
+    provider_id: Optional[int] = None
+    sms_account_id: Optional[int] = None
     customer_address: str
     client_id: Optional[int] = None
     client_name: Optional[str] = None
