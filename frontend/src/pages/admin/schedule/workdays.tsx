@@ -100,10 +100,13 @@ export default function WorkdaysPage() {
   const fetchInitialData = async () => {
     try {
       setIsLoading(true);
-      const providersData = await apiClient.get<Provider[]>('/api/admin/providers');
-      setProviders(providersData);
-      if (providersData.length > 0) {
-        handleSelectProvider(providersData[0]);
+      const res = await apiClient.get<any>('/api/admin/providers');
+      const providersList = Array.isArray(res) 
+        ? res 
+        : (Array.isArray(res?.data) ? res.data : (res?.items || []));
+      setProviders(providersList);
+      if (providersList.length > 0) {
+        handleSelectProvider(providersList[0]);
       }
     } catch (error) {
       toast.error('Failed to load initial data');

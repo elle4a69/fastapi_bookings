@@ -54,6 +54,13 @@ export default function SchedulingPage() {
     fetchProviders();
   }, []);
 
+  const handleProviderSelect = (providerId: string) => {
+    const found = providers.find((p) => p.id === providerId);
+    if (found) {
+      setSelectedProvider(found);
+    }
+  };
+
   const [specialDaysMap, setSpecialDaysMap] = useState<Record<string, { is_working: boolean; active_slots: string[]; reason?: string | null }>>({});
 
   useEffect(() => {

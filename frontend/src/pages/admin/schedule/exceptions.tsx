@@ -72,17 +72,20 @@ export default function ExceptionsPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [blockedData, reservedData, providersData, locationsData] = await Promise.all([
+      const [blockedData, reservedData, providersRes, locationsRes] = await Promise.all([
         apiClient.get<BlockedTime[]>('/api/admin/schedule/blocked-times').catch(() => []),
         apiClient.get<ReservedTime[]>('/api/admin/schedule/reserved-times').catch(() => []),
-        apiClient.get<Provider[]>('/api/admin/providers').catch(() => []),
-        apiClient.get<Location[]>('/api/admin/locations').catch(() => []),
+        apiClient.get<any>('/api/admin/providers').catch(() => ({ data: [] })),
+        apiClient.get<any>('/api/admin/locations').catch(() => ({ data: [] })),
       ]);
+
+      const providersList = Array.isArray(providersRes) ? providersRes : (providersRes?.data || []);
+      const locationsList = Array.isArray(locationsRes) ? locationsRes : (locationsRes?.data || []);
 
       setBlockedTimes(blockedData);
       setReservedTimes(reservedData);
-      setProviders(providersData);
-      setLocations(locationsData);
+      setProviders(providersList);
+      setLocations(locationsList);
     } catch (error) {
       toast.error('Failed to load schedule exceptions');
       console.error(error);
