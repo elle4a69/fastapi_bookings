@@ -45,23 +45,6 @@ def create_client(
     return {"ok": True, "data": client}
 
 
-@router.get("/clients/search", response_model=ClientResponse, tags=["clients"])
-def search_client_by_email(
-    email: str,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
-) -> dict:
-    """Search for a client by email."""
-    client = db.query(ClientModel).filter(
-        ClientModel.email == email,
-        ClientModel.tenant_id == current_user.tenant_id,
-        ClientModel.deleted_at.is_(None)
-    ).first()
-    if not client:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    return {"ok": True, "data": client}
-
-
 @router.get("/clients/{client_id}", response_model=ClientResponse, tags=["clients"])
 def get_client(
     client_id: int,

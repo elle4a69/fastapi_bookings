@@ -42,11 +42,10 @@ export default function WebhooksSettings() {
 
   const fetchWebhooks = async () => {
     try {
-      const res = await apiClient.get<any>("/api/admin/webhooks")
-      const raw = Array.isArray(res) ? res : (res?.data ?? [])
-      setWebhooks(raw)
-      if (raw.length > 0) {
-        setSelectedId(raw[0].id)
+      const data = await apiClient.get<WebhookEndpoint[]>("/api/admin/webhooks")
+      setWebhooks(data || [])
+      if (data?.length > 0) {
+        setSelectedId(data[0].id)
       }
     } catch (error) {
       toast.error("Failed to load webhooks")

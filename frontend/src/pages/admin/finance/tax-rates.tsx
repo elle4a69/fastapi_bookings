@@ -32,7 +32,7 @@ export default function TaxRatesPage() {
   const fetchTaxRates = async () => {
     setIsLoading(true);
     try {
-      const data = await apiClient.get<TaxRate[]>('/api/admin/tax-rates');
+      const data = await apiClient.get<TaxRate[]>('/api/admin/finance/tax-rates');
       setTaxRates(Array.isArray(data) ? data : []);
     } catch (error) {
       toast.error('Failed to fetch tax rates');
@@ -69,10 +69,10 @@ export default function TaxRatesPage() {
     setIsSaving(true);
     try {
       if (selectedRate?.id) {
-        await apiClient.put(`/api/admin/tax-rates/${selectedRate.id}`, formData);
+        await apiClient.put(`/api/admin/finance/tax-rates/${selectedRate.id}`, formData);
         toast.success('Tax rate updated');
       } else {
-        await apiClient.post('/api/admin/tax-rates', formData);
+        await apiClient.post('/api/admin/finance/tax-rates', formData);
         toast.success('Tax rate created');
       }
       fetchTaxRates();

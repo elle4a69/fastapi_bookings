@@ -22,9 +22,8 @@ export default function MessagesPage() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await apiClient.get<any>("/api/admin/notifications");
-        const raw = Array.isArray(res) ? res : (res?.data ?? []);
-        setMessages(raw);
+        const data = await apiClient.get<NotificationMessage[]>("/api/admin/notifications/messages");
+        setMessages(data);
       } catch (error) {
         console.error("Failed to fetch messages", error);
       } finally {
