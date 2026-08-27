@@ -121,11 +121,6 @@ function App() {
                 route.path === '/admin/relationships' ? <RelationshipsPage /> :
                 route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
                 route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
-                route.path === '/admin/catalog/packages' ? <PackagesPage /> :
-                route.path === '/admin/resources' ? <ResourcesPage /> :
-                route.path === '/admin/relationships' ? <RelationshipsPage /> :
-                route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
-                route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
                 route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
                 route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
                 route.path === '/admin/finance/invoices' ? <InvoicesPage /> :

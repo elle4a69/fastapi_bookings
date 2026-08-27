@@ -32,7 +32,7 @@ export function PaymentsPage() {
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<Payment[]>('/api/admin/finance/payments');
+      const data = await apiClient.get<Payment[]>('/api/admin/payments');
       setPayments(data || []);
     } catch (error) {
       toast.error('Failed to load payments');
@@ -48,7 +48,7 @@ export function PaymentsPage() {
 
   const handleRefund = async (paymentId: string) => {
     try {
-      await apiClient.post(`/api/admin/finance/payments/${paymentId}/refund`);
+      await apiClient.post(`/api/admin/payments/${paymentId}/refund`);
       toast.success('Refund initiated successfully');
       fetchPayments();
     } catch (error) {

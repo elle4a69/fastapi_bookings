@@ -1,0 +1,33 @@
+app = "assistant-ui-hub"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  PUBLIC_APP_URL = "https://assistant-ui-hub.fly.dev"
+
+[mounts]
+  source = "assistant_data_volume"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "3s"
+
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1gb"

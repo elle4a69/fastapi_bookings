@@ -37,22 +37,36 @@ export default function PluginsSettings() {
 
   const fetchPlugins = async () => {
     try {
-      // Trying to fetch from ui-config or similar plugin config
-      const data = await apiClient.get<{ plugins: PluginConfig[] }>("/api/admin/ui-config")
-      if (data && data.plugins) {
-        setPlugins(data.plugins)
-      } else {
-        throw new Error("No plugins data")
-      }
-    } catch (error) {
-      // Mock fallback
-      setPlugins([
+      const res = await apiClient.get<any>("/api/admin/plugin-states")
+      const list = Array.isArray(res) ? res : (res?.data ?? [])
+      
+      const activeMap: Record<string, boolean> = {}
+      list.forEach((item: any) => {
+        activeMap[item.name] = item.enabled
+      })
+
+      const basePlugins: PluginConfig[] = [
         { id: "stripe", name: "Stripe Payments", description: "Accept credit card payments and Apple Pay.", icon: "stripe", category: "payment", isActive: true, isConfigured: true },
         { id: "simplybook", name: "SimplyBook Widget", description: "Embeddable booking widget integration.", icon: "simplybook", category: "booking", isActive: false, isConfigured: false },
         { id: "sso", name: "Enterprise SSO", description: "SAML and OAuth2 authentication.", icon: "sso", category: "system", isActive: true, isConfigured: true },
         { id: "mailchimp", name: "Mailchimp", description: "Sync clients to mailing lists.", icon: "mailchimp", category: "communication", isActive: false, isConfigured: false },
         { id: "invoices", name: "Advanced Invoicing", description: "Generate PDF invoices automatically.", icon: "invoices", category: "payment", isActive: true, isConfigured: true },
-      ])
+      ]
+
+      const updated = basePlugins.map(p => ({
+        ...p,
+        isActive: activeMap[p.id] !== undefined ? activeMap[p.id] : p.isActive
+      }))
+      setPlugins(updated)
+    } catch (error) {
+      const fallbackPlugins: PluginConfig[] = [
+        { id: "stripe", name: "Stripe Payments", description: "Accept credit card payments and Apple Pay.", icon: "stripe", category: "payment", isActive: true, isConfigured: true },
+        { id: "simplybook", name: "SimplyBook Widget", description: "Embeddable booking widget integration.", icon: "simplybook", category: "booking", isActive: false, isConfigured: false },
+        { id: "sso", name: "Enterprise SSO", description: "SAML and OAuth2 authentication.", icon: "sso", category: "system", isActive: true, isConfigured: true },
+        { id: "mailchimp", name: "Mailchimp", description: "Sync clients to mailing lists.", icon: "mailchimp", category: "communication", isActive: false, isConfigured: false },
+        { id: "invoices", name: "Advanced Invoicing", description: "Generate PDF invoices automatically.", icon: "invoices", category: "payment", isActive: true, isConfigured: true },
+      ]
+      setPlugins(fallbackPlugins)
     } finally {
       setLoading(false)
     }
@@ -60,16 +74,11 @@ export default function PluginsSettings() {
 
   const togglePlugin = async (id: string, currentActive: boolean) => {
     try {
-      // Optimistic update
       setPlugins(plugins.map(p => p.id === id ? { ...p, isActive: !currentActive } : p))
-      
-      // In a real scenario you would update the specific plugin state
-      // await apiClient.post(`/api/admin/plugins/${id}/toggle`, { active: !currentActive })
-      
+      await apiClient.put(`/api/admin/plugin-states/${id}`, { enabled: !currentActive })
       toast.success(currentActive ? "Plugin disabled" : "Plugin enabled")
     } catch (error) {
       toast.error("Failed to toggle plugin")
-      // Revert on error
       setPlugins(plugins.map(p => p.id === id ? { ...p, isActive: currentActive } : p))
     }
   }

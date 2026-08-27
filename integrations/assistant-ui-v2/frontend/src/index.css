@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+html, body {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  -webkit-overflow-scrolling: auto; /* disables default momentum bounce */
+}
+
+html.booking-embed,
+html.booking-embed body {
+  position: static;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* Enable momentum scrolling ONLY inside scrollable panels */
+.overflow-y-auto, .overflow-auto {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
