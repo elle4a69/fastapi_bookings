@@ -8,10 +8,22 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-BookingModule = Literal["location", "category", "service", "provider", "time"]
+BookingModule = str
 ProviderSelectionMode = Literal["required", "optional", "automatic", "predefined"]
 
-DEFAULT_MODULE_ORDER = ["location", "category", "service", "provider", "time"]
+DEFAULT_MODULE_ORDER = [
+    "location",
+    "provider",
+    "category",
+    "service",
+    "addons",
+    "products",
+    "datetime",
+    "intake",
+    "client",
+    "checkout",
+    "outcome",
+]
 DEFAULT_ENABLED_MODULES = {module: True for module in DEFAULT_MODULE_ORDER}
 
 
@@ -40,8 +52,8 @@ class BookingFormBase(BaseModel):
     slug: str = Field(min_length=1, max_length=120)
     description: str | None = None
     active: bool = True
-    module_order: list[BookingModule] = Field(default_factory=lambda: list(DEFAULT_MODULE_ORDER))
-    enabled_modules: dict[BookingModule, bool] = Field(default_factory=lambda: dict(DEFAULT_ENABLED_MODULES))
+    module_order: list[str] = Field(default_factory=lambda: list(DEFAULT_MODULE_ORDER))
+    enabled_modules: dict[str, bool] = Field(default_factory=lambda: dict(DEFAULT_ENABLED_MODULES))
     predefined_values: PredefinedValues = Field(default_factory=PredefinedValues)
     provider_selection_mode: ProviderSelectionMode = "required"
     clear_session_on_start: bool = False
@@ -57,18 +69,7 @@ class BookingFormBase(BaseModel):
             raise ValueError("slug must contain lowercase letters, numbers, hyphens, and forward slashes only")
         if len(self.module_order) != len(set(self.module_order)):
             raise ValueError("module_order contains duplicates")
-        if set(self.module_order) != set(DEFAULT_MODULE_ORDER):
-            raise ValueError("module_order must contain every supported module exactly once")
-        unknown_enabled = set(self.enabled_modules) - set(DEFAULT_MODULE_ORDER)
-        if unknown_enabled:
-            raise ValueError(f"unknown enabled modules: {sorted(unknown_enabled)}")
-        merged = dict(DEFAULT_ENABLED_MODULES)
-        merged.update(self.enabled_modules)
-        self.enabled_modules = merged
-        if not self.enabled_modules["time"]:
-            raise ValueError("time cannot be disabled")
-        if self.provider_selection_mode == "predefined" and self.predefined_values.provider_id is None:
-            raise ValueError("predefined provider mode requires predefined_values.provider_id")
+        return self
         return self
 
 

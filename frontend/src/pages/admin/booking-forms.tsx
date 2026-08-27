@@ -29,11 +29,13 @@ interface BookingForm {
   description?: string;
 }
 
-const DEFAULT_MODULE_ORDER = ["service", "provider", "location", "datetime", "intake", "client", "checkout", "outcome"];
+const DEFAULT_MODULE_ORDER = ["location", "provider", "service", "addons", "products", "datetime", "intake", "client", "checkout", "outcome"];
 const DEFAULT_ENABLED_MODULES = {
-  service: true,
-  provider: true,
   location: true,
+  service: true,
+  addons: true,
+  products: true,
+  provider: true,
   datetime: true,
   intake: true,
   client: true,
@@ -44,14 +46,21 @@ const DEFAULT_ENABLED_MODULES = {
 export default function BookingForms() {
   const [forms, setForms] = useState<BookingForm[]>([]);
   const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [providers, setProviders] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
 
   // Dialogs
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [embedDialogOpen, setEmbedDialogOpen] = useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
 
-  const [selectedForm, setSelectedForm] = useState<BookingForm | null>(null);
+  const [selectedForm, setSelectedForm] = useState<any | null>(null);
   const [copiedEmbed, setCopiedEmbed] = useState(false);
+
+  // Pre-selection params for Embed Snippet Modal
+  const [embedLocId, setEmbedLocId] = useState<string>("none");
+  const [embedProvId, setEmbedProvId] = useState<string>("none");
+  const [embedSvcId, setEmbedSvcId] = useState<string>("none");
 
   // New Form Fields
   const [newFormName, setNewFormName] = useState("");
@@ -65,14 +74,25 @@ export default function BookingForms() {
   const loadForms = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get<any>("/api/admin/booking-forms").catch(() => []);
-      const raw = Array.isArray(res) ? res : (res?.data ?? []);
+      const [fRes, lRes, pRes, sRes] = await Promise.all([
+        apiClient.get<any>("/api/admin/booking-forms").catch(() => []),
+        apiClient.get<any>("/api/admin/locations").catch(() => []),
+        apiClient.get<any>("/api/admin/providers").catch(() => []),
+        apiClient.get<any>("/api/admin/services").catch(() => []),
+      ]);
+      const rawForms = Array.isArray(fRes) ? fRes : (fRes?.data ?? []);
+      const locsArr = Array.isArray(lRes) ? lRes : (lRes?.data ?? []);
+      const provsArr = Array.isArray(pRes) ? pRes : (pRes?.data ?? []);
+      const svcsArr = Array.isArray(sRes) ? sRes : (sRes?.data ?? []);
 
-      if (raw.length === 0) {
-        // Seed default forms if backend returns empty
+      setLocations(locsArr);
+      setProviders(provsArr);
+      setServices(svcsArr);
+
+      if (rawForms.length === 0) {
         await seedDefaultForms();
       } else {
-        setForms(raw);
+        setForms(rawForms);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to load booking forms.");
@@ -179,9 +199,25 @@ export default function BookingForms() {
     }
   };
 
+  const getEmbedQueryParams = () => {
+    const params = new URLSearchParams();
+    if (embedLocId !== "none") params.set("location_id", embedLocId);
+    if (embedProvId !== "none") params.set("provider_id", embedProvId);
+    if (embedSvcId !== "none") params.set("service_id", embedSvcId);
+    const q = params.toString();
+    return q ? `?${q}` : "";
+  };
+
   const getEmbedSnippet = (slug: string) => {
     const host = window.location.origin;
-    return `<iframe src="${host}/book/${slug}" width="100%" height="700px" frameborder="0" allow="payment"></iframe>`;
+    const q = getEmbedQueryParams();
+    return `<iframe src="${host}/book/${slug}${q}" width="100%" height="700px" frameborder="0" allow="payment"></iframe>`;
+  };
+
+  const getDirectUrl = (slug: string) => {
+    const host = window.location.origin;
+    const q = getEmbedQueryParams();
+    return `${host}/book/${slug}${q}`;
   };
 
   const handleCopyEmbed = (slug: string) => {
@@ -351,6 +387,46 @@ export default function BookingForms() {
           </DialogHeader>
           {selectedForm && (
             <div className="space-y-4 py-2">
+              {/* Optional Pre-selection Controls */}
+              <div className="p-3.5 rounded-xl border bg-muted/20 space-y-3">
+                <span className="text-xs font-bold text-foreground block">Optional Embed Pre-selections</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Location</Label>
+                    <select
+                      className="w-full text-xs h-8 rounded-md border bg-background px-2"
+                      value={embedLocId}
+                      onChange={e => setEmbedLocId(e.target.value)}
+                    >
+                      <option value="none">None</option>
+                      {locations.map((l: any) => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Provider</Label>
+                    <select
+                      className="w-full text-xs h-8 rounded-md border bg-background px-2"
+                      value={embedProvId}
+                      onChange={e => setEmbedProvId(e.target.value)}
+                    >
+                      <option value="none">None</option>
+                      {providers.map((p: any) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-medium text-muted-foreground">Service</Label>
+                    <select
+                      className="w-full text-xs h-8 rounded-md border bg-background px-2"
+                      value={embedSvcId}
+                      onChange={e => setEmbedSvcId(e.target.value)}
+                    >
+                      <option value="none">None</option>
+                      {services.map((s: any) => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-muted-foreground">HTML IFRAME CODE</Label>
                 <div className="relative">
@@ -372,9 +448,9 @@ export default function BookingForms() {
               </div>
 
               <div className="p-3 rounded-lg border bg-primary/5 text-xs text-muted-foreground space-y-1">
-                <div className="font-bold text-foreground">Direct Public URL:</div>
-                <a href={`/book/${selectedForm.slug}`} target="_blank" rel="noopener noreferrer" className="text-primary underline font-mono">
-                  {window.location.origin}/book/{selectedForm.slug}
+                <div className="font-bold text-foreground">Direct Deep-Linked Public URL:</div>
+                <a href={getDirectUrl(selectedForm.slug)} target="_blank" rel="noopener noreferrer" className="text-primary underline font-mono break-all">
+                  {getDirectUrl(selectedForm.slug)}
                 </a>
               </div>
             </div>

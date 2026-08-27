@@ -15,7 +15,30 @@ class BookingFormResolutionError(ValueError):
     pass
 
 
-ID_KEYS = {module: f"{module}_id" for module in DEFAULT_MODULE_ORDER if module != "time"}
+ID_KEYS = {
+    "location": "location_id",
+    "provider": "provider_id",
+    "category": "category_id",
+    "service": "service_id",
+}
+
+MODULE_KEY_MAP = {
+    "addons": "add_on",
+    "add_on": "addons",
+    "products": "product",
+    "product": "products",
+    "datetime": "time",
+    "time": "datetime",
+}
+
+
+def _is_enabled(enabled: dict[str, bool], module: str) -> bool:
+    if module in enabled:
+        return enabled[module]
+    alt = MODULE_KEY_MAP.get(module)
+    if alt and alt in enabled:
+        return enabled[alt]
+    return True
 
 
 def _config_dict(form: BookingForm, name: str) -> dict[str, Any]:
@@ -60,7 +83,7 @@ def resolve_booking_form(db: Session, form: BookingForm, selections: dict[str, i
     warnings: list[str] = []
 
     for module, key in ID_KEYS.items():
-        if not enabled.get(module, True):
+        if not _is_enabled(enabled, module):
             sources[module] = ResolutionSource.disabled.value
         elif presets.get(key) is not None:
             context[module] = presets[key]
@@ -87,7 +110,7 @@ def resolve_booking_form(db: Session, form: BookingForm, selections: dict[str, i
     while changed:
         changed = False
         for module in form.module_order:
-            if module == "time" or sources.get(module) != ResolutionSource.unresolved.value:
+            if module not in ID_KEYS or sources.get(module) != ResolutionSource.unresolved.value:
                 continue
             records = get_valid_records(db, form.tenant_id, module, context)
             options[module] = [_option(record) for record in records]
@@ -111,7 +134,7 @@ def resolve_booking_form(db: Session, form: BookingForm, selections: dict[str, i
     visible = [
         module
         for module in form.module_order
-        if module == "time" or sources.get(module) == ResolutionSource.unresolved.value
+        if module in {"datetime", "time"} or sources.get(module) == ResolutionSource.unresolved.value
     ]
     if "provider" in visible and form.provider_selection_mode == "optional":
         options.setdefault("provider", get_valid_records(db, form.tenant_id, "provider", context))

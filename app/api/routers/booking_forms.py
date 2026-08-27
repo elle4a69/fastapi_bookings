@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -173,7 +174,11 @@ public_router = APIRouter(prefix="/api/public/booking-forms", tags=["booking-for
 
 
 def _form_or_404(db: Session, tenant_id: int, form_id: int) -> BookingForm:
-    form = db.query(BookingForm).filter(BookingForm.id == form_id, BookingForm.tenant_id == tenant_id).first()
+    form = db.query(BookingForm).filter(
+        BookingForm.id == form_id,
+        BookingForm.tenant_id == tenant_id,
+        BookingForm.deleted_at.is_(None),
+    ).first()
     if not form:
         raise HTTPException(status_code=404, detail="Booking form not found")
     return form
@@ -184,6 +189,7 @@ def _public_form_or_404(db: Session, tenant_id: int, slug: str) -> BookingForm:
         BookingForm.tenant_id == tenant_id,
         BookingForm.slug == slug.lower(),
         BookingForm.active.is_(True),
+        BookingForm.deleted_at.is_(None),
     ).first()
     if not form:
         raise HTTPException(status_code=404, detail="Booking form not found")
@@ -227,7 +233,10 @@ def list_booking_forms(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    return db.query(BookingForm).filter(BookingForm.tenant_id == tenant.id).order_by(BookingForm.name).all()
+    return db.query(BookingForm).filter(
+        BookingForm.tenant_id == tenant.id,
+        BookingForm.deleted_at.is_(None),
+    ).order_by(BookingForm.name).all()
 
 
 @admin_router.post("", response_model=BookingFormOut, status_code=status.HTTP_201_CREATED)
@@ -272,9 +281,17 @@ def update_booking_form(
     _admin=Depends(get_current_admin),
 ):
     form = _form_or_404(db, tenant.id, form_id)
+    current_data = BookingFormOut.model_validate(form).model_dump(exclude={"id", "tenant_id", "created_at", "updated_at"})
+    update_data = payload.model_dump(exclude_unset=True)
+    if "predefined_values" in update_data and update_data["predefined_values"] is not None:
+        merged_predefined = {
+            **(current_data.get("predefined_values") or {}),
+            **payload.predefined_values.model_dump(exclude_unset=True),
+        }
+        update_data["predefined_values"] = merged_predefined
     merged = BookingFormCreate.model_validate({
-        **BookingFormOut.model_validate(form).model_dump(exclude={"id", "tenant_id", "created_at", "updated_at"}),
-        **payload.model_dump(exclude_unset=True),
+        **current_data,
+        **update_data,
     })
     for key, value in _as_model_data(merged).items():
         setattr(form, key, value)
@@ -298,7 +315,8 @@ def delete_booking_form(
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
 ):
-    db.delete(_form_or_404(db, tenant.id, form_id))
+    form = _form_or_404(db, tenant.id, form_id)
+    form.deleted_at = datetime.now(timezone.utc)
     db.commit()
 
 
@@ -370,6 +388,7 @@ def update_booking_form_design(
     form.clear_session_on_start = runtime.clear_session_on_start
     form.allow_switch_to_ada = runtime.allow_accessible_theme_switch
     form.widget_type = "iframe"
+    validate_form_presets(db, form)
     db.commit()
     db.refresh(form)
     return configuration_for_form(form)
@@ -413,15 +432,6 @@ def resolve_widget_form(
     return {"ok": True, "data": _resolution_or_422(db, form, payload.selections.model_dump())}
 
 
-def _provider_load(db: Session, tenant_id: int, provider_id: int, start: datetime, end: datetime) -> int:
-    return db.query(Booking).filter(
-        Booking.tenant_id == tenant_id,
-        Booking.provider_id == provider_id,
-        Booking.status != BookingStatus.CANCELLED,
-        Booking.end_time > start,
-        Booking.start_time < end,
-    ).count()
-
 
 def _available_provider_slots(db: Session, form: BookingForm, resolved: dict, start: datetime, end: datetime) -> list[dict]:
     context = {key.removesuffix("_id"): value for key, value in resolved["resolved_context"].items()}
@@ -429,11 +439,27 @@ def _available_provider_slots(db: Session, form: BookingForm, resolved: dict, st
     if not service_id:
         raise HTTPException(status_code=422, detail="Service must be resolved before availability")
     service = get_entity(db, form.tenant_id, "service", service_id)
+    if not service:
+        raise HTTPException(status_code=422, detail="Resolved service is inactive or invalid")
     location = get_entity(db, form.tenant_id, "location", context["location"]) if context["location"] else None
     if context["provider"]:
         providers = [get_entity(db, form.tenant_id, "provider", context["provider"])]
     else:
         providers = get_valid_providers(db, form.tenant_id, context)
+
+    loads_query = (
+        db.query(Booking.provider_id, func.count(Booking.id))
+        .filter(
+            Booking.tenant_id == form.tenant_id,
+            Booking.status != BookingStatus.CANCELLED,
+            Booking.end_time > start,
+            Booking.start_time < end,
+        )
+        .group_by(Booking.provider_id)
+        .all()
+    )
+    provider_loads: dict[int, int] = {p_id: count for p_id, count in loads_query if p_id is not None}
+
     by_time: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for provider in filter(None, providers):
         for slot in scheduling_service.compute_availability(
@@ -443,11 +469,9 @@ def _available_provider_slots(db: Session, form: BookingForm, resolved: dict, st
             by_time[key].append({**slot, "provider_id": provider.id})
     results = []
     for (slot_start, slot_end), choices in sorted(by_time.items()):
-        start_dt = datetime.fromisoformat(slot_start)
-        end_dt = datetime.fromisoformat(slot_end)
         selected = min(
             choices,
-            key=lambda choice: (_provider_load(db, form.tenant_id, choice["provider_id"], start_dt, end_dt), choice["provider_id"]),
+            key=lambda choice: (provider_loads.get(choice["provider_id"], 0), choice["provider_id"]),
         )
         if form.provider_selection_mode not in {"automatic", "optional"} or context["provider"]:
             results.extend(choices)
@@ -488,13 +512,17 @@ def create_widget_booking(
         raise HTTPException(status_code=404, detail="Client not found")
     if client.management_approval_required:
         raise HTTPException(status_code=403, detail="Client requires management approval before booking")
+
+    start_time = payload.start_time if payload.start_time.tzinfo else payload.start_time.replace(tzinfo=timezone.utc)
+    end_time = payload.end_time if payload.end_time.tzinfo else payload.end_time.replace(tzinfo=timezone.utc)
+
     resolved = _resolution_or_422(db, form, payload.selections.model_dump())
-    slots = _available_provider_slots(db, form, resolved, payload.start_time, payload.end_time)
+    slots = _available_provider_slots(db, form, resolved, start_time, end_time)
     match = next(
         (
             slot for slot in slots
-            if datetime.fromisoformat(slot["start_time"]) == payload.start_time
-            and datetime.fromisoformat(slot["end_time"]) == payload.end_time
+            if datetime.fromisoformat(slot["start_time"]) == start_time
+            and datetime.fromisoformat(slot["end_time"]) == end_time
         ),
         None,
     )
@@ -507,17 +535,25 @@ def create_widget_booking(
         service_id=context["service_id"],
         provider_id=match["provider_id"],
         location_id=context["location_id"],
-        start_time=payload.start_time,
-        end_time=payload.end_time,
+        start_time=start_time,
+        end_time=end_time,
         notes=payload.notes,
         status=BookingStatus.PENDING,
     )
     db.add(booking)
     try:
+        db.flush()
+        scheduling_service.allocate_resources(db, booking=booking, commit=False)
         db.commit()
+    except HTTPException as exc:
+        db.rollback()
+        raise exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Selected slot is no longer available") from exc
+    except Exception as exc:
+        db.rollback()
+        raise exc
     db.refresh(booking)
     return {"ok": True, "data": booking}
 
