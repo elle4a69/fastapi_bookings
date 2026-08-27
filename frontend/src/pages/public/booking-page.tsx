@@ -13,7 +13,11 @@ import {
   RotateCcw,
   AlertCircle,
   Lock,
-  Building
+  Building,
+  Check,
+  Package,
+  PlusCircle,
+  ShoppingBag
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -25,64 +29,170 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface ServiceItem {
-  id: number;
+  id: number | string;
   name: string;
   description?: string;
   duration: number;
   price?: number;
-  provider_ids?: number[];
-  category_ids?: number[];
+  provider_ids?: (number | string)[];
+  category_ids?: (number | string)[];
+  addon_ids?: (number | string)[];
 }
 
 interface ProviderItem {
-  id: number;
+  id: number | string;
   name: string;
   email?: string;
-  service_ids?: number[];
+  service_ids?: (number | string)[];
 }
 
 interface LocationItem {
-  id: number;
+  id: number | string;
   name: string;
   address?: string;
-  provider_ids?: number[];
-  service_ids?: number[];
+  provider_ids?: (number | string)[];
+  service_ids?: (number | string)[];
 }
+
+interface AddonItem {
+  id: number | string;
+  name: string;
+  description?: string;
+  price?: number;
+  duration?: number;
+}
+
+interface ProductItem {
+  id: number | string;
+  name: string;
+  description?: string;
+  price?: number;
+}
+
+// Helper to normalize IDs for robust comparison (e.g. "prov-1" -> "1", 1 -> "1")
+const normId = (id: any): string => {
+  if (id === null || id === undefined) return "";
+  return String(id).trim().replace(/^(prov|loc|svc|cat|client)-/i, "");
+};
+
+// Helper to get local date string in YYYY-MM-DD format (timezone-safe)
+const getLocalDateString = (d: Date = new Date()): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+// Check if a service is provided by a provider
+const isServiceProvidedByProvider = (svc: ServiceItem, prov: ProviderItem): boolean => {
+  const provIdNorm = normId(prov.id);
+  const svcIdNorm = normId(svc.id);
+
+  const provSvcIds = (prov.service_ids || []).map(normId);
+  const svcProvIds = (svc.provider_ids || []).map(normId);
+
+  if (provSvcIds.length > 0 && !provSvcIds.includes(svcIdNorm)) {
+    return false;
+  }
+  if (svcProvIds.length > 0 && !svcProvIds.includes(provIdNorm)) {
+    return false;
+  }
+  return true;
+};
+
+// Check if a provider is associated with a location
+const isProviderAtLocation = (prov: ProviderItem, loc: LocationItem | null): boolean => {
+  if (!loc) return true;
+  const locProvIds = (loc.provider_ids || []).map(normId);
+  const provLocIds = ((prov as any).location_ids || []).map(normId);
+
+  if (locProvIds.length > 0 && !locProvIds.includes(normId(prov.id))) {
+    return false;
+  }
+  if (provLocIds.length > 0 && !provLocIds.includes(normId(loc.id))) {
+    return false;
+  }
+  return true;
+};
+
+// Check if a location supports a service (when no specific provider is selected)
+const isServiceAtLocation = (svc: ServiceItem, loc: LocationItem | null): boolean => {
+  if (!loc) return true;
+  const locSvcIds = (loc.service_ids || []).map(normId);
+  const svcLocIds = ((svc as any).location_ids || []).map(normId);
+
+  if (locSvcIds.length > 0 && !locSvcIds.includes(normId(svc.id))) {
+    return false;
+  }
+  if (svcLocIds.length > 0 && !svcLocIds.includes(normId(loc.id))) {
+    return false;
+  }
+  return true;
+};
+
+// Check if an add-on is compatible with a selected service
+const isAddonCompatibleWithService = (addon: AddonItem, svc: ServiceItem | null): boolean => {
+  if (!svc) return true;
+  if (Array.isArray(svc.addon_ids) && svc.addon_ids.length === 0) {
+    return false;
+  }
+  const svcAddonIds = (svc.addon_ids || []).map(normId);
+
+  if (svcAddonIds.length > 0) {
+    return svcAddonIds.includes(normId(addon.id));
+  }
+
+  const addonSvcIds = ((addon as any).service_ids || []).map(normId);
+  if (addonSvcIds.length > 0) {
+    return addonSvcIds.includes(normId(svc.id));
+  }
+
+  return true;
+};
 
 export default function PublicBookingPage() {
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams] = useSearchParams();
 
-  // Extract path slug
-  const currentPath = window.location.pathname;
-  const pathSlug = currentPath.startsWith("/book/") 
-    ? currentPath.replace(/^\/book\//, "").replace(/\/$/, "")
-    : "";
-  const formSlug = pathSlug || slug || searchParams.get("form") || "standard";
+  // Extract path slug safely from HashRouter, BrowserRouter, or searchParams
+  const getExtractedSlug = () => {
+    if (slug && slug !== "*") return slug;
+    const hashMatch = window.location.hash.match(/#?\/(?:book|booking)\/([^?#]+)/);
+    if (hashMatch && hashMatch[1]) return hashMatch[1];
+    const pathMatch = window.location.pathname.match(/\/(?:book|booking)\/([^?#]+)/);
+    if (pathMatch && pathMatch[1]) return pathMatch[1];
+    return searchParams.get("form") || searchParams.get("slug") || "standard";
+  };
+  const formSlug = getExtractedSlug();
 
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<any>(null);
   const [allServices, setAllServices] = useState<ServiceItem[]>([]);
   const [allProviders, setAllProviders] = useState<ProviderItem[]>([]);
   const [allLocations, setAllLocations] = useState<LocationItem[]>([]);
+  const [allAddons, setAllAddons] = useState<AddonItem[]>([]);
+  const [allProducts, setAllProducts] = useState<ProductItem[]>([]);
 
-  // Stepper state: 1 = Selections, 2 = Date & Time, 3 = Client Info, 4 = Confirmation
-  const [step, setStep] = useState(1);
+  // Current Active Tab Index in wizard
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
 
   // Active selections
   const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderItem | null>(null);
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   // Lock status (from form predefined_values or URL params)
   const [isLocationLocked, setIsLocationLocked] = useState(false);
   const [isProviderLocked, setIsProviderLocked] = useState(false);
   const [isServiceLocked, setIsServiceLocked] = useState(false);
 
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [selectedTime, setSelectedTime] = useState<string>("10:00");
 
   // Client info
@@ -94,6 +204,41 @@ export default function PublicBookingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<any>(null);
 
+  // ── Iframe postMessage Handshake for widget.js ──────────────────────
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+      window.parent.postMessage({ event: "appReady" }, "*");
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = Math.ceil(entry.contentRect.height || document.body.scrollHeight);
+        if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+          window.parent.postMessage({ event: "updateWidgetSize", height }, "*");
+        }
+      }
+    });
+
+    if (typeof document !== "undefined" && document.body) {
+      resizeObserver.observe(document.body);
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && (event.data.action === "closeWidget" || event.data.event === "closeWidget")) {
+        if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+          window.parent.postMessage({ event: "closeWidget" }, "*");
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
   useEffect(() => {
     loadData();
   }, [formSlug]);
@@ -101,71 +246,95 @@ export default function PublicBookingPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [sRes, pRes, lRes, formsRes] = await Promise.all([
+      const [bootRes, formPublicRes, sRes, pRes, lRes, formsRes, addRes, prodRes] = await Promise.all([
+        apiClient.get<any>("/api/public/bootstrap").catch(() => null),
+        apiClient.get<any>(`/api/public/booking-forms/${formSlug}`).catch(() => null),
         apiClient.get<any>("/api/admin/services").catch(() => []),
         apiClient.get<any>("/api/admin/providers").catch(() => []),
         apiClient.get<any>("/api/admin/locations").catch(() => []),
-        apiClient.get<any>("/api/admin/booking-forms").catch(() => [])
+        apiClient.get<any>("/api/admin/booking-forms").catch(() => []),
+        apiClient.get<any>("/api/admin/add-ons").catch(() => []),
+        apiClient.get<any>("/api/admin/products").catch(() => [])
       ]);
 
-      const servicesArr = Array.isArray(sRes) ? sRes : (sRes?.data ?? []);
-      const providersArr = Array.isArray(pRes) ? pRes : (pRes?.data ?? []);
-      const locationsArr = Array.isArray(lRes) ? lRes : (lRes?.data ?? []);
-      const formsArr = Array.isArray(formsRes) ? formsRes : (formsRes?.data ?? []);
+      const bootData = bootRes?.data ?? bootRes;
+      const publicFormData = formPublicRes?.data?.form ?? formPublicRes?.form ?? null;
+
+      let servicesArr = Array.isArray(sRes) ? sRes : (sRes?.data ?? []);
+      let providersArr = Array.isArray(pRes) ? pRes : (pRes?.data ?? []);
+      let locationsArr = Array.isArray(lRes) ? lRes : (lRes?.data ?? []);
+      let formsArr = Array.isArray(formsRes) ? formsRes : (formsRes?.data ?? []);
+      let addonsArr = Array.isArray(addRes) ? addRes : (addRes?.data ?? []);
+      let productsArr = Array.isArray(prodRes) ? prodRes : (prodRes?.data ?? []);
+
+      if (servicesArr.length === 0 && bootData?.services) {
+        servicesArr = bootData.services;
+      }
+      if (providersArr.length === 0 && bootData?.providers) {
+        providersArr = bootData.providers;
+      }
+      if (locationsArr.length === 0 && bootData?.locations) {
+        locationsArr = bootData.locations;
+      }
 
       setAllServices(servicesArr);
       setAllProviders(providersArr);
       setAllLocations(locationsArr);
+      setAllAddons(addonsArr);
+      setAllProducts(productsArr);
 
       const normalizeSlug = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const matched = formsArr.find((f: any) => 
+      const matchingForms = formsArr.filter((f: any) => 
         f.slug === formSlug || 
         normalizeSlug(f.slug) === normalizeSlug(formSlug)
-      ) || {
-        name: formSlug === 'quick-consult' ? 'Quick Consult' : 'Standard Booking',
-        slug: formSlug,
-        widget_type: formSlug === 'quick-consult' ? 'modal' : 'full'
-      };
+      );
+      
+      const matched = publicFormData || (matchingForms.length > 0 
+        ? matchingForms[matchingForms.length - 1]
+        : {
+            name: formSlug === 'quick-consult' ? 'Quick Consult' : 'Standard Booking Intake',
+            slug: formSlug,
+            widget_type: formSlug === 'quick-consult' ? 'modal' : 'full'
+          });
 
       setFormData(matched);
 
       // Extract predefined values from backend setup or URL parameters
       const pv = matched.predefined_values || {};
-      const paramLocId = searchParams.get("location_id") || pv.location_id;
-      const paramProvId = searchParams.get("provider_id") || pv.provider_id;
-      const paramSvcId = searchParams.get("service_id") || pv.service_id;
+      const paramLocId = searchParams.get("location_id") ?? (pv.location_id != null ? String(pv.location_id) : null);
+      const paramProvId = searchParams.get("provider_id") ?? (pv.provider_id != null ? String(pv.provider_id) : null);
+      const paramSvcId = searchParams.get("service_id") ?? (pv.service_id != null ? String(pv.service_id) : null);
 
-      let locLocked = false;
-      let provLocked = false;
-      let svcLocked = false;
+      let activeLoc: LocationItem | null = null;
+      let activeProv: ProviderItem | null = null;
+      let activeSvc: ServiceItem | null = null;
 
-      let activeLoc: LocationItem | null = locationsArr.length > 0 ? locationsArr[0] : null;
-      let activeProv: ProviderItem | null = providersArr.length > 0 ? providersArr[0] : null;
-      let activeSvc: ServiceItem | null = servicesArr.length > 0 ? servicesArr[0] : null;
-
-      if (paramLocId) {
-        const found = locationsArr.find((l: LocationItem) => String(l.id) === String(paramLocId));
+      if (paramLocId && paramLocId !== "none" && paramLocId !== "null") {
+        const found = locationsArr.find((l: LocationItem) => normId(l.id) === normId(paramLocId));
         if (found) {
           activeLoc = found;
-          locLocked = true;
           setIsLocationLocked(true);
         }
       }
 
-      if (paramProvId) {
-        const found = providersArr.find((p: ProviderItem) => String(p.id) === String(paramProvId));
+      if (paramProvId && paramProvId !== "none" && paramProvId !== "null") {
+        const found = providersArr.find((p: ProviderItem) => normId(p.id) === normId(paramProvId));
         if (found) {
           activeProv = found;
-          provLocked = true;
           setIsProviderLocked(true);
         }
       }
 
-      if (paramSvcId) {
-        const found = servicesArr.find((s: ServiceItem) => String(s.id) === String(paramSvcId));
+      // Filter eligible services for active provider ON LOAD
+      let eligibleServices = servicesArr;
+      if (activeProv) {
+        eligibleServices = servicesArr.filter((svc: ServiceItem) => isServiceProvidedByProvider(svc, activeProv!));
+      }
+
+      if (paramSvcId && paramSvcId !== "none" && paramSvcId !== "null") {
+        const found = eligibleServices.find((s: ServiceItem) => normId(s.id) === normId(paramSvcId));
         if (found) {
           activeSvc = found;
-          svcLocked = true;
           setIsServiceLocked(true);
         }
       }
@@ -173,11 +342,6 @@ export default function PublicBookingPage() {
       setSelectedLocation(activeLoc);
       setSelectedProvider(activeProv);
       setSelectedService(activeSvc);
-
-      // Auto-advance to Step 2 (Date & Time) if Location, Provider, and Service are pre-selected
-      if ((locLocked || locationsArr.length <= 1) && (provLocked || providersArr.length <= 1) && activeSvc) {
-        setStep(2);
-      }
 
       if (matched.widget_type === 'modal') {
         setModalOpen(true);
@@ -189,63 +353,214 @@ export default function PublicBookingPage() {
     }
   };
 
+  // ── Reactive URL Parameter Synchronization ──────────────────────────
+  // Dynamically syncs selectedLocation, selectedProvider, selectedService to URL search params
+  useEffect(() => {
+    if (loading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    if (selectedLocation) {
+      const locIdStr = String(normId(selectedLocation.id));
+      if (params.get("location_id") !== locIdStr) {
+        params.set("location_id", locIdStr);
+        changed = true;
+      }
+    } else if (params.has("location_id") && !isLocationLocked) {
+      params.delete("location_id");
+      changed = true;
+    }
+
+    if (selectedProvider) {
+      const provIdStr = String(normId(selectedProvider.id));
+      if (params.get("provider_id") !== provIdStr) {
+        params.set("provider_id", provIdStr);
+        changed = true;
+      }
+    } else if (params.has("provider_id") && !isProviderLocked) {
+      params.delete("provider_id");
+      changed = true;
+    }
+
+    if (selectedService) {
+      const svcIdStr = String(normId(selectedService.id));
+      if (params.get("service_id") !== svcIdStr) {
+        params.set("service_id", svcIdStr);
+        changed = true;
+      }
+    } else if (params.has("service_id") && !isServiceLocked) {
+      params.delete("service_id");
+      changed = true;
+    }
+
+    if (changed) {
+      const newSearch = params.toString() ? `?${params.toString()}` : "";
+      const newUrl = window.location.pathname + newSearch + window.location.hash;
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, [selectedLocation, selectedProvider, selectedService, loading, isLocationLocked, isProviderLocked, isServiceLocked]);
+
   // ── Relational Calculation Filters ──────────────────────────────────
 
-  const availableLocations = allLocations.filter(loc => {
-    if (selectedService && loc.service_ids && loc.service_ids.length > 0) {
-      if (!loc.service_ids.includes(selectedService.id)) return false;
-    }
-    if (selectedProvider && loc.provider_ids && loc.provider_ids.length > 0) {
-      if (!loc.provider_ids.includes(selectedProvider.id)) return false;
-    }
-    return true;
+  const availableLocations = (() => {
+    const activeList = allLocations.filter(loc => (loc as any).active !== false && (loc as any).is_visible !== false);
+    return activeList.filter(loc => {
+      if (selectedProvider && !isProviderAtLocation(selectedProvider, loc)) {
+        return false;
+      }
+      if (selectedService && !isServiceAtLocation(selectedService, loc)) {
+        return false;
+      }
+      return true;
+    });
+  })();
+
+  const availableServices = (() => {
+    const activeList = allServices.filter(svc => (svc as any).active !== false && (svc as any).is_visible !== false);
+    return activeList.filter(svc => {
+      if (selectedProvider) {
+        if (!isServiceProvidedByProvider(svc, selectedProvider)) {
+          return false;
+        }
+      }
+      if (selectedLocation) {
+        if (!isServiceAtLocation(svc, selectedLocation)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  })();
+
+  const availableProviders = (() => {
+    const activeList = allProviders.filter(prov => (prov as any).active !== false && (prov as any).is_visible !== false);
+    return activeList.filter(prov => {
+      if (selectedLocation && !isProviderAtLocation(prov, selectedLocation)) {
+        return false;
+      }
+      if (selectedService && !isServiceProvidedByProvider(selectedService, prov)) {
+        return false;
+      }
+      return true;
+    });
+  })();
+
+  const availableAddons = allAddons.filter(addon => {
+    if ((addon as any).active === false || (addon as any).is_visible === false) return false;
+    return isAddonCompatibleWithService(addon, selectedService);
   });
 
-  const availableServices = allServices.filter(svc => {
-    if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
-      if (!selectedLocation.service_ids.includes(svc.id)) return false;
-    }
-    if (selectedProvider) {
-      if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(selectedProvider.id)) {
-        return false;
-      }
-      if (selectedProvider.service_ids && selectedProvider.service_ids.length > 0 && !selectedProvider.service_ids.includes(svc.id)) {
-        return false;
-      }
-    }
-    return true;
-  });
+  // ── Construct Dynamic Active Tabs Pipeline ──────────────────────────
+  // Rule: A tab ONLY appears if the module is enabled AND not pre-selected AND items exist!
 
-  const availableProviders = allProviders.filter(prov => {
-    if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
-      if (!selectedLocation.provider_ids.includes(prov.id)) return false;
-    }
-    if (selectedService) {
-      if (selectedService.provider_ids && selectedService.provider_ids.length > 0 && !selectedService.provider_ids.includes(prov.id)) {
-        return false;
+  const getActiveWizardTabs = () => {
+    const tabs: { id: string; label: string }[] = [];
+
+    let rawOrder = formData?.module_order;
+    if (typeof rawOrder === "string") {
+      try {
+        rawOrder = JSON.parse(rawOrder);
+      } catch {
+        rawOrder = null;
       }
-      if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(selectedService.id)) {
-        return false;
+    }
+
+    // Canonical database module_order (no cross-tenant localStorage override)
+    const moduleOrder: string[] = Array.isArray(rawOrder) && rawOrder.length > 0
+      ? rawOrder
+      : ["location", "provider", "service", "addons", "products", "datetime", "intake", "client", "checkout", "outcome"];
+
+    let rawEnabled = formData?.enabled_modules;
+    if (typeof rawEnabled === "string") {
+      try {
+        rawEnabled = JSON.parse(rawEnabled);
+      } catch {
+        rawEnabled = {};
       }
     }
-    return true;
-  });
+    const enabledModules: Record<string, boolean> = rawEnabled || {};
+
+    const pv = formData?.predefined_values || {};
+    // Verify that predefined entities actually exist in resolved allLocations/allProviders/allServices (resolves Phantom Step Lock)
+    const locPredefined = pv.location_id != null && pv.location_id !== 0 && String(pv.location_id) !== "none" && String(pv.location_id) !== "null" && allLocations.some(l => normId(l.id) === normId(pv.location_id));
+    const provPredefined = pv.provider_id != null && pv.provider_id !== 0 && String(pv.provider_id) !== "none" && String(pv.provider_id) !== "null" && allProviders.some(p => normId(p.id) === normId(pv.provider_id));
+    const svcPredefined = pv.service_id != null && pv.service_id !== 0 && String(pv.service_id) !== "none" && String(pv.service_id) !== "null" && allServices.some(s => normId(s.id) === normId(pv.service_id));
+
+    const locLocked = isLocationLocked || locPredefined || (Boolean(searchParams.get("location_id")) && searchParams.get("location_id") !== "none");
+    const provLocked = isProviderLocked || provPredefined || (Boolean(searchParams.get("provider_id")) && searchParams.get("provider_id") !== "none");
+    const svcLocked = isServiceLocked || svcPredefined || (Boolean(searchParams.get("service_id")) && searchParams.get("service_id") !== "none");
+
+    const compAddons = availableAddons;
+
+    moduleOrder.forEach((modId: string) => {
+      if (enabledModules[modId] === false) return;
+
+      if (modId === "location") {
+        if (!locLocked && availableLocations.length > 0) {
+          tabs.push({ id: "location", label: "Select Location" });
+        }
+      } else if (modId === "service") {
+        if (!svcLocked && availableServices.length > 0) {
+          tabs.push({ id: "service", label: "Select Service" });
+        }
+      } else if (modId === "provider") {
+        if (!provLocked && availableProviders.length > 0) {
+          tabs.push({ id: "provider", label: "Select Provider" });
+        }
+      } else if (modId === "addons") {
+        if (compAddons.length > 0) {
+          tabs.push({ id: "addons", label: "Add-ons" });
+        }
+      } else if (modId === "products") {
+        if (allProducts.length > 0) {
+          tabs.push({ id: "products", label: "Products" });
+        }
+      } else if (modId === "datetime") {
+        tabs.push({ id: "datetime", label: "Date & Time" });
+      } else if (modId === "intake") {
+        tabs.push({ id: "intake", label: "Intake Notes" });
+      } else if (modId === "client") {
+        tabs.push({ id: "client", label: "Client Details" });
+      } else if (modId === "checkout") {
+        tabs.push({ id: "checkout", label: "Checkout & Summary" });
+      } else if (modId === "outcome") {
+        if (enabledModules["outcome"] !== false) {
+          tabs.push({ id: "outcome", label: "Confirmation" });
+        }
+      }
+    });
+
+    if (!tabs.some(t => t.id === "datetime") && enabledModules["datetime"] !== false) {
+      tabs.push({ id: "datetime", label: "Date & Time" });
+    }
+    if (!tabs.some(t => t.id === "client") && enabledModules["client"] !== false) {
+      tabs.push({ id: "client", label: "Client Details" });
+    }
+
+    return tabs;
+  };
+
+  const wizardTabs = getActiveWizardTabs();
+
+  // Clamp activeTabIndex when wizardTabs shrinks dynamically
+  useEffect(() => {
+    if (wizardTabs.length > 0 && !completedBooking && activeTabIndex >= wizardTabs.length) {
+      setActiveTabIndex(Math.min(activeTabIndex, wizardTabs.length - 1));
+    }
+  }, [wizardTabs.length, activeTabIndex, completedBooking]);
+  const currentTab = wizardTabs[activeTabIndex] || wizardTabs[0];
 
   const handleSelectService = (svc: ServiceItem) => {
     setSelectedService(svc);
 
     if (!isProviderLocked) {
-      const validProvidersForSvc = allProviders.filter(prov => {
-        if (selectedLocation && selectedLocation.provider_ids && selectedLocation.provider_ids.length > 0) {
-          if (!selectedLocation.provider_ids.includes(prov.id)) return false;
-        }
-        if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
-        if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
-        return true;
-      });
+      const validProviders = allProviders.filter(prov =>
+        isServiceProvidedByProvider(svc, prov) && isProviderAtLocation(prov, selectedLocation)
+      );
 
-      if (selectedProvider && !validProvidersForSvc.some(p => p.id === selectedProvider.id)) {
-        setSelectedProvider(validProvidersForSvc.length > 0 ? validProvidersForSvc[0] : null);
+      if (selectedProvider && !validProviders.some(p => normId(p.id) === normId(selectedProvider.id))) {
+        setSelectedProvider(validProviders.length > 0 ? validProviders[0] : null);
       }
     }
   };
@@ -254,34 +569,72 @@ export default function PublicBookingPage() {
     setSelectedProvider(prov);
 
     if (!isServiceLocked) {
-      const validServicesForProv = allServices.filter(svc => {
-        if (selectedLocation && selectedLocation.service_ids && selectedLocation.service_ids.length > 0) {
-          if (!selectedLocation.service_ids.includes(svc.id)) return false;
-        }
-        if (svc.provider_ids && svc.provider_ids.length > 0 && !svc.provider_ids.includes(prov.id)) return false;
-        if (prov.service_ids && prov.service_ids.length > 0 && !prov.service_ids.includes(svc.id)) return false;
-        return true;
-      });
+      const validServices = allServices.filter(svc => isServiceProvidedByProvider(svc, prov));
 
-      if (selectedService && !validServicesForProv.some(s => s.id === selectedService.id)) {
-        setSelectedService(validServicesForProv.length > 0 ? validServicesForProv[0] : null);
+      if (selectedService && !validServices.some(s => normId(s.id) === normId(selectedService.id))) {
+        setSelectedService(validServices.length > 0 ? validServices[0] : null);
       }
     }
   };
 
+
+  const toggleAddon = (addonId: string) => {
+    if (selectedAddonIds.includes(addonId)) {
+      setSelectedAddonIds(selectedAddonIds.filter(id => id !== addonId));
+    } else {
+      setSelectedAddonIds([...selectedAddonIds, addonId]);
+    }
+  };
+
+  const toggleProduct = (productId: string) => {
+    if (selectedProductIds.includes(productId)) {
+      setSelectedProductIds(selectedProductIds.filter(id => id !== productId));
+    } else {
+      setSelectedProductIds([...selectedProductIds, productId]);
+    }
+  };
+
+  const settings = formData?.settings || {};
+  const primaryIdentifier = settings.primary_identifier || "email";
+  const showEmail = settings.show_email_field !== false;
+  const showPhone = settings.show_phone_field !== false;
+
+  const selectedAddonsList = allAddons.filter((a) => selectedAddonIds.includes(String(a.id)));
+  const selectedProductsList = allProducts.filter((p) => selectedProductIds.includes(String(p.id)));
+
+  const addonsDuration = selectedAddonsList.reduce((sum, addon) => sum + Number(addon.duration || 0), 0);
+  const totalDuration = (Number(selectedService?.duration) || 60) + addonsDuration;
+
   const handleCreateBookingSubmit = async () => {
-    if (!selectedService || !selectedProvider || !clientName || !clientEmail) {
-      toast.error("Please fill in your name, email, service, and provider.");
+    const isProviderRequired = wizardTabs.some((t) => t.id === "provider");
+    if (!selectedService || (isProviderRequired && !selectedProvider) || !clientName) {
+      toast.error(
+        isProviderRequired
+          ? "Please fill in your name, service, and provider."
+          : "Please fill in your name and service."
+      );
+      return;
+    }
+
+    if ((primaryIdentifier === "email" || primaryIdentifier === "both") && !clientEmail) {
+      toast.error("Email address is required.");
+      return;
+    }
+
+    if ((primaryIdentifier === "phone" || primaryIdentifier === "both") && !clientPhone) {
+      toast.error("Phone number is required.");
       return;
     }
 
     setSubmitting(true);
     try {
       let clientId = 1;
+      const targetEmail = clientEmail || `${(clientPhone || "client").replace(/[^0-9a-zA-Z]/g, "")}@client.local`;
+
       try {
         const clientRes = await apiClient.post<any>("/api/admin/clients", {
           name: clientName,
-          email: clientEmail,
+          email: targetEmail,
           phone: clientPhone || null
         });
         clientId = clientRes?.id || clientRes?.data?.id || 1;
@@ -290,30 +643,32 @@ export default function PublicBookingPage() {
       }
 
       const [hours, mins] = selectedTime.split(':').map(Number);
-      const start = new Date(selectedDate);
-      start.setHours(hours, mins, 0, 0);
+      const [year, month, day] = selectedDate.split('-').map(Number);
+      const start = new Date(year, month - 1, day, hours, mins, 0, 0);
 
-      const duration = selectedService.duration || 60;
-      const end = new Date(start.getTime() + duration * 60000);
+      // Duration calculation including selected add-ons
+      const addonsDur = selectedAddonsList.reduce((sum, addon) => sum + Number(addon.duration || 0), 0);
+      const computedTotalDuration = (Number(selectedService.duration) || 60) + addonsDur;
+      const end = new Date(start.getTime() + computedTotalDuration * 60000);
 
       const payload = {
-        client_id: clientId,
-        service_id: selectedService.id,
-        provider_id: selectedProvider.id,
-        location_id: selectedLocation?.id || null,
+        client_id: Number(normId(clientId)),
+        service_id: Number(normId(selectedService.id)),
+        provider_id: selectedProvider ? Number(normId(selectedProvider.id)) : null,
+        location_id: selectedLocation?.id ? Number(normId(selectedLocation.id)) : null,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
-        notes: bookingNotes || null
+        notes: bookingNotes || null,
+        addon_ids: selectedAddonIds.map((id) => Number(normId(id))),
+        product_ids: selectedProductIds.map((id) => Number(normId(id)))
       };
 
-      const bookingRes: any = await apiClient.post("/api/public/bookings", payload).catch(async () => {
-        return await apiClient.post("/api/bookings", payload);
-      });
+      const bookingRes: any = await apiClient.post("/api/public/bookings", payload);
 
       setCompletedBooking({
         id: bookingRes?.data?.id || bookingRes?.id || Math.floor(1000 + Math.random() * 9000),
         service: selectedService.name,
-        provider: selectedProvider.name,
+        provider: selectedProvider?.name || "Any Available Provider",
         location: selectedLocation?.name || "Main Branch",
         date: selectedDate,
         time: selectedTime,
@@ -321,7 +676,12 @@ export default function PublicBookingPage() {
         clientEmail
       });
 
-      setStep(4);
+      const outcomeIndex = wizardTabs.findIndex(t => t.id === "outcome");
+      if (outcomeIndex !== -1) {
+        setActiveTabIndex(outcomeIndex);
+      } else {
+        setActiveTabIndex(wizardTabs.length);
+      }
       toast.success("Booking submitted!");
     } catch (err: any) {
       toast.error(err.message || "Failed to submit booking.");
@@ -341,163 +701,329 @@ export default function PublicBookingPage() {
     );
   }
 
+  const isIframe = typeof window !== "undefined" && (window.parent !== window || searchParams.get("embed") === "true" || searchParams.get("inline") === "true");
   const isModalWidget = formData?.widget_type === 'modal';
+  const isInlineRender = !isModalWidget || isIframe;
 
   const renderBookingWizardContent = () => (
     <div className="space-y-6">
-      {/* Locked Presets Banner */}
-      {(isLocationLocked || isProviderLocked || isServiceLocked) && (
-        <div className="p-3.5 rounded-xl border bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between shadow-2xs">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <div>
-              <span className="font-bold block">Pre-configured Booking Session</span>
-              <span className="text-[11px] opacity-90">
-                {isProviderLocked && `Provider: ${selectedProvider?.name}`}
-                {isLocationLocked && ` • Location: ${selectedLocation?.name}`}
-                {isServiceLocked && ` • Service: ${selectedService?.name}`}
-              </span>
-            </div>
-          </div>
-          <Badge className="bg-amber-600 text-white font-bold text-[10px]">Pre-selected</Badge>
-        </div>
-      )}
 
-      {/* Wizard Stepper */}
-      {step < 4 && (
-        <div className="flex items-center justify-between border-b pb-4">
-          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 1 ? "text-primary" : "text-muted-foreground"}`}>
-            <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">1</span>
-            <span>{isServiceLocked ? "Service Confirmed" : "Select Service"}</span>
-          </div>
-          <div className="h-0.5 w-8 bg-muted" />
-          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 2 ? "text-primary" : "text-muted-foreground"}`}>
-            <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">2</span>
-            <span>Date & Time</span>
-          </div>
-          <div className="h-0.5 w-8 bg-muted" />
-          <div className={`flex items-center gap-2 text-xs font-bold ${step >= 3 ? "text-primary" : "text-muted-foreground"}`}>
-            <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">3</span>
-            <span>Client Details</span>
-          </div>
-        </div>
-      )}
+      {/* Dynamic Tab Stepper Header (Only active tabs are shown!) */}
+      {activeTabIndex < wizardTabs.length && (
+        <div className="flex items-center justify-between border-b pb-4 overflow-x-auto gap-2">
+          {wizardTabs.map((tab, idx) => {
+            const isActive = idx === activeTabIndex;
+            const isCompleted = idx < activeTabIndex;
 
-      {/* Step 1: Relational Service Selection Only (Location and Provider selections are COMPLETELY OMITTED when pre-selected) */}
-      {step === 1 && (
-        <div className="space-y-6">
-          {/* Location Selector (ONLY if NOT pre-selected/locked) */}
-          {!isLocationLocked && allLocations.length > 1 && (
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-foreground">Location</Label>
-              <Select
-                value={selectedLocation ? String(selectedLocation.id) : ""}
-                onValueChange={(val) => {
-                  const found = allLocations.find(l => String(l.id) === val);
-                  if (found) setSelectedLocation(found);
-                }}
-              >
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select location" /></SelectTrigger>
-                <SelectContent>
-                  {allLocations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Services List (ONLY if NOT pre-selected/locked) */}
-          {!isServiceLocked && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Available Services ({availableServices.length})
-                </h3>
-                {isProviderLocked && (
-                  <span className="text-xs text-primary font-semibold">
-                    Offered by {selectedProvider?.name}
+            return (
+              <div key={tab.id} className="flex items-center gap-2 shrink-0">
+                <div
+                  className={`flex items-center gap-2 text-xs font-bold transition-all ${
+                    isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground opacity-60"
+                  }`}
+                >
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] transition-all ${
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                        : isCompleted
+                        ? "bg-emerald-500 text-white font-bold"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : idx + 1}
                   </span>
+                  <span>{tab.label}</span>
+                </div>
+                {idx < wizardTabs.length - 1 && (
+                  <div className="h-0.5 w-6 bg-muted shrink-0 hidden sm:block" />
                 )}
               </div>
-
-              <div className="grid gap-3 max-h-[280px] overflow-y-auto pr-1">
-                {availableServices.map((svc) => {
-                  const isSelected = selectedService?.id === svc.id;
-                  return (
-                    <div
-                      key={svc.id}
-                      onClick={() => handleSelectService(svc)}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
-                        isSelected
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "hover:border-primary/50 bg-card"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-bold text-foreground text-sm">{svc.name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
-                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {svc.duration} mins</span>
-                          {svc.price && <span className="font-semibold text-emerald-600">${Number(svc.price).toFixed(2)}</span>}
-                        </div>
-                      </div>
-                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
-                        {isSelected && <CheckCircle2 className="w-4 h-4" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Provider Selection (ONLY if NOT pre-selected/locked) */}
-          {!isProviderLocked && (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Select Service Provider ({availableProviders.length})
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 max-h-[200px] overflow-y-auto pr-1">
-                {availableProviders.map((p) => {
-                  const isSelected = selectedProvider?.id === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => handleSelectProvider(p)}
-                      className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${
-                        isSelected
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "hover:border-primary/50 bg-card"
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
-                        {p.name.charAt(0)}
-                      </div>
-                      <div className="font-semibold text-xs truncate">{p.name}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <Button
-            className="w-full h-11 text-sm font-bold gap-2 mt-4"
-            disabled={!selectedService || !selectedProvider}
-            onClick={() => setStep(2)}
-          >
-            Continue to Date & Time <ArrowRight className="w-4 h-4" />
-          </Button>
+            );
+          })}
         </div>
       )}
 
-      {/* Step 2: Date & Time */}
-      {step === 2 && (
+      {/* Tab: Location Selection */}
+      {currentTab?.id === "location" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Choose Branch / Location</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Select your preferred branch for this appointment.</p>
+          </div>
+
+          <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
+            {availableLocations.map((loc) => {
+              const isSelected = selectedLocation && String(selectedLocation.id) === String(loc.id);
+              return (
+                <div
+                  key={loc.id}
+                  onClick={() => setSelectedLocation(loc)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "hover:border-primary/50 bg-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                      <Building className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-foreground text-sm">{loc.name}</div>
+                      {loc.address && <div className="text-xs text-muted-foreground">{loc.address}</div>}
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                    {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-3">
+            <Button
+              className="w-full h-11 text-sm font-bold gap-2"
+              disabled={!selectedLocation}
+              onClick={() => setActiveTabIndex(activeTabIndex + 1)}
+            >
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Service Selection */}
+      {currentTab?.id === "service" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">Select Service</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isProviderLocked ? `Services offered by ${selectedProvider?.name}` : "Choose the service you wish to book"}
+              </p>
+            </div>
+            <Badge variant="outline" className="text-xs font-semibold">{availableServices.length} Options</Badge>
+          </div>
+
+          <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
+            {availableServices.map((svc) => {
+              const isSelected = selectedService && String(selectedService.id) === String(svc.id);
+              return (
+                <div
+                  key={svc.id}
+                  onClick={() => handleSelectService(svc)}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "hover:border-primary/50 bg-card"
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-foreground text-sm">{svc.name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
+                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {svc.duration} mins</span>
+                      {svc.price && <span className="font-semibold text-emerald-600">${Number(svc.price).toFixed(2)}</span>}
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                    {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button
+              className="flex-1 h-11 text-sm font-bold gap-2"
+              disabled={!selectedService}
+              onClick={() => setActiveTabIndex(activeTabIndex + 1)}
+            >
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Provider Selection */}
+      {currentTab?.id === "provider" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Choose Provider</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Select the team member for your appointment ({availableProviders.length} available).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-1">
+            {availableProviders.map((p) => {
+              const isSelected = selectedProvider && String(selectedProvider.id) === String(p.id);
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => handleSelectProvider(p)}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "hover:border-primary/50 bg-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-9 h-9 rounded-full bg-primary/10 text-primary">
+                      <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
+                        {p.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="font-semibold text-sm">{p.name}</div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                    {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button
+              className="flex-1 h-11 text-sm font-bold gap-2"
+              disabled={!selectedProvider}
+              onClick={() => setActiveTabIndex(activeTabIndex + 1)}
+            >
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Service Add-ons (ONLY rendered if items exist!) */}
+      {currentTab?.id === "addons" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Enhance Your Session (Optional Add-ons)</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Select optional extras to add to your service.</p>
+          </div>
+
+          <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
+            {availableAddons.map((addon) => {
+              const isSelected = selectedAddonIds.includes(String(addon.id));
+              return (
+                <div
+                  key={addon.id}
+                  onClick={() => toggleAddon(String(addon.id))}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "hover:border-primary/50 bg-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                      <PlusCircle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-foreground text-sm">{addon.name}</div>
+                      {addon.description && <div className="text-xs text-muted-foreground">{addon.description}</div>}
+                      {addon.price && <div className="text-xs font-semibold text-emerald-600 mt-0.5">+${Number(addon.price).toFixed(2)}</div>}
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                    {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button className="flex-1 h-11 font-bold gap-2" onClick={() => setActiveTabIndex(activeTabIndex + 1)}>
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Products & Packages (ONLY rendered if items exist!) */}
+      {currentTab?.id === "products" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Featured Products & Bundles</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Add products to your booking invoice.</p>
+          </div>
+
+          <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
+            {allProducts.map((prod) => {
+              const isSelected = selectedProductIds.includes(String(prod.id));
+              return (
+                <div
+                  key={prod.id}
+                  onClick={() => toggleProduct(String(prod.id))}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                    isSelected
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "hover:border-primary/50 bg-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                      <ShoppingBag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-foreground text-sm">{prod.name}</div>
+                      {prod.description && <div className="text-xs text-muted-foreground">{prod.description}</div>}
+                      {prod.price && <div className="text-xs font-semibold text-emerald-600 mt-0.5">${Number(prod.price).toFixed(2)}</div>}
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
+                    {isSelected && <CheckCircle2 className="w-4 h-4" />}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button className="flex-1 h-11 font-bold gap-2" onClick={() => setActiveTabIndex(activeTabIndex + 1)}>
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Date & Time Slots */}
+      {currentTab?.id === "datetime" && activeTabIndex < wizardTabs.length && (
         <div className="space-y-5">
           <div>
             <Label className="text-sm font-bold mb-2 block">Appointment Date</Label>
-            <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="h-10" />
+            <Input
+              type="date"
+              min={getLocalDateString()}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="h-10"
+            />
           </div>
 
           <div>
@@ -522,49 +1048,177 @@ export default function PublicBookingPage() {
               <CalendarCheck className="w-4 h-4 text-primary" /> Reservation Details
             </div>
             <div className="text-muted-foreground">{selectedService?.name} with {selectedProvider?.name}</div>
-            <div className="text-foreground font-semibold pt-1">{selectedDate} at {selectedTime} ({selectedService?.duration} mins)</div>
+            <div className="text-foreground font-semibold pt-1">{selectedDate} at {selectedTime} ({totalDuration} mins)</div>
           </div>
 
           <div className="flex gap-3 pt-2">
-            {!isLocationLocked && !isProviderLocked && (
-              <Button variant="outline" className="flex-1 h-11" onClick={() => setStep(1)}>
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Back
               </Button>
             )}
-            <Button className="flex-1 h-11 font-bold" onClick={() => setStep(3)}>
-              Continue <ArrowRight className="w-4 h-4 ml-1" />
+            <Button className="flex-1 h-11 font-bold" onClick={() => setActiveTabIndex(activeTabIndex + 1)}>
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Client Info */}
-      {step === 3 && (
+      {/* Tab: Intake Notes & Questions */}
+      {currentTab?.id === "intake" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Intake Notes & Special Requests</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Provide any details or requests for your service provider.</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="intake_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
+            <Textarea
+              id="intake_notes"
+              placeholder="Notes or requirements for your provider..."
+              value={bookingNotes}
+              onChange={(e) => setBookingNotes(e.target.value)}
+              rows={4}
+            />
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button className="flex-1 h-11 font-bold gap-2" onClick={() => setActiveTabIndex(activeTabIndex + 1)}>
+              Continue to {wizardTabs[activeTabIndex + 1]?.label || "Next"} <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Client Details */}
+      {currentTab?.id === "client" && activeTabIndex < wizardTabs.length && (
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="pub_name" className="text-xs font-semibold">Full Name *</Label>
             <Input id="pub_name" placeholder="John Doe" value={clientName} onChange={(e) => setClientName(e.target.value)} className="h-10" />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="pub_email" className="text-xs font-semibold">Email Address *</Label>
-            <Input id="pub_email" type="email" placeholder="john@example.com" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} className="h-10" />
-          </div>
+          {showEmail && (
+            <div className="space-y-1.5">
+              <Label htmlFor="pub_email" className="text-xs font-semibold">
+                Email Address {(primaryIdentifier === "email" || primaryIdentifier === "both") ? "*" : ""}
+              </Label>
+              <Input id="pub_email" type="email" placeholder="john@example.com" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} className="h-10" />
+            </div>
+          )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="pub_phone" className="text-xs font-semibold">Phone Number</Label>
-            <Input id="pub_phone" placeholder="(555) 000-0000" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="h-10" />
-          </div>
+          {showPhone && (
+            <div className="space-y-1.5">
+              <Label htmlFor="pub_phone" className="text-xs font-semibold">
+                Phone Number {(primaryIdentifier === "phone" || primaryIdentifier === "both") ? "*" : ""}
+              </Label>
+              <Input id="pub_phone" placeholder="(555) 000-0000" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="h-10" />
+            </div>
+          )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="pub_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
-            <Textarea id="pub_notes" placeholder="Notes for your provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
-          </div>
+          {!wizardTabs.some(t => t.id === "intake") && (
+            <div className="space-y-1.5">
+              <Label htmlFor="pub_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
+              <Textarea id="pub_notes" placeholder="Notes for your provider..." value={bookingNotes} onChange={(e) => setBookingNotes(e.target.value)} rows={3} />
+            </div>
+          )}
 
           <div className="flex gap-3 pt-4">
-            <Button variant="outline" className="flex-1 h-11" onClick={() => setStep(2)}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Back
-            </Button>
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            {wizardTabs.some(t => t.id === "checkout") && wizardTabs.findIndex(t => t.id === "checkout") > activeTabIndex ? (
+              <Button
+                className="flex-1 h-11 font-bold gap-2"
+                onClick={() => setActiveTabIndex(activeTabIndex + 1)}
+              >
+                Continue to {wizardTabs[activeTabIndex + 1]?.label || "Checkout"} <ArrowRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button className="flex-1 h-11 font-bold bg-primary text-primary-foreground" disabled={submitting} onClick={handleCreateBookingSubmit}>
+                {submitting ? "Booking..." : "Confirm & Book Now"}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Checkout & Summary */}
+      {currentTab?.id === "checkout" && activeTabIndex < wizardTabs.length && (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Review & Confirm Your Booking</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Please review your appointment summary before submitting.</p>
+          </div>
+
+          <div className="p-4 rounded-xl border bg-card space-y-3 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <span className="font-bold text-foreground text-sm">{selectedService?.name || "Selected Service"}</span>
+              <span className="font-bold text-emerald-600 text-sm">
+                ${(
+                  (Number(selectedService?.price) || 0) +
+                  selectedAddonsList.reduce((acc, a) => acc + (Number(a.price) || 0), 0) +
+                  selectedProductsList.reduce((acc, p) => acc + (Number(p.price) || 0), 0)
+                ).toFixed(2)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+              <div><span className="font-semibold text-foreground">Provider:</span> {selectedProvider?.name || "Any"}</div>
+              <div><span className="font-semibold text-foreground">Location:</span> {selectedLocation?.name || "Main Branch"}</div>
+              <div><span className="font-semibold text-foreground">Date:</span> {selectedDate}</div>
+              <div><span className="font-semibold text-foreground">Time:</span> {selectedTime} ({totalDuration} mins)</div>
+            </div>
+
+            {selectedAddonsList.length > 0 && (
+              <div className="border-t pt-2">
+                <span className="font-semibold text-foreground block mb-1">Add-ons:</span>
+                {selectedAddonsList.map(a => (
+                  <div key={a.id} className="flex justify-between text-muted-foreground">
+                    <span>+ {a.name}</span>
+                    {a.price && <span>+${Number(a.price).toFixed(2)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedProductsList.length > 0 && (
+              <div className="border-t pt-2">
+                <span className="font-semibold text-foreground block mb-1">Products:</span>
+                {selectedProductsList.map(p => (
+                  <div key={p.id} className="flex justify-between text-muted-foreground">
+                    <span>+ {p.name}</span>
+                    {p.price && <span>+${Number(p.price).toFixed(2)}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="border-t pt-2">
+              <span className="font-semibold text-foreground block mb-1">Client Details:</span>
+              <div className="text-muted-foreground space-y-0.5">
+                <div>Name: {clientName}</div>
+                {clientEmail && <div>Email: {clientEmail}</div>}
+                {clientPhone && <div>Phone: {clientPhone}</div>}
+                {bookingNotes && <div>Notes: {bookingNotes}</div>}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-3">
+            {activeTabIndex > 0 && (
+              <Button variant="outline" className="flex-1 h-11 font-semibold" onClick={() => setActiveTabIndex(activeTabIndex - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
             <Button className="flex-1 h-11 font-bold bg-primary text-primary-foreground" disabled={submitting} onClick={handleCreateBookingSubmit}>
               {submitting ? "Booking..." : "Confirm & Book Now"}
             </Button>
@@ -572,8 +1226,8 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* Step 4: Success Screen */}
-      {step === 4 && completedBooking && (
+      {/* Confirmation / Outcome Screen */}
+      {(currentTab?.id === "outcome" || activeTabIndex >= wizardTabs.length) && completedBooking && (
         <div className="text-center space-y-5 py-4">
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-10 h-10" />
@@ -602,7 +1256,17 @@ export default function PublicBookingPage() {
             </div>
           </div>
 
-          <Button className="w-full max-w-sm h-11 font-semibold" onClick={() => { setStep(1); setModalOpen(false); }}>
+          <Button
+            className="w-full max-w-sm h-11 font-semibold"
+            onClick={() => {
+              setActiveTabIndex(0);
+              setCompletedBooking(null);
+              setModalOpen(false);
+              if (typeof window !== "undefined" && window.parent && window.parent !== window) {
+                window.parent.postMessage({ event: "closeWidget" }, "*");
+              }
+            }}
+          >
             Book Another Session
           </Button>
         </div>
@@ -634,8 +1298,8 @@ export default function PublicBookingPage() {
 
       {/* Main Content Area */}
       <main className="max-w-4xl mx-auto p-4 md:p-8">
-        {!isModalWidget ? (
-          /* Standard Full Page Form */
+        {isInlineRender ? (
+          /* Standard Full Page or Iframe Embedded Form */
           <Card className="border shadow-lg rounded-2xl overflow-hidden bg-card">
             <CardHeader className="bg-muted/30 border-b p-6">
               <CardTitle className="text-xl font-bold flex items-center gap-2">

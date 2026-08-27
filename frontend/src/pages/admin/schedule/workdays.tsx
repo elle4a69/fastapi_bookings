@@ -23,7 +23,7 @@ interface Provider {
   id: string;
   user_id: string;
   name: string;
-  weekly_schedule?: any[];
+  weekly_schedule?: Record<string, { is_working: boolean; recurring: boolean; active_slots: string[] }> | null;
 }
 
 const TIME_SLOTS: string[] = [];
@@ -115,11 +115,47 @@ export default function WorkdaysPage() {
 
   const handleSelectProvider = (provider: Provider) => {
     setSelectedProvider(provider);
-    
-    // In a real app we'd map provider.weekly_schedule to the new state here
-    // For now we just reset to defaults
-    setSchedules(generateInitialSchedules(currentWeekStart));
-    setFixedStartTimesSchedules(generateInitialSchedules(currentWeekStart));
+
+    const sched = provider.weekly_schedule;
+
+    if (sched && typeof sched === 'object' && !Array.isArray(sched)) {
+      // Backend returns { monday: { is_working, recurring, active_slots }, ... }
+      const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const mapped: DaySchedule[] = DAY_NAMES.map((dayLabel, i) => {
+        const key = dayLabel.toLowerCase();
+        const dayData = sched[key];
+        const d = new Date(currentWeekStart);
+        d.setDate(d.getDate() + i);
+
+        // Convert 12-hour slot strings ("9:00 AM") to 24-hour ("09:00")
+        const convertSlot = (slot: string): string => {
+          const match = slot.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+          if (!match) return slot; // already 24h or unrecognised
+          let h = parseInt(match[1]);
+          const m = match[2];
+          const period = match[3].toUpperCase();
+          if (period === 'PM' && h !== 12) h += 12;
+          if (period === 'AM' && h === 12) h = 0;
+          return `${String(h).padStart(2, '0')}:${m}`;
+        };
+
+        return {
+          dayName: dayLabel,
+          date: d,
+          isDayOff: dayData ? !dayData.is_working : i === 0 || i === 6,
+          isRecurring: dayData ? dayData.recurring : true,
+          selectedSlots: dayData && dayData.active_slots
+            ? dayData.active_slots.map(convertSlot)
+            : [],
+        };
+      });
+      setSchedules(mapped);
+      setFixedStartTimesSchedules(mapped.map(s => ({ ...s })));
+    } else {
+      // No persisted schedule — show sensible defaults
+      setSchedules(generateInitialSchedules(currentWeekStart));
+      setFixedStartTimesSchedules(generateInitialSchedules(currentWeekStart));
+    }
   };
 
   const handleSave = async () => {
@@ -127,37 +163,70 @@ export default function WorkdaysPage() {
 
     try {
       setIsSaving(true);
-      
-      // Map back to API format (simplistic mapping for compatibility)
-      const apiSchedule = schedules.map(day => {
-        let start_time = '09:00';
-        let end_time = '17:00';
-        if (day.selectedSlots.length > 0) {
-           const sorted = [...day.selectedSlots].sort();
-           start_time = sorted[0];
-           const lastSlot = sorted[sorted.length - 1];
-           const [h, m] = lastSlot.split(':').map(Number);
-           const d = new Date();
-           d.setHours(h, m + 30);
-           end_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        }
-        
-        const oldDayOfWeek = day.date.getDay() === 0 ? 6 : day.date.getDay() - 1;
-        
-        return {
-          day_of_week: oldDayOfWeek,
+
+      // Convert 24-hour slot strings ("09:00") to 12-hour ("9:00 AM")
+      const convertTo12h = (slot: string): string => {
+        const [hStr, mStr] = slot.split(':');
+        let h = parseInt(hStr);
+        const m = mStr;
+        const period = h >= 12 ? 'PM' : 'AM';
+        if (h > 12) h -= 12;
+        if (h === 0) h = 12;
+        return `${h}:${m} ${period}`;
+      };
+
+      // Format a Date to "YYYY-MM-DD"
+      const toISODate = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // ─────────────────────────────────────────────────────────────────────────
+      // SPLIT SAVE: recurring vs. one-off
+      //   • recurring = true  → update the weekly template (PUT /providers/{id})
+      //   • recurring = false → save a date-specific ProviderSpecialDay override
+      //                         (POST /providers/{id}/special-days) for that exact
+      //                         calendar date. The weekly template is NOT changed.
+      //                         Flipping recurring back on later has no retroactive
+      //                         effect on already-saved special days.
+      // ─────────────────────────────────────────────────────────────────────────
+
+      // 1. Build the weekly template from all RECURRING days
+      const weekly_schedule: Record<string, { is_working: boolean; recurring: boolean; active_slots: string[] }> = {};
+      schedules.forEach((day) => {
+        const key = day.dayName.toLowerCase();
+        weekly_schedule[key] = {
           is_working: !day.isDayOff && day.selectedSlots.length > 0,
-          start_time,
-          end_time,
-          location_id: null
+          recurring: day.isRecurring,
+          active_slots: day.selectedSlots.map(convertTo12h),
         };
       });
 
-      await apiClient.put(`/api/admin/providers/${selectedProvider.id}`, {
-        weekly_schedule: apiSchedule,
-      });
-      
-      toast.success('Schedule saved');
+      await apiClient.put(`/api/admin/providers/${selectedProvider.id}`, { weekly_schedule });
+
+      // 2. For every NON-RECURRING day, POST a date-specific special-day override
+      const nonRecurringDays = schedules.filter(d => !d.isRecurring);
+      await Promise.all(
+        nonRecurringDays.map(day =>
+          apiClient.post(`/api/admin/providers/${selectedProvider.id}/special-days`, {
+            date: toISODate(day.date),
+            is_working: !day.isDayOff && day.selectedSlots.length > 0,
+            active_slots: day.selectedSlots.map(convertTo12h),
+            reason: 'One-off schedule override',
+          })
+        )
+      );
+
+      // Update local provider cache
+      setProviders(prev =>
+        prev.map(p => p.id === selectedProvider.id ? { ...p, weekly_schedule } : p)
+      );
+      setSelectedProvider(prev => prev ? { ...prev, weekly_schedule } : prev);
+
+      const specialCount = nonRecurringDays.length;
+      if (specialCount > 0) {
+        toast.success(`Schedule saved — ${specialCount} one-off day${specialCount > 1 ? 's' : ''} saved as exceptions`);
+      } else {
+        toast.success('Schedule saved');
+      }
     } catch (error) {
       toast.error('Failed to save schedule');
       console.error(error);

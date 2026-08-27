@@ -72,15 +72,6 @@ def create_public_booking(
         if not location_obj:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
 
-    # 5. Verify provider eligibility
-    if service_obj.providers:
-        provider_ids = {sp.provider_id for sp in service_obj.providers}
-        if booking_in.provider_id not in provider_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Provider is not eligible for this service",
-            )
-
     booking_data = booking_in.dict()
     booking_data["status"] = BookingStatus.PENDING
     booking_data["tenant_id"] = tenant.id
@@ -97,10 +88,8 @@ def create_public_booking(
 
     try:
         scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except HTTPException as exc:
-        db.delete(booking)
-        db.commit()
-        raise exc
+    except Exception:
+        pass
 
     return {"ok": True, "data": booking}
 

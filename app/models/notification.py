@@ -38,10 +38,11 @@ class NotificationTemplate(Base):
     """Reusable notification content template."""
 
     __tablename__ = "notification_templates"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_notification_templates_tenant_code"),)
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    code = Column(String, unique=True, index=True, nullable=False)
+    code = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     channel = Column(String, nullable=False, default="email")
     subject = Column(String, nullable=True)
@@ -118,7 +119,7 @@ class DeviceToken(Base):
     __table_args__ = (UniqueConstraint("token", name="uq_device_tokens_token"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String, nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     token = Column(String, nullable=False)

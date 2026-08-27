@@ -6,7 +6,7 @@ working hours, breaks and are linked to bookings.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -30,6 +30,7 @@ class Provider(Base):
     description = Column(Text, nullable=True)
     ignore_company_hours = Column(Boolean, default=False, nullable=False)
     image = Column(Text, nullable=True)
+    weekly_schedule = Column(JSON, nullable=True)
 
     # Relationships
     tenant = relationship("Tenant")

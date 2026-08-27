@@ -570,7 +570,7 @@ export default function LocationsPage() {
             />
           </div>
         </div>
-        <ScrollArea className="flex-1 bg-muted/5">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-muted/5">
           <div className="p-4 pb-20 md:pb-4 flex flex-col gap-2">
             {leftPaneMode === 'locations' && filteredLocations.map(location => (
               <div
@@ -625,7 +625,7 @@ export default function LocationsPage() {
             {leftPaneMode === 'providers' && filteredProviders.map(provider => (
               <button
                 key={provider.id}
-                onClick={() => setSelectedProviderId(provider.id)}
+                onClick={() => setSelectedProviderId(String(provider.id))}
                 className={`flex items-center gap-3 rounded-xl px-4 py-3.5 text-left text-sm transition-all duration-200 hover:scale-[1.01] hover:shadow-md min-h-[60px] border ${
                   selectedProviderId === provider.id 
                     ? "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent text-foreground border-primary" 
@@ -671,7 +671,7 @@ export default function LocationsPage() {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* RIGHT PANE: Detail / Edit */}

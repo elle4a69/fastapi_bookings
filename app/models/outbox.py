@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import json
 from enum import Enum as PyEnum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, Text, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -40,7 +40,7 @@ class OutboxEvent(Base):
     __tablename__ = "outbox_events"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(String, nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     type = Column(String, nullable=False)
     payload = Column(Text, nullable=False)
     status = Column(String, default="PENDING", nullable=False, index=True)

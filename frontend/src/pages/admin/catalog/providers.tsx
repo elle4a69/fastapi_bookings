@@ -27,6 +27,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { WeeklyScheduleEditor } from '@/components/ui/weekly-schedule-editor';
 
 
 // Types based on the MCD specifications
@@ -46,6 +47,7 @@ interface Provider {
   ignore_company_hours: boolean;
   weekly_schedule?: any;
   special_days?: any[];
+  service_ids?: (number | string)[];
   services?: string[];
   locations?: string[];
 }
@@ -89,6 +91,20 @@ const DAYS_OF_WEEK = [
   { key: 'saturday', label: 'Saturday', short: 'Sa' },
   { key: 'sunday', label: 'Sunday', short: 'Su' },
 ];
+
+const getProviderAlbumShortUrl = (providerId: string | number): string => {
+  const savedAlbumsRaw = localStorage.getItem("fastapi_bookings_media_albums_v1");
+  if (savedAlbumsRaw) {
+    try {
+      const albums = JSON.parse(savedAlbumsRaw);
+      const matchingAlbum = albums.find((a: any) => String(a.providerId) === String(providerId));
+      if (matchingAlbum?.shortUrl) {
+        return matchingAlbum.shortUrl;
+      }
+    } catch {}
+  }
+  return `http://localhost:8002/api/v1/alb-prov-${providerId}`;
+};
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -240,6 +256,9 @@ export default function ProvidersPage() {
       const mapped: Provider[] = rawList.map((p: any) => ({
         ...p,
         id: String(p.id),
+        service_ids: p.service_ids || [],
+        services: (p.service_ids || p.services || []).map(String),
+        weekly_schedule: p.weekly_schedule || null,
       }));
 
       setProviders(mapped);
@@ -565,12 +584,16 @@ export default function ProvidersPage() {
     triggerSave(next, immediate);
   };
 
-  const handleServicesToggle = async (updatedServices: string[]) => {
+  const handleServicesToggle = async (updatedServiceIds: (string | number)[]) => {
     if (!selectedProvider) return;
     
+    const numericIds = updatedServiceIds.map((id) => Number(id)).filter((n) => !isNaN(n));
+    const strIds = updatedServiceIds.map(String);
+
     const updatedProvider = {
       ...selectedProvider,
-      services: updatedServices
+      service_ids: numericIds,
+      services: strIds
     };
     
     setSelectedProvider(updatedProvider);
@@ -588,19 +611,18 @@ export default function ProvidersPage() {
         color: updatedProvider.color || null,
         description: updatedProvider.description || null,
         ignore_company_hours: updatedProvider.ignore_company_hours ?? false,
-        services: updatedProvider.services,
+        service_ids: numericIds,
       };
       await apiClient.put(`/api/admin/providers/${updatedProvider.id}`, payload);
       setServicesSaveStatus('saved');
+      toast.success("Provider services saved!");
       setTimeout(() => {
         setServicesSaveStatus(current => current === 'saved' ? 'idle' : current);
       }, 1500);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Auto-save services failed:", err);
-      setServicesSaveStatus('saved'); // Fallback
-      setTimeout(() => {
-        setServicesSaveStatus(current => current === 'saved' ? 'idle' : current);
-      }, 1500);
+      toast.error(err.message || "Failed to save provider services");
+      setServicesSaveStatus('idle');
     }
   };
 
@@ -628,6 +650,32 @@ export default function ProvidersPage() {
       setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? loc : l));
     }
   };
+
+  const [specialDaysMap, setSpecialDaysMap] = useState<Record<string, { is_working: boolean; active_slots: string[]; reason?: string | null }>>({});
+
+  useEffect(() => {
+    if (!selectedProvider) return;
+    const fetchSpecialDays = async () => {
+      try {
+        const res = await apiClient.get<any>(`/api/admin/providers/${selectedProvider.id}/special-days`);
+        const list = Array.isArray(res) ? res : (res?.data || []);
+        const map: Record<string, { is_working: boolean; active_slots: string[]; reason?: string | null }> = {};
+        list.forEach((item: any) => {
+          if (item.date) {
+            map[item.date] = {
+              is_working: item.is_working,
+              active_slots: item.active_slots || [],
+              reason: item.reason,
+            };
+          }
+        });
+        setSpecialDaysMap(map);
+      } catch (err) {
+        console.warn('Failed to fetch provider special days', err);
+      }
+    };
+    fetchSpecialDays();
+  }, [selectedProvider?.id]);
 
   const autoSaveProviderSchedule = async (updatedProvider: Provider) => {
     try {
@@ -659,52 +707,153 @@ export default function ProvidersPage() {
     }
   };
 
-  const handleWeeklyScheduleChange = (day: string, field: string, value: any) => {
+  const handleScheduleFieldChange = async (
+    day: string,
+    field: string,
+    value: any,
+    dateStr: string
+  ) => {
     if (!selectedProvider) return;
-    const currentSchedule = selectedProvider.weekly_schedule || {};
-    const daySchedule = currentSchedule[day] || {};
-    
-    const updatedProvider = {
-      ...selectedProvider,
-      weekly_schedule: {
-        ...currentSchedule,
-        [day]: {
-          ...daySchedule,
-          [field]: value
-        }
-      }
-    };
 
-    setSelectedProvider(updatedProvider);
-    setProviders(prev => prev.map(p => (p.id === selectedProvider.id ? updatedProvider : p)));
-    autoSaveProviderSchedule(updatedProvider);
+    const currentSpecial = specialDaysMap[dateStr];
+    const currentWeekly = selectedProvider.weekly_schedule?.[day] ?? { is_working: false, recurring: true, active_slots: [] };
+    const isCurrentlySpecial = !!currentSpecial;
+
+    const currentEffective = isCurrentlySpecial
+      ? { is_working: currentSpecial.is_working, recurring: false, active_slots: currentSpecial.active_slots }
+      : currentWeekly;
+
+    const updatedEffective = { ...currentEffective, [field]: value };
+
+    if (field === 'recurring') {
+      if (value === false) {
+        setSpecialDaysMap(prev => ({
+          ...prev,
+          [dateStr]: { is_working: currentEffective.is_working, active_slots: currentEffective.active_slots }
+        }));
+        try {
+          setSaveStatus('saving');
+          await apiClient.post(`/api/admin/providers/${selectedProvider.id}/special-days`, {
+            date: dateStr,
+            is_working: currentEffective.is_working,
+            active_slots: currentEffective.active_slots,
+            reason: 'One-off schedule override',
+          });
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
+        } catch (err) {
+          console.warn('Failed to save special day', err);
+        }
+      } else {
+        setSpecialDaysMap(prev => {
+          const copy = { ...prev };
+          delete copy[dateStr];
+          return copy;
+        });
+        try {
+          setSaveStatus('saving');
+          await apiClient.delete(`/api/admin/providers/${selectedProvider.id}/special-days/${dateStr}`);
+        } catch (err) {
+          // Ignore
+        }
+
+        const updatedWeeklySchedule = {
+          ...(selectedProvider.weekly_schedule || {}),
+          [day]: {
+            is_working: updatedEffective.is_working,
+            recurring: true,
+            active_slots: updatedEffective.active_slots,
+          }
+        };
+        const updatedProvider = { ...selectedProvider, weekly_schedule: updatedWeeklySchedule };
+        setSelectedProvider(updatedProvider);
+        setProviders(prev => prev.map(p => p.id === selectedProvider.id ? updatedProvider : p));
+        autoSaveProviderSchedule(updatedProvider);
+      }
+    } else {
+      if (isCurrentlySpecial || currentEffective.recurring === false) {
+        setSpecialDaysMap(prev => ({
+          ...prev,
+          [dateStr]: { is_working: updatedEffective.is_working, active_slots: updatedEffective.active_slots }
+        }));
+        try {
+          setSaveStatus('saving');
+          await apiClient.post(`/api/admin/providers/${selectedProvider.id}/special-days`, {
+            date: dateStr,
+            is_working: updatedEffective.is_working,
+            active_slots: updatedEffective.active_slots,
+            reason: 'One-off schedule override',
+          });
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
+        } catch (err) {
+          console.warn('Failed to update special day', err);
+        }
+      } else {
+        const updatedWeeklySchedule = {
+          ...(selectedProvider.weekly_schedule || {}),
+          [day]: {
+            ...currentWeekly,
+            [field]: value,
+          }
+        };
+        const updatedProvider = { ...selectedProvider, weekly_schedule: updatedWeeklySchedule };
+        setSelectedProvider(updatedProvider);
+        setProviders(prev => prev.map(p => p.id === selectedProvider.id ? updatedProvider : p));
+        autoSaveProviderSchedule(updatedProvider);
+      }
+    }
   };
 
-  const toggleSlot = (day: string, slot: string) => {
+  const handleScheduleSlotToggle = async (day: string, slot: string, dateStr: string) => {
     if (!selectedProvider) return;
-    const currentSchedule = selectedProvider.weekly_schedule || {};
-    const daySchedule = currentSchedule[day] || { is_working: true, active_slots: [] };
-    const currentSlots: string[] = daySchedule.active_slots || [];
-    
+
+    const currentSpecial = specialDaysMap[dateStr];
+    const currentWeekly = selectedProvider.weekly_schedule?.[day] ?? { is_working: true, recurring: true, active_slots: [] };
+    const isCurrentlySpecial = !!currentSpecial;
+
+    const currentSlots: string[] = isCurrentlySpecial
+      ? currentSpecial.active_slots
+      : (currentWeekly.active_slots || []);
+
     const newSlots = currentSlots.includes(slot)
       ? currentSlots.filter(s => s !== slot)
       : [...currentSlots, slot];
-      
-    const updatedProvider = {
-      ...selectedProvider,
-      weekly_schedule: {
-        ...currentSchedule,
-        [day]: {
-          ...daySchedule,
-          active_slots: newSlots
-        }
+
+    if (isCurrentlySpecial || currentWeekly.recurring === false) {
+      const isWorking = isCurrentlySpecial ? currentSpecial.is_working : currentWeekly.is_working;
+      setSpecialDaysMap(prev => ({
+        ...prev,
+        [dateStr]: { is_working: isWorking, active_slots: newSlots }
+      }));
+      try {
+        setSaveStatus('saving');
+        await apiClient.post(`/api/admin/providers/${selectedProvider.id}/special-days`, {
+          date: dateStr,
+          is_working: isWorking,
+          active_slots: newSlots,
+          reason: 'One-off schedule override',
+        });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
+      } catch (err) {
+        console.warn('Failed to update special day slot', err);
       }
-    };
-      
-    setSelectedProvider(updatedProvider);
-    setProviders(prev => prev.map(p => (p.id === selectedProvider.id ? updatedProvider : p)));
-    autoSaveProviderSchedule(updatedProvider);
+    } else {
+      const updatedWeeklySchedule = {
+        ...(selectedProvider.weekly_schedule || {}),
+        [day]: {
+          ...currentWeekly,
+          active_slots: newSlots,
+        }
+      };
+      const updatedProvider = { ...selectedProvider, weekly_schedule: updatedWeeklySchedule };
+      setSelectedProvider(updatedProvider);
+      setProviders(prev => prev.map(p => p.id === selectedProvider.id ? updatedProvider : p));
+      autoSaveProviderSchedule(updatedProvider);
+    }
   };
+
 
 
 
@@ -1234,6 +1383,64 @@ export default function ProvidersPage() {
                         </p>
                       </div>
 
+                      {/* Provider's Album Short Link */}
+                      <div className="space-y-2 pt-2 border-t">
+                        <Label className="flex items-center gap-2 font-bold text-xs">
+                          Provider's Album <Info className="h-4 w-4 text-muted-foreground" />
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            readOnly
+                            value={getProviderAlbumShortUrl(selectedProvider.id)}
+                            className="bg-muted/30 font-mono text-xs text-primary"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            className="shrink-0 gap-1.5 min-h-[40px]"
+                            onClick={async () => {
+                              const targetUrl = `${window.location.origin}/admin/media?provider=${selectedProvider.id}`;
+                              let finalShort = getProviderAlbumShortUrl(selectedProvider.id);
+                              
+                              try {
+                                const res = await fetch("http://localhost:8002/api/v1/shorten/", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ long_url: targetUrl }),
+                                });
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  if (data?.short_url) {
+                                    const code = data.short_url.split("/").pop();
+                                    finalShort = `http://localhost:8002/api/v1/${code}`;
+                                  }
+                                }
+                              } catch (err) {
+                                console.warn("Shortener API offline:", err);
+                              }
+
+                              navigator.clipboard.writeText(finalShort);
+                              toast.success("Provider's album short link copied to clipboard!");
+                            }}
+                          >
+                            <Copy className="h-4 w-4" /> Copy
+                          </Button>
+                          <a
+                            href={`/admin/media?provider=${selectedProvider.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button variant="outline" size="sm" type="button" className="shrink-0 gap-1.5 min-h-[40px]">
+                              <ExternalLink className="h-4 w-4" /> Open
+                            </Button>
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Short link for this provider's photo & media album gallery in the Media Library.
+                        </p>
+                      </div>
+
                       {/* 5. Image & Avatar Dropzone */}
                       <div className="space-y-2 pt-2 border-t">
                         <Label>Service provider image & avatar</Label>
@@ -1330,71 +1537,18 @@ export default function ProvidersPage() {
                       )}
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="pb-6 pt-2">
-                    <div className="space-y-3">
-                      {DAYS_OF_WEEK.map((day) => {
-                        const sched = selectedProvider.weekly_schedule?.[day.key] || {
-                          is_working: false,
-                          recurring: false,
-                          active_slots: [],
-                        };
-                        const isActive = sched.is_working;
-                        const isRecurring = sched.recurring;
-                        const activeSlots: string[] = sched.active_slots || [];
-
-                        return (
-                          <div
-                            key={day.key}
-                            className="rounded-xl border border-border/60 overflow-hidden transition-all duration-200"
-                          >
-                            {/* Day header row */}
-                            <div className={`flex items-center justify-between px-4 py-2.5 transition-colors ${isActive ? 'bg-muted/30' : 'bg-muted/10'}`}>
-                              <div className="flex items-center gap-3">
-                                <Switch
-                                  checked={isActive}
-                                  onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'is_working', val)}
-                                  className="scale-90"
-                                />
-                                <span className={`font-semibold text-sm transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>{day.label}</span>
-                              </div>
-                              {isActive && (
-                                <div className="flex items-center gap-2">
-                                  <Label className="text-xs text-muted-foreground">Recurring</Label>
-                                  <Switch
-                                    checked={isRecurring}
-                                    onCheckedChange={(val) => handleWeeklyScheduleChange(day.key, 'recurring', val)}
-                                    className="scale-90"
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Time pill grid — only shown when day is active */}
-                            {isActive && (
-                              <div className="grid grid-cols-6 gap-1.5 p-3 border-t border-border/40">
-                                {HALF_HOUR_SLOTS.map((slot) => {
-                                  const isSlotActive = activeSlots.includes(slot);
-                                  return (
-                                    <button
-                                      key={slot}
-                                      type="button"
-                                      onClick={() => toggleSlot(day.key, slot)}
-                                      className={`py-1 rounded-md text-[10px] font-medium border text-center transition-colors ${
-                                        isSlotActive
-                                          ? 'bg-primary text-primary-foreground border-primary'
-                                          : 'bg-background text-muted-foreground border-border/40 hover:border-border'
-                                      }`}
-                                    >
-                                      {slot}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <AccordionContent className="pb-2 pt-0">
+                    <WeeklyScheduleEditor
+                      schedule={selectedProvider.weekly_schedule}
+                      specialDays={specialDaysMap}
+                      saveStatus={saveStatus}
+                      onFieldChange={(dayKey, field, value, dateStr) =>
+                        handleScheduleFieldChange(dayKey, field as string, value, dateStr)
+                      }
+                      onSlotToggle={(dayKey, slot, dateStr) =>
+                        handleScheduleSlotToggle(dayKey, slot, dateStr)
+                      }
+                    />
                   </AccordionContent>
 
 
@@ -1403,29 +1557,80 @@ export default function ProvidersPage() {
                 {/* Accordion 3: Provider Services */}
                 <AccordionItem id="acc-prov-services" value="services" className="border rounded-lg bg-card overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">
-                    Provider Services
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span>Provider Services</span>
+                      {servicesSaveStatus === 'saving' && (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground font-normal animate-pulse">
+                          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                          Saving...
+                        </span>
+                      )}
+                      {servicesSaveStatus === 'saved' && (
+                        <span className="text-xs text-emerald-500 font-medium font-normal">
+                          Saved
+                        </span>
+                      )}
+                    </div>
                   </AccordionTrigger>
                   <AccordionContent className="p-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 py-2 w-full">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 w-full">
                       {(services || []).map((service, sIndex) => {
-                        const isAttached = (selectedProvider.services || []).includes(service.id);
+                        const attachedIds = [
+                          ...(selectedProvider.service_ids || []),
+                          ...(selectedProvider.services || [])
+                        ].map(String);
+                        const isAttached = attachedIds.includes(String(service.id));
+
                         return (
                           <div 
                             key={service.id || `service-${sIndex}`} 
-                            className="flex items-center justify-between p-3 border rounded-lg bg-card/45"
+                            className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-between ${
+                              isAttached 
+                                ? 'border-primary bg-primary/5 shadow-xs ring-1 ring-primary/20' 
+                                : 'border-border bg-card hover:bg-muted/30 hover:border-border/60 hover:scale-[1.01] hover:shadow-xs'
+                            }`}
+                            onClick={() => {
+                              const current = attachedIds;
+                              const next = isAttached 
+                                ? current.filter(id => id !== String(service.id))
+                                : [...current, String(service.id)];
+                              handleServicesToggle(next);
+                            }}
                           >
-                            <Label htmlFor={`service-${service.id}`} className="text-sm font-medium">{service.name}</Label>
-                            <Switch
-                              id={`service-${service.id}`}
-                              checked={isAttached}
-                              onCheckedChange={(checked) => {
-                                const current = selectedProvider.services || [];
-                                let updatedServices = checked 
-                                  ? [...current, service.id] 
-                                  : current.filter((id) => id !== service.id);
-                                handleServicesToggle(updatedServices);
-                              }}
-                            />
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <Avatar className="w-9 h-9 rounded-lg shrink-0 bg-primary/10 text-primary">
+                                <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary rounded-lg">
+                                  {service.name ? service.name.charAt(0).toUpperCase() : 'S'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-semibold text-foreground truncate" title={service.name}>
+                                  {service.name}
+                                </span>
+                                <span className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                                  {service.duration && <span>{service.duration} mins</span>}
+                                  {service.price !== undefined && service.price !== null && (
+                                    <span className="font-semibold text-foreground">
+                                      ${Number(service.price).toFixed(2)}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div onClick={e => e.stopPropagation()}>
+                              <Switch
+                                id={`service-${service.id}`}
+                                checked={isAttached}
+                                onCheckedChange={(checked) => {
+                                  const current = attachedIds;
+                                  const next = checked 
+                                    ? [...current.filter(id => id !== String(service.id)), String(service.id)]
+                                    : current.filter(id => id !== String(service.id));
+                                  handleServicesToggle(next);
+                                }}
+                              />
+                            </div>
                           </div>
                         );
                       })}

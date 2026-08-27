@@ -288,9 +288,9 @@ SimplybookWidget.prototype.getUrl = function () {
         if (parts.length === 2) return parts.pop().split(';').shift();
     };
 
-    var url = this.options.url + '/v2/?widget-type=' + widget_type + '&theme=' + this.options.theme;
+    var url = this.options.url + '/v2/?widget-type=' + encodeURIComponent(widget_type);
     if (this.options.theme) {
-        url += '&theme=' + this.options.theme;
+        url += '&theme=' + encodeURIComponent(this.options.theme);
     }
     if (this.options.theme_id) {
         url += '&theme_id=' + this.options.theme_id;

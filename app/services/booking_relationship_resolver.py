@@ -45,17 +45,27 @@ RELATIONS: dict[frozenset[str], RelationSpec] = {
     frozenset(("provider", "category")): RelationSpec(ProviderCategory, "provider_id", "category_id"),
 }
 
+RELATION_KEY_MAP = {
+    "addons": "add_on",
+    "products": "product",
+    "time": "datetime",
+    "datetime": "time",
+}
+
 ENTITY_MODELS = {
     "location": Location,
     "category": Category,
     "service": Service,
     "provider": Provider,
     "product": Product,
+    "products": Product,
     "add_on": AddOn,
+    "addons": AddOn,
 }
 
 
 def _column(spec: RelationSpec, entity: str):
+    entity = RELATION_KEY_MAP.get(entity, entity)
     if spec.left.startswith(f"{entity}_") or (entity == "add_on" and spec.left == "add_on_id"):
         return getattr(spec.model, spec.left)
     return getattr(spec.model, spec.right)
@@ -63,25 +73,39 @@ def _column(spec: RelationSpec, entity: str):
 
 def pair_allowed(db: Session, tenant_id: int, left_type: str, left_id: int, right_type: str, right_id: int) -> bool:
     """Return symmetric universal-default compatibility for an entity pair."""
+    left_type = RELATION_KEY_MAP.get(left_type, left_type)
+    right_type = RELATION_KEY_MAP.get(right_type, right_type)
     spec = RELATIONS.get(frozenset((left_type, right_type)))
     if spec is None:
         return True
-    left_col = _column(spec, left_type)
-    right_col = _column(spec, right_type)
-    explicit = db.query(spec.model).filter(
-        spec.model.tenant_id == tenant_id,
-        left_col == left_id,
-        right_col == right_id,
-    ).first()
-    if explicit:
-        return True
-    left_restricted = db.query(spec.model).filter(spec.model.tenant_id == tenant_id, left_col == left_id).first() is not None
-    right_restricted = db.query(spec.model).filter(spec.model.tenant_id == tenant_id, right_col == right_id).first() is not None
-    return not left_restricted and not right_restricted
+
+    rows = db.query(getattr(spec.model, spec.left), getattr(spec.model, spec.right)).filter(
+        spec.model.tenant_id == tenant_id
+    ).all()
+    pairs = set(rows)
+    left_restricted_ids = {r[0] for r in rows}
+    right_restricted_ids = {r[1] for r in rows}
+
+    left_col_name = _column(spec, left_type).key
+    is_left_spec_left = (left_col_name == spec.left)
+
+    if is_left_spec_left:
+        has_explicit = (left_id, right_id) in pairs
+        left_restricted = left_id in left_restricted_ids
+        right_restricted = right_id in right_restricted_ids
+    else:
+        has_explicit = (right_id, left_id) in pairs
+        left_restricted = left_id in right_restricted_ids
+        right_restricted = right_id in left_restricted_ids
+
+    res = has_explicit or (not left_restricted and not right_restricted)
+    return res
 
 
 def get_entity(db: Session, tenant_id: int, entity: str, entity_id: int):
-    model = ENTITY_MODELS[entity]
+    model = ENTITY_MODELS.get(entity)
+    if not model:
+        return None
     query = db.query(model).filter(model.id == entity_id, model.tenant_id == tenant_id)
     if hasattr(model, "active"):
         query = query.filter(model.active.is_(True))
@@ -91,7 +115,9 @@ def get_entity(db: Session, tenant_id: int, entity: str, entity_id: int):
 
 
 def get_valid_records(db: Session, tenant_id: int, entity: str, context: dict[str, int | None]) -> list[Any]:
-    model = ENTITY_MODELS[entity]
+    model = ENTITY_MODELS.get(entity)
+    if not model:
+        return []
     query = db.query(model).filter(model.tenant_id == tenant_id)
     if hasattr(model, "active"):
         query = query.filter(model.active.is_(True))

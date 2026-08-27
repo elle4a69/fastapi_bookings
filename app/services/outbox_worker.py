@@ -32,6 +32,12 @@ async def start_outbox_worker():
             await process_pending_outbox_events()
         except Exception as e:
             logger.error(f"Error in outbox processing loop: {str(e)}\n{traceback.format_exc()}")
+            
+        try:
+            from .sms.outbox_worker import process_pending_sms_outbound_jobs
+            await process_pending_sms_outbound_jobs()
+        except Exception as e:
+            logger.error(f"Error in SMS outbound processing loop: {str(e)}\n{traceback.format_exc()}")
         
         # Poll every settings.OUTBOX_POLL_INTERVAL seconds
         await asyncio.sleep(settings.OUTBOX_POLL_INTERVAL)

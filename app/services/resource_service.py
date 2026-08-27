@@ -55,11 +55,13 @@ def find_available_resources(
         required_type = requirement.resource_type
         required_qty = requirement.quantity or 1
         
-        # Query all active resources of the required type
+        from sqlalchemy.orm import joinedload
+        # Query all active resources of the required type for the target tenant
         query = db.query(Resource).filter(
+            Resource.tenant_id == service.tenant_id,
             Resource.type == required_type,
             Resource.active.is_(True)
-        )
+        ).options(joinedload(Resource.allocations).joinedload(BookingResourceAllocation.booking))
         
         # Filter by location if provided; resources with location_id set to None
         # are considered global and may be used at any location.
@@ -119,6 +121,9 @@ def allocate_resources(
     persisted.
     """
     service = booking.service
+    if not service and getattr(booking, "service_id", None):
+        from ..models.service import Service
+        service = db.query(Service).get(booking.service_id)
     if not service:
         return
 
@@ -133,7 +138,7 @@ def allocate_resources(
     )
     if allocations is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail="No available resources for this service at the requested time"
         )
         

@@ -164,9 +164,12 @@ def create_and_connect(
         link = spec.model(tenant_id=tenant.id, **{left_col.key: left_id, right_col.key: record.id})
         db.add(link)
         db.commit()
-    except (IntegrityError, TypeError, ValueError) as exc:
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=422, detail="Record could not be created and connected") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Record could not be created or already exists") from exc
+    except (TypeError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid data provided") from exc
     db.refresh(record)
     return {"ok": True, "data": {"record": _serialize(record), "relationship_id": link.id}}
 

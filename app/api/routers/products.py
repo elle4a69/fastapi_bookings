@@ -1,7 +1,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -27,10 +27,10 @@ def list_products(
     current_user = Depends(get_current_admin),
 ) -> List[ProductOut]:
     products = db.query(ProductModel).filter(ProductModel.tenant_id == tenant.id).all()
-    return [ProductOut.from_orm(p) for p in products]
+    return [ProductOut.model_validate(p) for p in products]
 
 
-@router.post("", response_model=ProductOut)
+@router.post("", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     product_in: ProductCreate,
     tenant: Tenant = Depends(get_current_tenant),
@@ -45,7 +45,7 @@ def create_product(
         db.rollback()
         raise HTTPException(status_code=409, detail=f"Product SKU '{product_in.sku}' already exists") from exc
     db.refresh(product)
-    return ProductOut.from_orm(product)
+    return ProductOut.model_validate(product)
 
 
 @router.get("/{product_id}", response_model=ProductOut)
@@ -58,7 +58,7 @@ def get_product(
     product = db.query(ProductModel).filter(ProductModel.id == product_id, ProductModel.tenant_id == tenant.id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return ProductOut.from_orm(product)
+    return ProductOut.model_validate(product)
 
 
 @router.put("/{product_id}", response_model=ProductOut)
@@ -81,22 +81,22 @@ def update_product(
         sku = product_in.sku or product.sku
         raise HTTPException(status_code=409, detail=f"Product SKU '{sku}' already exists") from exc
     db.refresh(product)
-    return ProductOut.from_orm(product)
+    return ProductOut.model_validate(product)
 
 
-@router.delete("/{product_id}", response_model=ProductOut)
+@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
     product_id: int,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
-) -> ProductOut:
+):
     product = db.query(ProductModel).filter(ProductModel.id == product_id, ProductModel.tenant_id == tenant.id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     db.delete(product)
     db.commit()
-    return ProductOut.from_orm(product)
+    return None
 
 
 @router.post("/assign", response_model=ServiceProductOut)

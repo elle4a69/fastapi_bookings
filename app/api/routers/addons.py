@@ -21,10 +21,10 @@ def list_addons(
     current_user = Depends(get_current_admin),
 ) -> List[AddOnOut]:
     add_ons = db.query(AddOnModel).filter(AddOnModel.tenant_id == tenant.id).all()
-    return [AddOnOut.from_orm(a) for a in add_ons]
+    return [AddOnOut.model_validate(a) for a in add_ons]
 
 
-@router.post("", response_model=AddOnOut)
+@router.post("", response_model=AddOnOut, status_code=status.HTTP_201_CREATED)
 def create_addon(
     addon_in: AddOnCreate,
     tenant: Tenant = Depends(get_current_tenant),
@@ -43,7 +43,7 @@ def create_addon(
         db.add(ServiceAddOn(tenant_id=tenant.id, service_id=service.id, add_on_id=addon.id))
     db.commit()
     db.refresh(addon)
-    return AddOnOut.from_orm(addon)
+    return AddOnOut.model_validate(addon)
 
 
 @router.get("/{add_on_id}", response_model=AddOnOut)
@@ -56,7 +56,7 @@ def get_addon(
     addon = db.query(AddOnModel).filter(AddOnModel.id == add_on_id, AddOnModel.tenant_id == tenant.id).first()
     if not addon:
         raise HTTPException(status_code=404, detail="Add‑on not found")
-    return AddOnOut.from_orm(addon)
+    return AddOnOut.model_validate(addon)
 
 
 @router.put("/{add_on_id}", response_model=AddOnOut)
@@ -74,19 +74,19 @@ def update_addon(
         setattr(addon, field, value)
     db.commit()
     db.refresh(addon)
-    return AddOnOut.from_orm(addon)
+    return AddOnOut.model_validate(addon)
 
 
-@router.delete("/{add_on_id}", response_model=AddOnOut)
+@router.delete("/{add_on_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_addon(
     add_on_id: int,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
-) -> AddOnOut:
+):
     addon = db.query(AddOnModel).filter(AddOnModel.id == add_on_id, AddOnModel.tenant_id == tenant.id).first()
     if not addon:
         raise HTTPException(status_code=404, detail="Add‑on not found")
     db.delete(addon)
     db.commit()
-    return AddOnOut.from_orm(addon)
+    return None

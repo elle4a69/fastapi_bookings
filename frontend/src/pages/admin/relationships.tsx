@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, Loader2, LayoutGrid, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -144,11 +146,25 @@ export default function RelationshipsPage() {
 
   return (
     <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Bulk Relationship Matrix Editor</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage many-to-many relationships across all catalog and provider records efficiently.
-        </p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Bulk Relationship Matrix Editor</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage many-to-many relationships across all catalog and provider records efficiently.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/admin/relationships-matrix">
+            <Button variant="outline" size="sm" className="gap-1.5 font-semibold">
+              <LayoutGrid className="w-4 h-4 text-primary" /> 5-Column Matrix
+            </Button>
+          </Link>
+          <Link to="/admin/relationships-tree">
+            <Button variant="outline" size="sm" className="gap-1.5 font-semibold">
+              <Layers className="w-4 h-4 text-primary" /> Nested Tree View
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
