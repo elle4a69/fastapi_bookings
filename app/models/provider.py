@@ -41,7 +41,7 @@ class Provider(Base):
         "ServiceProvider",
         back_populates="provider",
         cascade="all, delete-orphan",
-        lazy="joined"
+        lazy="selectin"
     )
 
     @property

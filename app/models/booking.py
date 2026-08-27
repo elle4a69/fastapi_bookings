@@ -56,7 +56,7 @@ class Booking(Base):
         "BookingResourceAllocation",
         back_populates="booking",
         cascade="all, delete-orphan",
-        lazy="joined",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

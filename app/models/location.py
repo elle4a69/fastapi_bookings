@@ -29,21 +29,21 @@ class Location(Base):
 
     # New: resources associated with this location (rooms, equipment, etc.)
     resources = relationship(
-        "Resource", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+        "Resource", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
 
     # Join table relationships
     location_providers = relationship(
-        "LocationProvider", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+        "LocationProvider", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
     location_services = relationship(
-        "LocationService", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+        "LocationService", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
     location_categories = relationship(
-        "LocationCategory", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+        "LocationCategory", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
     location_products = relationship(
-        "LocationProduct", back_populates="location", cascade="all, delete-orphan", lazy="joined"
+        "LocationProduct", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
 
     @property

@@ -56,7 +56,7 @@ def list_bookings(
     if date_to:
         query = query.filter(BookingModel.start_time <= date_to)
     query = query.order_by(BookingModel.id.desc())
-    items, meta = paginate_query(query, params["page"], 500)
+    items, meta = paginate_query(query, params["page"], params["page_size"])
     return {"ok": True, "data": items, "meta": meta}
 
 

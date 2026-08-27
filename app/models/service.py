@@ -46,7 +46,7 @@ class Service(Base):
         "ServiceResourceRequirement",
         back_populates="service",
         cascade="all, delete-orphan",
-        lazy="joined",
+        lazy="selectin",
     )
 
     # Categories to which this service belongs
