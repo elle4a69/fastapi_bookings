@@ -133,6 +133,12 @@ from .api.routers import (
     booking_forms,
     relationship_management,
     discovery,
+    sms_accounts,
+    sms_webhooks,
+    sms_conversations,
+    sms_settings,
+    sms_arrivals,
+    sms_chatwoot,
 )
 
 
@@ -346,6 +352,15 @@ app.include_router(booking_forms.admin_router)
 app.include_router(booking_forms.public_router)
 app.include_router(relationship_management.router)
 app.include_router(discovery.router)
+
+# SMS Module routers
+app.include_router(sms_accounts.router, prefix="/api/admin")
+app.include_router(sms_conversations.router, prefix="/api/admin")
+app.include_router(sms_settings.router, prefix="/api/admin")
+app.include_router(sms_arrivals.router, prefix="/api/admin")
+app.include_router(sms_chatwoot.router, prefix="/api/admin")
+app.include_router(sms_chatwoot.router, prefix="/api")
+app.include_router(sms_webhooks.router, prefix="/api")
 
 
 @app.get("/health", tags=["system"])

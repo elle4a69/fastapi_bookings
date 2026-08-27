@@ -75,6 +75,16 @@ from .outbox import OutboxEvent, BookingEvent, BookingEventType
 from .hold import Hold, HoldStatus
 from .waitlist import WaitlistEntry, WaitlistStatus
 
+# SMS Module models
+from .sms_account import SmsAccount
+from .sms_conversation import SmsConversation
+from .sms_message import SmsMessage
+from .sms_receipt import SmsInboundReceipt, SmsDeliveryReceipt
+from .sms_outbox import SmsOutboundJob, SmsAiJob, SmsConversationEvent, SmsNote
+from .sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
+from .sms_arrival import SmsArrivalSession
+from .sms_chatwoot import SmsChatwootBinding
+
 __all__ = [
     "User",
     "Service",
@@ -114,4 +124,19 @@ __all__ = [
     "ProviderCategory",
     "BookingForm",
     "ManagementReviewRequest",
+    
+    # SMS Module
+    "SmsAccount",
+    "SmsConversation",
+    "SmsMessage",
+    "SmsInboundReceipt",
+    "SmsDeliveryReceipt",
+    "SmsOutboundJob",
+    "SmsAiJob",
+    "SmsConversationEvent",
+    "SmsNote",
+    "SmsKnowledgeEntry",
+    "SmsPromptProfile",
+    "SmsArrivalSession",
+    "SmsChatwootBinding",
 ]
