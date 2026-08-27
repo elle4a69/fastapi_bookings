@@ -13,6 +13,7 @@ import {
   LandmarkIcon,
   LayoutDashboardIcon,
   MapPinIcon,
+  MessageSquareTextIcon,
   SendIcon,
   SettingsIcon,
   ShieldCheckIcon,
@@ -21,6 +22,7 @@ import {
   StarIcon,
   TagsIcon,
   UsersIcon,
+  ImagesIcon,
   UserRoundCogIcon,
   WrenchIcon,
 } from "lucide-react"
@@ -44,6 +46,7 @@ export const navigation: NavSection[] = [
       { title: "Dashboard", url: "/admin", icon: LayoutDashboardIcon },
       { title: "Calendar", url: "/admin/calendar", icon: CalendarDaysIcon },
       { title: "Bookings", url: "/admin/bookings", icon: ClipboardListIcon },
+      { title: "SMS Assistant", url: "/admin/sms-assistant", icon: MessageSquareTextIcon },
     ],
   },
   {
@@ -114,6 +117,7 @@ export const navigation: NavSection[] = [
   {
     label: "More",
     items: [
+      { title: "Media", url: "/admin/media", icon: ImagesIcon },
       { title: "Booking Forms", url: "/admin/booking-forms", icon: FileInputIcon },
       { title: "Reviews", url: "/admin/reviews", icon: StarIcon },
       {

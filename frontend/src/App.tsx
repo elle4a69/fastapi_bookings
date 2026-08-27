@@ -22,6 +22,8 @@ import ProductsPage from "@/pages/admin/catalog/products"
 import PackagesPage from "@/pages/admin/catalog/packages"
 import ResourcesPage from "@/pages/admin/resources"
 import RelationshipsPage from "@/pages/admin/relationships"
+import RelationshipsMatrixPage from "@/pages/admin/relationships-matrix"
+import RelationshipsTreePage from "@/pages/admin/relationships-tree"
 
 import TaxRatesPage from "@/pages/admin/finance/tax-rates"
 import ProcessorsPage from "@/pages/admin/finance/processors"
@@ -30,6 +32,8 @@ import { PaymentsPage } from "@/pages/admin/finance/payments"
 import { PromotionsPage } from "@/pages/admin/finance/promotions"
 import ReviewsPage from "@/pages/admin/reviews"
 import AdditionalFieldsPage from "@/pages/admin/configuration/additional-fields"
+import MediaPage from "@/pages/admin/media"
+import SmsAssistantPage from "@/pages/admin/sms-assistant"
 
 import MessagesPage from "@/pages/admin/notifications/messages"
 import TemplatesPage from "@/pages/admin/notifications/templates"
@@ -41,6 +45,7 @@ import GDPRPage from "@/pages/admin/compliance/gdpr"
 import AuditLogsPage from "@/pages/admin/audit"
 import SystemPage from "@/pages/admin/system"
 import PublicBookingPage from "@/pages/public/booking-page"
+import PublicUploadPage from "@/pages/public/upload-page"
 
 const adminRoutes = navigation.flatMap((section) =>
   section.items.flatMap((item) => {
@@ -114,12 +119,21 @@ function App() {
                 route.path === '/admin/catalog/packages' ? <PackagesPage /> :
                 route.path === '/admin/resources' ? <ResourcesPage /> :
                 route.path === '/admin/relationships' ? <RelationshipsPage /> :
+                route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
+                route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
+                route.path === '/admin/catalog/packages' ? <PackagesPage /> :
+                route.path === '/admin/resources' ? <ResourcesPage /> :
+                route.path === '/admin/relationships' ? <RelationshipsPage /> :
+                route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
+                route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
                 route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
                 route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
                 route.path === '/admin/finance/invoices' ? <InvoicesPage /> :
                 route.path === '/admin/finance/payments' ? <PaymentsPage /> :
                 route.path === '/admin/finance/promotions' ? <PromotionsPage /> :
                 route.path === '/admin/reviews' ? <ReviewsPage /> :
+                route.path === '/admin/media' ? <MediaPage /> :
+                route.path === '/admin/sms-assistant' ? <SmsAssistantPage /> :
                 route.path === '/admin/configuration/additional-fields' ? <AdditionalFieldsPage /> :
                 route.path === '/admin/notifications/messages' ? <MessagesPage /> :
                 route.path === '/admin/notifications/templates' ? <TemplatesPage /> :
@@ -134,11 +148,15 @@ function App() {
               } 
             />
           ))}
+          <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
+          <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
           <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
         </Route>
         <Route path="/book/*" element={<PublicBookingPage />} />
         <Route path="/book" element={<PublicBookingPage />} />
         <Route path="/booking" element={<PublicBookingPage />} />
+        <Route path="/public/upload" element={<PublicUploadPage />} />
+        <Route path="/book/upload" element={<PublicUploadPage />} />
         <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
         <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
         <Route path="/" element={<Navigate to="/admin" replace />} />
