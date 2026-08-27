@@ -29,13 +29,17 @@ async def start_outbox_worker():
     
     while _worker_running:
         try:
-            await process_pending_outbox_events()
+            from ..core.telemetry import tracer
+            with tracer.start_as_current_span("process_pending_outbox_events"):
+                await process_pending_outbox_events()
         except Exception as e:
             logger.error(f"Error in outbox processing loop: {str(e)}\n{traceback.format_exc()}")
             
         try:
-            from .sms.outbox_worker import process_pending_sms_outbound_jobs
-            await process_pending_sms_outbound_jobs()
+            from ..core.telemetry import tracer
+            with tracer.start_as_current_span("process_pending_sms_outbound_jobs"):
+                from .sms.outbox_worker import process_pending_sms_outbound_jobs
+                await process_pending_sms_outbound_jobs()
         except Exception as e:
             logger.error(f"Error in SMS outbound processing loop: {str(e)}\n{traceback.format_exc()}")
         

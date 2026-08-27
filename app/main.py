@@ -68,20 +68,7 @@ def setup_logging() -> None:
 setup_logging()
 
 # --- OpenTelemetry setup ---
-otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-telemetry_disabled = os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"1", "true", "yes"}
-provider = TracerProvider()
-if telemetry_disabled:
-    pass
-elif otlp_endpoint:
-    try:
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint)))
-    except Exception:
-        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-else:
-    provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-trace.set_tracer_provider(provider)
+from .core.telemetry import init_telemetry, telemetry_disabled
 
 
 # --- Import routers ---
@@ -185,10 +172,26 @@ app = FastAPI(
     servers=servers
 )
 
+# Initialize OpenTelemetry instrumentation
+init_telemetry(app)
+
 # Configure SlowAPI limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(PublicRouteRateLimitMiddleware)
+
+
+@app.middleware("http")
+async def add_correlation_id_header(request, call_next):
+    current_span = trace.get_current_span()
+    trace_id = "00000000000000000000000000000000"
+    if current_span and current_span.get_span_context().is_valid:
+        trace_id = f"{current_span.get_span_context().trace_id:032x}"
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = trace_id
+    response.headers["X-Trace-ID"] = trace_id
+    return response
+
 
 
 def add_cors_headers(request, response: JSONResponse) -> JSONResponse:
@@ -283,9 +286,6 @@ async def global_exception_handler(request, exc: Exception):
     )
     return add_cors_headers(request, response)
 
-
-if not telemetry_disabled:
-    FastAPIInstrumentor.instrument_app(app)
 
 # Configure CORS
 origins = [o.strip() for o in settings.FRONTEND_ORIGINS.split(",") if o.strip()]

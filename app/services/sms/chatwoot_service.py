@@ -15,6 +15,12 @@ from .transports.base import normalize_sms_destination
 
 logger = logging.getLogger(__name__)
 
+try:
+    from ...core.telemetry import record_webhook_event
+except ImportError:
+    def record_webhook_event(status: str) -> None:
+        pass
+
 async def send_chatwoot_message(
     db: Session,
     conversation: SmsConversation,
@@ -83,6 +89,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
 
     if not binding:
         logger.warning(f"Chatwoot webhook rejected: binding not found or disabled for chatwoot_inbox_id={chatwoot_inbox_id}")
+        record_webhook_event("rejected")
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
 
     # 3. Validate authenticity
@@ -90,6 +97,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
     binding_secret = binding.webhook_secret
     if not token or not binding_secret or not secrets.compare_digest(token, binding_secret):
         logger.warning(f"Chatwoot webhook authentication failed for binding {binding.id}")
+        record_webhook_event("rejected")
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
 
     # 4. Enforce Idempotency using external Chatwoot message ID
@@ -99,6 +107,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
 
     if existing_message:
         logger.info(f"Duplicate Chatwoot message detected and deduplicated: {chatwoot_msg_id}")
+        record_webhook_event("duplicate")
         return {
             "status": "success",
             "duplicate": True,
@@ -127,6 +136,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
                 "Ignoring internal Chatwoot outbound echo for SmsMessage %s",
                 internal_outbound.id,
             )
+            record_webhook_event("duplicate")
             return {
                 "status": "success",
                 "duplicate": True,
@@ -250,6 +260,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
             ai_job_enqueued = False
 
         db.commit()
+        record_webhook_event("accepted")
         return {
             "status": "success",
             "duplicate": False,
@@ -297,6 +308,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         db.add(takeover_event)
         
         db.commit()
+        record_webhook_event("accepted")
         return {
             "status": "success",
             "duplicate": False,
