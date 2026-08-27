@@ -32,6 +32,7 @@ def setup_chatwoot_data(db_session):
         chatwoot_inbox_id=45,
         chatwoot_base_url="https://app.chatwoot.com",
         chatwoot_api_token="my-secret-token",
+        webhook_secret="my-webhook-secret",
         is_enabled=True
     )
     db_session.add(binding)
@@ -60,7 +61,7 @@ def test_inbound_idempotency(db_session, setup_chatwoot_data):
         }
     }
     
-    result = process_chatwoot_webhook(db_session, payload, token="my-secret-token")
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
     assert result["status"] == "success"
     assert result["duplicate"] is False
     assert result["conversation_id"] is not None
@@ -73,7 +74,7 @@ def test_inbound_idempotency(db_session, setup_chatwoot_data):
     assert msg.author_type == "customer"
 
     # Send the exact same webhook again
-    result2 = process_chatwoot_webhook(db_session, payload, token="my-secret-token")
+    result2 = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
     assert result2["status"] == "success"
     assert result2["duplicate"] is True
     assert result2["message_id"] == msg.id
@@ -101,6 +102,7 @@ def test_provider_inbox_isolation(db_session, setup_chatwoot_data):
         chatwoot_inbox_id=46,
         chatwoot_base_url="https://app.chatwoot.com",
         chatwoot_api_token="another-secret-token",
+        webhook_secret="another-webhook-secret",
         is_enabled=True
     )
     db_session.add(binding2)
@@ -124,10 +126,10 @@ def test_provider_inbox_isolation(db_session, setup_chatwoot_data):
     # Verify invalid token rejected
     with pytest.raises(Exception) as exc_info:
         process_chatwoot_webhook(db_session, payload, token="wrong-token")
-    assert "401" in str(exc_info.value) or "API token" in str(exc_info.value)
+    assert "401" in str(exc_info.value) or "webhook secret" in str(exc_info.value)
 
     # Process with correct token
-    result = process_chatwoot_webhook(db_session, payload, token="my-secret-token")
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
     assert result["status"] == "success"
 
     # Verify message is created for provider 1, but not provider 2
@@ -241,7 +243,7 @@ def test_webhook_loops_prevention_and_staff_takeover(db_session, setup_chatwoot_
         }
     }
 
-    result = process_chatwoot_webhook(db_session, payload_loop, token="my-secret-token")
+    result = process_chatwoot_webhook(db_session, payload_loop, token="my-webhook-secret")
     assert result["status"] == "success"
     assert result["duplicate"] is True # Webhook loop prevented
 
@@ -274,7 +276,7 @@ def test_webhook_loops_prevention_and_staff_takeover(db_session, setup_chatwoot_
         }
     }
 
-    result2 = process_chatwoot_webhook(db_session, payload_staff, token="my-secret-token")
+    result2 = process_chatwoot_webhook(db_session, payload_staff, token="my-webhook-secret")
     assert result2["status"] == "success"
     assert result2["duplicate"] is False
     assert result2["state"] == "taken-over"
@@ -342,7 +344,7 @@ def test_internal_outbound_echo_before_remote_message_id_does_not_take_over(
         "conversation": {"id": 500, "contact": {"id": 89}},
     }
 
-    result = process_chatwoot_webhook(db_session, payload, token="my-secret-token")
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
 
     assert result["status"] == "success"
     assert result["duplicate"] is True
@@ -594,3 +596,110 @@ def test_outbox_worker_retry_on_exception(db_session, setup_chatwoot_data):
         assert job.status == "PENDING"
         assert job.retry_count == 1
         assert msg.status == "queued"
+
+def test_webhook_authentication_regression_cases(db_session, setup_chatwoot_data):
+    """Regression tests for webhook secret authentication, loop prevention, and takeover."""
+    from fastapi import HTTPException
+    data = setup_chatwoot_data
+    
+    # Payload for a new inbound message
+    payload = {
+        "id": 801,
+        "content": "Testing webhook secrets.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {
+            "id": 500,
+            "contact": {
+                "id": 89,
+                "phone_number": "+61400000000"
+            }
+        }
+    }
+    
+    # 1. Valid dedicated webhook secret accepted
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
+    assert result["status"] == "success"
+    assert result["duplicate"] is False
+    
+    # 2. API token rejected as webhook secret
+    payload["id"] = 802
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(db_session, payload, token="my-secret-token")
+    assert exc_info.value.status_code == 401
+    assert "webhook secret" in exc_info.value.detail or "Invalid" in exc_info.value.detail
+
+    # 3. Invalid secret rejected
+    payload["id"] = 803
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(db_session, payload, token="invalid-secret-key")
+    assert exc_info.value.status_code == 401
+    assert "webhook secret" in exc_info.value.detail or "Invalid" in exc_info.value.detail
+
+    # Set up conversation for loop and takeover cases
+    conversation = db_session.query(SmsConversation).filter(
+        SmsConversation.chatwoot_conversation_id == 500
+    ).first()
+    assert conversation is not None
+    conversation.state = "auto-reply"
+    db_session.commit()
+
+    # 4. FastAPI's own outbound Chatwoot echo does not trigger takeover
+    # Create the internal outbound message with the client_request_id (source_id)
+    outbound = SmsMessage(
+        tenant_id=data["tenant"].id,
+        provider_id=data["provider"].id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="FastAPI reply.",
+        direction="outbound",
+        author_type="ai",
+        status="sending",
+        client_request_id="fastapi-source-id-takeover-test",
+    )
+    db_session.add(outbound)
+    db_session.commit()
+
+    payload_echo = {
+        "id": 804,
+        "source_id": "fastapi-source-id-takeover-test",
+        "content": "FastAPI reply.",
+        "message_type": "outgoing",
+        "inbox": {"id": 45},
+        "conversation": {"id": 500, "contact": {"id": 89}},
+    }
+    
+    result_echo = process_chatwoot_webhook(db_session, payload_echo, token="my-webhook-secret")
+    assert result_echo["status"] == "success"
+    assert result_echo["duplicate"] is True
+    assert result_echo["reason"] == "internal_outbound_echo"
+    
+    db_session.refresh(conversation)
+    assert conversation.state == "auto-reply"  # State remains auto-reply (no takeover)
+
+    # 5. Real staff outgoing message still triggers takeover
+    ai_job = SmsAiJob(
+        conversation_id=conversation.id,
+        customer_turn_ref="turn-test",
+        status="PENDING"
+    )
+    db_session.add(ai_job)
+    db_session.commit()
+
+    payload_staff = {
+        "id": 805,
+        "content": "Hello, I am a human agent.",
+        "message_type": "outgoing",
+        "inbox": {"id": 45},
+        "conversation": {"id": 500, "contact": {"id": 89}},
+    }
+    
+    result_staff = process_chatwoot_webhook(db_session, payload_staff, token="my-webhook-secret")
+    assert result_staff["status"] == "success"
+    assert result_staff["duplicate"] is False
+    assert result_staff["state"] == "taken-over"
+    
+    db_session.refresh(conversation)
+    assert conversation.state == "taken-over"
+    db_session.refresh(ai_job)
+    assert ai_job.status == "CANCELLED"

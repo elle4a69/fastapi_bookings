@@ -26,6 +26,8 @@ class SmsChatwootBindingResponse(SmsChatwootBindingBase):
     tenant_id: int
     provider_id: int
     chatwoot_api_token: str = "********"
+    webhook_secret: str = "********"
+    webhook_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

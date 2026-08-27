@@ -31,6 +31,7 @@ class SmsChatwootBinding(Base):
     chatwoot_inbox_id = Column(Integer, nullable=False, index=True)
     chatwoot_base_url = Column(String, nullable=False)
     _chatwoot_api_token = Column("chatwoot_api_token", String, nullable=False)
+    _webhook_secret = Column("webhook_secret", String, nullable=True)
     is_enabled = Column(Boolean, default=True, nullable=False)
     channel_metadata = Column(JSON, nullable=True)
 
@@ -59,6 +60,29 @@ class SmsChatwootBinding(Base):
             self._chatwoot_api_token = _chatwoot_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
         except Exception:
             self._chatwoot_api_token = value
+
+    @property
+    def webhook_secret(self) -> str:
+        """Decrypts and returns the Chatwoot webhook secret."""
+        if not self._webhook_secret:
+            return ""
+        try:
+            return _chatwoot_token_cipher().decrypt(self._webhook_secret.encode("utf-8")).decode("utf-8")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to decrypt webhook_secret for SmsChatwootBinding {self.id}: {e}")
+            return ""
+
+    @webhook_secret.setter
+    def webhook_secret(self, value: str):
+        """Encrypts the Chatwoot webhook secret before storing it in the database."""
+        if not value:
+            self._webhook_secret = ""
+            return
+        try:
+            self._webhook_secret = _chatwoot_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
+        except Exception:
+            self._webhook_secret = value
 
     # Relationships
     tenant = relationship("Tenant")

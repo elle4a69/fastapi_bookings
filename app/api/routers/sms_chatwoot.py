@@ -15,8 +15,15 @@ from ...schemas.sms_chatwoot import (
 
 router = APIRouter(prefix="/sms/chatwoot", tags=["sms-chatwoot"])
 
-def to_response(binding: SmsChatwootBinding) -> SmsChatwootBindingResponse:
+def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) -> SmsChatwootBindingResponse:
     """Helper to convert SmsChatwootBinding to Response schema, masking the API token."""
+    base = "http://localhost:8000"
+    if request:
+        base = str(request.base_url).rstrip("/")
+        
+    secret = binding.webhook_secret
+    webhook_url = f"{base}/api/sms/chatwoot/webhook?token={secret}" if secret else None
+
     return SmsChatwootBindingResponse(
         id=binding.id,
         tenant_id=binding.tenant_id,
@@ -25,6 +32,8 @@ def to_response(binding: SmsChatwootBinding) -> SmsChatwootBindingResponse:
         chatwoot_inbox_id=binding.chatwoot_inbox_id,
         chatwoot_base_url=binding.chatwoot_base_url,
         chatwoot_api_token="********",
+        webhook_secret="********",
+        webhook_url=webhook_url,
         is_enabled=binding.is_enabled,
         channel_metadata=binding.channel_metadata,
         created_at=binding.created_at,
@@ -57,11 +66,14 @@ async def chatwoot_webhook(
 @router.post("/bindings", response_model=SmsChatwootBindingResponse, status_code=status.HTTP_201_CREATED)
 async def create_chatwoot_binding(
     payload: SmsChatwootBindingCreate,
+    request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
     """Create a new Chatwoot binding."""
+    import secrets
+    webhook_secret = secrets.token_hex(32)
     binding = SmsChatwootBinding(
         tenant_id=tenant.id,
         provider_id=payload.provider_id,
@@ -69,16 +81,18 @@ async def create_chatwoot_binding(
         chatwoot_inbox_id=payload.chatwoot_inbox_id,
         chatwoot_base_url=payload.chatwoot_base_url,
         chatwoot_api_token=payload.chatwoot_api_token,
+        webhook_secret=webhook_secret,
         is_enabled=payload.is_enabled,
         channel_metadata=payload.channel_metadata,
     )
     db.add(binding)
     db.commit()
     db.refresh(binding)
-    return to_response(binding)
+    return to_response(binding, request)
 
 @router.get("/bindings", response_model=List[SmsChatwootBindingResponse])
 async def list_chatwoot_bindings(
+    request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -87,11 +101,12 @@ async def list_chatwoot_bindings(
     bindings = db.query(SmsChatwootBinding).filter(
         SmsChatwootBinding.tenant_id == tenant.id
     ).all()
-    return [to_response(b) for b in bindings]
+    return [to_response(b, request) for b in bindings]
 
 @router.get("/bindings/{binding_id}", response_model=SmsChatwootBindingResponse)
 async def get_chatwoot_binding(
     binding_id: int,
+    request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -103,12 +118,13 @@ async def get_chatwoot_binding(
     ).first()
     if not binding:
         raise HTTPException(status_code=404, detail="Chatwoot binding not found.")
-    return to_response(binding)
+    return to_response(binding, request)
 
 @router.put("/bindings/{binding_id}", response_model=SmsChatwootBindingResponse)
 async def update_chatwoot_binding(
     binding_id: int,
     payload: SmsChatwootBindingUpdate,
+    request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -133,7 +149,30 @@ async def update_chatwoot_binding(
     binding.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(binding)
-    return to_response(binding)
+    return to_response(binding, request)
+
+@router.post("/bindings/{binding_id}/rotate-secret", response_model=SmsChatwootBindingResponse)
+async def rotate_chatwoot_webhook_secret(
+    binding_id: int,
+    request: Request,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Rotate the webhook secret for a specific Chatwoot binding."""
+    binding = db.query(SmsChatwootBinding).filter(
+        SmsChatwootBinding.id == binding_id,
+        SmsChatwootBinding.tenant_id == tenant.id
+    ).first()
+    if not binding:
+        raise HTTPException(status_code=404, detail="Chatwoot binding not found.")
+
+    import secrets
+    binding.webhook_secret = secrets.token_hex(32)
+    binding.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(binding)
+    return to_response(binding, request)
 
 @router.delete("/bindings/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chatwoot_binding(

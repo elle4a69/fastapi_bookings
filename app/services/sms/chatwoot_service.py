@@ -86,10 +86,11 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
 
     # 3. Validate authenticity
-    decrypted_token = binding.chatwoot_api_token
-    if not token or token != decrypted_token:
+    import secrets
+    binding_secret = binding.webhook_secret
+    if not token or not binding_secret or not secrets.compare_digest(token, binding_secret):
         logger.warning(f"Chatwoot webhook authentication failed for binding {binding.id}")
-        raise HTTPException(status_code=401, detail="Invalid API token.")
+        raise HTTPException(status_code=401, detail="Invalid webhook secret.")
 
     # 4. Enforce Idempotency using external Chatwoot message ID
     existing_message = db.query(SmsMessage).filter(

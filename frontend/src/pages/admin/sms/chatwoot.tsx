@@ -19,6 +19,8 @@ interface SmsChatwootBinding {
   chatwoot_inbox_id: number;
   chatwoot_base_url: string;
   chatwoot_api_token: string;
+  webhook_secret?: string;
+  webhook_url?: string;
   is_enabled: boolean;
 }
 
@@ -188,10 +190,47 @@ export default function SmsChatwootTab() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
+                          onClick={() => {
+                            if (bind.webhook_url) {
+                              navigator.clipboard.writeText(bind.webhook_url);
+                              toast.success("Webhook Callback URL copied to clipboard!");
+                            } else {
+                              toast.error("Webhook URL not available.");
+                            }
+                          }}
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10"
+                          title="Copy Webhook Callback URL"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          onClick={async () => {
+                            if (!confirm("Are you sure you want to rotate the webhook secret? This will invalidate the previous webhook URL in Chatwoot.")) {
+                              return;
+                            }
+                            try {
+                              await apiClient.post(`/api/admin/sms/chatwoot/bindings/${bind.id}/rotate-secret`, {});
+                              toast.success("Webhook secret rotated successfully!");
+                              loadData();
+                            } catch (err: any) {
+                              toast.error(err.message || "Failed to rotate secret.");
+                            }
+                          }}
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                          title="Rotate Webhook Secret"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
                           onClick={() => handleOpenEdit(bind)}
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
+                          title="Edit Binding"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
@@ -200,6 +239,7 @@ export default function SmsChatwootTab() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Delete Binding"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
