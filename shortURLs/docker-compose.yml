@@ -1,0 +1,49 @@
+services:
+  web:
+    build: ./src
+    command: |
+      bash -c "
+      timeout=30
+      while ! nc -z db 27017; do
+        sleep 1
+        timeout=$$((timeout - 1))
+        if [ $$timeout -le 0 ]; then
+          echo 'MongoDB did not become ready in time.'
+          exit 1
+        fi
+      done
+      uvicorn app.main:app --workers 1 --host 0.0.0.0 --port 8000 --no-access-log
+      "
+    volumes:
+      - ./src/:/usr/src/app/
+    ports:
+      - "8002:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: mongo:7.0.16-jammy
+    volumes:
+      - mongo_data:/var/lib/mongo
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  mongo_data:

@@ -1,0 +1,10 @@
+{
+  "long_url_duplicates": [],
+  "short_url_duplicates": [],
+  "actions": {
+    "long_url_groups": 0,
+    "short_url_groups": 0,
+    "long_url_deleted": 0,
+    "short_url_reassigned": 0
+  }
+}
