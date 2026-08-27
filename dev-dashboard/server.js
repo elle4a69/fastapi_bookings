@@ -101,25 +101,32 @@ function buildSpawnEnv(extra = {}) {
   return env;
 }
 
-// Clear port using exact netstat pattern matching and LISTENING filter
+// Clear port using exact JS-parsed netstat matching and LISTENING filter
 async function clearPort(port) {
   if (!port) return;
   try {
-    const { stdout } = await execAsync(`netstat -ano | findstr ":${port} " | findstr "LISTENING"`);
-    const pids = new Set();
-    for (const line of stdout.split('\n')) {
+    const { stdout } = await execAsync('netstat -ano');
+    const lines = stdout.split('\n').filter(Boolean);
+    let killed = false;
+    for (const line of lines) {
       const parts = line.trim().split(/\s+/);
-      const pid = parts[parts.length - 1];
-      if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
-    }
-    for (const pid of pids) {
-      try {
+      const localAddr = parts[1] || '';
+      const state = parts[parts.length - 2] || '';
+      const pidStr = parts[parts.length - 1];
+      const pid = parseInt(pidStr, 10);
+      
+      if (pid && pid !== process.pid && state === 'LISTENING' && (localAddr.endsWith(`:${port}`) || localAddr.endsWith(`[::]:${port}`))) {
         console.log(`[Dashboard] Forcefully killing zombie process PID ${pid} listening on port ${port}`);
-        await execAsync(`taskkill /PID ${pid} /F`);
-      } catch {}
+        try {
+          await execAsync(`taskkill /PID ${pid} /F`);
+          killed = true;
+        } catch {}
+      }
     }
-    if (pids.size > 0) await sleep(800); // Give the OS time to free the socket
-  } catch {}
+    if (killed) await sleep(800); // Give the OS time to free the socket
+  } catch (err) {
+    console.error('Error during clearPort:', err);
+  }
 }
 
 // Helper to check if port is active
@@ -198,7 +205,7 @@ async function getModuleRuntime(mod) {
   const isProcessAlive = tracked && tracked.pid ? isPidAlive(tracked.pid) : false;
   
   const portUp = await checkTcpPort(mod.port);
-  const healthy = await checkHealth(mod.health_url);
+  const healthy = portUp && mod.health_url ? await checkHealth(mod.health_url) : false;
   
   const running = isProcessAlive || portUp || healthy;
   const logError = checkLogErrors(mod.name);
@@ -228,18 +235,24 @@ async function getModuleRuntime(mod) {
   };
 }
 
-// Get status of all modules
+// Get status of all modules in parallel with deduplication
+let statusRefreshInFlight = null;
 async function getFullStatus() {
-  loadConfig();
-  const statuses = [];
-  for (const mod of modulesConfig.modules) {
-    const rt = await getModuleRuntime(mod);
-    statuses.push(rt);
+  if (statusRefreshInFlight) return statusRefreshInFlight;
+  statusRefreshInFlight = (async () => {
+    loadConfig();
+    const promises = (modulesConfig.modules || []).map(mod => getModuleRuntime(mod));
+    const statuses = await Promise.all(promises);
+    return {
+      generatedAt: new Date().toISOString(),
+      modules: statuses
+    };
+  })();
+  try {
+    return await statusRefreshInFlight;
+  } finally {
+    statusRefreshInFlight = null;
   }
-  return {
-    generatedAt: new Date().toISOString(),
-    modules: statuses
-  };
 }
 
 // Spawn process using hidden PowerShell -EncodedCommand wrapper

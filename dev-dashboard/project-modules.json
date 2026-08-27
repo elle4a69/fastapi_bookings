@@ -10,6 +10,33 @@
       "health_url": "http://127.0.0.1:8000/health"
     },
     {
+      "name": "bookings-ai-agent",
+      "label": "Bookings AI Agent Backend",
+      "description": "FastAPI microservice executing autonomous chat responder, SMS gateway, Locanto autoreply bridge, and booking webhooks.",
+      "working_dir": "F:\\Projects\\bookings_ai_agent",
+      "command": "cmd.exe /c start-server.bat",
+      "port": 5172,
+      "health_url": "http://localhost:5172/"
+    },
+    {
+      "name": "bookings-ai-agent-frontend",
+      "label": "Bookings AI Console UI",
+      "description": "React dashboard for managing AI settings, onboarding, message approvals, simulation bootcamps, and the public booking form.",
+      "working_dir": "F:\\Projects\\bookings_ai_agent\\frontend",
+      "command": "npm run dev",
+      "port": 5173,
+      "health_url": "http://localhost:5173/"
+    },
+    {
+      "name": "locanto-autoreply",
+      "label": "Locanto Autoreply Engine",
+      "description": "Playwright-powered browser automation that scans the Locanto inbox every 3 minutes and sends AI-generated replies to buyer enquiries.",
+      "working_dir": "F:\\Locanto",
+      "command": "node server.js",
+      "port": 3033,
+      "health_url": "http://localhost:3033/api/ai/messages"
+    },
+    {
       "name": "bookings-mapbox-frontend",
       "label": "Bookings UI (Mapbox)",
       "description": "Interactive map dashboard built with React and Mapbox-GL for booking visualization and location management.",
@@ -19,22 +46,48 @@
       "health_url": "http://localhost:5180/"
     },
     {
-      "name": "bookings-ai-agent",
-      "label": "Bookings AI Agent Backend",
-      "description": "FastAPI microservice executing autonomous chat responder pipelines, agent bootcamps, and SMS simulation flows.",
+      "name": "ngrok-ai-backend-tunnel",
+      "label": "Ngrok — AI Backend Tunnel",
+      "description": "Public HTTPS tunnel exposing the Bookings AI Agent backend (port 5172) via ngrok for Mobile Message webhooks and external access.",
       "working_dir": "F:\\Projects\\bookings_ai_agent",
-      "command": "cmd.exe /c start.bat",
-      "port": 5505,
-      "health_url": "http://localhost:5505/docs"
+      "command": "ngrok http 5172 --authtoken 2tJLlya0ftTPBgGFIovkpaD8L4o_bLTgxubHoYsKgr5Dz7k7 --url sunbird-premium-titmouse.ngrok-free.app",
+      "port": 4040,
+      "health_url": "http://127.0.0.1:4040/api/tunnels",
+      "public_url": "https://sunbird-premium-titmouse.ngrok-free.app",
+      "enabled": false
     },
     {
-      "name": "bookings-ai-agent-frontend",
-      "label": "Bookings AI Console UI",
-      "description": "React-based dashboard UI for onboarding interviews, message drafts approvals, and simulation boot camps.",
+      "name": "ngrok-frontend-tunnel",
+      "label": "Ngrok — Frontend Tunnel",
+      "description": "Public HTTPS tunnel exposing the Bookings React UI (port 5173) including the embeddable public booking form at /book.",
       "working_dir": "F:\\Projects\\bookings_ai_agent\\frontend",
-      "command": "npm run dev",
-      "port": 5173,
-      "health_url": "http://localhost:5173/"
+      "command": "ngrok http 5173 --authtoken 33pnxuXvPkLDdt1roCj7ByWmJXx_4WMvVztZ59wmwYNMKvGLE --url reediest-jayce-heterodoxly.ngrok-free.dev",
+      "port": 4041,
+      "health_url": "http://127.0.0.1:4041/api/tunnels",
+      "public_url": "https://reediest-jayce-heterodoxly.ngrok-free.dev",
+      "enabled": false
+    },
+    {
+      "name": "ngrok-locanto-tunnel",
+      "label": "Ngrok — Locanto Tunnel",
+      "description": "Public HTTPS tunnel exposing the Locanto Autoreply Engine (port 3033).",
+      "working_dir": "F:\\Locanto",
+      "command": "ngrok http 3033 --authtoken 3GSxTzSbxu9UKH4FjvVBHswzT2w_7MQUBcSjtVypoQomWNqUN --url whooping-gloating-lullaby.ngrok-free.dev",
+      "port": 4042,
+      "health_url": "http://127.0.0.1:4042/api/tunnels",
+      "public_url": "https://whooping-gloating-lullaby.ngrok-free.dev",
+      "enabled": false
+    },
+    {
+      "name": "ngrok-devdash-tunnel",
+      "label": "Ngrok — Dev Dashboard Tunnel",
+      "description": "Public HTTPS tunnel exposing this Bookings Dev Dashboard (port 2310).",
+      "working_dir": "F:\\Projects\\fastapi_bookings\\dev-dashboard",
+      "command": "ngrok http 2310 --authtoken 3GSykh1A1BLY7dbfUmH53zKzEw3_4hjEWEHbkA1Z7qtLU18ge --url prize-diner-thirteen.ngrok-free.dev",
+      "port": 4044,
+      "health_url": "http://127.0.0.1:4044/api/tunnels",
+      "public_url": "https://prize-diner-thirteen.ngrok-free.dev",
+      "enabled": false
     },
     {
       "name": "chatwoot-support-desk",
@@ -47,20 +100,11 @@
       "cloud_url": "https://chatwoot-web-208926050296.us-central1.run.app"
     },
     {
-      "name": "signoz-apm",
-      "label": "SigNoz APM",
-      "description": "Application Performance Monitoring platform and OpenTelemetry collector UI for tracking booking flow telemetry.",
-      "working_dir": "F:\\Projects\\fastapi_bookings\\signoz\\frontend",
-      "command": "pnpm dev",
-      "port": 3301,
-      "health_url": "http://localhost:3301/"
-    },
-    {
       "name": "anti-gravity-engine",
       "label": "Anti-Gravity Engine",
       "description": "Orchestration core executing Multi-Agent projects and tasks based on SQLite dependency chains.",
       "working_dir": "E:\\Projects\\King of Kings",
-      "command": "py -u anti_gravity_system/run_demo.py",
+      "command": "py -u anti_gravity_system/cli.py run --continuous",
       "port": null,
       "health_url": null
     }
