@@ -1,7 +1,25 @@
 from datetime import datetime, timezone
+import base64
+import hashlib
+
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from ..db.database import Base
+from ..core.config import settings
+
+
+def _chatwoot_token_cipher():
+    """Build a stable cipher from the application's configured key.
+
+    The previous implementation read ``os.getenv`` directly. That bypassed
+    Pydantic's ``.env`` loading and meant a manually launched server could use
+    a different key from the application that saved the binding.
+    """
+    from cryptography.fernet import Fernet
+
+    secret = settings.PUBLIC_API_KEY or settings.SECRET_KEY or "fallback-default-secret-key-change-me"
+    key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
 
 class SmsChatwootBinding(Base):
     __tablename__ = "sms_chatwoot_bindings"
@@ -25,17 +43,7 @@ class SmsChatwootBinding(Base):
         if not self._chatwoot_api_token:
             return ""
         try:
-            import os
-            import base64
-            import hashlib
-            from cryptography.fernet import Fernet
-            
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-            key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-            fernet_key = base64.urlsafe_b64encode(key_bytes)
-            f = Fernet(fernet_key)
-            
-            return f.decrypt(self._chatwoot_api_token.encode("utf-8")).decode("utf-8")
+            return _chatwoot_token_cipher().decrypt(self._chatwoot_api_token.encode("utf-8")).decode("utf-8")
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Failed to decrypt chatwoot_api_token for SmsChatwootBinding {self.id}: {e}")
@@ -48,17 +56,7 @@ class SmsChatwootBinding(Base):
             self._chatwoot_api_token = ""
             return
         try:
-            import os
-            import base64
-            import hashlib
-            from cryptography.fernet import Fernet
-            
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-            key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-            fernet_key = base64.urlsafe_b64encode(key_bytes)
-            f = Fernet(fernet_key)
-            
-            self._chatwoot_api_token = f.encrypt(value.encode("utf-8")).decode("utf-8")
+            self._chatwoot_api_token = _chatwoot_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
         except Exception:
             self._chatwoot_api_token = value
 
