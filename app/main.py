@@ -267,6 +267,68 @@ async def validation_exception_handler(request, exc: RequestValidationError):
     return add_cors_headers(request, response)
 
 
+from sqlalchemy.exc import DataError, DBAPIError
+
+
+@app.exception_handler(OverflowError)
+async def overflow_error_handler(request, exc: OverflowError):
+    current_span = trace.get_current_span()
+    trace_id = f"{current_span.get_span_context().trace_id:032x}" if current_span and current_span.get_span_context().is_valid else ""
+    response = JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "ok": False,
+            "error": {
+                "code": "NOT_FOUND",
+                "message": "Resource not found.",
+                "details": {},
+                "request_id": trace_id
+            }
+        }
+    )
+    return add_cors_headers(request, response)
+
+
+@app.exception_handler(DataError)
+async def data_error_handler(request, exc: DataError):
+    current_span = trace.get_current_span()
+    trace_id = f"{current_span.get_span_context().trace_id:032x}" if current_span and current_span.get_span_context().is_valid else ""
+    response = JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={
+            "ok": False,
+            "error": {
+                "code": "NOT_FOUND",
+                "message": "Resource not found.",
+                "details": {},
+                "request_id": trace_id
+            }
+        }
+    )
+    return add_cors_headers(request, response)
+
+
+@app.exception_handler(DBAPIError)
+async def dbapi_error_handler(request, exc: DBAPIError):
+    if isinstance(exc.orig, (OverflowError, ValueError)):
+        current_span = trace.get_current_span()
+        trace_id = f"{current_span.get_span_context().trace_id:032x}" if current_span and current_span.get_span_context().is_valid else ""
+        response = JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "ok": False,
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Resource not found.",
+                    "details": {},
+                    "request_id": trace_id
+                }
+            }
+        )
+        return add_cors_headers(request, response)
+    return await global_exception_handler(request, exc)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
     logging.exception(f"Unhandled exception occurred: {str(exc)}")

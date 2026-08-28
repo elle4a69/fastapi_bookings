@@ -1,9 +1,17 @@
-"""Dependency injection functions for FastAPI routes."""
+from typing import Annotated, Optional
 
-from typing import Optional
-
-from fastapi import Depends, Header, HTTPException, status, Request
+from fastapi import Depends, Header, HTTPException, Path, status, Request
 from sqlalchemy.orm import Session
+
+# Maximum positive signed 64-bit integer supported by SQLite/PostgreSQL BIGINT
+MAX_DATABASE_ID: int = 9_223_372_036_854_775_807
+MAX_INT32_ID: int = 2_147_483_647
+
+# Shared bounded database identifier path parameter
+DatabaseId = Annotated[
+    int,
+    Path(ge=1, le=MAX_DATABASE_ID, description="Unique positive database identifier"),
+]
 
 from ..core.security import decode_access_token
 from ..db.database import get_db
