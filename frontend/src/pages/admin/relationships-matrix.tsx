@@ -326,9 +326,7 @@ export default function RelationshipsMatrixPage() {
     setUpdatingKeys(prev => new Set(prev).add(key));
 
     try {
-      await apiClient.put(`/api/admin/${plural}/${item.id}`, { is_visible: newStatus }).catch(async () => {
-        return await apiClient.patch(`/api/admin/${plural}/${item.id}`, { is_visible: newStatus });
-      });
+      await apiClient.put(`/api/admin/${plural}/${item.id}`, { is_visible: newStatus });
 
       setData(prev => ({
         ...prev,
@@ -353,9 +351,7 @@ export default function RelationshipsMatrixPage() {
     setUpdatingKeys(prev => new Set(prev).add(key));
 
     try {
-      await apiClient.put(`/api/admin/${plural}/${item.id}`, { active: newStatus }).catch(async () => {
-        return await apiClient.patch(`/api/admin/${plural}/${item.id}`, { active: newStatus });
-      });
+      await apiClient.put(`/api/admin/${plural}/${item.id}`, { active: newStatus });
 
       setData(prev => ({
         ...prev,
@@ -512,9 +508,7 @@ export default function RelationshipsMatrixPage() {
     }
 
     try {
-      await apiClient.put(`/api/admin/${colDef.plural}/${item.id}`, payload).catch(async () => {
-        return await apiClient.patch(`/api/admin/${colDef.plural}/${item.id}`, payload);
-      });
+      await apiClient.put(`/api/admin/${colDef.plural}/${item.id}`, payload);
       setData(prev => ({
         ...prev,
         [col]: prev[col].map(i => normId(i.id) === normId(item.id) ? { ...i, ...payload } : i)
