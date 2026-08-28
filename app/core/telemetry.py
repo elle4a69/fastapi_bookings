@@ -627,7 +627,10 @@ def init_telemetry(app=None) -> None:
         )
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-        from opentelemetry.sdk._logs import LoggingHandler
+        try:
+            from opentelemetry.instrumentation.logging.handler import LoggingHandler
+        except ImportError:
+            from opentelemetry.sdk._logs import LoggingHandler
 
         l_exp = OTLPLogExporter(endpoint=f"{base}/v1/logs", timeout=3)
         _logger_provider = LoggerProvider(resource=resource)
