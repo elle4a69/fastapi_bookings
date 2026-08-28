@@ -374,3 +374,98 @@ def test_amend_booking_facade(db_session, setup_sms_test_data):
     db_session.refresh(booking)
     assert booking.start_time.replace(tzinfo=timezone.utc) == new_start_time
     assert booking.end_time.replace(tzinfo=timezone.utc) == new_start_time + timedelta(minutes=30)
+
+
+def test_list_conversation_messages_with_null_sms_account_id(client, db_session, setup_sms_test_data):
+    from app.core.security import create_access_token
+    tenant = setup_sms_test_data["tenant"]
+    admin = setup_sms_test_data["admin"]
+    provider = setup_sms_test_data["provider_a"]
+    token = create_access_token({"sub": str(admin.id)})
+    headers = {"X-Tenant": tenant.subdomain, "X-Token": token}
+
+    # 1. Create a conversation
+    conv = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        customer_address="61499999999",
+        state="active",
+        unread_count=1
+    )
+    db_session.add(conv)
+    db_session.commit()
+
+    # 2. Create message with sms_account_id = None (e.g. system message or raw inbound)
+    msg = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        sms_account_id=None,
+        conversation_id=conv.id,
+        body="Hello from system without direct account link",
+        direction="inbound",
+        author_type="customer",
+        status="received",
+        occurred_at=datetime.now(timezone.utc),
+        received_at=datetime.now(timezone.utc)
+    )
+    db_session.add(msg)
+    db_session.commit()
+
+    # 3. Query conversation messages
+    resp = client.get(f"/api/admin/sms/conversations/{conv.id}/messages", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == msg.id
+    assert data[0]["sms_account_id"] is None
+    assert data[0]["body"] == "Hello from system without direct account link"
+
+
+def test_list_outbound_jobs_route_precedence(client, db_session, setup_sms_test_data):
+    from app.core.security import create_access_token
+    tenant = setup_sms_test_data["tenant"]
+    admin = setup_sms_test_data["admin"]
+    account = setup_sms_test_data["account_a"]
+    provider = setup_sms_test_data["provider_a"]
+    token = create_access_token({"sub": str(admin.id)})
+    headers = {"X-Tenant": tenant.subdomain, "X-Token": token}
+
+    # Create message and job
+    conv = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        sms_account_id=account.id,
+        customer_address="61499999999",
+        state="active"
+    )
+    db_session.add(conv)
+    db_session.commit()
+
+    msg = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        sms_account_id=account.id,
+        conversation_id=conv.id,
+        body="Test message for job",
+        direction="outbound",
+        author_type="staff",
+        status="queued"
+    )
+    db_session.add(msg)
+    db_session.commit()
+
+    job = SmsOutboundJob(
+        message_id=msg.id,
+        sms_account_id=account.id,
+        status="PENDING",
+        retry_count=0
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    # Query /jobs route (must NOT return 422 int_parsing validation error)
+    resp = client.get("/api/admin/sms/conversations/jobs", headers=headers)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    data = resp.json()
+    assert isinstance(data, list)
+    assert any(j["id"] == job.id for j in data)

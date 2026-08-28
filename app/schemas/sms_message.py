@@ -10,7 +10,7 @@ class SmsMessageResponse(BaseModel):
     id: int
     tenant_id: int
     provider_id: int
-    sms_account_id: int
+    sms_account_id: Optional[int] = None
     conversation_id: int
     body: str
     direction: str

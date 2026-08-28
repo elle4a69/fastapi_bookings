@@ -56,6 +56,138 @@ async def list_conversations(
         ))
     return result
 
+@router.get("/jobs", response_model=List[dict])
+async def list_outbound_jobs(
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    # Fetch jobs that belong to the accounts of this tenant
+    jobs = db.query(SmsOutboundJob).join(
+        SmsAccount, SmsAccount.id == SmsOutboundJob.sms_account_id
+    ).filter(
+        SmsAccount.tenant_id == tenant.id
+    ).order_by(SmsOutboundJob.created_at.desc()).limit(50).all()
+    
+    return [
+        {
+            "id": job.id,
+            "message_id": job.message_id,
+            "sms_account_id": job.sms_account_id,
+            "status": job.status,
+            "retry_count": job.retry_count,
+            "error_log": job.error_log,
+            "created_at": job.created_at
+        }
+        for job in jobs
+    ]
+
+@router.post("/jobs/{job_id}/retry", status_code=status.HTTP_200_OK)
+async def retry_outbound_job(
+    job_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    job = db.query(SmsOutboundJob).join(
+        SmsAccount, SmsAccount.id == SmsOutboundJob.sms_account_id
+    ).filter(
+        SmsOutboundJob.id == job_id,
+        SmsAccount.tenant_id == tenant.id
+    ).first()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Outbound job not found.")
+        
+    job.status = "PENDING"
+    job.retry_count = 0
+    job.error_log = None
+    
+    # Also reset the message status to queued
+    message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
+    if message:
+        message.status = "queued"
+        
+    db.commit()
+    return {"status": "success", "detail": "Job marked for retry."}
+
+@router.post("/messages/{message_id}/approve", response_model=SmsMessageResponse)
+async def approve_draft_message(
+    message_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    # Retrieve message, checking tenant boundary
+    message = db.query(SmsMessage).filter(
+        SmsMessage.id == message_id,
+        SmsMessage.tenant_id == tenant.id
+    ).first()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Draft message not found.")
+        
+    if message.status != "draft":
+        # Already approved/processed; return current message (idempotency!)
+        return message
+
+    # Mark message as queued for outbound send
+    message.direction = "outbound"
+    message.status = "queued"
+    
+    # Create the SmsOutboundJob record transactionally
+    job = SmsOutboundJob(
+        message_id=message.id,
+        sms_account_id=message.sms_account_id,
+        status="PENDING",
+        retry_count=0,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.add(job)
+
+    # Log approval event
+    event = SmsConversationEvent(
+        conversation_id=message.conversation_id,
+        type="draft_approved",
+        meta={"message_id": message.id}
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(message)
+    
+    return message
+
+@router.post("/messages/{message_id}/discard", response_model=SmsMessageResponse)
+async def discard_draft_message(
+    message_id: int,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    message = db.query(SmsMessage).filter(
+        SmsMessage.id == message_id,
+        SmsMessage.tenant_id == tenant.id
+    ).first()
+    
+    if not message:
+        raise HTTPException(status_code=404, detail="Draft message not found.")
+        
+    if message.status != "draft":
+        raise HTTPException(status_code=400, detail="Only draft messages can be discarded.")
+
+    message.status = "discarded"
+    
+    event = SmsConversationEvent(
+        conversation_id=message.conversation_id,
+        type="draft_discarded",
+        meta={"message_id": message.id}
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(message)
+    
+    return message
+
 @router.get("/{conversation_id}", response_model=SmsConversationResponse)
 async def get_conversation(
     conversation_id: int,
@@ -234,137 +366,3 @@ async def restore_auto_reply(
     db.commit()
     
     return conv
-
-@router.post("/messages/{message_id}/approve", response_model=SmsMessageResponse)
-async def approve_draft_message(
-    message_id: int,
-    tenant: Tenant = Depends(get_current_tenant),
-    _admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    # Retrieve message, checking tenant boundary
-    message = db.query(SmsMessage).filter(
-        SmsMessage.id == message_id,
-        SmsMessage.tenant_id == tenant.id
-    ).first()
-    
-    if not message:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-        
-    if message.status != "draft":
-        # Already approved/processed; return current message (idempotency!)
-        # We also set a duplicate flag if needed, or simply return the message.
-        return message
-
-    # Mark message as queued for outbound send
-    message.direction = "outbound"
-    message.status = "queued"
-    
-    # Create the SmsOutboundJob record transactionally
-    job = SmsOutboundJob(
-        message_id=message.id,
-        sms_account_id=message.sms_account_id,
-        status="PENDING",
-        retry_count=0,
-        created_at=datetime.now(timezone.utc)
-    )
-    db.add(job)
-
-    # Log approval event
-    event = SmsConversationEvent(
-        conversation_id=message.conversation_id,
-        type="draft_approved",
-        meta={"message_id": message.id}
-    )
-    db.add(event)
-    db.commit()
-    db.refresh(message)
-    
-    return message
-
-@router.post("/messages/{message_id}/discard", response_model=SmsMessageResponse)
-async def discard_draft_message(
-    message_id: int,
-    tenant: Tenant = Depends(get_current_tenant),
-    _admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    message = db.query(SmsMessage).filter(
-        SmsMessage.id == message_id,
-        SmsMessage.tenant_id == tenant.id
-    ).first()
-    
-    if not message:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-        
-    if message.status != "draft":
-        raise HTTPException(status_code=400, detail="Only draft messages can be discarded.")
-
-    message.status = "discarded"
-    
-    event = SmsConversationEvent(
-        conversation_id=message.conversation_id,
-        type="draft_discarded",
-        meta={"message_id": message.id}
-    )
-    db.add(event)
-    db.commit()
-    db.refresh(message)
-    
-    return message
-
-
-@router.get("/jobs", response_model=List[dict])
-async def list_outbound_jobs(
-    tenant: Tenant = Depends(get_current_tenant),
-    _admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    # Fetch jobs that belong to the accounts of this tenant
-    jobs = db.query(SmsOutboundJob).join(
-        SmsAccount, SmsAccount.id == SmsOutboundJob.sms_account_id
-    ).filter(
-        SmsAccount.tenant_id == tenant.id
-    ).order_by(SmsOutboundJob.created_at.desc()).limit(50).all()
-    
-    return [
-        {
-            "id": job.id,
-            "message_id": job.message_id,
-            "sms_account_id": job.sms_account_id,
-            "status": job.status,
-            "retry_count": job.retry_count,
-            "error_log": job.error_log,
-            "created_at": job.created_at
-        }
-        for job in jobs
-    ]
-
-@router.post("/jobs/{job_id}/retry", status_code=status.HTTP_200_OK)
-async def retry_outbound_job(
-    job_id: int,
-    tenant: Tenant = Depends(get_current_tenant),
-    _admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    job = db.query(SmsOutboundJob).join(
-        SmsAccount, SmsAccount.id == SmsOutboundJob.sms_account_id
-    ).filter(
-        SmsOutboundJob.id == job_id,
-        SmsAccount.tenant_id == tenant.id
-    ).first()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Outbound job not found.")
-        
-    job.status = "PENDING"
-    job.retry_count = 0
-    job.error_log = None
-    
-    # Also reset the message status to queued
-    message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
-    if message:
-        message.status = "queued"
-        
-    db.commit()
-    return {"status": "success", "detail": "Job marked for retry."}
