@@ -42,10 +42,18 @@ export default function WebhooksSettings() {
 
   const fetchWebhooks = async () => {
     try {
-      const data = await apiClient.get<WebhookEndpoint[]>("/api/admin/webhooks")
-      setWebhooks(data || [])
-      if (data?.length > 0) {
-        setSelectedId(data[0].id)
+      const res: any = await apiClient.get("/api/admin/webhooks")
+      const rawList = Array.isArray(res) ? res : res?.data || []
+      const list: WebhookEndpoint[] = rawList.map((item: any) => ({
+        id: String(item.id),
+        url: item.target_url || item.url || "",
+        isActive: item.is_active ?? item.isActive ?? true,
+        secret: item.secret || "",
+        events: item.events || (item.event ? [item.event] : [])
+      }))
+      setWebhooks(list)
+      if (list.length > 0) {
+        setSelectedId(list[0].id)
       }
     } catch (error) {
       toast.error("Failed to load webhooks")
@@ -62,13 +70,26 @@ export default function WebhooksSettings() {
   const handleSave = async (webhook: WebhookEndpoint) => {
     setSaving(true)
     try {
+      const payload = {
+        target_url: webhook.url,
+        is_active: webhook.isActive,
+        secret: webhook.secret || undefined,
+        event: webhook.events[0] || "booking.created"
+      }
       if (webhook.id.startsWith("new_")) {
-        const { id, ...payload } = webhook
-        const created = await apiClient.post<WebhookEndpoint>("/api/admin/webhooks", payload)
-        setWebhooks(webhooks.map(w => w.id === webhook.id ? created : w))
-        setSelectedId(created.id)
+        const res: any = await apiClient.post("/api/admin/webhooks", payload)
+        const created = res?.data ?? res
+        const newEndpoint: WebhookEndpoint = {
+          id: String(created.id),
+          url: created.target_url || webhook.url,
+          isActive: created.is_active ?? webhook.isActive,
+          secret: created.secret || webhook.secret,
+          events: webhook.events
+        }
+        setWebhooks(webhooks.map(w => w.id === webhook.id ? newEndpoint : w))
+        setSelectedId(newEndpoint.id)
       } else {
-        await apiClient.put(`/api/admin/webhooks/${webhook.id}`, webhook)
+        await apiClient.put(`/api/admin/webhooks/${webhook.id}`, payload)
       }
       toast.success("Webhook saved successfully")
     } catch (error) {
