@@ -19,7 +19,6 @@ from . import payments  # noqa: F401
 from . import notifications  # noqa: F401
 
 # New feature routers
-from . import holds  # noqa: F401
 from . import waitlist  # noqa: F401
 from . import search  # noqa: F401
 from . import ui_config  # noqa: F401

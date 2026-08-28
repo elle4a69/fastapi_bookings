@@ -56,7 +56,7 @@ ADMIN_MUTATING_ID_ROUTES = [
     ("PUT", "/api/admin/additional-fields/{id}"),
     ("POST", "/api/admin/sms/conversations/jobs/{id}/retry"),
     ("POST", "/api/admin/sms/conversations/messages/{id}/approve"),
-    ("DELETE", "/api/public/holds/{id}"),
+    ("POST", "/api/admin/bookings/{id}/cancel"),
 ]
 
 

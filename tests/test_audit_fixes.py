@@ -9,7 +9,6 @@ from app.models.user import User
 from app.models.service import Service
 from app.models.provider import Provider
 from app.models.client import Client
-from app.models.hold import Hold, HoldStatus
 from app.models.waitlist import WaitlistEntry, WaitlistStatus
 from app.models.schedule import ProviderWorkDay
 from app.core.security import create_access_token
@@ -57,69 +56,50 @@ def test_decimal_format_validation(client: TestClient, db_session: Session):
     assert isinstance(db_service.deposit_amount, Decimal)
 
 
-def test_hold_timezone_and_serialization(client: TestClient, db_session: Session):
-    """Verify hold timezone creation logic and correct serialization of BookingResponse on confirmation."""
-    tenant = Tenant(name="Hold Biz", subdomain="hold-biz")
+def test_public_booking_timezone_and_serialization(client: TestClient, db_session: Session):
+    """Verify public booking creation logic and correct serialization of BookingResponse."""
+    tenant = Tenant(name="Public Booking Biz", subdomain="pub-biz")
     db_session.add(tenant)
     db_session.commit()
     db_session.refresh(tenant)
 
     service = Service(
         tenant_id=tenant.id,
-        name="Hold Service",
+        name="Consult Service",
         duration=30,
         price=Decimal("50.00"),
         active=True
     )
     provider = Provider(
         tenant_id=tenant.id,
-        name="Hold Provider",
+        name="Doctor Public",
         active=True
     )
     db_session.add_all([service, provider])
     db_session.commit()
 
-    # Timezone-aware timestamp for expires_at (expires in 15 minutes)
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+    start_time = (datetime.now(timezone.utc) + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    end_time = start_time + timedelta(minutes=30)
 
     payload = {
         "service_id": service.id,
         "provider_id": provider.id,
-        "start_time": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
-        "end_time": (datetime.now(timezone.utc) + timedelta(hours=1, minutes=30)).isoformat(),
-        "expires_at": expires_at,
+        "client_name": "Public Client",
+        "client_email": "pubclient@example.com",
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
     }
 
-    # Create hold
-    token = create_access_token({"sub": "hold-biz"})
-    headers = {"X-Tenant": "hold-biz", "X-Token": token}
-    response = client.post("/api/public/holds", json=payload, headers=headers)
+    token = create_access_token({"sub": "pub-biz"})
+    headers = {"X-Tenant": "pub-biz", "X-Token": token}
+    response = client.post("/api/public/bookings", json=payload, headers=headers)
     assert response.status_code == 200, response.text
-    hold_data = response.json()
-    assert hold_data["status"] == "pending"
-
-    # Confirm hold (requires client info)
-    client_obj = Client(tenant_id=tenant.id, name="Test Client", email="test@example.com")
-    db_session.add(client_obj)
-    db_session.commit()
-
-    confirm_payload = {
-        "hold_id": hold_data['id'],
-        "client_details": {
-            "name": "Test Client",
-            "email": "test@example.com"
-        }
-    }
-    confirm_response = client.post(
-        f"/api/public/holds/{hold_data['id']}/confirm",
-        json=confirm_payload,
-        headers=headers
-    )
-    assert confirm_response.status_code == 200, confirm_response.text
-    confirm_data = confirm_response.json()
-    assert confirm_data["ok"] is True
-    assert "data" in confirm_data
-    assert confirm_data["data"]["status"] == "pending"
+    booking_data = response.json()
+    assert booking_data["ok"] is True
+    assert "data" in booking_data
+    assert booking_data["data"]["status"] == "pending"
+    assert booking_data["data"]["service_id"] == service.id
+    assert booking_data["data"]["provider_id"] == provider.id
 
 
 def test_buffer_aware_overlap_checks(db_session: Session):
@@ -246,8 +226,8 @@ def test_scoped_reset_and_schedule_endpoints(client: TestClient, db_session: Ses
     assert response.status_code == 201
 
 
-def test_auto_promotion_on_cancellation(client: TestClient, db_session: Session):
-    """Verify that cancelling a booking triggers promotion of the waitlist."""
+def test_passive_waitlist_on_cancellation(client: TestClient, db_session: Session):
+    """Verify that cancelling a booking cancels cleanly without triggering unauthorized hold creation."""
     # Setup Tenant, Service, Provider, Location
     tenant = Tenant(name="Promo Biz", subdomain="promo-biz")
     db_session.add(tenant)
@@ -283,7 +263,7 @@ def test_auto_promotion_on_cancellation(client: TestClient, db_session: Session)
     db_session.add(entry)
     db_session.commit()
 
-    user = User(tenant_id=tenant.id, login="owner_promo", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    user = User(tenant_id=tenant.id, login="owner_promo", password_hash="fake", role="owner")
     db_session.add(user)
     db_session.commit()
 
@@ -310,14 +290,11 @@ def test_auto_promotion_on_cancellation(client: TestClient, db_session: Session)
     response = client.post(f"/api/admin/bookings/{booking.id}/cancel", headers=headers)
     assert response.status_code == 200, response.text
 
-    # After cancellation, waitlist entry should be enqueued and promoted to NOTIFIED status
+    # After cancellation, booking is CANCELLED and waitlist entry remains safe passive record
+    db_session.refresh(booking)
+    assert booking.status == BookingStatus.CANCELLED
     db_session.refresh(entry)
-    assert entry.status == WaitlistStatus.NOTIFIED
-
-    # Check that a hold was created for the waitlist promotion
-    hold = db_session.query(Hold).filter(Hold.client_id == client_obj.id).first()
-    assert hold is not None
-    assert hold.status == HoldStatus.PENDING
+    assert entry.status == WaitlistStatus.REQUESTED
 
 
 def test_booking_reschedule_with_body_payload(client: TestClient, db_session: Session):

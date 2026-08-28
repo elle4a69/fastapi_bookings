@@ -11,7 +11,6 @@ from app.models.service import Service
 from app.models.client import Client
 from app.models.booking import Booking
 from app.models.schedule import ProviderWorkDay, BlockedTime, ReservedTime
-from app.models.hold import Hold, HoldStatus
 from app.models.waitlist import WaitlistEntry, WaitlistStatus
 from app.models.user import User
 from app.core.state_machine import BookingStatus
@@ -339,7 +338,7 @@ def test_cascading_waitlist_promotions(db_session: Session, client: TestClient):
     db_session.add_all([entry_x, entry_y, entry_z])
     db_session.commit()
 
-    user = User(tenant_id=tenant.id, login="owner_promo", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    user = User(tenant_id=tenant.id, login="owner_promoedge", password_hash="fake", role="owner")
     db_session.add(user)
     db_session.commit()
 
@@ -350,36 +349,21 @@ def test_cascading_waitlist_promotions(db_session: Session, client: TestClient):
     response = client.post(f"/api/admin/bookings/{booking1.id}/cancel", headers=headers)
     assert response.status_code == 200, response.text
 
-    db_session.refresh(entry_x)
-    db_session.refresh(entry_y)
-    db_session.refresh(entry_z)
-
-    # entry_x should be promoted (NOTIFIED)
-    assert entry_x.status == WaitlistStatus.NOTIFIED
-    assert entry_y.status == WaitlistStatus.REQUESTED
-    assert entry_z.status == WaitlistStatus.REQUESTED
-
-    # An active Hold should have been created for entry_x (client_x)
-    hold_x = db_session.query(Hold).filter(Hold.client_id == client_x.id, Hold.status == HoldStatus.PENDING).first()
-    assert hold_x is not None
-    assert hold_x.start_time.hour == 9
-    assert hold_x.start_time.minute == 0
+    db_session.refresh(booking1)
+    assert booking1.status == BookingStatus.CANCELLED
 
     # Cancel Booking 2 (09:30 - 10:00) via API Client.
     response2 = client.post(f"/api/admin/bookings/{booking2.id}/cancel", headers=headers)
     assert response2.status_code == 200, response2.text
 
+    db_session.refresh(booking2)
+    assert booking2.status == BookingStatus.CANCELLED
+
     db_session.refresh(entry_x)
     db_session.refresh(entry_y)
     db_session.refresh(entry_z)
 
-    # entry_y should be promoted (NOTIFIED), entry_z remains REQUESTED (since no slots left: 09:00 has hold_x, 09:30 has hold_y)
-    assert entry_x.status == WaitlistStatus.NOTIFIED
-    assert entry_y.status == WaitlistStatus.NOTIFIED
+    # Waitlist entries remain passive REQUESTED records
+    assert entry_x.status == WaitlistStatus.REQUESTED
+    assert entry_y.status == WaitlistStatus.REQUESTED
     assert entry_z.status == WaitlistStatus.REQUESTED
-
-    # Active hold for client_y
-    hold_y = db_session.query(Hold).filter(Hold.client_id == client_y.id, Hold.status == HoldStatus.PENDING).first()
-    assert hold_y is not None
-    assert hold_y.start_time.hour == 9
-    assert hold_y.start_time.minute == 30

@@ -36,7 +36,6 @@ from .provider_category import ProviderCategory
 from .booking_form import BookingForm
 from .package import ServicePackage, PackageStep
 from .outbox import OutboxEvent, BookingEvent, BookingEventType
-from .hold import Hold, HoldStatus
 from .waitlist import WaitlistEntry, WaitlistStatus
 from .booking_series import BookingSeries
 
@@ -66,14 +65,6 @@ from .webhook import WebhookRegistration
 from .calendar_note import CalendarNote
 from .general_systems import PluginState, GdprConsent
 from .management_review_request import ManagementReviewRequest
-
-# System models (from FastBook merge)
-from .webhook import WebhookRegistration
-from .calendar_note import CalendarNote
-from .general_systems import PluginState, GdprConsent
-from .outbox import OutboxEvent, BookingEvent, BookingEventType
-from .hold import Hold, HoldStatus
-from .waitlist import WaitlistEntry, WaitlistStatus
 
 # SMS Module models
 from .sms_account import SmsAccount
@@ -111,8 +102,6 @@ __all__ = [
     "OutboxEvent",
     "BookingEvent",
     "BookingEventType",
-    "Hold",
-    "HoldStatus",
     "WaitlistEntry",
     "WaitlistStatus",
 

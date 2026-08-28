@@ -86,7 +86,6 @@ from .api.routers import (
     audit,
     payments,
     notifications,
-    holds,
     waitlist,
     search,
     ui_config,
@@ -318,7 +317,6 @@ app.include_router(payments.router, prefix="/api/admin")
 app.include_router(notifications.router, prefix="/api/admin")
 
 # Feature routers
-app.include_router(holds.router)
 app.include_router(waitlist.router)
 app.include_router(search.router)
 app.include_router(ui_config.router)

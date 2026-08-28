@@ -21,8 +21,6 @@ from ..models import (
     ProviderWorkDay,
     ProviderSpecialDay,
     ReservedTime,
-    Hold,
-    HoldStatus,
     Tenant,
 )
 from ..core.state_machine import BookingStatus
@@ -32,11 +30,6 @@ from .resource_service import (
     find_available_resources,
     allocate_resources,
     release_resources,
-)
-from .hold_service import (
-    create_hold,
-    expire_holds,
-    promote_waitlist,
 )
 
 # Import extracted utility functions to keep file under 250 lines
@@ -220,19 +213,6 @@ def compute_availability(
                 .all()
             )
 
-            active_holds = (
-                db.query(Hold)
-                .filter(
-                    Hold.tenant_id == prov.tenant_id,
-                    Hold.status == HoldStatus.PENDING,
-                    Hold.expires_at > now_utc,
-                    Hold.end_time > working_start,
-                    Hold.start_time < working_end,
-                    (Hold.provider_id == prov.id) | (Hold.provider_id.is_(None)),
-                )
-                .all()
-            )
-
             active_reservations = (
                 db.query(ReservedTime)
                 .filter(
@@ -254,7 +234,6 @@ def compute_availability(
                     slot_end,
                     active_bookings,
                     provider_blocked,
-                    active_holds,
                     active_reservations,
                     new_buffer_before=service.buffer_before if service.buffer_before else 0,
                     new_buffer_after=service.buffer_after if service.buffer_after else 0,

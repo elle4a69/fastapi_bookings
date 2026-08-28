@@ -34,14 +34,17 @@ def check_slot_overlaps(
     slot_end: datetime,
     active_bookings: List[Any],
     provider_blocked: List[Any],
-    active_holds: List[Any],
     active_reservations: List[Any],
     new_buffer_before: int = 0,
     new_buffer_after: int = 0,
+    active_holds: List[Any] | None = None,
 ) -> bool:
-    """Check if a time slot overlaps with active bookings, blocked periods, holds, or reservations."""
-    padded_slot_start = slot_start - timedelta(minutes=new_buffer_before)
-    padded_slot_end = slot_end + timedelta(minutes=new_buffer_after)
+    """Check if a time slot overlaps with active bookings, blocked periods, or reservations."""
+    # Ensure minimum 15-minute inter-booking buffer unless specified higher
+    eff_buffer_before = max(15, new_buffer_before) if new_buffer_before else 0
+    eff_buffer_after = max(15, new_buffer_after) if new_buffer_after else 0
+    padded_slot_start = slot_start - timedelta(minutes=eff_buffer_before)
+    padded_slot_end = slot_end + timedelta(minutes=eff_buffer_after)
 
     # 1. Check overlaps with Bookings (considering buffer_before and buffer_after)
     for b in active_bookings:
@@ -52,8 +55,8 @@ def check_slot_overlaps(
         if b_end.tzinfo is None:
             b_end = b_end.replace(tzinfo=timezone.utc)
 
-        buf_before = b.service.buffer_before if (b.service and b.service.buffer_before) else 0
-        buf_after = b.service.buffer_after if (b.service and b.service.buffer_after) else 0
+        buf_before = max(15, b.service.buffer_before) if (b.service and b.service.buffer_before) else 0
+        buf_after = max(15, b.service.buffer_after) if (b.service and b.service.buffer_after) else 0
         blocked_start = b_start - timedelta(minutes=buf_before)
         blocked_end = b_end + timedelta(minutes=buf_after)
 
@@ -71,18 +74,7 @@ def check_slot_overlaps(
         if bt_start < padded_slot_end and bt_end > padded_slot_start:
             return True
 
-    # 3. Check overlaps with unexpired Hold
-    for h in active_holds:
-        h_start = h.start_time
-        if h_start.tzinfo is None:
-            h_start = h_start.replace(tzinfo=timezone.utc)
-        h_end = h.end_time
-        if h_end.tzinfo is None:
-            h_end = h_end.replace(tzinfo=timezone.utc)
-        if h_start < padded_slot_end and h_end > padded_slot_start:
-            return True
-
-    # 4. Check overlaps with unexpired ReservedTime
+    # 3. Check overlaps with unexpired ReservedTime
     for r in active_reservations:
         r_start = r.start_time
         if r_start.tzinfo is None:

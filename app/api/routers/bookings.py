@@ -1,9 +1,8 @@
-"""Booking management routes."""
-
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant, DatabaseId
@@ -12,7 +11,7 @@ from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
 from ...services import scheduling_service
 from ...models.booking import Booking as BookingModel
-from ...models import Service, Provider, Client, Location
+from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
 from ...services.outbox_service import create_outbox_event
 from ...schemas.booking import (
     Booking,
@@ -66,8 +65,35 @@ def create_booking(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
-    """Create a new booking as an admin."""
-    # 1. Verify service belongs to active tenant
+    """Create a new booking as an admin using atomic first-submit-wins."""
+    # 0. Check idempotency key if provided
+    if booking_in.idempotency_key:
+        existing_booking = (
+            db.query(BookingModel)
+            .filter(
+                BookingModel.tenant_id == current_user.tenant_id,
+                BookingModel.idempotency_key == booking_in.idempotency_key,
+            )
+            .first()
+        )
+        if existing_booking:
+            return {"ok": True, "data": existing_booking}
+
+    # 1. Enforce UTC timezone awareness
+    start_time = booking_in.start_time
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    end_time = booking_in.end_time
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    if start_time >= end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking start time must be before end time.",
+        )
+
+    # 2. Verify service belongs to active tenant
     service_obj = db.query(Service).filter(
         Service.id == booking_in.service_id,
         Service.tenant_id == current_user.tenant_id,
@@ -75,17 +101,26 @@ def create_booking(
     ).first()
     if not service_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
+    if not service_obj.active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Service is not active")
 
-    # 2. Verify provider belongs to active tenant
-    provider_obj = db.query(Provider).filter(
-        Provider.id == booking_in.provider_id,
-        Provider.tenant_id == current_user.tenant_id,
-        Provider.deleted_at.is_(None)
-    ).first()
+    # 3. Lock and verify provider belongs to active tenant
+    provider_obj = (
+        db.query(Provider)
+        .filter(
+            Provider.id == booking_in.provider_id,
+            Provider.tenant_id == current_user.tenant_id,
+            Provider.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .first()
+    )
     if not provider_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+    if not provider_obj.active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not active")
 
-    # 3. Verify client belongs to active tenant
+    # 4. Verify client belongs to active tenant
     client_obj = db.query(Client).filter(
         Client.id == booking_in.client_id,
         Client.tenant_id == current_user.tenant_id,
@@ -94,7 +129,8 @@ def create_booking(
     if not client_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
-    # 4. Verify location (if provided) belongs to active tenant
+    # 5. Verify location (if provided) belongs to active tenant
+    location_obj = None
     if booking_in.location_id:
         location_obj = db.query(Location).filter(
             Location.id == booking_in.location_id,
@@ -103,26 +139,92 @@ def create_booking(
         if not location_obj:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
 
-    # 5. Validate provider eligibility for the service
+    # 6. Validate provider eligibility for the service
     if service_obj.providers:
         provider_ids = {sp.provider_id for sp in service_obj.providers}
         if booking_in.provider_id not in provider_ids:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
 
-    from sqlalchemy.exc import IntegrityError
-    booking = BookingModel(tenant_id=current_user.tenant_id, **booking_in.dict())
+    # 7. Atomic Conflict & Buffer Validation
+    buf_before = max(15, service_obj.buffer_before if service_obj.buffer_before else 0)
+    buf_after = max(15, service_obj.buffer_after if service_obj.buffer_after else 0)
+    padded_start = start_time - timedelta(minutes=buf_before)
+    padded_end = end_time + timedelta(minutes=buf_after)
+
+    active_bookings = (
+        db.query(BookingModel)
+        .filter(
+            BookingModel.provider_id == provider_obj.id,
+            BookingModel.status != BookingStatus.CANCELLED,
+            BookingModel.start_time < padded_end,
+            BookingModel.end_time > padded_start,
+        )
+        .all()
+    )
+
+    for b in active_bookings:
+        b_start = b.start_time.replace(tzinfo=timezone.utc) if b.start_time.tzinfo is None else b.start_time
+        b_end = b.end_time.replace(tzinfo=timezone.utc) if b.end_time.tzinfo is None else b.end_time
+        b_buf_before = max(15, b.service.buffer_before) if (b.service and b.service.buffer_before) else 0
+        b_buf_after = max(15, b.service.buffer_after) if (b.service and b.service.buffer_after) else 0
+        b_blocked_start = b_start - timedelta(minutes=b_buf_before)
+        b_blocked_end = b_end + timedelta(minutes=b_buf_after)
+
+        if b_blocked_start < end_time and b_blocked_end > start_time:
+            if booking_in.idempotency_key and b.idempotency_key == booking_in.idempotency_key:
+                return {"ok": True, "data": b}
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The requested time slot is no longer available.",
+            )
+
+    # 8. Check BlockedTime
+    blocked_time = (
+        db.query(BlockedTime)
+        .filter(
+            BlockedTime.tenant_id == current_user.tenant_id,
+            BlockedTime.active.is_(True),
+            (BlockedTime.provider_id == provider_obj.id) | (BlockedTime.provider_id.is_(None)),
+            BlockedTime.start_time < end_time,
+            BlockedTime.end_time > start_time,
+        )
+        .first()
+    )
+    if blocked_time:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The requested time slot is blocked by provider schedule.",
+        )
+
+    # 9. Create booking record
+    booking_dict = booking_in.model_dump(exclude={"client_name", "client_email", "client_phone"})
+    booking_dict["start_time"] = start_time
+    booking_dict["end_time"] = end_time
+
+    booking = BookingModel(tenant_id=current_user.tenant_id, **booking_dict)
     db.add(booking)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
+        if booking_in.idempotency_key:
+            existing = (
+                db.query(BookingModel)
+                .filter(
+                    BookingModel.tenant_id == current_user.tenant_id,
+                    BookingModel.idempotency_key == booking_in.idempotency_key,
+                )
+                .first()
+            )
+            if existing:
+                return {"ok": True, "data": existing}
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
     db.refresh(booking)
-    # Allocate resources if needed
+
+    # 10. Allocate resources if needed
     try:
         scheduling_service.allocate_resources(db, booking=booking, commit=True)
     except HTTPException as exc:
-        # Remove the booking if resources cannot be allocated
         db.delete(booking)
         db.commit()
         raise exc
@@ -136,7 +238,7 @@ def create_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.created", payload)
+    create_outbox_event(db, "booking.created", payload, tenant_id=current_user.tenant_id)
     db.commit()
     return {"ok": True, "data": booking}
 
@@ -161,7 +263,7 @@ def update_booking(
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-    update_data = booking_in.dict(exclude_unset=True)
+    update_data = booking_in.model_dump(exclude_unset=True)
     # Validate status transitions if provided
     if "status" in update_data:
         new_status = update_data["status"]
@@ -233,9 +335,6 @@ def cancel_booking(
     create_outbox_event(db, "booking.cancelled", payload)
     db.commit()
     db.refresh(booking)
-    if booking.service:
-        from ...services.hold_service import promote_waitlist
-        promote_waitlist(db, service=booking.service)
     return {"ok": True, "data": booking}
 
 

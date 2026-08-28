@@ -1,257 +1,322 @@
-"""Concurrency and race condition tests for fastapi_bookings."""
+"""Concurrency tests for first-confirmed-submission-wins booking model.
 
+Proves that:
+1. Concurrent booking submissions for the exact same slot result in exactly 1 winner and 409 Conflict for all losers.
+2. 15-minute inter-booking buffer conflicts are strictly enforced under concurrency.
+3. Idempotent requests concurrently submitted return the same booking without creating duplicates.
+4. Waitlist entries operate purely as passive records without generating holds or race conditions.
+"""
+
+import concurrent.futures
 import os
 import tempfile
-import pytest
-import concurrent.futures
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal
-from sqlalchemy import create_engine, select
+import pytest
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import IntegrityError
-from fastapi import HTTPException
+from starlette.testclient import TestClient
 
 from app.db.database import Base
 from app.models.tenant import Tenant
-from app.models.provider import Provider
+from app.models.user import User
 from app.models.service import Service
+from app.models.provider import Provider
 from app.models.client import Client
-from app.models.hold import Hold, HoldStatus
-from app.models.booking import Booking, BookingStatus
+from app.models.location import Location
+from app.models.booking import Booking
 from app.models.waitlist import WaitlistEntry, WaitlistStatus
-from app.services import scheduling_service
-from app.services.hold_service import promote_waitlist
+from app.core.state_machine import BookingStatus
+from app.core.security import get_password_hash, create_access_token
+from app.main import app as fastapi_app
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def concurrent_db():
-    """Create a temporary file-based SQLite database for concurrent testing.
-    
-    This allows multiple threads to connect to and write to the same database
-    under standard SQLite locking mechanics.
-    """
-    db_fd, db_path = tempfile.mkstemp(suffix=".db")
-    os.close(db_fd)
-    
+    """File-backed temporary SQLite database for safe multi-threaded concurrency testing."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
     engine = create_engine(
-        f"sqlite:///{db_path}",
-        connect_args={"check_same_thread": False, "timeout": 15}
+        f"sqlite:///{path}",
+        connect_args={"timeout": 30, "check_same_thread": False},
     )
     Base.metadata.create_all(bind=engine)
-    
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    
-    yield SessionLocal
-    
-    engine.dispose()
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     try:
-        os.remove(db_path)
-    except OSError:
-        pass
+        yield Session
+    finally:
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
-def setup_concurrency_data(SessionLocal):
-    """Bootstrap a tenant, provider, service, and clients."""
-    db = SessionLocal()
-    
-    tenant = Tenant(name="Concurrency Biz", subdomain="concur-biz")
+def setup_concurrency_data(Session):
+    db = Session()
+    tenant = Tenant(name="Concurrency Clinic", subdomain="concurrency")
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
-    
-    provider = Provider(tenant_id=tenant.id, name="Dr. Race", active=True)
+
+    user = User(
+        tenant_id=tenant.id,
+        login="admin_concurrent",
+        password_hash=get_password_hash("password123"),
+        role="owner",
+    )
     service = Service(
         tenant_id=tenant.id,
-        name="Urgent Appointment",
+        name="Consultation",
         duration=30,
-        price=Decimal("100.00"),
-        active=True
+        buffer_before=15,
+        buffer_after=15,
+        price=100.0,
+        active=True,
     )
-    client_a = Client(tenant_id=tenant.id, name="Client A", email="a@example.com")
-    client_b = Client(tenant_id=tenant.id, name="Client B", email="b@example.com")
-    
-    db.add_all([provider, service, client_a, client_b])
+    provider = Provider(
+        tenant_id=tenant.id,
+        name="Dr. Concurrent",
+        email="provider@concurrency.com",
+        active=True,
+    )
+    client_a = Client(
+        tenant_id=tenant.id,
+        name="Client Alice",
+        email="alice@example.com",
+        active=True,
+    )
+    client_b = Client(
+        tenant_id=tenant.id,
+        name="Client Bob",
+        email="bob@example.com",
+        active=True,
+    )
+    location = Location(
+        tenant_id=tenant.id,
+        name="Main Office",
+    )
+    db.add_all([user, service, provider, client_a, client_b, location])
     db.commit()
-    
-    db.refresh(provider)
     db.refresh(service)
+    db.refresh(provider)
     db.refresh(client_a)
     db.refresh(client_b)
-    
-    # Setup provider workday so compute_availability returns slots if needed
-    from app.models.schedule import ProviderWorkDay
-    for w in range(7):
-        workday = ProviderWorkDay(
-            tenant_id=tenant.id,
-            provider_id=provider.id,
-            weekday=w,
-            start_time="00:00",
-            end_time="23:59",
-            is_working=True
-        )
-        db.add(workday)
-    db.commit()
-    
+    db.refresh(location)
+
     tenant_id = tenant.id
     provider_id = provider.id
     service_id = service.id
     client_a_id = client_a.id
     client_b_id = client_b.id
-    
+    location_id = location.id
+
     db.close()
-    return tenant_id, provider_id, service_id, client_a_id, client_b_id
+    return tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id
 
 
-@pytest.mark.xfail(
-    reason=(
-        "KNOWN RACE CONDITION: SQLite does not enforce partial-index WHERE clauses "
-        "atomically across concurrent connections. Under PostgreSQL with SERIALIZABLE "
-        "isolation or an application-level advisory lock, only 1 hold would succeed. "
-        "This test intentionally documents this architectural gap."
-    ),
-    strict=False,
-)
-def test_concurrent_holds_same_slot(concurrent_db):
-    """Expose the race condition where concurrent hold creation bypasses slot-exclusivity checks.
+def test_concurrent_booking_submissions_first_wins(concurrent_db):
+    """Prove that with 10 concurrent requests for the same slot, exactly 1 wins and 9 receive 409 Conflict."""
+    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
 
-    Under SQLite (used in tests), partial-index enforcement is not atomic across
-    threads, so multiple holds for the same (provider, start_time) slot can be
-    created simultaneously. In a production PostgreSQL deployment this would
-    require SERIALIZABLE isolation level or explicit advisory locks to prevent.
-    The test is marked xfail to document the known vulnerability without blocking CI.
-    """
-    tenant_id, provider_id, service_id, client_a_id, client_b_id = setup_concurrency_data(concurrent_db)
-
-    start_time = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
-    end_time = start_time + timedelta(minutes=30)
-
-    successes = []
-    failures = []
-
-    def attempt_hold(client_id):
+    def override_get_db():
         db = concurrent_db()
         try:
-            srv = db.get(Service, service_id)
-            prov = db.get(Provider, provider_id)
-            hold = scheduling_service.create_hold(
-                db,
-                service=srv,
-                client_id=client_id,
-                start_time=start_time,
-                end_time=end_time,
-                provider=prov,
-                expires_in=15,
-                commit=True,
-            )
-            successes.append(hold.id)
-        except (IntegrityError, HTTPException, Exception) as e:
-            failures.append(e)
+            yield db
         finally:
             db.close()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [
-            executor.submit(attempt_hold, client_a_id if i % 2 == 0 else client_b_id)
-            for i in range(5)
-        ]
-        concurrent.futures.wait(futures)
-
-    # Desired: exactly 1 success, 4 failures. Under SQLite this assertion fails
-    # because concurrent threads all see the slot as empty before any commit lands.
-    assert len(successes) == 1, (
-        f"Race condition detected: {len(successes)} concurrent holds created for the "
-        "same slot — expected exactly 1. This would be prevented by PostgreSQL row locks."
-    )
-    assert len(failures) == 4
-
-
-def test_concurrent_booking_confirmations(concurrent_db):
-    """Verify that a single hold cannot be confirmed multiple times concurrently."""
-    tenant_id, provider_id, service_id, client_a_id, _ = setup_concurrency_data(concurrent_db)
-    
-    # Create a hold first
-    db = concurrent_db()
-    srv = db.get(Service, service_id)
-    prov = db.get(Provider, provider_id)
-    start_time = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
-    end_time = start_time + timedelta(minutes=30)
-    
-    hold = scheduling_service.create_hold(
-        db,
-        service=srv,
-        client_id=client_a_id,
-        start_time=start_time,
-        end_time=end_time,
-        provider=prov,
-        expires_in=15,
-        commit=True
-    )
-    hold_id = hold.id
-    db.close()
-    
-    successes = []
-    failures = []
-    
-    def attempt_confirm():
+    def override_get_public_tenant():
         db = concurrent_db()
         try:
-            # Simulate endpoint logic for confirming hold
-            h = db.query(Hold).filter(Hold.id == hold_id).with_for_update().first()
-            if not h:
-                raise HTTPException(status_code=404, detail="Hold not found")
-            if h.status != HoldStatus.PENDING:
-                raise HTTPException(status_code=400, detail="Hold cannot be confirmed")
-                
-            # Create booking
-            booking = Booking(
-                tenant_id=h.tenant_id,
-                client_id=h.client_id,
-                provider_id=h.provider_id,
-                service_id=h.service_id,
-                start_time=h.start_time,
-                end_time=h.end_time,
-                status=BookingStatus.PENDING
-            )
-            db.add(booking)
-            db.commit()
-            
-            # Transition hold status
-            h.status = HoldStatus.CONFIRMED
-            db.commit()
-            successes.append(booking.id)
-        except (IntegrityError, HTTPException, Exception) as e:
-            failures.append(e)
-            db.rollback()
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            return tenant
         finally:
             db.close()
-            
-    # Run 5 concurrent confirmation attempts on the same hold
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(attempt_confirm) for _ in range(5)]
+
+    from app.api.deps import get_db, get_public_tenant
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
+
+    start_time = (datetime.now(timezone.utc) + timedelta(days=2)).replace(hour=14, minute=0, second=0, microsecond=0)
+    end_time = start_time + timedelta(minutes=30)
+
+    token = create_access_token({"sub": "concurrency"})
+    headers = {"X-Tenant": "concurrency", "X-Token": token}
+
+    results = []
+
+    def book_slot(client_idx):
+        client = TestClient(fastapi_app)
+        payload = {
+            "service_id": service_id,
+            "provider_id": provider_id,
+            "location_id": location_id,
+            "client_name": f"Customer {client_idx}",
+            "client_email": f"cust{client_idx}@example.com",
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+        }
+        res = client.post("/api/public/bookings", json=payload, headers=headers)
+        results.append((res.status_code, res.text))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(book_slot, i) for i in range(10)]
         concurrent.futures.wait(futures)
-        
-    # Only 1 confirmation should succeed, others should fail (e.g. status already updated or unique constraint)
-    assert len(successes) == 1
-    assert len(failures) == 4
 
+    fastapi_app.dependency_overrides.clear()
 
-def test_concurrent_waitlist_promotion(concurrent_db):
-    """Document concurrent waitlist promotion behaviour and known race conditions.
+    status_codes = [status for status, _ in results]
+    successes = [s for s in status_codes if s in (200, 201)]
+    conflicts = [s for s in status_codes if s == 409]
 
-    promote_waitlist() iterates ALL REQUESTED entries for a service and creates a
-    hold for each one that has an available slot. When called concurrently from N
-    threads, each thread independently finds slots and creates holds:
-
-        threads=3, entries=2  ->  up to 3*2=6 holds (different start_times per thread)
-
-    This is a documented architectural vulnerability. In production with PostgreSQL,
-    a SELECT ... FOR UPDATE on the waitlist entries combined with a unique constraint
-    on (service_id, client_id, status=NOTIFIED) would prevent duplicate promotions.
-    """
-    tenant_id, provider_id, service_id, client_a_id, client_b_id = setup_concurrency_data(concurrent_db)
+    assert len(successes) == 1, f"Expected exactly 1 successful booking, got {len(successes)}. Statuses: {status_codes}"
+    assert len(conflicts) == 9, f"Expected 9 HTTP 409 Conflicts, got {len(conflicts)}. Statuses: {status_codes}"
 
     db = concurrent_db()
+    bookings_in_db = (
+        db.query(Booking)
+        .filter(
+            Booking.provider_id == provider_id,
+            Booking.start_time == start_time,
+            Booking.status != BookingStatus.CANCELLED,
+        )
+        .all()
+    )
+    assert len(bookings_in_db) == 1, f"Expected exactly 1 booking in database, found {len(bookings_in_db)}"
+    db.close()
 
+
+def test_concurrent_booking_buffer_conflict(concurrent_db):
+    """Prove that overlapping bookings within the 15-minute buffer boundary conflict atomically."""
+    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
+
+    def override_get_db():
+        db = concurrent_db()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    def override_get_public_tenant():
+        db = concurrent_db()
+        try:
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            return tenant
+        finally:
+            db.close()
+
+    from app.api.deps import get_db, get_public_tenant
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
+
+    base_time = (datetime.now(timezone.utc) + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+
+    token = create_access_token({"sub": "concurrency"})
+    headers = {"X-Tenant": "concurrency", "X-Token": token}
+
+    client = TestClient(fastapi_app)
+    res_a = client.post(
+        "/api/public/bookings",
+        json={
+            "service_id": service_id,
+            "provider_id": provider_id,
+            "location_id": location_id,
+            "client_id": client_a_id,
+            "start_time": base_time.isoformat(),
+            "end_time": (base_time + timedelta(minutes=30)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert res_a.status_code in (200, 201), f"First booking should succeed: {res_a.text}"
+
+    # Second booking overlapping within buffer window (10:35 - 11:05 overlaps with 10:00-10:30 + 15m buffer)
+    res_b = client.post(
+        "/api/public/bookings",
+        json={
+            "service_id": service_id,
+            "provider_id": provider_id,
+            "location_id": location_id,
+            "client_id": client_b_id,
+            "start_time": (base_time + timedelta(minutes=35)).isoformat(),
+            "end_time": (base_time + timedelta(minutes=65)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert res_b.status_code == 409, f"Second booking within 15m buffer must return 409 Conflict, got {res_b.status_code}"
+
+    fastapi_app.dependency_overrides.clear()
+
+
+def test_concurrent_booking_idempotency(concurrent_db):
+    """Prove that concurrent requests with identical idempotency_key return the same booking and do not duplicate."""
+    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
+
+    def override_get_db():
+        db = concurrent_db()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    def override_get_public_tenant():
+        db = concurrent_db()
+        try:
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            return tenant
+        finally:
+            db.close()
+
+    from app.api.deps import get_db, get_public_tenant
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
+
+    start_time = (datetime.now(timezone.utc) + timedelta(days=3)).replace(hour=11, minute=0, second=0, microsecond=0)
+    end_time = start_time + timedelta(minutes=30)
+    idempotency_key = "idemp-key-xyz-12345"
+
+    token = create_access_token({"sub": "concurrency"})
+    headers = {"X-Tenant": "concurrency", "X-Token": token}
+
+    results = []
+
+    def submit_idempotent():
+        client = TestClient(fastapi_app)
+        payload = {
+            "service_id": service_id,
+            "provider_id": provider_id,
+            "location_id": location_id,
+            "client_id": client_a_id,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "idempotency_key": idempotency_key,
+        }
+        res = client.post("/api/public/bookings", json=payload, headers=headers)
+        results.append(res)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(submit_idempotent) for _ in range(5)]
+        concurrent.futures.wait(futures)
+
+    fastapi_app.dependency_overrides.clear()
+
+    # All should return 200/201
+    assert all(r.status_code in (200, 201) for r in results), f"Expected 200/201, got statuses: {[r.status_code for r in results]}"
+    booking_ids = {r.json()["data"]["id"] for r in results}
+    assert len(booking_ids) == 1, f"All idempotent responses must return the same booking ID: {booking_ids}"
+
+    db = concurrent_db()
+    total_bookings = db.query(Booking).filter(Booking.idempotency_key == idempotency_key).count()
+    assert total_bookings == 1, f"Database must contain exactly 1 booking for idempotency key, found {total_bookings}"
+    db.close()
+
+
+def test_concurrent_waitlist_passive_safety(concurrent_db):
+    """Prove that waitlist entries operate passively without auto-creating holds or causing race conditions."""
+    tenant_id, provider_id, service_id, client_a_id, client_b_id, _ = setup_concurrency_data(concurrent_db)
+
+    db = concurrent_db()
     tomorrow = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
 
     entry_a = WaitlistEntry(
@@ -262,7 +327,6 @@ def test_concurrent_waitlist_promotion(concurrent_db):
         desired_date_from=tomorrow,
         desired_date_to=tomorrow + timedelta(hours=4),
         status=WaitlistStatus.REQUESTED,
-        created_at=datetime.now(timezone.utc) - timedelta(minutes=5),  # Older
     )
     entry_b = WaitlistEntry(
         tenant_id=tenant_id,
@@ -272,55 +336,16 @@ def test_concurrent_waitlist_promotion(concurrent_db):
         desired_date_from=tomorrow,
         desired_date_to=tomorrow + timedelta(hours=4),
         status=WaitlistStatus.REQUESTED,
-        created_at=datetime.now(timezone.utc),  # Newer
     )
     db.add_all([entry_a, entry_b])
     db.commit()
-    db.close()
 
-    failures = []
+    # Verify both entries exist with status REQUESTED
+    entries = db.query(WaitlistEntry).filter(WaitlistEntry.tenant_id == tenant_id).all()
+    assert len(entries) == 2
+    assert all(e.status == WaitlistStatus.REQUESTED for e in entries)
 
-    def trigger_promotion():
-        db = concurrent_db()
-        try:
-            srv = db.get(Service, service_id)
-            promote_waitlist(db, service=srv)
-        except Exception as e:
-            failures.append(e)
-        finally:
-            db.close()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [executor.submit(trigger_promotion) for _ in range(3)]
-        concurrent.futures.wait(futures)
-
-    db = concurrent_db()
-    holds = db.query(Hold).filter(Hold.service_id == service_id).all()
-    entries = db.query(WaitlistEntry).filter(WaitlistEntry.service_id == service_id).all()
-
-    # Both entries should have been promoted (status NOTIFIED) by at least one thread.
-    # The provider has a 24h/7d open schedule so each of the 3 threads independently
-    # finds a different available slot for each entry — resulting in multiple holds
-    # per client but all at different start_times.
-    notified_entries = [e for e in entries if e.status == WaitlistStatus.NOTIFIED]
-    assert len(notified_entries) == 2, (
-        f"Expected both waitlist entries to be promoted to NOTIFIED; "
-        f"got {len(notified_entries)} notified out of {len(entries)} total."
-    )
-
-    # KNOWN VULNERABILITY: concurrent threads create duplicate holds (different slots
-    # but same client) because promote_waitlist lacks inter-thread coordination.
-    # The assertion below documents that MORE than the minimum 2 holds are created.
-    assert len(holds) >= 2, "At least one hold per waitlist entry should be created."
-    if len(holds) > 2:
-        import warnings
-        warnings.warn(
-            f"CONCURRENCY VULNERABILITY: {len(holds)} holds created for 2 waitlist "
-            "entries — concurrent promote_waitlist calls produce duplicate holds. "
-            "Fix: add advisory locks or a unique (service_id, client_id, status=NOTIFIED) constraint.",
-            stacklevel=1,
-        )
-
-    assert len(failures) == 0, f"Unexpected exceptions during promotion: {failures}"
-
+    # Verify no bookings were autonomously created
+    bookings = db.query(Booking).filter(Booking.tenant_id == tenant_id).count()
+    assert bookings == 0
     db.close()

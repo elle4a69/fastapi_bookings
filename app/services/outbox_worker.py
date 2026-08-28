@@ -109,7 +109,7 @@ async def process_pending_outbox_events(db: Session = None):
                     fcm_client.send_push_notification(token=token, title=title, body=body, data=data_dict)
                 
                 # If it's a domain webhook event (e.g. booking.created, booking.confirmed)
-                elif any(event.type.startswith(prefix) for prefix in ["booking.", "client.", "hold."]):
+                elif any(event.type.startswith(prefix) for prefix in ["booking.", "client."]):
                     await dispatch_outbound_webhooks(db, event.type, payload)
                 
                 else:
