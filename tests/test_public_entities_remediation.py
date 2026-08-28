@@ -59,12 +59,13 @@ def test_public_entities_tenant_isolation(client, db_session):
     assert len(cats_data) == 1
     assert cats_data[0]["name"] == "Category A"
 
-    # 6. Test missing Token returns 401
-    headers_missing_token = {"X-Tenant": "tenant-a"}
-    response_missing = client.get("/api/public/services", headers=headers_missing_token)
-    assert response_missing.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response_missing.json()["ok"] is False
-    assert response_missing.json()["error"]["code"] == "UNAUTHORIZED"
+    # 6. Test anonymous public access without Token returns 200 for resolved tenant
+    headers_anonymous = {"X-Tenant": "tenant-a"}
+    response_anon = client.get("/api/public/services", headers=headers_anonymous)
+    assert response_anon.status_code == status.HTTP_200_OK
+    assert response_anon.json()["ok"] is True
+    assert len(response_anon.json()["data"]) == 1
+    assert response_anon.json()["data"][0]["name"] == "Service A"
 
     # 7. Test invalid Tenant returns 404
     headers_invalid_tenant = {"X-Tenant": "nonexistent", "X-Token": token_a}

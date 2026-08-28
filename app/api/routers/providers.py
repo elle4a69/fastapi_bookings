@@ -312,7 +312,10 @@ def delete_provider_special_day(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
-    target_date = date_type.fromisoformat(date_str)
+    try:
+        target_date = date_type.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format, expected YYYY-MM-DD")
     existing = db.query(ProviderSpecialDay).filter(
         ProviderSpecialDay.tenant_id == tenant.id,
         ProviderSpecialDay.provider_id == numeric_id,
