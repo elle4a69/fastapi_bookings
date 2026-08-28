@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import { apiClient } from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -27,51 +26,31 @@ const ICONS: Record<string, React.ReactNode> = {
   default: <Puzzle className="h-6 w-6 text-slate-500" />
 }
 
+// Initial mock plugin catalog.
+// NOTE: Backend plugin management and persistence endpoints remain intentionally
+// unimplemented pending a dedicated product/API design.
+const MOCK_PLUGINS: PluginConfig[] = [
+  { id: "stripe", name: "Stripe Payments", description: "Accept credit card payments and Apple Pay.", icon: "stripe", category: "payment", isActive: true, isConfigured: true },
+  { id: "simplybook", name: "SimplyBook Widget", description: "Embeddable booking widget integration.", icon: "simplybook", category: "booking", isActive: false, isConfigured: false },
+  { id: "sso", name: "Enterprise SSO", description: "SAML and OAuth2 authentication.", icon: "sso", category: "system", isActive: true, isConfigured: true },
+  { id: "mailchimp", name: "Mailchimp", description: "Sync clients to mailing lists.", icon: "mailchimp", category: "communication", isActive: false, isConfigured: false },
+  { id: "invoices", name: "Advanced Invoicing", description: "Generate PDF invoices automatically.", icon: "invoices", category: "payment", isActive: true, isConfigured: true },
+]
+
 export default function PluginsSettings() {
   const [plugins, setPlugins] = useState<PluginConfig[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchPlugins()
+    // Initialize mock plugin catalog in-memory without making invalid HTTP calls
+    setPlugins(MOCK_PLUGINS)
+    setLoading(false)
   }, [])
 
-  const fetchPlugins = async () => {
-    try {
-      // Trying to fetch from ui-config or similar plugin config
-      const data = await apiClient.get<{ plugins: PluginConfig[] }>("/api/public/ui-config/admin")
-      if (data && data.plugins) {
-        setPlugins(data.plugins)
-      } else {
-        throw new Error("No plugins data")
-      }
-    } catch (error) {
-      // Mock fallback
-      setPlugins([
-        { id: "stripe", name: "Stripe Payments", description: "Accept credit card payments and Apple Pay.", icon: "stripe", category: "payment", isActive: true, isConfigured: true },
-        { id: "simplybook", name: "SimplyBook Widget", description: "Embeddable booking widget integration.", icon: "simplybook", category: "booking", isActive: false, isConfigured: false },
-        { id: "sso", name: "Enterprise SSO", description: "SAML and OAuth2 authentication.", icon: "sso", category: "system", isActive: true, isConfigured: true },
-        { id: "mailchimp", name: "Mailchimp", description: "Sync clients to mailing lists.", icon: "mailchimp", category: "communication", isActive: false, isConfigured: false },
-        { id: "invoices", name: "Advanced Invoicing", description: "Generate PDF invoices automatically.", icon: "invoices", category: "payment", isActive: true, isConfigured: true },
-      ])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const togglePlugin = async (id: string, currentActive: boolean) => {
-    try {
-      // Optimistic update
-      setPlugins(plugins.map(p => p.id === id ? { ...p, isActive: !currentActive } : p))
-      
-      // In a real scenario you would update the specific plugin state
-      // await apiClient.post(`/api/admin/plugins/${id}/toggle`, { active: !currentActive })
-      
-      toast.success(currentActive ? "Plugin disabled" : "Plugin enabled")
-    } catch (error) {
-      toast.error("Failed to toggle plugin")
-      // Revert on error
-      setPlugins(plugins.map(p => p.id === id ? { ...p, isActive: currentActive } : p))
-    }
+  const togglePlugin = (id: string, currentActive: boolean) => {
+    // In-memory non-persistent state toggle
+    setPlugins(plugins.map(p => p.id === id ? { ...p, isActive: !currentActive } : p))
+    toast.success(currentActive ? "Plugin disabled" : "Plugin enabled")
   }
 
   if (loading) {

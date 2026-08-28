@@ -1,11 +1,11 @@
 # Frontend-to-Backend API Contract Alignment Audit
 
-**Audit Date**: 2026-08-28  
-**Branch**: `telemetry/observability-baseline`  
-**OpenAPI Total Paths**: 209 paths / 305 operations  
-**Frontend Total Callers Scanned**: 242 `apiClient` callers across 34 TypeScript/React files  
-**Baseline Match Rate Before Repair**: 216 / 242 (89.3%)  
-**Match Rate After Category A Repair**: 230 / 242 (95.0%) (remaining 12 are Category B/C or parameterized dynamic dispatch)
+**Audit Date**: 2026-08-28
+**Branch**: `telemetry/observability-baseline`
+**OpenAPI Total Paths**: 209 paths / 305 operations
+**Frontend Total Callers Scanned**: 241 active `apiClient` callers across 34 TypeScript/React files
+**Baseline Match Rate Before Repair**: 216 / 241 (89.6%)
+**Match Rate After Category A Repair**: 229 / 241 (95.0%) (remaining 12 callers are Category B/C or parameterized dynamic dispatch)
 
 ---
 
@@ -47,24 +47,29 @@ Every identified mismatch between frontend caller paths and backend FastAPI Open
 | 22 | `frontend/src/pages/admin/relationships-matrix.tsx:515` | `PUT /api/admin/${colDef.plural}/${item.id}` | `PUT /api/admin/{entities}/{id}` | **Dynamic** | **No change** | Evaluates at runtime to canonical entity routes. |
 | 23 | `frontend/src/pages/admin/relationships-matrix.tsx:516` | `PATCH /api/admin/${colDef.plural}/${item.id}` | `PATCH /api/admin/{entities}/{id}` | **Dynamic** | **No change** | Fallback path for entities supporting PATCH. |
 | 24 | `frontend/src/pages/admin/reviews.tsx:84` | `PUT /api/admin/management-reviews/${review.id}` | `PUT /api/admin/management-reviews/{id}/resolve` | **B** | **No** | **Domain/Payload Mismatch**: Page is a mock customer star ratings table (`{ is_approved }`), whereas backend endpoint is for restricted-client booking reviews (`{ state: "approved" | "rejected", resolution_notes }`). |
-| 25 | `frontend/src/pages/admin/settings/plugins.tsx:41` | `GET /api/admin/ui-config` | `GET /api/public/ui-config/admin` | **A** | **Yes** | Declared in `app/api/routers/ui_config.py:79` (`get_admin_ui_config`). Returns admin UI modules config `{ modules: {...} }`. |
+| 25 | `frontend/src/pages/admin/settings/plugins.tsx:41` | `GET /api/admin/ui-config` | `GET /api/public/ui-config/admin` | **B** | **No** | **Schema Mismatch**: `/api/public/ui-config/admin` returns `{ modules: { locations: bool, ... } }`, whereas `plugins.tsx` expects `{ plugins: PluginConfig[] }`. Corrected in source to explicit in-memory mock catalog without attempting invalid HTTP calls. |
 | 26 | `frontend/src/pages/admin/settings/plugins.tsx:67` | `POST /api/admin/plugins/${id}/toggle` | *None* | **B** | **No** | **Commented Stub**: Line is commented out in TypeScript (`// await ...`); no plugin toggle route exists. |
 
 ---
 
 ## 3. Decisions & Recommendations for Untouched Items (Categories B & C)
 
-### A. Payment Refund Endpoint (`frontend/src/pages/admin/finance/payments.tsx:51`) — Category C
+### A. Plugins & Integrations Settings (`frontend/src/pages/admin/settings/plugins.tsx`) — Category B
+- **Current State**: The page renders a catalog of modular plugins (Stripe, SimplyBook Widget, SSO, Mailchimp, Advanced Invoicing) with an in-memory toggle state.
+- **Reason Left Untouched**: Backend `/api/public/ui-config/admin` returns feature boolean flags for core modules, not a dynamic plugins entity catalog. Pointing `plugins.tsx` to `ui-config/admin` caused predictable runtime schema errors ("No plugins data") and fallback warnings.
+- **Decision Required**: Real backend plugin management and persistence endpoints remain intentionally unimplemented pending a separately approved product/API design. The mock-only status is now explicit in the frontend source.
+
+### B. Payment Refund Endpoint (`frontend/src/pages/admin/finance/payments.tsx:51`) — Category C
 - **Current State**: Frontend attempts `POST /api/admin/finance/payments/${paymentId}/refund`.
 - **Reason Left Untouched**: In accordance with `AGENTS.md` Rule 3 ("A payment/refund feature requires an approved provider integration, idempotency, audit trail, and explicit user authorization"), no backend refund route exists.
 - **Decision Required**: When refund functionality is prioritized, create an explicit Stripe/gateway refund service with idempotency keying and an audit log table before attaching a frontend action.
 
-### B. Payment Processors Configuration (`frontend/src/pages/admin/finance/processors.tsx:43, 62`) — Category B
+### C. Payment Processors Configuration (`frontend/src/pages/admin/finance/processors.tsx:43, 62`) — Category B
 - **Current State**: Frontend expects `{ currency: string, processors: { stripe, paypal, offline } }`. Backend stores records in `payment_processor_configs` table (`GET/POST/PUT /api/admin/payment-processor/configs`).
 - **Reason Left Untouched**: Simply changing the URL would produce schema mapping errors and prevent saving.
 - **Decision Required**: Update `processors.tsx` to map its form state to the `PaymentProcessorConfig` entity schema or introduce a typed frontend adapter.
 
-### C. Reviews Management (`frontend/src/pages/admin/reviews.tsx:84`) — Category B
+### D. Reviews Management (`frontend/src/pages/admin/reviews.tsx:84`) — Category B
 - **Current State**: `reviews.tsx` renders a 5-star customer rating UI and calls `PUT /api/admin/management-reviews/${id}` with `{ is_approved: boolean }`.
 - **Reason Left Untouched**: Backend `management-reviews` is dedicated to restricted-client booking policy approval (`state: 'approved' | 'rejected'`), not customer testimonials/star ratings.
 - **Decision Required**: Determine whether customer testimonials are in scope for a new `CustomerReview` model or if `reviews.tsx` should be adapted to display restricted-client booking review requests.
