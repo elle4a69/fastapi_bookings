@@ -1,4 +1,4 @@
-import React, { Component, ReactNode } from 'react';
+import React, { Component, type ReactNode } from 'react';
 import { recordComponentError } from '@/lib/telemetry';
 
 interface Props {

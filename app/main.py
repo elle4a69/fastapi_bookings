@@ -145,6 +145,9 @@ async def app_lifespan(app: FastAPI):
     yield
     # Shutdown
     await stop_outbox_worker(worker_task)
+    from .core.telemetry import shutdown_telemetry
+    shutdown_telemetry()
+
 
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
@@ -321,6 +324,7 @@ app.include_router(search.router)
 app.include_router(ui_config.router)
 app.include_router(forms.router)
 app.include_router(diagnostics.router)
+app.include_router(diagnostics.public_router)
 app.include_router(categories.router)
 app.include_router(resources_router.router)
 app.include_router(addons.router)

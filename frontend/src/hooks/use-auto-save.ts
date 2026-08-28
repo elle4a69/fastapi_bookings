@@ -9,7 +9,7 @@ interface UseAutoSaveOptions<T> {
 
 export function useAutoSave<T>({ onSave, debounceMs = 500 }: UseAutoSaveOptions<T>) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSaveRef = useRef(onSave);
   const lastPayloadRef = useRef<T | null>(null);
   const failedPayloadRef = useRef<T | null>(null);

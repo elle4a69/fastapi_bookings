@@ -1,15 +1,11 @@
 /**
  * telemetry.ts – Privacy-safe frontend telemetry forwarder.
  *
- * Captures JS errors and unhandled promise rejections, strips all personal
- * data, and forwards only structural metadata (error class, route template,
- * component name) to the backend diagnostics endpoint.
- *
- * NEVER sends: message body, SMS content, phone numbers, names, tokens,
- * customer data, query parameters, or anything identifying.
+ * Captures structural error metadata and Web Vitals across both public
+ * booking pages and admin UI, stripping all query strings, hashes, and PII.
  */
 
-const TELEMETRY_ENDPOINT = '/api/admin/system/diagnostics/telemetry';
+const TELEMETRY_ENDPOINT = '/api/public/diagnostics/telemetry';
 
 interface TelemetryEvent {
   event_type: string;
@@ -18,48 +14,41 @@ interface TelemetryEvent {
   component?: string;
   duration_ms?: number;
   vital_name?: string;
-  session_id?: string;
 }
 
 /** Return URL pathname only – strip query params and hash */
 function safeRoute(): string {
   try {
-    return window.location.pathname;
+    return window.location.pathname.split('?')[0].split('#')[0];
   } catch {
     return '';
   }
 }
 
-/** Get anonymous session ID (generated once per page load, not stored) */
-const _sessionId: string = Math.random().toString(36).slice(2, 10);
-
 async function sendTelemetry(event: TelemetryEvent): Promise<void> {
   try {
-    const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || '') : '';
-    if (!token) return; // only send when admin session is active
-
     const body: TelemetryEvent = {
       ...event,
-      route: event.route ?? safeRoute(),
-      session_id: _sessionId,
+      route: (event.route ?? safeRoute()).split('?')[0].split('#')[0].slice(0, 150),
     };
 
     await fetch(TELEMETRY_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Token': token,
       },
       body: JSON.stringify(body),
     });
   } catch {
-    // Silently ignore – never let telemetry break the app
+    // Fail silently – never disrupt UI or user interaction
   }
 }
 
 function extractErrorClass(err: unknown): string {
-  if (err instanceof Error) return err.constructor.name || 'Error';
-  if (typeof err === 'string') return 'StringError';
+  if (err instanceof Error) {
+    const name = err.constructor.name || 'Error';
+    return name.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 100);
+  }
   return 'UnknownError';
 }
 
@@ -71,8 +60,7 @@ export function initFrontendTelemetry(): void {
     sendTelemetry({
       event_type: 'js_error',
       error_class: extractErrorClass(event.error),
-      // Only the first line of the source file – never the message (may contain PII)
-      component: event.filename ? event.filename.split('/').pop()?.split('?')[0] ?? '' : '',
+      component: event.filename ? (event.filename.split('/').pop()?.split('?')[0] ?? '').slice(0, 100) : '',
     });
   });
 
@@ -97,7 +85,7 @@ export function recordWebVital(name: string, value: number): void {
 export function recordComponentError(errorClass: string, component: string): void {
   sendTelemetry({
     event_type: 'component_error',
-    error_class: errorClass,
-    component,
+    error_class: extractErrorClass(errorClass),
+    component: component.slice(0, 100),
   });
 }
