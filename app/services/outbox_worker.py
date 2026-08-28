@@ -51,13 +51,11 @@ async def stop_outbox_worker(task: asyncio.Task):
     global _worker_running
     logger.info("Stopping outbox worker background loop...")
     _worker_running = False
+    task.cancel()
     try:
-        await asyncio.wait_for(task, timeout=10.0)
-    except asyncio.TimeoutError:
-        logger.warning("Outbox worker task shutdown timed out. Cancelling task.")
-        task.cancel()
-    except Exception as e:
-        logger.error(f"Error during outbox worker shutdown: {str(e)}")
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
 
 async def process_pending_outbox_events(db: Session = None):
     """Fetch and dispatch outstanding OutboxEvents."""

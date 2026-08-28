@@ -14,8 +14,13 @@ from opentelemetry.sdk.resources import Resource
 
 logger = logging.getLogger(__name__)
 
-# Module-level flag: True when OTEL_SDK_DISABLED is set to a truthy value
-telemetry_disabled: bool = os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"1", "true", "yes"}
+def _is_telemetry_disabled() -> bool:
+    """Re-read OTEL_SDK_DISABLED at call-time so tests can set it before import."""
+    return os.environ.get("OTEL_SDK_DISABLED", "").lower() in {"1", "true", "yes"}
+
+# Module-level alias — evaluates lazily via property-style function
+# main.py imports this; tests can override via os.environ before app loads.
+telemetry_disabled: bool = _is_telemetry_disabled()
 
 # Sensitive key patterns to redact
 SENSITIVE_KEYS = re.compile(

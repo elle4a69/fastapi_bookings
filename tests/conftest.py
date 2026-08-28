@@ -1,5 +1,11 @@
 """Conftest file for setting up pytest fixtures and overriding app dependencies."""
 
+import os
+
+# Force OTel SDK off before ANY app module is imported.
+# Uses a hard assignment so shell env overrides are also suppressed.
+os.environ["OTEL_SDK_DISABLED"] = "true"
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
