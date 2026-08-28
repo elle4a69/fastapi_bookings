@@ -75,7 +75,6 @@ def test_extreme_service_buffers_direct():
         slot_end=datetime(2026, 7, 5, 11, 0, tzinfo=timezone.utc),
         active_bookings=[booking],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[]
     )
     assert overlaps_1 is False
@@ -88,7 +87,6 @@ def test_extreme_service_buffers_direct():
         slot_end=datetime(2026, 7, 5, 14, 0, tzinfo=timezone.utc),
         active_bookings=[booking],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[]
     )
     assert overlaps_2 is True
@@ -101,7 +99,6 @@ def test_extreme_service_buffers_direct():
         slot_end=datetime(2026, 7, 7, 11, 0, tzinfo=timezone.utc),
         active_bookings=[booking],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[]
     )
     assert overlaps_3 is True
@@ -114,7 +111,6 @@ def test_extreme_service_buffers_direct():
         slot_end=datetime(2026, 7, 7, 15, 0, tzinfo=timezone.utc),
         active_bookings=[booking],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[]
     )
     assert overlaps_4 is False

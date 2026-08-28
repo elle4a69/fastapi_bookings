@@ -130,7 +130,6 @@ def test_buffer_aware_overlap_checks(db_session: Session):
         slot_end=datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
         active_bookings=[booking_exist],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[]
     )
     assert overlaps is True
@@ -144,7 +143,6 @@ def test_buffer_aware_overlap_checks(db_session: Session):
         slot_end=datetime(2026, 7, 9, 12, 15, tzinfo=timezone.utc),
         active_bookings=[booking_exist],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[],
         new_buffer_before=10,
         new_buffer_after=10
@@ -160,7 +158,6 @@ def test_buffer_aware_overlap_checks(db_session: Session):
         slot_end=datetime(2026, 7, 9, 12, 30, tzinfo=timezone.utc),
         active_bookings=[booking_exist],
         provider_blocked=[],
-        active_holds=[],
         active_reservations=[],
         new_buffer_before=10,
         new_buffer_after=10

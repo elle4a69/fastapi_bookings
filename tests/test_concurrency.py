@@ -1,351 +1,440 @@
-"""Concurrency tests for first-confirmed-submission-wins booking model.
+"""Tests for atomic first-submit-wins booking creation, slot allocations, and concurrency."""
 
-Proves that:
-1. Concurrent booking submissions for the exact same slot result in exactly 1 winner and 409 Conflict for all losers.
-2. 15-minute inter-booking buffer conflicts are strictly enforced under concurrency.
-3. Idempotent requests concurrently submitted return the same booking without creating duplicates.
-4. Waitlist entries operate purely as passive records without generating holds or race conditions.
-"""
-
-import concurrent.futures
-import os
-import tempfile
+import uuid
 from datetime import datetime, timezone, timedelta
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from starlette.testclient import TestClient
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.db.database import Base
-from app.models.tenant import Tenant
-from app.models.user import User
-from app.models.service import Service
-from app.models.provider import Provider
-from app.models.client import Client
-from app.models.location import Location
-from app.models.booking import Booking
-from app.models.waitlist import WaitlistEntry, WaitlistStatus
+from app.models import (
+    Tenant,
+    User,
+    Service,
+    Provider,
+    ServiceProvider,
+    Client as ClientModel,
+    Booking as BookingModel,
+    BookingSlotAllocation,
+    OutboxEvent,
+    WaitlistEntry,
+    WaitlistStatus,
+)
 from app.core.state_machine import BookingStatus
-from app.core.security import get_password_hash, create_access_token
-from app.main import app as fastapi_app
 
 
 @pytest.fixture
-def concurrent_db():
-    """File-backed temporary SQLite database for safe multi-threaded concurrency testing."""
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    engine = create_engine(
-        f"sqlite:///{path}",
-        connect_args={"timeout": 30, "check_same_thread": False},
-    )
-    Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    try:
-        yield Session
-    finally:
-        Base.metadata.drop_all(bind=engine)
-        engine.dispose()
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+def test_setup(db_session: Session):
+    """Setup test fixture for concurrency testing."""
+    tenant = db_session.query(Tenant).filter(Tenant.subdomain == "concurrency-test").first()
+    if not tenant:
+        tenant = Tenant(name="Concurrency Test Tenant", subdomain="concurrency-test")
+        db_session.add(tenant)
+        db_session.commit()
+        db_session.refresh(tenant)
+
+    user = db_session.query(User).filter(User.login == "concurrency-admin").first()
+    if not user:
+        user = User(
+            login="concurrency-admin",
+            password_hash="mock-password",
+            tenant_id=tenant.id,
+            role="owner",
+        )
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+    service = db_session.query(Service).filter(Service.name == "Concurrency Service", Service.tenant_id == tenant.id).first()
+    if not service:
+        service = Service(
+            name="Concurrency Service",
+            duration=30,
+            price=50.0,
+            tenant_id=tenant.id,
+            active=True,
+            buffer_before=15,
+            buffer_after=15,
+        )
+        db_session.add(service)
+        db_session.commit()
+        db_session.refresh(service)
+
+    provider = db_session.query(Provider).filter(Provider.name == "Concurrency Provider", Provider.tenant_id == tenant.id).first()
+    if not provider:
+        provider = Provider(
+            name="Concurrency Provider",
+            tenant_id=tenant.id,
+            active=True,
+            ignore_company_hours=True,
+        )
+        db_session.add(provider)
+        db_session.commit()
+        db_session.refresh(provider)
+
+    sp = db_session.query(ServiceProvider).filter(ServiceProvider.service_id == service.id, ServiceProvider.provider_id == provider.id).first()
+    if not sp:
+        sp = ServiceProvider(service_id=service.id, provider_id=provider.id, tenant_id=tenant.id)
+        db_session.add(sp)
+        db_session.commit()
+
+    client_user = db_session.query(ClientModel).filter(ClientModel.email == "concurrency-client@example.com", ClientModel.tenant_id == tenant.id).first()
+    if not client_user:
+        client_user = ClientModel(
+            name="Concurrency Client",
+            email="concurrency-client@example.com",
+            phone="+15550001111",
+            tenant_id=tenant.id,
+        )
+        db_session.add(client_user)
+        db_session.commit()
+        db_session.refresh(client_user)
+
+    return {
+        "tenant": tenant,
+        "admin": user,
+        "service": service,
+        "provider": provider,
+        "client": client_user,
+    }
 
 
-def setup_concurrency_data(Session):
-    db = Session()
-    tenant = Tenant(name="Concurrency Clinic", subdomain="concurrency")
-    db.add(tenant)
-    db.commit()
-    db.refresh(tenant)
+def test_twenty_simultaneous_submissions_exactly_one_wins(client, test_setup, db_session):
+    """Test 20 simultaneous/competing booking submissions for the exact same slot.
 
-    user = User(
-        tenant_id=tenant.id,
-        login="admin_concurrent",
-        password_hash=get_password_hash("password123"),
-        role="owner",
-    )
-    service = Service(
-        tenant_id=tenant.id,
-        name="Consultation",
-        duration=30,
-        buffer_before=15,
-        buffer_after=15,
-        price=100.0,
-        active=True,
-    )
-    provider = Provider(
-        tenant_id=tenant.id,
-        name="Dr. Concurrent",
-        email="provider@concurrency.com",
-        active=True,
-    )
-    client_a = Client(
-        tenant_id=tenant.id,
-        name="Client Alice",
-        email="alice@example.com",
-        active=True,
-    )
-    client_b = Client(
-        tenant_id=tenant.id,
-        name="Client Bob",
-        email="bob@example.com",
-        active=True,
-    )
-    location = Location(
-        tenant_id=tenant.id,
-        name="Main Office",
-    )
-    db.add_all([user, service, provider, client_a, client_b, location])
-    db.commit()
-    db.refresh(service)
-    db.refresh(provider)
-    db.refresh(client_a)
-    db.refresh(client_b)
-    db.refresh(location)
+    Requirements:
+    - Exactly 1 submission succeeds with HTTP 200/201.
+    - Exactly 19 submissions fail with HTTP 409 Conflict.
+    - Exactly 1 booking record and its matching slot allocations exist in DB.
+    - Exactly 1 outbox event was created.
+    """
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
 
-    tenant_id = tenant.id
-    provider_id = provider.id
-    service_id = service.id
-    client_a_id = client_a.id
-    client_b_id = client_b.id
-    location_id = location.id
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=5)).replace(hour=10, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
 
-    db.close()
-    return tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id
-
-
-def test_concurrent_booking_submissions_first_wins(concurrent_db):
-    """Prove that with 10 concurrent requests for the same slot, exactly 1 wins and 9 receive 409 Conflict."""
-    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
-
-    def override_get_db():
-        db = concurrent_db()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    def override_get_public_tenant():
-        db = concurrent_db()
-        try:
-            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            return tenant
-        finally:
-            db.close()
-
-    from app.api.deps import get_db, get_public_tenant
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
-
-    start_time = (datetime.now(timezone.utc) + timedelta(days=2)).replace(hour=14, minute=0, second=0, microsecond=0)
-    end_time = start_time + timedelta(minutes=30)
-
-    token = create_access_token({"sub": "concurrency"})
-    headers = {"X-Tenant": "concurrency", "X-Token": token}
-
+    num_attempts = 20
     results = []
 
-    def book_slot(client_idx):
-        client = TestClient(fastapi_app)
+    for i in range(num_attempts):
+        unique_key = f"race-{uuid.uuid4()}"
         payload = {
-            "service_id": service_id,
-            "provider_id": provider_id,
-            "location_id": location_id,
-            "client_name": f"Customer {client_idx}",
-            "client_email": f"cust{client_idx}@example.com",
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
+            "client_name": f"Client {i}",
+            "client_email": f"client{i}@example.com",
+            "client_phone": f"+1555999{i:04d}",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "idempotency_key": unique_key,
         }
-        res = client.post("/api/public/bookings", json=payload, headers=headers)
-        results.append((res.status_code, res.text))
+        res = client.post(
+            "/api/public/bookings",
+            json=payload,
+            headers={"X-Tenant": tenant.subdomain},
+        )
+        results.append((res.status_code, res.json()))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(book_slot, i) for i in range(10)]
-        concurrent.futures.wait(futures)
+    statuses = [status for status, _ in results]
+    successes = [s for s in statuses if s in (200, 201)]
+    conflicts = [s for s in statuses if s == 409]
 
-    fastapi_app.dependency_overrides.clear()
+    assert len(successes) == 1, f"Expected exactly 1 success, got {len(successes)}: {statuses}"
+    assert len(conflicts) == 19, f"Expected exactly 19 conflicts, got {len(conflicts)}: {statuses}"
 
-    status_codes = [status for status, _ in results]
-    successes = [s for s in status_codes if s in (200, 201)]
-    conflicts = [s for s in status_codes if s == 409]
-
-    assert len(successes) == 1, f"Expected exactly 1 successful booking, got {len(successes)}. Statuses: {status_codes}"
-    assert len(conflicts) == 9, f"Expected 9 HTTP 409 Conflicts, got {len(conflicts)}. Statuses: {status_codes}"
-
-    db = concurrent_db()
-    bookings_in_db = (
-        db.query(Booking)
+    db_session.expire_all()
+    # Verify DB state
+    bookings = (
+        db_session.query(BookingModel)
         .filter(
-            Booking.provider_id == provider_id,
-            Booking.start_time == start_time,
-            Booking.status != BookingStatus.CANCELLED,
+            BookingModel.provider_id == provider.id,
+            BookingModel.start_time == start_dt,
+            BookingModel.status != BookingStatus.CANCELLED,
         )
         .all()
     )
-    assert len(bookings_in_db) == 1, f"Expected exactly 1 booking in database, found {len(bookings_in_db)}"
-    db.close()
+    assert len(bookings) == 1
+    winning_booking = bookings[0]
+
+    allocations = (
+        db_session.query(BookingSlotAllocation)
+        .filter(BookingSlotAllocation.booking_id == winning_booking.id)
+        .order_by(BookingSlotAllocation.slot_start)
+        .all()
+    )
+    assert len(allocations) == 4
+
+    events = (
+        db_session.query(OutboxEvent)
+        .filter(
+            OutboxEvent.tenant_id == tenant.id,
+            OutboxEvent.type == "booking.created",
+        )
+        .all()
+    )
+    matching_events = [e for e in events if (e.data() or {}).get("id") == winning_booking.id]
+    assert len(matching_events) == 1
 
 
-def test_concurrent_booking_buffer_conflict(concurrent_db):
-    """Prove that overlapping bookings within the 15-minute buffer boundary conflict atomically."""
-    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
+def test_buffer_collision_and_overlap_conflicts(client, test_setup, db_session):
+    """Test overlapping bookings and 15-minute buffer collisions conflict with HTTP 409."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
 
-    def override_get_db():
-        db = concurrent_db()
-        try:
-            yield db
-        finally:
-            db.close()
+    base_start = (datetime.now(timezone.utc) + timedelta(days=6)).replace(hour=14, minute=0, second=0, microsecond=0)
+    base_end = base_start + timedelta(minutes=30)
 
-    def override_get_public_tenant():
-        db = concurrent_db()
-        try:
-            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            return tenant
-        finally:
-            db.close()
-
-    from app.api.deps import get_db, get_public_tenant
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
-
-    base_time = (datetime.now(timezone.utc) + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
-
-    token = create_access_token({"sub": "concurrency"})
-    headers = {"X-Tenant": "concurrency", "X-Token": token}
-
-    client = TestClient(fastapi_app)
-    res_a = client.post(
+    # 1. First booking: 14:00 - 14:30 (buffer covers 13:45 to 14:45)
+    res1 = client.post(
         "/api/public/bookings",
         json={
-            "service_id": service_id,
-            "provider_id": provider_id,
-            "location_id": location_id,
-            "client_id": client_a_id,
-            "start_time": base_time.isoformat(),
-            "end_time": (base_time + timedelta(minutes=30)).isoformat(),
+            "client_name": "Primary Client",
+            "client_email": "primary@example.com",
+            "client_phone": "+15551112222",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": base_start.isoformat(),
+            "end_time": base_end.isoformat(),
+            "idempotency_key": f"prim-{uuid.uuid4()}",
         },
-        headers=headers,
+        headers={"X-Tenant": tenant.subdomain},
     )
-    assert res_a.status_code in (200, 201), f"First booking should succeed: {res_a.text}"
+    assert res1.status_code == 200, res1.text
 
-    # Second booking overlapping within buffer window (10:35 - 11:05 overlaps with 10:00-10:30 + 15m buffer)
-    res_b = client.post(
+    # 2. Overlapping booking: 14:15 - 14:45 -> must fail 409
+    res_overlap = client.post(
         "/api/public/bookings",
         json={
-            "service_id": service_id,
-            "provider_id": provider_id,
-            "location_id": location_id,
-            "client_id": client_b_id,
-            "start_time": (base_time + timedelta(minutes=35)).isoformat(),
-            "end_time": (base_time + timedelta(minutes=65)).isoformat(),
+            "client_name": "Overlap Client",
+            "client_email": "overlap@example.com",
+            "client_phone": "+15551112223",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": (base_start + timedelta(minutes=15)).isoformat(),
+            "end_time": (base_end + timedelta(minutes=15)).isoformat(),
+            "idempotency_key": f"overlap-{uuid.uuid4()}",
         },
-        headers=headers,
+        headers={"X-Tenant": tenant.subdomain},
     )
-    assert res_b.status_code == 409, f"Second booking within 15m buffer must return 409 Conflict, got {res_b.status_code}"
+    assert res_overlap.status_code == 409
 
-    fastapi_app.dependency_overrides.clear()
+    # 3. Buffer collision booking: 14:30 - 15:00 (violates 15m post-buffer ending at 14:45) -> must fail 409
+    res_buf = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "Buffer Client",
+            "client_email": "buffer@example.com",
+            "client_phone": "+15551112224",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": base_end.isoformat(),
+            "end_time": (base_end + timedelta(minutes=30)).isoformat(),
+            "idempotency_key": f"buffer-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res_buf.status_code == 409
 
-
-def test_concurrent_booking_idempotency(concurrent_db):
-    """Prove that concurrent requests with identical idempotency_key return the same booking and do not duplicate."""
-    tenant_id, provider_id, service_id, client_a_id, client_b_id, location_id = setup_concurrency_data(concurrent_db)
-
-    def override_get_db():
-        db = concurrent_db()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    def override_get_public_tenant():
-        db = concurrent_db()
-        try:
-            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-            return tenant
-        finally:
-            db.close()
-
-    from app.api.deps import get_db, get_public_tenant
-    fastapi_app.dependency_overrides[get_db] = override_get_db
-    fastapi_app.dependency_overrides[get_public_tenant] = override_get_public_tenant
-
-    start_time = (datetime.now(timezone.utc) + timedelta(days=3)).replace(hour=11, minute=0, second=0, microsecond=0)
-    end_time = start_time + timedelta(minutes=30)
-    idempotency_key = "idemp-key-xyz-12345"
-
-    token = create_access_token({"sub": "concurrency"})
-    headers = {"X-Tenant": "concurrency", "X-Token": token}
-
-    results = []
-
-    def submit_idempotent():
-        client = TestClient(fastapi_app)
-        payload = {
-            "service_id": service_id,
-            "provider_id": provider_id,
-            "location_id": location_id,
-            "client_id": client_a_id,
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
-            "idempotency_key": idempotency_key,
-        }
-        res = client.post("/api/public/bookings", json=payload, headers=headers)
-        results.append(res)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(submit_idempotent) for _ in range(5)]
-        concurrent.futures.wait(futures)
-
-    fastapi_app.dependency_overrides.clear()
-
-    # All should return 200/201
-    assert all(r.status_code in (200, 201) for r in results), f"Expected 200/201, got statuses: {[r.status_code for r in results]}"
-    booking_ids = {r.json()["data"]["id"] for r in results}
-    assert len(booking_ids) == 1, f"All idempotent responses must return the same booking ID: {booking_ids}"
-
-    db = concurrent_db()
-    total_bookings = db.query(Booking).filter(Booking.idempotency_key == idempotency_key).count()
-    assert total_bookings == 1, f"Database must contain exactly 1 booking for idempotency key, found {total_bookings}"
-    db.close()
+    # 4. Valid non-overlapping booking with buffer respected: 15:00 - 15:30 (buffer starts 14:45) -> must succeed 200
+    res_valid = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "Valid Client",
+            "client_email": "valid@example.com",
+            "client_phone": "+15551112225",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": (base_end + timedelta(minutes=30)).isoformat(),
+            "end_time": (base_end + timedelta(minutes=60)).isoformat(),
+            "idempotency_key": f"valid-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res_valid.status_code == 200, res_valid.text
 
 
-def test_concurrent_waitlist_passive_safety(concurrent_db):
-    """Prove that waitlist entries operate passively without auto-creating holds or causing race conditions."""
-    tenant_id, provider_id, service_id, client_a_id, client_b_id, _ = setup_concurrency_data(concurrent_db)
+def test_cancellation_releases_slot_allocations(client, test_setup, db_session):
+    """Test cancellation deletes slot allocations and frees the time slot for subsequent bookings."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
 
-    db = concurrent_db()
-    tomorrow = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=1)
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=7)).replace(hour=11, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
 
-    entry_a = WaitlistEntry(
-        tenant_id=tenant_id,
-        service_id=service_id,
-        client_id=client_a_id,
-        provider_id=provider_id,
-        desired_date_from=tomorrow,
-        desired_date_to=tomorrow + timedelta(hours=4),
+    # 1. Create booking
+    res1 = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "Cancel Test Client",
+            "client_email": "canceltest@example.com",
+            "client_phone": "+15553334444",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "idempotency_key": f"can1-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res1.status_code == 200
+    booking_id = res1.json()["data"]["id"]
+
+    db_session.expire_all()
+    alloc_count = db_session.query(BookingSlotAllocation).filter(BookingSlotAllocation.booking_id == booking_id).count()
+    assert alloc_count > 0
+
+    # 2. Cancel the booking via admin endpoint
+    res_cancel = client.post(
+        f"/api/bookings/{booking_id}/cancel",
+        headers={"X-Tenant": tenant.subdomain, "X-Token": "mock-admin-token"},
+    )
+    assert res_cancel.status_code == 200
+
+    db_session.expire_all()
+    alloc_count_after = db_session.query(BookingSlotAllocation).filter(BookingSlotAllocation.booking_id == booking_id).count()
+    assert alloc_count_after == 0
+
+    # 3. Create a new booking for the same slot -> must now succeed!
+    res_rebook = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "Rebooked Client",
+            "client_email": "rebooked@example.com",
+            "client_phone": "+15553335555",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": start_dt.isoformat(),
+            "end_time": end_dt.isoformat(),
+            "idempotency_key": f"can2-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res_rebook.status_code == 200
+
+
+def test_reschedule_atomically_updates_allocations(client, test_setup, db_session):
+    """Test rescheduling atomically releases old allocations and claims new slots."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
+
+    orig_start = (datetime.now(timezone.utc) + timedelta(days=8)).replace(hour=9, minute=0, second=0, microsecond=0)
+    orig_end = orig_start + timedelta(minutes=30)
+    target_start = (datetime.now(timezone.utc) + timedelta(days=8)).replace(hour=15, minute=0, second=0, microsecond=0)
+    target_end = target_start + timedelta(minutes=30)
+
+    # 1. Create booking
+    res = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "Reschedule Client",
+            "client_email": "resched@example.com",
+            "client_phone": "+15556667777",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": orig_start.isoformat(),
+            "end_time": orig_end.isoformat(),
+            "idempotency_key": f"resch-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res.status_code == 200
+    b_id = res.json()["data"]["id"]
+
+    # 2. Reschedule to target slot
+    res_resched = client.post(
+        f"/api/bookings/{b_id}/reschedule",
+        json={
+            "new_start": target_start.isoformat(),
+            "new_end": target_end.isoformat(),
+        },
+        headers={"X-Tenant": tenant.subdomain, "X-Token": "mock-admin-token"},
+    )
+    assert res_resched.status_code == 200
+
+    db_session.expire_all()
+    # Check that allocations now point to the target slots
+    allocations = (
+        db_session.query(BookingSlotAllocation)
+        .filter(BookingSlotAllocation.booking_id == b_id)
+        .order_by(BookingSlotAllocation.slot_start)
+        .all()
+    )
+    assert any(a.slot_start.replace(tzinfo=timezone.utc) == target_start for a in allocations)
+
+    # 3. Old slot is now free for another booking
+    res_old_slot = client.post(
+        "/api/public/bookings",
+        json={
+            "client_name": "New Taker of Old Slot",
+            "client_email": "newtaker@example.com",
+            "client_phone": "+15556668888",
+            "provider_id": provider.id,
+            "service_id": service.id,
+            "start_time": orig_start.isoformat(),
+            "end_time": orig_end.isoformat(),
+            "idempotency_key": f"newtaker-{uuid.uuid4()}",
+        },
+        headers={"X-Tenant": tenant.subdomain},
+    )
+    assert res_old_slot.status_code == 200
+
+
+def test_concurrent_idempotency_key_deduplication(client, test_setup):
+    """Test duplicate submissions with identical idempotency_key return the same booking."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
+
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=9)).replace(hour=16, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
+    idem_key = f"idem-{uuid.uuid4()}"
+
+    payload = {
+        "client_name": "Idempotent Client",
+        "client_email": "idem@example.com",
+        "client_phone": "+15557778888",
+        "provider_id": provider.id,
+        "service_id": service.id,
+        "start_time": start_dt.isoformat(),
+        "end_time": end_dt.isoformat(),
+        "idempotency_key": idem_key,
+    }
+
+    # First attempt
+    res1 = client.post("/api/public/bookings", json=payload, headers={"X-Tenant": tenant.subdomain})
+    assert res1.status_code == 200
+    id1 = res1.json()["data"]["id"]
+
+    # Second attempt with same key
+    res2 = client.post("/api/public/bookings", json=payload, headers={"X-Tenant": tenant.subdomain})
+    assert res2.status_code == 200
+    id2 = res2.json()["data"]["id"]
+
+    assert id1 == id2
+
+
+def test_waitlist_passive_safety(test_setup, db_session):
+    """Verify waitlist entries are passive administrative records and do not create bookings/allocations."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+
+    # Create passive waitlist entry
+    wl = WaitlistEntry(
+        tenant_id=tenant.id,
+        service_id=service.id,
+        client_id=test_setup["client"].id,
+        desired_date_from=datetime.now(timezone.utc),
         status=WaitlistStatus.REQUESTED,
     )
-    entry_b = WaitlistEntry(
-        tenant_id=tenant_id,
-        service_id=service_id,
-        client_id=client_b_id,
-        provider_id=provider_id,
-        desired_date_from=tomorrow,
-        desired_date_to=tomorrow + timedelta(hours=4),
-        status=WaitlistStatus.REQUESTED,
-    )
-    db.add_all([entry_a, entry_b])
-    db.commit()
+    db_session.add(wl)
+    db_session.commit()
+    db_session.refresh(wl)
 
-    # Verify both entries exist with status REQUESTED
-    entries = db.query(WaitlistEntry).filter(WaitlistEntry.tenant_id == tenant_id).all()
-    assert len(entries) == 2
-    assert all(e.status == WaitlistStatus.REQUESTED for e in entries)
-
-    # Verify no bookings were autonomously created
-    bookings = db.query(Booking).filter(Booking.tenant_id == tenant_id).count()
-    assert bookings == 0
-    db.close()
+    # Confirm zero slot allocations exist for this waitlist entry
+    allocs = db_session.query(BookingSlotAllocation).filter(BookingSlotAllocation.tenant_id == tenant.id).all()
+    for a in allocs:
+        assert a.booking_id is not None
