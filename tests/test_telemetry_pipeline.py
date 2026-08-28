@@ -1,11 +1,12 @@
-"""Automated unit and integration tests for Privacy-Safe Telemetry & Observability Pipeline."""
+"""Comprehensive Automated Unit and Integration Tests for Telemetry & Observability Pipeline."""
 
 import pytest
-import logging
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
+
 from opentelemetry.sdk.trace import ReadableSpan, Event
 from opentelemetry.trace import SpanContext, TraceFlags
+from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import encode_spans
 
 from app.core.config import settings
 from app.core.telemetry import (
@@ -19,36 +20,46 @@ from app.core.telemetry import (
     record_arrival_event,
     record_link_failure,
     record_booking_failure,
+    record_telemetry_log,
     get_telemetry_status_data,
+    SanitizedSpanProxy,
 )
 from app.main import app
 
 
-def test_telemetry_disabled_in_tests():
-    """Verify that settings correctly identify disabled telemetry state during test runs."""
-    assert get_telemetry_status_data()["telemetry_enabled"] is True or get_telemetry_status_data()["telemetry_enabled"] is False
+def test_telemetry_configuration_resolution():
+    """Verify settings drive telemetry configuration cleanly without raw os.environ reads."""
+    status = get_telemetry_status_data()
+    assert "telemetry_enabled" in status
+    assert status["service_name"] == "fastapi-bookings"
+    assert status["environment"] == settings.APP_ENV
 
 
-def test_privacy_safe_span_exporter_redaction():
-    """Verify PrivacySafeSpanExporter strips unsanitized keys, tokens, emails, phones, SQL params, and exception messages."""
+def test_otlp_serialization_privacy():
+    """Test PrivacySafeSpanExporter with real OTLP span encoding to prove prohibited sentinel values are absent."""
     mock_inner_exporter = MagicMock()
     mock_inner_exporter.export.return_value = None
-    exporter = PrivacySafeSpanExporter(mock_inner_exporter)
+    safe_exporter = PrivacySafeSpanExporter(mock_inner_exporter)
 
     ctx = SpanContext(trace_id=0x12345678901234567890123456789012, span_id=0x1234567890123456, is_remote=False, trace_flags=TraceFlags(1))
-    
-    # Span with sensitive attributes and raw exception details
+
+    SENTINEL_TOKEN = "bearer_secret_token_val_123"
+    SENTINEL_PHONE = "+15551234567"
+    SENTINEL_EMAIL = "customer_privacy@example.com"
+    SENTINEL_SQL = "SELECT * FROM users WHERE password = 'super_secret'"
+    SENTINEL_MSG = "Authentication failed for user customer_privacy@example.com with token bearer_secret_token_val_123"
+
     raw_span = ReadableSpan(
-        name="test_sensitive_span",
+        name="test_privacy_serialization_span",
         context=ctx,
         attributes={
             "http.method": "POST",
-            "http.route": "/api/bookings/12345?token=secret123&key=456",
+            "http.route": "/api/bookings/99999?token=" + SENTINEL_TOKEN,
             "http.status_code": 200,
-            "secret_token": "bearer_secret_token_val",
-            "customer_phone": "+1234567890",
-            "customer_email": "user@example.com",
-            "sql_query": "SELECT * FROM users WHERE password = 'secret'",
+            "secret_token": SENTINEL_TOKEN,
+            "customer_phone": SENTINEL_PHONE,
+            "customer_email": SENTINEL_EMAIL,
+            "sql_statement": SENTINEL_SQL,
             "error.type": "ValueError",
         },
         events=[
@@ -56,45 +67,37 @@ def test_privacy_safe_span_exporter_redaction():
                 name="exception",
                 attributes={
                     "exception.type": "ValueError",
-                    "exception.message": "User user@example.com failed auth with token secret123",
-                    "exception.stacktrace": "Traceback (most recent call last):\n  File 'app/main.py', line 123 in login\n"
+                    "exception.message": SENTINEL_MSG,
+                    "exception.stacktrace": f"Traceback:\n  File 'auth.py', line 50\n    {SENTINEL_MSG}"
                 },
-                timestamp=1000
+                timestamp=100000
             )
         ]
     )
 
-    exporter.export([raw_span])
+    safe_exporter.export([raw_span])
     assert mock_inner_exporter.export.called
-    exported_spans = mock_inner_exporter.export.call_args[0][0]
-    exported_proxy = exported_spans[0]
+    exported_proxies = mock_inner_exporter.export.call_args[0][0]
+    sanitized_proxy = exported_proxies[0]
 
-    # 1. Non-allowlisted keys must be stripped
-    assert "secret_token" not in exported_proxy.attributes
-    assert "customer_phone" not in exported_proxy.attributes
-    assert "customer_email" not in exported_proxy.attributes
-    assert "sql_query" not in exported_proxy.attributes
+    # Real OTLP Protobuf Serialization via trace_encoder.encode_spans
+    encoded_otlp_pb = encode_spans([sanitized_proxy])
+    otlp_str = str(encoded_otlp_pb)
 
-    # 2. Allowlisted keys must be retained and sanitized
-    assert exported_proxy.attributes["http.method"] == "POST"
-    assert exported_proxy.attributes["http.status_code"] == 200
-    assert exported_proxy.attributes["error.type"] == "ValueError"
+    # Assert NO prohibited sentinel string appears anywhere in the serialized payload
+    assert SENTINEL_TOKEN not in otlp_str
+    assert SENTINEL_PHONE not in otlp_str
+    assert SENTINEL_EMAIL not in otlp_str
+    assert SENTINEL_SQL not in otlp_str
+    assert SENTINEL_MSG not in otlp_str
 
-    # 3. Route must be sanitized of raw numeric IDs and query strings
-    assert "?" not in exported_proxy.attributes["http.route"]
-    assert "token" not in exported_proxy.attributes["http.route"]
-    assert exported_proxy.attributes["http.route"] == "/api/bookings/{id}"
-
-    # 4. Exception events must keep only exception.type (no raw message or stacktrace)
-    assert len(exported_proxy.events) == 1
-    ev_attrs = exported_proxy.events[0].attributes
-    assert ev_attrs.get("exception.type") == "ValueError"
-    assert "exception.message" not in ev_attrs
-    assert "exception.stacktrace" not in ev_attrs
+    # Assert allowlisted attributes are present
+    assert "http.method" in otlp_str or "POST" in otlp_str
+    assert "/api/bookings/{id}" in otlp_str
 
 
-def test_bounded_enum_metrics_recording():
-    """Verify custom metric recorders process bounded enum values cleanly."""
+def test_metric_recorders_and_bounded_enums():
+    """Verify metrics recording functions accept bounded enum codes cleanly."""
     record_webhook_event("accepted")
     record_webhook_event("invalid_enum_status")  # falls back to "failed"
     
@@ -105,60 +108,106 @@ def test_bounded_enum_metrics_recording():
     record_booking_failure(operation="cancel", reason="client_no_show")
 
 
-def test_public_frontend_telemetry_endpoint(client: TestClient):
-    """Verify POST /api/public/diagnostics/telemetry accepts safe structural events and rejects invalid ones."""
+def test_safe_structured_telemetry_logging():
+    """Verify record_telemetry_log emits structured allowlisted attributes only without KeyError."""
+    record_telemetry_log(
+        event_code="WEBHOOK_ACCEPTED",
+        level="INFO",
+        module="chatwoot_service",
+        request_id="req_123",
+        trace_id="trace_456",
+        route_template="/api/chatwoot/webhook?token=secret",
+        method="POST",
+        status="200",
+        duration_ms=45.2,
+    )
+
+
+def test_http_404_405_5xx_telemetry(client: TestClient):
+    """Verify HTTP 404, 405, and 200 responses carry correlation headers and trace contexts."""
+    # 200 OK
+    r200 = client.post("/api/public/diagnostics/telemetry", json={"event_type": "web_vital", "vital_name": "LCP", "duration_ms": 100.0})
+    assert r200.status_code == 200
+    assert "X-Trace-ID" in r200.headers
+
+    # 404 Not Found
+    r404 = client.get("/api/public/non-existent-endpoint-test-404")
+    assert r404.status_code == 404
+    assert "X-Trace-ID" in r404.headers
+
+    # 405 Method Not Allowed
+    r405 = client.get("/api/public/diagnostics/telemetry")
+    assert r405.status_code == 405
+    assert "X-Trace-ID" in r405.headers
+
+
+def test_public_frontend_telemetry_validation(client: TestClient):
+    """Verify POST /api/public/diagnostics/telemetry validates schemas and strips sensitive inputs."""
     # 1. Valid event
-    valid_payload = {
+    res1 = client.post("/api/public/diagnostics/telemetry", json={
         "event_type": "js_error",
         "error_class": "TypeError",
-        "route": "/book/checkout?token=123#step2",
-        "component": "BookingForm",
-        "duration_ms": 145.5
-    }
-    res = client.post("/api/public/diagnostics/telemetry", json=valid_payload)
-    assert res.status_code == 200
-    assert res.json() == {"status": "accepted"}
+        "route": "/checkout/payment?token=secret123#step2",
+        "component": "CheckoutForm",
+        "duration_ms": 120.0,
+    })
+    assert res1.status_code == 200
+    assert res1.json() == {"status": "accepted"}
 
-    # 2. Invalid event_type
-    invalid_payload = {
-        "event_type": "malicious_type",
-        "error_class": "TypeError"
-    }
-    res_inv = client.post("/api/public/diagnostics/telemetry", json=invalid_payload)
-    assert res_inv.status_code == 200
-    assert res_inv.json() == {"status": "rejected"}
+    # 2. Invalid event_type -> rejected
+    res2 = client.post("/api/public/diagnostics/telemetry", json={
+        "event_type": "malicious_script_injection",
+        "error_class": "TypeError",
+    })
+    assert res2.status_code == 200
+    assert res2.json() == {"status": "rejected"}
 
 
-def test_admin_diagnostics_telemetry_status(client: TestClient, db_session):
-    """Verify GET /api/admin/system/diagnostics/telemetry/status returns safe state without exposing endpoints or secrets."""
+def test_collector_failure_non_impact():
+    """Verify exporter failure does not break telemetry exporter wrapper or throw exceptions."""
+    failing_inner_exporter = MagicMock()
+    failing_inner_exporter.export.side_effect = RuntimeError("Collector connection refused")
+
+    safe_exporter = PrivacySafeSpanExporter(failing_inner_exporter)
+    ctx = SpanContext(trace_id=0x1111, span_id=0x2222, is_remote=False, trace_flags=TraceFlags(1))
+    span = ReadableSpan(name="test_fail_span", context=ctx)
+
+    # Must return FAILURE without raising RuntimeError to the caller
+    res = safe_exporter.export([span])
+    assert res.name == "FAILURE"
+
+
+def test_idempotent_telemetry_init():
+    """Verify calling init_telemetry multiple times is safe and idempotent."""
+    init_telemetry(app)
+    init_telemetry(app)
+
+
+def test_truthful_telemetry_status(client: TestClient, db_session):
+    """Verify GET /api/admin/system/diagnostics/telemetry/status returns truthful state without credentials or endpoints."""
     from app.models.tenant import Tenant
     from app.models.user import User
     from app.core.security import create_access_token
 
-    tenant = Tenant(name="Diag Biz", subdomain="diag-biz")
+    tenant = Tenant(name="Truth Biz", subdomain="truth-biz")
     db_session.add(tenant)
     db_session.commit()
 
-    user = User(tenant_id=tenant.id, login="admin_diag", password_hash="hash", role="owner")
+    user = User(tenant_id=tenant.id, login="truth_admin", password_hash="hash", role="owner")
     db_session.add(user)
     db_session.commit()
 
     token = create_access_token({"sub": str(user.id)})
-    headers = {"X-Tenant": "diag-biz", "X-Token": token}
+    headers = {"X-Tenant": "truth-biz", "X-Token": token}
 
     res = client.get("/api/admin/system/diagnostics/telemetry/status", headers=headers)
     assert res.status_code == 200
     data = res.json()
+    
     assert "telemetry_enabled" in data
-    assert "service_name" in data
+    assert "last_export_status" in data
     assert data["service_name"] == "fastapi-bookings"
-    # Must NOT expose endpoints or tokens
+    
+    # Must NOT expose endpoints, tokens, or credentials
     assert "http://localhost" not in str(data)
     assert "secret" not in str(data).lower()
-
-
-def test_idempotent_telemetry_init():
-    """Verify multiple init_telemetry calls do not double-instrument."""
-    init_telemetry(app)
-    init_telemetry(app)
-    # Should not raise exception

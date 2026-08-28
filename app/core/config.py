@@ -80,7 +80,7 @@ class Settings(BaseSettings):
 
     # OpenTelemetry / observability
     OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
-        "http://localhost:4318", description="OTLP exporter base endpoint URL"
+        "http://localhost:8080", description="OTLP exporter base endpoint URL"
     )
     OTEL_SDK_DISABLED: bool = Field(
         False, description="Set to True to disable OTel SDK"

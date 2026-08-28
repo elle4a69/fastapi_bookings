@@ -1,18 +1,19 @@
 """Centralized Privacy-Safe OpenTelemetry Observability Module.
 
-Provides traces, metrics, logs, and frontend diagnostic forwarding for FastAPI Bookings.
-All telemetry configuration is read exclusively from central application settings (`settings`).
+Provides traces, metrics, structured logs, and frontend diagnostic forwarding.
+All configuration is driven strictly through `settings` (from app.core.config).
 Redaction is enforced via an Allowlist-based Span Exporter wrapper prior to export.
 """
 
 import re
-import json
+import time
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Sequence, Set
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider, ReadableSpan, SpanProcessor, Event
+from opentelemetry.sdk.trace import TracerProvider, ReadableSpan, Event
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -22,14 +23,16 @@ from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Module-level flag alias for main.py import
-telemetry_disabled: bool = settings.OTEL_SDK_DISABLED
-
-# Global Sentinel & State
+# Global Sentinel & Pipeline State
 _telemetry_initialized: bool = False
 _tracer_provider: Optional[TracerProvider] = None
 _meter_provider: Optional[MeterProvider] = None
 _logger_provider: Optional[Any] = None
+_last_export_status: str = "idle"
+_last_export_timestamp: Optional[str] = None
+
+# Allowlist alias for backward compatibility
+telemetry_disabled: bool = settings.OTEL_SDK_DISABLED
 
 # Safe Telemetry Attribute Allowlist
 SAFE_ATTRIBUTE_KEYS: Set[str] = {
@@ -51,7 +54,7 @@ SAFE_ATTRIBUTE_KEYS: Set[str] = {
     "frontend.component",
     "frontend.duration_ms",
     "frontend.vital_name",
-    "event_type",
+    "event_code",
     "status",
     "job_type",
     "operation",
@@ -59,11 +62,17 @@ SAFE_ATTRIBUTE_KEYS: Set[str] = {
     "account_id",
 }
 
-# Regex to detect raw parameter IDs or tokens in URL paths
+# Strict Enum Sets for Metrics & Events
+VALID_STATUSES: Set[str] = {"accepted", "rejected", "duplicate", "failed", "success", "retry", "queued", "cancelled", "processed", "activated", "alert_repeated", "acknowledged"}
+VALID_OPERATIONS: Set[str] = {"confirm", "cancel", "reschedule", "complete", "noshow", "search", "create", "update", "delete", "other"}
+VALID_REASONS: Set[str] = {"client_no_show", "slot_unavailable", "invalid_state", "unauthorized", "validation_failed", "payment_failed", "other"}
+VALID_JOB_TYPES: Set[str] = {"outbox_sms", "chatwoot_sync", "ai_autopilot", "arrival_notification", "other"}
+
+# Path Normalization Pattern
 PATH_ID_PATTERN = re.compile(r"/\d+(?=/|$)")
 
 def sanitize_url_path(url_val: str) -> str:
-    """Normalize raw URL paths to template format and strip query strings."""
+    """Normalize raw URL paths to template format (/path/{id}) and strip query strings."""
     if not url_val or not isinstance(url_val, str):
         return ""
     try:
@@ -81,15 +90,13 @@ def sanitize_attribute_value(key: str, val: Any) -> Any:
         return val
     
     str_val = str(val)
-    # If key is a route, strip query string and normalize parameters
     if key in ("http.route", "http.target", "frontend.route"):
         return sanitize_url_path(str_val)
     
-    # Strip any strings containing query tokens, credentials, or sensitive symbols
+    # Strip string values containing query tokens, credentials, or sensitive symbols
     if any(s in str_val.lower() for s in ["token=", "key=", "auth=", "secret=", "password=", "@"]):
         return "[REDACTED]"
     
-    # Limit length of string attributes
     if len(str_val) > 150:
         return str_val[:147] + "..."
     return str_val
@@ -135,10 +142,18 @@ class PrivacySafeSpanExporter(SpanExporter):
         self.wrapped_exporter = wrapped_exporter
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        global _last_export_status, _last_export_timestamp
         try:
             sanitized_spans = [SanitizedSpanProxy(s, SAFE_ATTRIBUTE_KEYS) for s in spans]
-            return self.wrapped_exporter.export(sanitized_spans)
+            result = self.wrapped_exporter.export(sanitized_spans)
+            if result == SpanExportResult.SUCCESS:
+                _last_export_status = "ok"
+                _last_export_timestamp = datetime.now(timezone.utc).isoformat()
+            else:
+                _last_export_status = "error"
+            return result
         except Exception as e:
+            _last_export_status = "error"
             logger.debug(f"PrivacySafeSpanExporter export suppressed exception: {e}")
             return SpanExportResult.FAILURE
 
@@ -155,7 +170,7 @@ class PrivacySafeSpanExporter(SpanExporter):
             return False
 
 
-# Meters & Global Instruments
+# Global Meter & Metric Instruments
 tracer = trace.get_tracer("fastapi-bookings")
 meter = metrics.get_meter("fastapi-bookings")
 
@@ -172,70 +187,94 @@ job_duration = meter.create_histogram("job_execution_duration_seconds", descript
 
 # Bounded Enum Helpers
 def record_webhook_event(status: str) -> None:
-    """Record a webhook event using a bounded status code (accepted, rejected, duplicate, failed)."""
-    valid_statuses = {"accepted", "rejected", "duplicate", "failed"}
-    clean_status = status if status in valid_statuses else "failed"
+    """Record a webhook event using a bounded status code."""
+    clean_status = status if status in VALID_STATUSES else "failed"
     webhook_counter.add(1, {"status": clean_status})
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("webhook_event", {"status": clean_status})
+    record_telemetry_log(f"WEBHOOK_{clean_status.upper()}", "INFO", "chatwoot_service", status=clean_status)
 
 def record_sms_event(status: str, account_id: Optional[int] = None) -> None:
     """Record SMS outbound status using a bounded status enum."""
-    valid_statuses = {"success", "failure", "retry"}
-    clean_status = status if status in valid_statuses else "failure"
+    clean_status = status if status in VALID_STATUSES else "failure"
     attrs = {"status": clean_status}
     if account_id is not None:
         attrs["account_id"] = str(account_id)
     sms_counter.add(1, attrs)
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("sms_event", attrs)
+    record_telemetry_log(f"SMS_{clean_status.upper()}", "INFO" if clean_status == "success" else "ERROR", "sms_service", status=clean_status)
 
 def record_ai_event(status: str, job_type: str) -> None:
     """Record AI job status using bounded enums."""
-    valid_statuses = {"queued", "cancelled", "processed", "failed"}
-    clean_status = status if status in valid_statuses else "failed"
-    attrs = {"status": clean_status, "job_type": job_type[:50]}
+    clean_status = status if status in VALID_STATUSES else "failed"
+    clean_job_type = job_type if job_type in VALID_JOB_TYPES else "other"
+    attrs = {"status": clean_status, "job_type": clean_job_type}
     ai_counter.add(1, attrs)
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("ai_event", attrs)
+    record_telemetry_log(f"AI_JOB_{clean_status.upper()}", "INFO" if clean_status == "processed" else "ERROR", "ai_service", status=clean_status)
 
 def record_arrival_event(status: str) -> None:
     """Record arrival status using bounded enums."""
-    valid_statuses = {"activated", "alert_repeated", "acknowledged"}
-    clean_status = status if status in valid_statuses else "activated"
+    clean_status = status if status in VALID_STATUSES else "activated"
     arrival_counter.add(1, {"status": clean_status})
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("arrival_event", {"status": clean_status})
+    record_telemetry_log(f"ARRIVAL_{clean_status.upper()}", "INFO", "arrival_service", status=clean_status)
 
 def record_link_failure() -> None:
     """Record a short-link resolution failure."""
     link_counter.add(1)
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("link_resolution_failure")
+    record_telemetry_log("LINK_RESOLUTION_FAILURE", "WARNING", "link_service")
 
 def record_booking_failure(operation: str, reason: str) -> None:
-    """Record a booking operation failure using bounded operation and reason codes."""
-    attrs = {"operation": operation[:50], "reason": reason[:50]}
+    """Record a booking operation failure using validated enum codes."""
+    clean_op = operation if operation in VALID_OPERATIONS else "other"
+    clean_reason = reason if reason in VALID_REASONS else "other"
+    attrs = {"operation": clean_op, "reason": clean_reason}
     booking_counter.add(1, attrs)
-    span = trace.get_current_span()
-    if span and span.is_recording():
-        span.add_event("booking_failure", attrs)
+    record_telemetry_log(f"BOOKING_{clean_op.upper()}_FAILURE", "WARNING", "booking_service", status="failed")
+
+
+# Dedicated Structured Telemetry Log Path
+def record_telemetry_log(
+    event_code: str,
+    level: str = "INFO",
+    module: str = "app",
+    request_id: str = "",
+    trace_id: str = "",
+    route_template: str = "",
+    method: str = "",
+    status: str = "",
+    error_class: str = "",
+    duration_ms: float = 0.0,
+) -> None:
+    """Emit a dedicated structured telemetry log record with allowlisted fields only."""
+    log_data = {
+        "event_code": str(event_code)[:50],
+        "level": str(level)[:10],
+        "safe_module": str(module)[:50],
+        "request_id": str(request_id)[:32],
+        "trace_id": str(trace_id)[:32],
+        "route": sanitize_url_path(route_template),
+        "method": str(method)[:10],
+        "status": str(status)[:20],
+        "error_class": str(error_class)[:50],
+        "duration_ms": round(float(duration_ms), 2) if duration_ms else 0.0,
+    }
+    
+    current_span = trace.get_current_span()
+    if current_span and current_span.is_recording():
+        current_span.add_event(f"telemetry_log.{event_code}", log_data)
+        
+    t_logger = logging.getLogger(f"telemetry.{module}")
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    t_logger.log(log_level, f"Telemetry Event: {event_code}", extra=log_data)
 
 
 def init_telemetry(app=None) -> None:
     """Idempotently initialize OpenTelemetry Traces, Metrics, Logs, and Instrumentations."""
-    global _telemetry_initialized, _tracer_provider, _meter_provider, _logger_provider
+    global _telemetry_initialized, _tracer_provider, _meter_provider, _logger_provider, _last_export_status
 
     if _telemetry_initialized:
         return
 
     if settings.OTEL_SDK_DISABLED:
         logger.info("Telemetry is disabled via settings (OTEL_SDK_DISABLED=True)")
+        _last_export_status = "disabled"
         return
 
     base_endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
@@ -245,7 +284,7 @@ def init_telemetry(app=None) -> None:
 
     resource = Resource.create({
         "service.name": "fastapi-bookings",
-        "service.namespace": "production",
+        "service.namespace": settings.APP_ENV,
         "deployment.environment": settings.APP_ENV,
     })
 
@@ -273,16 +312,12 @@ def init_telemetry(app=None) -> None:
     # 3. Logs Pipeline
     try:
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+        from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
         l_exporter = OTLPLogExporter(endpoint=logs_url, timeout=3)
         _logger_provider = LoggerProvider(resource=resource)
         _logger_provider.add_log_record_processor(BatchLogRecordProcessor(l_exporter, max_queue_size=2048, max_export_batch_size=512))
-        
-        # Attach OTel logging handler to root logger
-        handler = LoggingHandler(logger_provider=_logger_provider)
-        logging.getLogger().addHandler(handler)
     except Exception as e:
         logger.warning(f"Failed to initialize Log Provider: {e}")
 
@@ -308,6 +343,7 @@ def init_telemetry(app=None) -> None:
         logger.error(f"Failed to instrument HTTPX: {e}")
 
     _telemetry_initialized = True
+    _last_export_status = "idle"
     logger.info(f"Telemetry initialized using OTLP base endpoint: {base_endpoint}")
 
 
@@ -340,7 +376,7 @@ def shutdown_telemetry() -> None:
 
 
 def get_telemetry_status_data() -> Dict[str, Any]:
-    """Return safe telemetry health metadata (no credentials, endpoints, or tokens)."""
+    """Return truthful, safe telemetry health metadata (no credentials, endpoints, or tokens)."""
     return {
         "telemetry_enabled": not settings.OTEL_SDK_DISABLED,
         "trace_exporter_active": _tracer_provider is not None,
@@ -348,5 +384,6 @@ def get_telemetry_status_data() -> Dict[str, Any]:
         "log_exporter_active": _logger_provider is not None,
         "service_name": "fastapi-bookings",
         "environment": settings.APP_ENV,
-        "last_export_status": "ok" if _telemetry_initialized else "disabled",
+        "last_export_status": _last_export_status,
+        "last_export_timestamp": _last_export_timestamp,
     }
