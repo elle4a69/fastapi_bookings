@@ -32,9 +32,6 @@ SUPPORTED_EVENTS = {
     "booking.rescheduled",
     "booking.no_show",
     "client.created",
-    "hold.created",
-    "hold.confirmed",
-    "hold.expired",
 }
 
 

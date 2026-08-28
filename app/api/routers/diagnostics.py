@@ -40,7 +40,6 @@ class DiagnosticsModules(BaseModel):
     products: bool
     add_ons: bool
     packages: bool
-    holds: bool = False
     waitlist: bool
     multi_tenant: bool
 
@@ -77,7 +76,6 @@ def get_system_diagnostics(
             "products": True,
             "add_ons": True,
             "packages": True,
-            "holds": False,
             "waitlist": True,
             "multi_tenant": True,
         },

@@ -37,7 +37,6 @@ def check_slot_overlaps(
     active_reservations: List[Any],
     new_buffer_before: int = 0,
     new_buffer_after: int = 0,
-    active_holds: List[Any] | None = None,
 ) -> bool:
     """Check if a time slot overlaps with active bookings, blocked periods, or reservations."""
     # Ensure minimum 15-minute inter-booking buffer unless specified higher
