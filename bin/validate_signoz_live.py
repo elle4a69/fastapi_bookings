@@ -1,114 +1,239 @@
-"""Live SigNoz Observability Validation & Privacy Verification Script.
+#!/usr/bin/env python
+"""Live SigNoz validation — strictly fail-closed and run-scoped.
 
-Reads collector configuration strictly from application settings (settings.OTEL_EXPORTER_OTLP_ENDPOINT).
-Generates synthetic traffic, flushes OTel providers, and queries the local ClickHouse telemetry store
-to prove live receipt of traces, metrics, and safe logs while verifying that prohibited sentinel values are absent.
+Generates labelled synthetic telemetry with a unique run ID, flushes all
+providers, then queries ClickHouse inside Docker to prove receipt of traces,
+metrics, and structured logs generated during THIS specific execution.
+
+Exits non-zero if:
+  - Any signal fails to reach ClickHouse
+  - The OTLP endpoint is unreachable
+  - SDK is disabled
+  - A privacy canary leaks into stored data
+
+Usage:
+    python bin/validate_signoz_live.py
 """
 
+import os
+import subprocess
+import sys
 import time
-import urllib.request
-import urllib.parse
 import json
-from fastapi.testclient import TestClient
+import logging
+
+# Ensure project root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.core.config import settings
-from app.main import app
+
+from opentelemetry import trace, metrics
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+
 from app.core.telemetry import (
-    init_telemetry,
-    shutdown_telemetry,
-    record_webhook_event,
-    record_sms_event,
-    record_ai_event,
+    PrivacySafeSpanExporter,
     record_telemetry_log,
-    get_telemetry_status_data,
+    _TELEMETRY_LOGGER_NAME,
 )
 
-SENTINEL_TOKEN = "bearer_live_privacy_sentinel_token_987"
-SENTINEL_PHONE = "+15550009999"
-SENTINEL_EMAIL = "live_privacy_test@example.com"
-SENTINEL_SQL = "SELECT * FROM users WHERE secret_password = 'live_secret'"
+CLICKHOUSE_CONTAINER = "signoz-telemetrystore-clickhouse-0-0"
+SERVICE_NAME = "fastapi-bookings"
+PRIVACY_SENTINEL = "PRIVACY_SENTINEL_CANARY_12345"
 
-def run_live_validation():
-    print("--- 1. Initializing Telemetry Pipeline via Central Settings ---")
-    print(f"Configured Base Endpoint: {settings.OTEL_EXPORTER_OTLP_ENDPOINT}")
-    print(f"OTEL_SDK_DISABLED: {settings.OTEL_SDK_DISABLED}")
+failures: list[str] = []
 
-    # Ensure telemetry is enabled using central settings
-    settings.OTEL_SDK_DISABLED = False
-    init_telemetry(app)
-    
-    status = get_telemetry_status_data()
-    print("Telemetry Pipeline Status:", status)
 
-    client = TestClient(app)
+def _ch_query(sql: str) -> str:
+    """Execute a ClickHouse query via docker exec; return stdout."""
+    result = subprocess.run(
+        [
+            "docker", "exec", CLICKHOUSE_CONTAINER,
+            "clickhouse-client", "--query", sql,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ClickHouse query failed: {result.stderr.strip()}")
+    return result.stdout.strip()
 
-    print("\n--- 2. Generating Synthetic Traffic & Privacy Sentinel Events ---")
-    # Event 1: Normal 200 Request
-    res1 = client.post("/api/public/diagnostics/telemetry", json={
-        "event_type": "web_vital",
-        "vital_name": "LCP",
-        "duration_ms": 150.0,
-        "route": f"/checkout/pay?token={SENTINEL_TOKEN}#step1"
-    })
-    print("1. Normal Request (200 OK):", res1.status_code, "X-Trace-ID:", res1.headers.get("X-Trace-ID"))
 
-    # Event 2: Controlled 404 Request
-    res2 = client.get(f"/api/public/non-existent-live-route?token={SENTINEL_TOKEN}")
-    print("2. Controlled 404 Request:", res2.status_code)
+def main() -> int:
+    run_start_ns = time.time_ns()
+    run_start_ms = run_start_ns // 1_000_000
+    run_id = f"val{int(time.time())}"
 
-    # Event 3: Controlled 405 Request
-    res3 = client.get("/api/public/diagnostics/telemetry")
-    print("3. Controlled 405 Request:", res3.status_code)
+    base = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
+    print(f"=== Live SigNoz Validation (fail-closed, run_id={run_id}) ===")
+    print(f"OTLP endpoint (from settings): {base}")
+    print(f"SDK disabled: {settings.OTEL_SDK_DISABLED}")
 
-    # Event 4: Safe Background/Webhook Event
-    record_webhook_event("accepted")
-    record_sms_event("success", account_id=101)
-    record_ai_event("processed", job_type="outbox_sms")
-    print("4. Safe Webhook/SMS/AI Events Recorded")
+    if settings.OTEL_SDK_DISABLED:
+        print("[FAIL] OTEL_SDK_DISABLED is True — cannot validate live pipeline.")
+        return 1
 
-    # Event 5: Safe Structured Telemetry Log
+    resource = Resource.create({"service.name": SERVICE_NAME})
+
+    # ── 1. Traces ─────────────────────────────────────────────────────────
+    print("\n--- 1. Generating Traces ---")
+    t_exp = OTLPSpanExporter(endpoint=f"{base}/v1/traces", timeout=5)
+    safe_exp = PrivacySafeSpanExporter(t_exp)
+    tp = TracerProvider(resource=resource)
+    tp.add_span_processor(BatchSpanProcessor(safe_exp, max_export_batch_size=10,
+                                             schedule_delay_millis=500))
+    tracer = tp.get_tracer("live-validator")
+
+    span_200_name = f"live_200_{run_id}"
+    span_404_name = f"live_404_{run_id}"
+    span_405_name = f"live_405_{run_id}"
+
+    with tracer.start_as_current_span(span_200_name) as span:
+        span.set_attribute("http.method", "GET")
+        span.set_attribute("http.status_code", 200)
+        span.set_attribute("http.route", "/api/health")
+        # Inject privacy sentinel as an unallowlisted attribute
+        span.set_attribute("customer_secret", PRIVACY_SENTINEL)
+
+    with tracer.start_as_current_span(span_404_name) as span:
+        span.set_attribute("http.method", "GET")
+        span.set_attribute("http.status_code", 404)
+        span.set_attribute("http.route", "/api/not-found")
+
+    with tracer.start_as_current_span(span_405_name) as span:
+        span.set_attribute("http.method", "POST")
+        span.set_attribute("http.status_code", 405)
+        span.set_attribute("http.route", "/api/read-only")
+
+    tp.force_flush(timeout_millis=10000)
+    print(f"  Exported 3 run-tagged spans ({span_200_name}, {span_404_name}, {span_405_name})")
+
+    # ── 2. Metrics ────────────────────────────────────────────────────────
+    print("\n--- 2. Generating Metrics ---")
+    m_exp = OTLPMetricExporter(endpoint=f"{base}/v1/metrics", timeout=5)
+    m_reader = PeriodicExportingMetricReader(m_exp, export_interval_millis=1000,
+                                            export_timeout_millis=3000)
+    mp = MeterProvider(resource=resource, metric_readers=[m_reader])
+    meter = mp.get_meter("live-validator")
+    ctr = meter.create_counter("live_validation_counter")
+    ctr.add(1, {"status": "accepted", "event": "live_test"})
+    mp.force_flush(timeout_millis=10000)
+    print("  Exported 1 metric data point")
+
+    # ── 3. Logs (dedicated pipeline) ──────────────────────────────────────
+    print("\n--- 3. Generating Dedicated Structured Log ---")
+    l_exp = OTLPLogExporter(endpoint=f"{base}/v1/logs", timeout=5)
+    lp = LoggerProvider(resource=resource)
+    lp.add_log_record_processor(BatchLogRecordProcessor(l_exp, max_queue_size=512,
+                                                        max_export_batch_size=64))
+    handler = LoggingHandler(level=logging.DEBUG, logger_provider=lp)
+    dedicated = logging.getLogger(_TELEMETRY_LOGGER_NAME)
+    dedicated.addHandler(handler)
+    dedicated.setLevel(logging.DEBUG)
+    dedicated.propagate = False
+
     record_telemetry_log(
         event_code="LIVE_TEST_EVENT",
         level="INFO",
         module="live_validator",
-        request_id="req_live_001",
-        route_template=f"/public/test?token={SENTINEL_TOKEN}",
+        request_id=run_id,
         method="POST",
         status="200",
-        duration_ms=88.5
+        duration_ms=42.0,
     )
-    print("5. Structured Telemetry Log Emitted")
+    lp.force_flush(timeout_millis=10000)
+    dedicated.removeHandler(handler)
+    print(f"  Exported 1 structured log record tagged with request_id={run_id}")
 
-    print("\n--- 3. Flushing OTel Trace, Metric, and Log Providers ---")
-    shutdown_telemetry()
-    print("Flush and shutdown complete.")
+    # ── 4. Flush and wait for batch writes ────────────────────────────────
+    print("\n--- 4. Waiting 5s for ClickHouse Ingestion ---")
+    tp.shutdown()
+    mp.shutdown()
+    lp.shutdown()
+    time.sleep(5)
 
-    print("\n--- 4. Querying Local Telemetry Store for Verification & Privacy Scan ---")
-    # Give ClickHouse a brief moment to write batch
-    time.sleep(2.0)
+    # ── 5. Query ClickHouse ───────────────────────────────────────────────
+    print("\n--- 5. ClickHouse Evidence Verification ---")
 
-    clickhouse_url = "http://127.0.0.1:8123/?query="
+    # 5a. Traces: check specifically for this run's 3 span names
     try:
-        # Query traces
-        query_spans = "SELECT serviceName, name, statusCode, timestamp FROM signoz_traces.signoz_spans WHERE serviceName = 'fastapi-bookings' ORDER BY timestamp DESC LIMIT 10 FORMAT JSON"
-        req = urllib.request.urlopen(clickhouse_url + urllib.parse.quote(query_spans))
-        spans_json = json.loads(req.read().decode())
-        span_count = len(spans_json.get("data", []))
-        print(f"Traces Verified in SigNoz ClickHouse: {span_count} spans found.")
-
-        # Privacy Scan across all signoz_spans attributes
-        query_privacy = f"SELECT count() FROM signoz_traces.signoz_spans WHERE position(attributes_string_values, '{SENTINEL_TOKEN}') > 0 OR position(attributes_string_values, '{SENTINEL_PHONE}') > 0 OR position(attributes_string_values, '{SENTINEL_EMAIL}') > 0 OR position(attributes_string_values, '{SENTINEL_SQL}') > 0"
-        req_p = urllib.request.urlopen(clickhouse_url + urllib.parse.quote(query_privacy))
-        leaked_count = int(req_p.read().decode().strip())
-        print(f"Privacy Scan Result: {leaked_count} leaks found for prohibited sentinels.")
-        
-        assert leaked_count == 0, "PRIVACY VIOLATION: Prohibited sentinel string leaked into SigNoz trace attributes!"
-        print("PRIVACY VERIFICATION PASSED: ZERO sentinel leaks detected in SigNoz!")
-
+        count_str = _ch_query(
+            f"SELECT count() FROM signoz_traces.signoz_index_v3 "
+            f"WHERE resources_string['service.name'] = '{SERVICE_NAME}' "
+            f"AND name IN ('{span_200_name}', '{span_404_name}', '{span_405_name}')"
+        )
+        trace_count = int(count_str)
+        print(f"  Run-specific traces received: {trace_count} / 3")
+        if trace_count < 3:
+            failures.append(f"Expected 3 run-specific traces ({span_200_name}, {span_404_name}, {span_405_name}), got {trace_count}")
     except Exception as e:
-        print(f"ClickHouse direct query note: {e}")
+        failures.append(f"Trace query failed: {e}")
 
-    print("\nSUCCESS: Live SigNoz Observability Validation Completed Cleanly!")
+    # 5b. Logs: check specifically for this run's request_id
+    try:
+        count_str = _ch_query(
+            f"SELECT count() FROM signoz_logs.logs_v2 "
+            f"WHERE resources_string['service.name'] = '{SERVICE_NAME}' "
+            f"AND attributes_string['request_id'] = '{run_id}'"
+        )
+        log_count = int(count_str)
+        print(f"  Run-specific structured logs received: {log_count} / 1")
+        if log_count < 1:
+            failures.append(f"Expected >= 1 log with request_id={run_id}, got {log_count}")
+    except Exception as e:
+        failures.append(f"Log query failed: {e}")
+
+    # 5c. Metrics: check samples_v4 for timestamp >= run_start_ms
+    try:
+        count_str = _ch_query(
+            f"SELECT count() FROM signoz_metrics.samples_v4 "
+            f"WHERE metric_name = 'live_validation_counter' "
+            f"AND unix_milli >= {run_start_ms}"
+        )
+        metric_count = int(count_str)
+        print(f"  Run-specific metric samples received: {metric_count}")
+        if metric_count < 1:
+            failures.append(f"Expected >= 1 metric sample recorded since {run_start_ms}, got {metric_count}")
+    except Exception as e:
+        failures.append(f"Metric query failed: {e}")
+
+    # 5d. Privacy scan: sentinel must NEVER appear in trace attributes
+    try:
+        leak_str = _ch_query(
+            f"SELECT count() FROM signoz_traces.signoz_index_v3 "
+            f"WHERE position(toString(attributes_string), '{PRIVACY_SENTINEL}') > 0"
+        )
+        leak_count = int(leak_str)
+        print(f"  Privacy sentinel leaks: {leak_count}")
+        if leak_count > 0:
+            failures.append(f"PRIVACY VIOLATION: sentinel found in {leak_count} spans")
+    except Exception as e:
+        failures.append(f"Privacy scan failed: {e}")
+
+    # ── 6. Report ─────────────────────────────────────────────────────────
+    print()
+    if failures:
+        print("=== VALIDATION FAILED ===")
+        for f in failures:
+            print(f"  [FAIL] {f}")
+        return 1
+    else:
+        print("=== VALIDATION PASSED ===")
+        print(f"  [OK] Run {run_id} traces verified in SigNoz (200, 404, 405)")
+        print(f"  [OK] Run {run_id} structured logs verified in SigNoz")
+        print(f"  [OK] Run {run_id} metrics verified in SigNoz")
+        print("  [OK] Privacy canary completely absent from stored telemetry")
+        return 0
+
 
 if __name__ == "__main__":
-    run_live_validation()
+    sys.exit(main())

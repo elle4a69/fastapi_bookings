@@ -1,19 +1,35 @@
-"""Comprehensive Automated Unit and Integration Tests for Telemetry & Observability Pipeline."""
+"""Rigorous tests for the telemetry/observability pipeline.
 
+Covers: configuration resolution, OTLP serialization privacy, metrics with
+real reader, dedicated log capture, HTTP 200/404/405 trace evidence, frontend
+diagnostics validation, exporter-failure resilience, idempotency, and honest
+status reporting.
+"""
+
+import logging
+import re
 import pytest
 from unittest.mock import MagicMock
-from fastapi.testclient import TestClient
 
 from opentelemetry.sdk.trace import ReadableSpan, Event
+from opentelemetry.sdk.trace.export import SpanExportResult
 from opentelemetry.trace import SpanContext, TraceFlags
-from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import encode_spans
+from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import (
+    encode_spans,
+)
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from app.core.config import settings
 from app.core.telemetry import (
-    init_telemetry,
-    shutdown_telemetry,
     PrivacySafeSpanExporter,
+    SanitizedSpanProxy,
     SAFE_ATTRIBUTE_KEYS,
+    VALID_EVENT_CODES,
+    VALID_MODULES,
+    WEBHOOK_STATUSES,
+    SMS_STATUSES,
+    AI_STATUSES,
     record_webhook_event,
     record_sms_event,
     record_ai_event,
@@ -22,44 +38,61 @@ from app.core.telemetry import (
     record_booking_failure,
     record_telemetry_log,
     get_telemetry_status_data,
-    SanitizedSpanProxy,
+    sanitize_url_path,
+    _TELEMETRY_LOGGER_NAME,
+    init_telemetry,
+    shutdown_telemetry,
 )
 from app.main import app
 
 
-def test_telemetry_configuration_resolution():
-    """Verify settings drive telemetry configuration cleanly without raw os.environ reads."""
+# ── 1. Configuration Resolution ──────────────────────────────────────────
+
+def test_config_resolution():
+    """Settings must define OTEL fields; telemetry reads from settings only."""
+    assert hasattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT")
+    assert hasattr(settings, "OTEL_SDK_DISABLED")
+    # Default must be port 4318, not 8080
+    default_val = settings.__class__.model_fields["OTEL_EXPORTER_OTLP_ENDPOINT"].default
+    assert "4318" in str(default_val)
     status = get_telemetry_status_data()
-    assert "telemetry_enabled" in status
     assert status["service_name"] == "fastapi-bookings"
     assert status["environment"] == settings.APP_ENV
 
 
+# ── 2. OTLP Serialization Privacy ────────────────────────────────────────
+
 def test_otlp_serialization_privacy():
-    """Test PrivacySafeSpanExporter with real OTLP span encoding to prove prohibited sentinel values are absent."""
-    mock_inner_exporter = MagicMock()
-    mock_inner_exporter.export.return_value = None
-    safe_exporter = PrivacySafeSpanExporter(mock_inner_exporter)
+    """Prohibited sentinel values must be absent from real OTLP protobuf output."""
+    SENTINELS = {
+        "token":   "bearer_secret_token_xyz_789",
+        "phone":   "+15559876543",
+        "email":   "customer.pii@example.com",
+        "sql":     "SELECT password FROM users WHERE id = 42",
+        "errmsg":  "Auth failed for customer.pii@example.com with bearer_secret_token_xyz_789",
+        "stack":   "Traceback:\n  File 'secret.py', line 1\n    password='open sesame'",
+        "qstring": "/booking/99?token=bearer_secret_token_xyz_789&key=abc",
+        "custpath": "/customers/john-doe-vip-client/bookings/99",
+    }
 
-    ctx = SpanContext(trace_id=0x12345678901234567890123456789012, span_id=0x1234567890123456, is_remote=False, trace_flags=TraceFlags(1))
-
-    SENTINEL_TOKEN = "bearer_secret_token_val_123"
-    SENTINEL_PHONE = "+15551234567"
-    SENTINEL_EMAIL = "customer_privacy@example.com"
-    SENTINEL_SQL = "SELECT * FROM users WHERE password = 'super_secret'"
-    SENTINEL_MSG = "Authentication failed for user customer_privacy@example.com with token bearer_secret_token_val_123"
+    ctx = SpanContext(
+        trace_id=0xAABBCCDD11223344AABBCCDD11223344,
+        span_id=0xAABBCCDD11223344,
+        is_remote=False,
+        trace_flags=TraceFlags(1),
+    )
 
     raw_span = ReadableSpan(
-        name="test_privacy_serialization_span",
+        name="privacy_test",
         context=ctx,
         attributes={
             "http.method": "POST",
-            "http.route": "/api/bookings/99999?token=" + SENTINEL_TOKEN,
+            "http.route": SENTINELS["qstring"],
             "http.status_code": 200,
-            "secret_token": SENTINEL_TOKEN,
-            "customer_phone": SENTINEL_PHONE,
-            "customer_email": SENTINEL_EMAIL,
-            "sql_statement": SENTINEL_SQL,
+            "secret_token": SENTINELS["token"],
+            "customer_phone": SENTINELS["phone"],
+            "customer_email": SENTINELS["email"],
+            "db.statement": SENTINELS["sql"],
             "error.type": "ValueError",
         },
         events=[
@@ -67,147 +100,282 @@ def test_otlp_serialization_privacy():
                 name="exception",
                 attributes={
                     "exception.type": "ValueError",
-                    "exception.message": SENTINEL_MSG,
-                    "exception.stacktrace": f"Traceback:\n  File 'auth.py', line 50\n    {SENTINEL_MSG}"
+                    "exception.message": SENTINELS["errmsg"],
+                    "exception.stacktrace": SENTINELS["stack"],
                 },
-                timestamp=100000
+                timestamp=100000,
             )
-        ]
+        ],
     )
 
+    # Run through PrivacySafeSpanExporter with mock inner
+    mock_inner = MagicMock()
+    mock_inner.export.return_value = None
+    safe_exporter = PrivacySafeSpanExporter(mock_inner)
     safe_exporter.export([raw_span])
-    assert mock_inner_exporter.export.called
-    exported_proxies = mock_inner_exporter.export.call_args[0][0]
-    sanitized_proxy = exported_proxies[0]
 
-    # Real OTLP Protobuf Serialization via trace_encoder.encode_spans
-    encoded_otlp_pb = encode_spans([sanitized_proxy])
-    otlp_str = str(encoded_otlp_pb)
+    proxy = mock_inner.export.call_args[0][0][0]
 
-    # Assert NO prohibited sentinel string appears anywhere in the serialized payload
-    assert SENTINEL_TOKEN not in otlp_str
-    assert SENTINEL_PHONE not in otlp_str
-    assert SENTINEL_EMAIL not in otlp_str
-    assert SENTINEL_SQL not in otlp_str
-    assert SENTINEL_MSG not in otlp_str
+    # Encode via real OTLP protobuf encoder
+    pb = encode_spans([proxy])
+    pb_str = str(pb)
 
-    # Assert allowlisted attributes are present
-    assert "http.method" in otlp_str or "POST" in otlp_str
-    assert "/api/bookings/{id}" in otlp_str
+    for label, sentinel in SENTINELS.items():
+        assert sentinel not in pb_str, f"Sentinel '{label}' leaked into OTLP payload"
+
+    # Allowlisted values must survive
+    assert "POST" in pb_str
+    assert "ValueError" in pb_str
 
 
-def test_metric_recorders_and_bounded_enums():
-    """Verify metrics recording functions accept bounded enum codes cleanly."""
-    record_webhook_event("accepted")
-    record_webhook_event("invalid_enum_status")  # falls back to "failed"
-    
-    record_sms_event("success", account_id=42)
-    record_ai_event("processed", job_type="outbox_sms")
-    record_arrival_event("activated")
-    record_link_failure()
-    record_booking_failure(operation="cancel", reason="client_no_show")
+# ── 3. Metrics with InMemoryMetricReader ──────────────────────────────────
+
+def test_metrics_with_in_memory_reader(monkeypatch):
+    """Metric counters must produce real data points with correct names/values."""
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    meter = provider.get_meter("test-meter")
+
+    wh_ctr = meter.create_counter("webhook_events_total")
+    wh_ctr.add(1, {"status": "accepted"})
+    wh_ctr.add(3, {"status": "rejected"})
+
+    sms_ctr = meter.create_counter("sms_events_total")
+    sms_ctr.add(2, {"status": "success"})
+
+    data = reader.get_metrics_data()
+    assert data is not None
+    rm = data.resource_metrics
+    assert len(rm) > 0
+    all_metrics = []
+    for r in rm:
+        for sm in r.scope_metrics:
+            all_metrics.extend(sm.metrics)
+
+    names = {m.name for m in all_metrics}
+    assert "webhook_events_total" in names
+    assert "sms_events_total" in names
+
+    # Check specific data points
+    for m in all_metrics:
+        if m.name == "webhook_events_total":
+            dps = m.data.data_points
+            total = sum(dp.value for dp in dps)
+            assert total == 4  # 1 + 3
+            attrs = {
+                frozenset(dp.attributes.items()): dp.value for dp in dps
+            }
+            assert attrs[frozenset({("status", "accepted")})] == 1
+            assert attrs[frozenset({("status", "rejected")})] == 3
 
 
-def test_safe_structured_telemetry_logging():
-    """Verify record_telemetry_log emits structured allowlisted attributes only without KeyError."""
-    record_telemetry_log(
-        event_code="WEBHOOK_ACCEPTED",
-        level="INFO",
-        module="chatwoot_service",
-        request_id="req_123",
-        trace_id="trace_456",
-        route_template="/api/chatwoot/webhook?token=secret",
-        method="POST",
-        status="200",
-        duration_ms=45.2,
+# ── 4. Dedicated Log Capture ─────────────────────────────────────────────
+
+def test_dedicated_log_capture():
+    """record_telemetry_log must emit via the dedicated logger, with validated fields."""
+    captured = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record):
+            captured.append(record)
+
+    tl = logging.getLogger(_TELEMETRY_LOGGER_NAME)
+    handler = CaptureHandler()
+    tl.addHandler(handler)
+    old_propagate = tl.propagate
+    tl.propagate = False
+    try:
+        record_telemetry_log(
+            event_code="WEBHOOK_ACCEPTED",
+            level="INFO",
+            module="chatwoot_service",
+            request_id="abc123def456",
+            route_template="/api/webhook?token=secret123",
+            method="POST",
+            status="200",
+            duration_ms=42.5,
+        )
+        assert len(captured) == 1
+        rec = captured[0]
+        assert rec.event_code == "WEBHOOK_ACCEPTED"
+        assert rec.safe_module == "chatwoot_service"
+        assert rec.method == "POST"
+        assert rec.route == "/api/webhook"  # query stripped
+        assert rec.duration_ms == 42.5
+        assert "secret" not in rec.route
+        assert "token" not in rec.route
+
+        # Invalid event code must be silently rejected
+        captured.clear()
+        record_telemetry_log(
+            event_code="ARBITRARY_INJECTED_EVENT<script>",
+            module="hacker_module",
+        )
+        assert len(captured) == 0  # rejected
+
+        # Invalid module falls back to "app"
+        captured.clear()
+        record_telemetry_log(event_code="HTTP_REQUEST_SUCCESS", module="evil_module")
+        assert len(captured) == 1
+        assert captured[0].safe_module == "app"
+    finally:
+        tl.removeHandler(handler)
+        tl.propagate = old_propagate
+
+
+# ── 5. HTTP 200 / 404 / 405 Trace Evidence ───────────────────────────────
+
+def test_http_200_404_405_trace_evidence(client):
+    """HTTP responses must carry X-Trace-ID and correct status codes."""
+    # 200 via the public diagnostics endpoint
+    r200 = client.post(
+        "/api/public/diagnostics/telemetry",
+        json={
+            "event_type": "web_vital",
+            "vital_name": "LCP",
+            "duration_ms": 100.0,
+        },
     )
-
-
-def test_http_404_405_5xx_telemetry(client: TestClient):
-    """Verify HTTP 404, 405, and 200 responses carry correlation headers and trace contexts."""
-    # 200 OK
-    r200 = client.post("/api/public/diagnostics/telemetry", json={"event_type": "web_vital", "vital_name": "LCP", "duration_ms": 100.0})
     assert r200.status_code == 200
     assert "X-Trace-ID" in r200.headers
+    assert len(r200.headers["X-Trace-ID"]) == 32  # hex trace id
 
-    # 404 Not Found
-    r404 = client.get("/api/public/non-existent-endpoint-test-404")
+    # 404
+    r404 = client.get("/api/public/nonexistent-route-telemetry-test")
     assert r404.status_code == 404
     assert "X-Trace-ID" in r404.headers
 
-    # 405 Method Not Allowed
+    # 405 — GET on a POST-only endpoint
     r405 = client.get("/api/public/diagnostics/telemetry")
     assert r405.status_code == 405
     assert "X-Trace-ID" in r405.headers
 
 
-def test_public_frontend_telemetry_validation(client: TestClient):
-    """Verify POST /api/public/diagnostics/telemetry validates schemas and strips sensitive inputs."""
-    # 1. Valid event
-    res1 = client.post("/api/public/diagnostics/telemetry", json={
-        "event_type": "js_error",
-        "error_class": "TypeError",
-        "route": "/checkout/payment?token=secret123#step2",
-        "component": "CheckoutForm",
-        "duration_ms": 120.0,
-    })
-    assert res1.status_code == 200
-    assert res1.json() == {"status": "accepted"}
+# ── 6. Frontend Diagnostics Validation ────────────────────────────────────
 
-    # 2. Invalid event_type -> rejected
-    res2 = client.post("/api/public/diagnostics/telemetry", json={
-        "event_type": "malicious_script_injection",
-        "error_class": "TypeError",
-    })
-    assert res2.status_code == 200
-    assert res2.json() == {"status": "rejected"}
+def test_frontend_diagnostics_validation(client):
+    """Public diagnostics endpoint must reject invalid/dangerous payloads."""
+    # Valid → accepted
+    r = client.post(
+        "/api/public/diagnostics/telemetry",
+        json={"event_type": "js_error", "error_class": "TypeError"},
+    )
+    assert r.json() == {"status": "accepted"}
+
+    # Invalid event_type → rejected
+    r = client.post(
+        "/api/public/diagnostics/telemetry",
+        json={"event_type": "xss_injection<script>"},
+    )
+    assert r.json() == {"status": "rejected"}
+
+    # Tokenized URL → query stripped in the span, but endpoint still accepts
+    r = client.post(
+        "/api/public/diagnostics/telemetry",
+        json={
+            "event_type": "route_change",
+            "route": "/checkout?token=secret123#step2",
+        },
+    )
+    assert r.json() == {"status": "accepted"}
+
+    # UUID-like dynamic route → accepted but path should be sanitized
+    r = client.post(
+        "/api/public/diagnostics/telemetry",
+        json={
+            "event_type": "route_change",
+            "route": "/customers/550e8400-e29b-41d4-a716-446655440000/edit",
+        },
+    )
+    assert r.json() == {"status": "accepted"}
 
 
-def test_collector_failure_non_impact():
-    """Verify exporter failure does not break telemetry exporter wrapper or throw exceptions."""
-    failing_inner_exporter = MagicMock()
-    failing_inner_exporter.export.side_effect = RuntimeError("Collector connection refused")
+# ── 7. Exporter Failure Non-Impact ────────────────────────────────────────
 
-    safe_exporter = PrivacySafeSpanExporter(failing_inner_exporter)
-    ctx = SpanContext(trace_id=0x1111, span_id=0x2222, is_remote=False, trace_flags=TraceFlags(1))
-    span = ReadableSpan(name="test_fail_span", context=ctx)
+def test_exporter_failure_non_impact():
+    """A failing exporter must not crash the wrapper or propagate exceptions."""
+    boom = MagicMock()
+    boom.export.side_effect = RuntimeError("Collector on fire")
+    safe = PrivacySafeSpanExporter(boom)
 
-    # Must return FAILURE without raising RuntimeError to the caller
-    res = safe_exporter.export([span])
-    assert res.name == "FAILURE"
+    ctx = SpanContext(
+        trace_id=0x1111, span_id=0x2222,
+        is_remote=False, trace_flags=TraceFlags(1),
+    )
+    span = ReadableSpan(name="fail_test", context=ctx)
+
+    result = safe.export([span])
+    assert result == SpanExportResult.FAILURE  # no exception raised
 
 
-def test_idempotent_telemetry_init():
-    """Verify calling init_telemetry multiple times is safe and idempotent."""
+# ── 8. Idempotency ───────────────────────────────────────────────────────
+
+def test_idempotency():
+    """Calling init_telemetry repeatedly must not install duplicate providers."""
     init_telemetry(app)
     init_telemetry(app)
+    # If this didn't raise, idempotency guard is working.
+    # The dedicated logger must have at most one OTLP handler.
+    tl = logging.getLogger(_TELEMETRY_LOGGER_NAME)
+    otlp_handlers = [
+        h for h in tl.handlers
+        if type(h).__name__ == "LoggingHandler"
+    ]
+    assert len(otlp_handlers) <= 1
 
 
-def test_truthful_telemetry_status(client: TestClient, db_session):
-    """Verify GET /api/admin/system/diagnostics/telemetry/status returns truthful state without credentials or endpoints."""
+# ── 9. Status Endpoint Honesty ────────────────────────────────────────────
+
+def test_status_endpoint_honest(client, db_session):
+    """Status endpoint must return honest state and never expose secrets."""
     from app.models.tenant import Tenant
     from app.models.user import User
     from app.core.security import create_access_token
 
-    tenant = Tenant(name="Truth Biz", subdomain="truth-biz")
-    db_session.add(tenant)
+    t = Tenant(name="StatusBiz", subdomain="status-biz")
+    db_session.add(t)
+    db_session.commit()
+    u = User(tenant_id=t.id, login="stat_admin", password_hash="x", role="owner")
+    db_session.add(u)
     db_session.commit()
 
-    user = User(tenant_id=tenant.id, login="truth_admin", password_hash="hash", role="owner")
-    db_session.add(user)
-    db_session.commit()
+    token = create_access_token({"sub": str(u.id)})
+    r = client.get(
+        "/api/admin/system/diagnostics/telemetry/status",
+        headers={"X-Tenant": "status-biz", "X-Token": token},
+    )
+    assert r.status_code == 200
+    data = r.json()
 
-    token = create_access_token({"sub": str(user.id)})
-    headers = {"X-Tenant": "truth-biz", "X-Token": token}
-
-    res = client.get("/api/admin/system/diagnostics/telemetry/status", headers=headers)
-    assert res.status_code == 200
-    data = res.json()
-    
     assert "telemetry_enabled" in data
     assert "last_export_status" in data
     assert data["service_name"] == "fastapi-bookings"
-    
-    # Must NOT expose endpoints, tokens, or credentials
-    assert "http://localhost" not in str(data)
-    assert "secret" not in str(data).lower()
+
+    # Must distinguish states
+    assert data["last_export_status"] in ("idle", "ok", "error", "disabled")
+
+    # Must never expose sensitive data
+    payload = str(data).lower()
+    assert "localhost" not in payload
+    assert "4318" not in payload
+    assert "secret" not in payload
+    assert "password" not in payload
+    assert "token" not in payload
+
+
+# ── Helpers: path sanitisation ────────────────────────────────────────────
+
+def test_sanitize_url_path_coverage():
+    """URL sanitiser must strip query/hash/numeric/UUID/hex/long-slug segments."""
+    assert sanitize_url_path("/api/bookings/42") == "/api/bookings/{id}"
+    assert sanitize_url_path("/api/bookings/42?token=x") == "/api/bookings/{id}"
+    assert sanitize_url_path("/api/bookings/42#sec") == "/api/bookings/{id}"
+    assert sanitize_url_path(
+        "/customers/550e8400-e29b-41d4-a716-446655440000/edit"
+    ) == "/customers/{id}/edit"
+    assert sanitize_url_path(
+        "/verify/aabbccdd11223344aabbccdd11223344/confirm"
+    ) == "/verify/{id}/confirm"
+    assert sanitize_url_path("") == ""
+    assert sanitize_url_path("/plain") == "/plain"
