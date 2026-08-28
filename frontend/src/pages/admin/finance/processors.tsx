@@ -4,48 +4,120 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 
-interface ProcessorConfig {
+interface PaymentProcessorConfig {
+  id?: number;
+  provider: string;
   enabled: boolean;
-  [key: string]: any;
+  display_name?: string | null;
+  public_key?: string | null;
+  config_json?: string | null;
 }
 
-interface ProcessorsData {
-  currency: string;
-  processors: {
-    stripe: ProcessorConfig;
-    paypal: ProcessorConfig;
-    offline: ProcessorConfig;
-  };
+interface ProcessorFormState {
+  id?: number;
+  enabled: boolean;
+  public_key: string;
+  secret_key: string;
+  client_id: string;
+  client_secret: string;
+  instructions: string;
 }
 
 export default function ProcessorsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [data, setData] = useState<ProcessorsData>({
-    currency: 'USD',
-    processors: {
-      stripe: { enabled: false, public_key: '', secret_key: '' },
-      paypal: { enabled: false, client_id: '', client_secret: '' },
-      offline: { enabled: true, instructions: '' },
-    }
+  const [stripeState, setStripeState] = useState<ProcessorFormState>({
+    enabled: false,
+    public_key: '',
+    secret_key: '',
+    client_id: '',
+    client_secret: '',
+    instructions: '',
   });
+
+  const [paypalState, setPaypalState] = useState<ProcessorFormState>({
+    enabled: false,
+    public_key: '',
+    secret_key: '',
+    client_id: '',
+    client_secret: '',
+    instructions: '',
+  });
+
+  const [offlineState, setOfflineState] = useState<ProcessorFormState>({
+    enabled: true,
+    public_key: '',
+    secret_key: '',
+    client_id: '',
+    client_secret: '',
+    instructions: '',
+  });
+
+  const parseConfigJson = (jsonStr?: string | null): Record<string, any> => {
+    if (!jsonStr) return {};
+    try {
+      return JSON.parse(jsonStr);
+    } catch {
+      return {};
+    }
+  };
 
   const fetchProcessors = async () => {
     setIsLoading(true);
     try {
-      // In case endpoint returns something different, we provide a fallback
-      const result = await apiClient.get<ProcessorsData>('/api/admin/finance/processors');
-      if (result && result.processors) {
-        setData(result);
+      const res = await apiClient.get<PaymentProcessorConfig[] | { data: PaymentProcessorConfig[] }>(
+        '/api/admin/payment-processor/configs'
+      );
+      const list: PaymentProcessorConfig[] = Array.isArray(res) ? res : (res as any)?.data || [];
+      
+      const stripeConfig = list.find((c) => c.provider === 'stripe');
+      if (stripeConfig) {
+        const parsed = parseConfigJson(stripeConfig.config_json);
+        setStripeState({
+          id: stripeConfig.id,
+          enabled: stripeConfig.enabled,
+          public_key: stripeConfig.public_key || '',
+          secret_key: parsed.secret_key || '',
+          client_id: '',
+          client_secret: '',
+          instructions: '',
+        });
+      }
+
+      const paypalConfig = list.find((c) => c.provider === 'paypal');
+      if (paypalConfig) {
+        const parsed = parseConfigJson(paypalConfig.config_json);
+        setPaypalState({
+          id: paypalConfig.id,
+          enabled: paypalConfig.enabled,
+          public_key: '',
+          secret_key: '',
+          client_id: parsed.client_id || '',
+          client_secret: parsed.client_secret || '',
+          instructions: '',
+        });
+      }
+
+      const offlineConfig = list.find((c) => c.provider === 'offline');
+      if (offlineConfig) {
+        const parsed = parseConfigJson(offlineConfig.config_json);
+        setOfflineState({
+          id: offlineConfig.id,
+          enabled: offlineConfig.enabled,
+          public_key: '',
+          secret_key: '',
+          client_id: '',
+          client_secret: '',
+          instructions: parsed.instructions || '',
+        });
       }
     } catch (error) {
-      toast.error('Failed to fetch processors');
+      toast.error('Failed to fetch payment processor configurations');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -56,30 +128,62 @@ export default function ProcessorsPage() {
     fetchProcessors();
   }, []);
 
+  const saveProcessorConfig = async (
+    provider: string,
+    state: ProcessorFormState,
+    displayName: string
+  ) => {
+    let configJson = '{}';
+    if (provider === 'stripe') {
+      configJson = JSON.stringify({ secret_key: state.secret_key });
+    } else if (provider === 'paypal') {
+      configJson = JSON.stringify({ client_id: state.client_id, client_secret: state.client_secret });
+    } else if (provider === 'offline') {
+      configJson = JSON.stringify({ instructions: state.instructions });
+    }
+
+    const payload = {
+      provider,
+      enabled: state.enabled,
+      display_name: displayName,
+      public_key: provider === 'stripe' ? state.public_key : null,
+      config_json: configJson,
+    };
+
+    if (state.id) {
+      const res: any = await apiClient.put(`/api/admin/payment-processor/configs/${state.id}`, {
+        enabled: payload.enabled,
+        display_name: payload.display_name,
+        public_key: payload.public_key,
+        config_json: payload.config_json,
+      });
+      return res?.id || state.id;
+    } else {
+      const res: any = await apiClient.post('/api/admin/payment-processor/configs', payload);
+      return res?.id || res?.data?.id;
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await apiClient.put('/api/admin/finance/processors', data);
-      toast.success('Payment processors updated');
+      const [stripeId, paypalId, offlineId] = await Promise.all([
+        saveProcessorConfig('stripe', stripeState, 'Stripe'),
+        saveProcessorConfig('paypal', paypalState, 'PayPal'),
+        saveProcessorConfig('offline', offlineState, 'Offline / Cash'),
+      ]);
+
+      if (stripeId) setStripeState((prev) => ({ ...prev, id: stripeId }));
+      if (paypalId) setPaypalState((prev) => ({ ...prev, id: paypalId }));
+      if (offlineId) setOfflineState((prev) => ({ ...prev, id: offlineId }));
+
+      toast.success('Payment processor configurations saved successfully');
     } catch (error) {
-      toast.error('Failed to save processors');
+      toast.error('Failed to save payment processor configurations');
       console.error(error);
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const updateProcessor = (processor: keyof ProcessorsData['processors'], field: string, value: any) => {
-    setData((prev) => ({
-      ...prev,
-      processors: {
-        ...prev.processors,
-        [processor]: {
-          ...prev.processors[processor],
-          [field]: value
-        }
-      }
-    }));
   };
 
   if (isLoading) {
@@ -94,24 +198,6 @@ export default function ProcessorsPage() {
           <p className="text-muted-foreground">Configure payment gateways and methods.</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap">Global Currency</Label>
-            <Select 
-              value={data.currency} 
-              onValueChange={(val) => setData((prev) => ({ ...prev, currency: val }))}
-            >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Currency" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD ($)</SelectItem>
-                <SelectItem value="EUR">EUR (€)</SelectItem>
-                <SelectItem value="GBP">GBP (£)</SelectItem>
-                <SelectItem value="AUD">AUD ($)</SelectItem>
-                <SelectItem value="CAD">CAD ($)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save All Changes'}
           </Button>
@@ -119,7 +205,6 @@ export default function ProcessorsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        
         {/* Stripe Card */}
         <Card>
           <CardHeader>
@@ -129,8 +214,8 @@ export default function ProcessorsPage() {
                 <CardDescription>Credit card processing</CardDescription>
               </div>
               <Switch 
-                checked={data.processors.stripe.enabled}
-                onCheckedChange={(checked) => updateProcessor('stripe', 'enabled', checked)}
+                checked={stripeState.enabled}
+                onCheckedChange={(checked) => setStripeState((prev) => ({ ...prev, enabled: checked }))}
               />
             </div>
           </CardHeader>
@@ -140,9 +225,9 @@ export default function ProcessorsPage() {
               <Input 
                 type="text" 
                 placeholder="pk_test_..."
-                value={data.processors.stripe.public_key || ''}
-                onChange={(e) => updateProcessor('stripe', 'public_key', e.target.value)}
-                disabled={!data.processors.stripe.enabled}
+                value={stripeState.public_key}
+                onChange={(e) => setStripeState((prev) => ({ ...prev, public_key: e.target.value }))}
+                disabled={!stripeState.enabled}
               />
             </div>
             <div className="space-y-2">
@@ -150,9 +235,9 @@ export default function ProcessorsPage() {
               <Input 
                 type="password" 
                 placeholder="sk_test_..."
-                value={data.processors.stripe.secret_key || ''}
-                onChange={(e) => updateProcessor('stripe', 'secret_key', e.target.value)}
-                disabled={!data.processors.stripe.enabled}
+                value={stripeState.secret_key}
+                onChange={(e) => setStripeState((prev) => ({ ...prev, secret_key: e.target.value }))}
+                disabled={!stripeState.enabled}
               />
             </div>
           </CardContent>
@@ -167,8 +252,8 @@ export default function ProcessorsPage() {
                 <CardDescription>PayPal checkout integration</CardDescription>
               </div>
               <Switch 
-                checked={data.processors.paypal.enabled}
-                onCheckedChange={(checked) => updateProcessor('paypal', 'enabled', checked)}
+                checked={paypalState.enabled}
+                onCheckedChange={(checked) => setPaypalState((prev) => ({ ...prev, enabled: checked }))}
               />
             </div>
           </CardHeader>
@@ -178,9 +263,9 @@ export default function ProcessorsPage() {
               <Input 
                 type="text" 
                 placeholder="PayPal Client ID"
-                value={data.processors.paypal.client_id || ''}
-                onChange={(e) => updateProcessor('paypal', 'client_id', e.target.value)}
-                disabled={!data.processors.paypal.enabled}
+                value={paypalState.client_id}
+                onChange={(e) => setPaypalState((prev) => ({ ...prev, client_id: e.target.value }))}
+                disabled={!paypalState.enabled}
               />
             </div>
             <div className="space-y-2">
@@ -188,9 +273,9 @@ export default function ProcessorsPage() {
               <Input 
                 type="password" 
                 placeholder="PayPal Client Secret"
-                value={data.processors.paypal.client_secret || ''}
-                onChange={(e) => updateProcessor('paypal', 'client_secret', e.target.value)}
-                disabled={!data.processors.paypal.enabled}
+                value={paypalState.client_secret}
+                onChange={(e) => setPaypalState((prev) => ({ ...prev, client_secret: e.target.value }))}
+                disabled={!paypalState.enabled}
               />
             </div>
           </CardContent>
@@ -205,8 +290,8 @@ export default function ProcessorsPage() {
                 <CardDescription>Manual payment processing</CardDescription>
               </div>
               <Switch 
-                checked={data.processors.offline.enabled}
-                onCheckedChange={(checked) => updateProcessor('offline', 'enabled', checked)}
+                checked={offlineState.enabled}
+                onCheckedChange={(checked) => setOfflineState((prev) => ({ ...prev, enabled: checked }))}
               />
             </div>
           </CardHeader>
@@ -216,14 +301,13 @@ export default function ProcessorsPage() {
               <Textarea 
                 placeholder="e.g. Please pay in cash upon arrival."
                 rows={4}
-                value={data.processors.offline.instructions || ''}
-                onChange={(e) => updateProcessor('offline', 'instructions', e.target.value)}
-                disabled={!data.processors.offline.enabled}
+                value={offlineState.instructions}
+                onChange={(e) => setOfflineState((prev) => ({ ...prev, instructions: e.target.value }))}
+                disabled={!offlineState.enabled}
               />
             </div>
           </CardContent>
         </Card>
-
       </div>
     </div>
   );
