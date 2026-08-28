@@ -16,7 +16,7 @@ from ...core.state_machine import BookingStatus
 from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
 from ...models.booking import Booking as BookingModel
 from ...schemas.booking import BookingCreate, BookingResponse
-from ...services import scheduling_service
+from ...services import scheduling_service, slot_allocation_service
 from ...services.outbox_service import create_outbox_event
 
 router = APIRouter(prefix="/api/public", tags=["public-bookings"])
@@ -226,7 +226,7 @@ def create_public_booking(
             detail="Required resources are not available for this time slot.",
         )
 
-    # 10. Create booking record
+    # 10. Atomic single-transaction booking, slot allocation, and resource reservation
     booking_data = booking_in.model_dump(exclude={"client_name", "client_email", "client_phone"})
     booking_data["client_id"] = client_obj.id
     booking_data["status"] = BookingStatus.PENDING
@@ -236,9 +236,32 @@ def create_public_booking(
 
     booking = BookingModel(**booking_data)
     db.add(booking)
+    db.flush()
+
     try:
+        # Create durable slot allocations with database-level unique constraint on (provider_id, slot_start)
+        slot_allocation_service.create_allocations_for_booking(
+            db, booking=booking, buffer_before=buf_before, buffer_after=buf_after
+        )
+
+        # Allocate required resources
+        scheduling_service.allocate_resources(db, booking=booking, commit=False)
+
+        # Enqueue transactional outbox event
+        payload = {
+            "id": booking.id,
+            "client_id": booking.client_id,
+            "provider_id": booking.provider_id,
+            "service_id": booking.service_id,
+            "start_time": booking.start_time.isoformat() if booking.start_time else None,
+            "end_time": booking.end_time.isoformat() if booking.end_time else None,
+            "status": booking.status,
+        }
+        create_outbox_event(db, "booking.created", payload, tenant_id=tenant.id)
+
+        # Commit entire atomic transaction
         db.commit()
-    except (IntegrityError, Exception):
+    except (IntegrityError, Exception) as exc:
         db.rollback()
         if booking_in.idempotency_key:
             existing = (
@@ -253,30 +276,9 @@ def create_public_booking(
                 return {"ok": True, "data": existing}
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The requested time slot has just been booked. Please select another available time.",
+            detail="The requested time slot or buffer has just been booked. Please select another available time.",
         )
+
     db.refresh(booking)
-
-    # 11. Allocate resources
-    try:
-        scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except HTTPException as exc:
-        db.delete(booking)
-        db.commit()
-        raise exc
-
-    # 12. Trigger outbox event post-commit
-    payload = {
-        "id": booking.id,
-        "client_id": booking.client_id,
-        "provider_id": booking.provider_id,
-        "service_id": booking.service_id,
-        "start_time": booking.start_time.isoformat() if booking.start_time else None,
-        "end_time": booking.end_time.isoformat() if booking.end_time else None,
-        "status": booking.status
-    }
-    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.id)
-    db.commit()
-
     return {"ok": True, "data": booking}
 

@@ -9,7 +9,7 @@ from ..deps import get_current_admin, get_current_company, get_db, get_current_t
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
-from ...services import scheduling_service
+from ...services import scheduling_service, slot_allocation_service
 from ...models.booking import Booking as BookingModel
 from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
 from ...services.outbox_service import create_outbox_event
@@ -196,16 +196,33 @@ def create_booking(
             detail="The requested time slot is blocked by provider schedule.",
         )
 
-    # 9. Create booking record
+    # 9. Atomic single-transaction booking, slot allocation, and resource reservation
     booking_dict = booking_in.model_dump(exclude={"client_name", "client_email", "client_phone"})
     booking_dict["start_time"] = start_time
     booking_dict["end_time"] = end_time
 
     booking = BookingModel(tenant_id=current_user.tenant_id, **booking_dict)
     db.add(booking)
+    db.flush()
+
     try:
+        slot_allocation_service.create_allocations_for_booking(
+            db, booking=booking, buffer_before=buf_before, buffer_after=buf_after
+        )
+        scheduling_service.allocate_resources(db, booking=booking, commit=False)
+
+        payload = {
+            "id": booking.id,
+            "client_id": booking.client_id,
+            "provider_id": booking.provider_id,
+            "service_id": booking.service_id,
+            "start_time": booking.start_time.isoformat() if booking.start_time else None,
+            "end_time": booking.end_time.isoformat() if booking.end_time else None,
+            "status": booking.status,
+        }
+        create_outbox_event(db, "booking.created", payload, tenant_id=current_user.tenant_id)
         db.commit()
-    except IntegrityError:
+    except (IntegrityError, Exception) as exc:
         db.rollback()
         if booking_in.idempotency_key:
             existing = (
@@ -218,28 +235,12 @@ def create_booking(
             )
             if existing:
                 return {"ok": True, "data": existing}
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
-    db.refresh(booking)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The requested time slot or buffer has just been booked. Please select another available time.",
+        )
 
-    # 10. Allocate resources if needed
-    try:
-        scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except HTTPException as exc:
-        db.delete(booking)
-        db.commit()
-        raise exc
-    
-    payload = {
-        "id": booking.id,
-        "client_id": booking.client_id,
-        "provider_id": booking.provider_id,
-        "service_id": booking.service_id,
-        "start_time": booking.start_time.isoformat() if booking.start_time else None,
-        "end_time": booking.end_time.isoformat() if booking.end_time else None,
-        "status": booking.status
-    }
-    create_outbox_event(db, "booking.created", payload, tenant_id=current_user.tenant_id)
-    db.commit()
+    db.refresh(booking)
     return {"ok": True, "data": booking}
 
 
@@ -319,9 +320,9 @@ def cancel_booking(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.CANCELLED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
-    # Update status and release resources
+    # Update status and release slot allocations and resources
     booking.status = BookingStatus.CANCELLED
-    # Release any allocated resources since the booking will no longer take place
+    slot_allocation_service.release_allocations_for_booking(db, booking.id)
     scheduling_service.release_resources(db, booking=booking, commit=False)
     payload = {
         "id": booking.id,
@@ -416,35 +417,49 @@ def reschedule_booking(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     if not is_valid_transition(booking.status, BookingStatus.RESCHEDULED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
-    # Change status and release/allocate resources
+    # Validate lead time for rescheduled time
+    now_utc = datetime.now(timezone.utc)
+    new_start_utc = reschedule_in.new_start.replace(tzinfo=timezone.utc) if reschedule_in.new_start.tzinfo is None else reschedule_in.new_start
+    if new_start_utc < now_utc + timedelta(minutes=30):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bookings must be scheduled at least 30 minutes in advance.",
+        )
+
+    # Change status and atomically update slot allocations and resources
     booking.status = BookingStatus.RESCHEDULED
-    # Release old resources
-    scheduling_service.release_resources(db, booking=booking, commit=False)
-    # Update times
-    booking.start_time = reschedule_in.new_start
-    booking.end_time = reschedule_in.new_end
-    db.commit()
-    db.refresh(booking)
-    # Attempt to allocate resources for the new time
+    buf_before = max(15, booking.service.buffer_before if booking.service else 15)
+    buf_after = max(15, booking.service.buffer_after if booking.service else 15)
+
     try:
-        scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except HTTPException as exc:
-        # If allocation fails revert the time change and status
-        # Note: we do not re-add old resources; they were released; but we need to restore time/resources; for simplicity, mark booking cancelled
-        booking.status = BookingStatus.CANCELLED
+        slot_allocation_service.reschedule_allocations_for_booking(
+            db,
+            booking=booking,
+            new_start=reschedule_in.new_start,
+            new_end=reschedule_in.new_end,
+            buffer_before=buf_before,
+            buffer_after=buf_after,
+        )
+        scheduling_service.release_resources(db, booking=booking, commit=False)
+        scheduling_service.allocate_resources(db, booking=booking, commit=False)
+
+        payload = {
+            "id": booking.id,
+            "client_id": booking.client_id,
+            "provider_id": booking.provider_id,
+            "service_id": booking.service_id,
+            "start_time": booking.start_time.isoformat() if booking.start_time else None,
+            "end_time": booking.end_time.isoformat() if booking.end_time else None,
+            "status": booking.status,
+        }
+        create_outbox_event(db, "booking.rescheduled", payload, tenant_id=current_user.tenant_id)
         db.commit()
-        db.refresh(booking)
-        raise exc
-    
-    payload = {
-        "id": booking.id,
-        "client_id": booking.client_id,
-        "provider_id": booking.provider_id,
-        "service_id": booking.service_id,
-        "start_time": booking.start_time.isoformat() if booking.start_time else None,
-        "end_time": booking.end_time.isoformat() if booking.end_time else None,
-        "status": booking.status
-    }
-    create_outbox_event(db, "booking.rescheduled", payload)
-    db.commit()
+    except (IntegrityError, Exception) as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The requested new time slot is no longer available. Please select another time.",
+        )
+
+    db.refresh(booking)
     return {"ok": True, "data": booking}
