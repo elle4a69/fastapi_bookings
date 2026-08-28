@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect , useCallback } from "react";
 import { Link } from 'react-router-dom';
 import { Search, Loader2, LayoutGrid, Layers } from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,23 +55,7 @@ export default function RelationshipsPage() {
 
   const currentTab = TABS.find(t => t.id === activeTab)!;
 
-  useEffect(() => {
-    loadLists();
-    setSelectedLeftId(null);
-    setAssignedRightIds(new Set());
-    setLeftSearch('');
-    setRightSearch('');
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (selectedLeftId) {
-      loadMappings();
-    } else {
-      setAssignedRightIds(new Set());
-    }
-  }, [selectedLeftId, activeTab]);
-
-  const loadLists = async () => {
+  const loadLists = useCallback(async () => {
     setLeftLoading(true);
     setRightLoading(true);
     try {
@@ -85,15 +69,15 @@ export default function RelationshipsPage() {
       
       setLeftItems(leftData);
       setRightItems(rightData);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load items.');
     } finally {
       setLeftLoading(false);
       setRightLoading(false);
     }
-  };
+  }, [currentTab]);
 
-  const loadMappings = async () => {
+  const loadMappings = useCallback(async () => {
     if (!selectedLeftId) return;
     setMappingsLoading(true);
     try {
@@ -102,12 +86,32 @@ export default function RelationshipsPage() {
       const data = Array.isArray(res) ? res : res.data || [];
       const ids = new Set<number | string>(data.map((item: any) => item.id));
       setAssignedRightIds(ids);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load mappings.');
     } finally {
       setMappingsLoading(false);
     }
-  };
+  }, [currentTab, selectedLeftId]);
+
+  useEffect(() => {
+    loadLists();
+    setSelectedLeftId(null);
+    setAssignedRightIds(new Set());
+    setLeftSearch('');
+    setRightSearch('');
+  }, [activeTab, loadLists]);
+
+  useEffect(() => {
+    if (selectedLeftId) {
+      loadMappings();
+    } else {
+      setAssignedRightIds(new Set());
+    }
+  }, [selectedLeftId, activeTab, loadMappings]);
+
+  
+
+  
 
   const toggleMapping = async (rightId: number | string, isAssigned: boolean) => {
     if (!selectedLeftId) return;
@@ -130,7 +134,7 @@ export default function RelationshipsPage() {
         setAssignedRightIds(prev => new Set(prev).add(rightId));
         toast.success('Linked successfully.');
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update mapping.');
     } finally {
       setUpdatingIds(prev => {

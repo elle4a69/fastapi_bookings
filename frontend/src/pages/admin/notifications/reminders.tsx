@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState , useCallback } from "react";
 import { apiClient } from "../../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -30,11 +30,7 @@ export default function RemindersPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [rulesRes, templatesRes] = await Promise.all([
@@ -63,12 +59,18 @@ export default function RemindersPage() {
       if (normalizedRules.length > 0 && !selectedRule) {
         setSelectedRule(normalizedRules[0]);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch reminder rules");
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedRule]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  
 
   const handleSave = async () => {
     if (!selectedRule) return;
@@ -89,7 +91,7 @@ export default function RemindersPage() {
       }
       toast.success("Reminder rule saved successfully");
       fetchData();
-    } catch (error) {
+    } catch {
       toast.error("Failed to save reminder rule");
     } finally {
       setSaving(false);

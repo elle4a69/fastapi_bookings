@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef , useCallback } from "react";
 import {
   Search, Plus, Trash2, ArrowLeft, Copy, Info,
   X, Check,
@@ -216,7 +216,7 @@ export default function ProvidersPage() {
   };
 
 
-  const fetchProviders = async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get<any>('/api/admin/providers');
@@ -236,14 +236,14 @@ export default function ProvidersPage() {
       if (mapped.length > 0) {
         setSelectedProvider(mapped[0]);
       }
-    } catch (err) {
-      console.warn('Failed to load providers from backend:', err);
+    } catch {
+      console.warn('Failed to load providers from backend');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchServicesAndLocations = async () => {
+  const fetchServicesAndLocations = useCallback(async () => {
     try {
       const [servicesData, locationsData] = await Promise.all([
         apiClient.get<any[]>('/api/admin/services').catch(() => []),
@@ -252,34 +252,13 @@ export default function ProvidersPage() {
       const srvList = Array.isArray(servicesData) ? servicesData : (servicesData as any).data || (servicesData as any).items || [];
       setServices(srvList.length > 0 ? srvList : MOCK_SERVICES);
       setLocations(Array.isArray(locationsData) ? locationsData : (locationsData as any).data || (locationsData as any).items || []);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      console.error('Failed to load services and locations');
       setServices(MOCK_SERVICES);
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    fetchProviders();
-    fetchServicesAndLocations();
-    if (location.state?.returnToServiceId) {
-      handleCreate();
-    }
-  }, [location.state]);
-
-  const handleCancel = () => {
-    if (location.state?.returnToServiceId) {
-      navigate('/admin/catalog/services', {
-        state: {
-          selectServiceId: location.state.returnToServiceId,
-          openSection: location.state.section
-        }
-      });
-      return;
-    }
-    setSelectedProvider(null);
-  };
-
-  const handleCreate = async (initialProps?: Partial<Provider>) => {
+  const handleCreate = useCallback(async (initialProps?: Partial<Provider>) => {
     setRightPaneType('provider');
     const defaultData = {
       name: 'New Provider',
@@ -315,8 +294,8 @@ export default function ProvidersPage() {
           locations: initialProps?.locations || []
         };
       }
-    } catch (err) {
-      console.warn("Backend create notice, using local provider:", err);
+    } catch {
+      console.warn("Backend create notice, using local provider");
     }
  
     if (!createdProvider) {
@@ -355,11 +334,33 @@ export default function ProvidersPage() {
         apiClient.put(`/api/admin/locations/${locId}`, {
           name: loc.name,
           provider_ids: nextProviderIds
-        }).catch((err) => {
-          console.warn("Failed to update location provider_ids on create:", err);
+        }).catch(() => {
+          console.warn("Failed to update location provider_ids on create");
         });
       }
     }
+    return createdProvider;
+  }, [locations]);
+
+  useEffect(() => {
+    fetchProviders();
+    fetchServicesAndLocations();
+    if (location.state?.returnToServiceId) {
+      handleCreate();
+    }
+  }, [location.state, fetchProviders, fetchServicesAndLocations, handleCreate]);
+
+  const handleCancel = () => {
+    if (location.state?.returnToServiceId) {
+      navigate('/admin/catalog/services', {
+        state: {
+          selectServiceId: location.state.returnToServiceId,
+          openSection: location.state.section
+        }
+      });
+      return;
+    }
+    setSelectedProvider(null);
   };
 
   const handleAssignProviderToLocation = async (providerId: string, locationId: string) => {
@@ -391,7 +392,7 @@ export default function ProvidersPage() {
     try {
       await apiClient.delete(`/api/admin/providers/${id}`).catch(() => {});
     } catch (err) {
-      console.warn("Backend delete error:", err);
+console.warn("Backend delete error:", err);
     }
     setProviders(prev => prev.filter((p) => p.id !== id));
     if (selectedProvider?.id === id) {
@@ -577,12 +578,12 @@ export default function ProvidersPage() {
           }
         });
         setSpecialDaysMap(map);
-      } catch (err) {
-        console.warn('Failed to fetch provider special days', err);
+      } catch {
+        console.warn('Failed to fetch provider special days');
       }
     };
     fetchSpecialDays();
-  }, [selectedProvider?.id]);
+  }, [selectedProvider]);
 
   const autoSaveProviderSchedule = async (updatedProvider: Provider) => {
     try {
@@ -606,7 +607,7 @@ export default function ProvidersPage() {
         setSaveStatus((current) => current === 'saved' ? 'idle' : current);
       }, 1500);
     } catch (err) {
-      console.warn("Auto-save schedule failed:", err);
+console.warn("Auto-save schedule failed:", err);
       setSaveStatus('saved');
       setTimeout(() => {
         setSaveStatus((current) => current === 'saved' ? 'idle' : current);
@@ -649,7 +650,7 @@ export default function ProvidersPage() {
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
         } catch (err) {
-          console.warn('Failed to save special day', err);
+console.warn('Failed to save special day', err);
         }
       } else {
         setSpecialDaysMap(prev => {
@@ -660,7 +661,7 @@ export default function ProvidersPage() {
         try {
           setSaveStatus('saving');
           await apiClient.delete(`/api/admin/providers/${selectedProvider.id}/special-days/${dateStr}`);
-        } catch (err) {
+        } catch {
           // Ignore
         }
 
@@ -694,7 +695,7 @@ export default function ProvidersPage() {
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
         } catch (err) {
-          console.warn('Failed to update special day', err);
+console.warn('Failed to update special day', err);
         }
       } else {
         const updatedWeeklySchedule = {
@@ -744,7 +745,7 @@ export default function ProvidersPage() {
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
       } catch (err) {
-        console.warn('Failed to update special day slot', err);
+console.warn('Failed to update special day slot', err);
       }
     } else {
       const updatedWeeklySchedule = {
@@ -1324,7 +1325,7 @@ export default function ProvidersPage() {
                                   }
                                 }
                               } catch (err) {
-                                console.warn("Shortener API offline:", err);
+console.warn("Shortener API offline:", err);
                               }
 
                               navigator.clipboard.writeText(finalShort);

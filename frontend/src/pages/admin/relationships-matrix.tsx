@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef , useCallback } from "react";
 import { 
   Search, 
   Loader2, 
@@ -207,22 +207,7 @@ export default function RelationshipsMatrixPage() {
     });
   };
 
-  useEffect(() => {
-    if (!focusId) {
-      setLinkedIds({
-        location: new Set(),
-        provider: new Set(),
-        service: new Set(),
-        addon: new Set(),
-        product: new Set(),
-        category: new Set(),
-      });
-      return;
-    }
-    fetchFocusMappings();
-  }, [focusColumn, focusId]);
-
-  const fetchFocusMappings = async () => {
+  const fetchFocusMappings = useCallback(async () => {
     if (!focusId) return;
 
     const sourcePlural = DEFAULT_COLUMNS.find(c => c.id === focusColumn)!.plural;
@@ -252,7 +237,24 @@ export default function RelationshipsMatrixPage() {
     );
 
     setLinkedIds(newLinked);
-  };
+  }, [focusId, focusColumn]);
+
+  useEffect(() => {
+    if (!focusId) {
+      setLinkedIds({
+        location: new Set(),
+        provider: new Set(),
+        service: new Set(),
+        addon: new Set(),
+        product: new Set(),
+        category: new Set(),
+      });
+      return;
+    }
+    fetchFocusMappings();
+  }, [focusColumn, focusId, fetchFocusMappings]);
+
+  
 
   const handleContainerScroll = () => {
     const el = columnsScrollRef.current;

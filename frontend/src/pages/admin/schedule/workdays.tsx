@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect , useCallback } from "react";
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,45 +78,7 @@ export default function WorkdaysPage() {
   // Fixed Start Times state
   const [fixedStartTimesSchedules, setFixedStartTimesSchedules] = useState<DaySchedule[]>(generateInitialSchedules(currentWeekStart));
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  useEffect(() => {
-    // When week changes, regenerate dates
-    setSchedules(prev => prev.map((s, i) => {
-      const d = new Date(currentWeekStart);
-      d.setDate(d.getDate() + i);
-      return { ...s, date: d };
-    }));
-    
-    setFixedStartTimesSchedules(prev => prev.map((s, i) => {
-      const d = new Date(currentWeekStart);
-      d.setDate(d.getDate() + i);
-      return { ...s, date: d };
-    }));
-  }, [currentWeekStart]);
-
-  const fetchInitialData = async () => {
-    try {
-      setIsLoading(true);
-      const res = await apiClient.get<any>('/api/admin/providers');
-      const providersList = Array.isArray(res) 
-        ? res 
-        : (Array.isArray(res?.data) ? res.data : (res?.items || []));
-      setProviders(providersList);
-      if (providersList.length > 0) {
-        handleSelectProvider(providersList[0]);
-      }
-    } catch (error) {
-      toast.error('Failed to load initial data');
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSelectProvider = (provider: Provider) => {
+  const handleSelectProvider = useCallback((provider: Provider) => {
     setSelectedProvider(provider);
 
     const sched = provider.weekly_schedule;
@@ -159,7 +121,49 @@ export default function WorkdaysPage() {
       setSchedules(generateInitialSchedules(currentWeekStart));
       setFixedStartTimesSchedules(generateInitialSchedules(currentWeekStart));
     }
-  };
+  }, [currentWeekStart]);
+
+  const fetchInitialData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await apiClient.get<any>('/api/admin/providers');
+      const providersList = Array.isArray(res) 
+        ? res 
+        : (Array.isArray(res?.data) ? res.data : (res?.items || []));
+      setProviders(providersList);
+      if (providersList.length > 0) {
+        handleSelectProvider(providersList[0]);
+      }
+    } catch (error) {
+      toast.error('Failed to load initial data');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [handleSelectProvider]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
+
+  useEffect(() => {
+    // When week changes, regenerate dates
+    setSchedules(prev => prev.map((s, i) => {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+      return { ...s, date: d };
+    }));
+    
+    setFixedStartTimesSchedules(prev => prev.map((s, i) => {
+      const d = new Date(currentWeekStart);
+      d.setDate(d.getDate() + i);
+      return { ...s, date: d };
+    }));
+  }, [currentWeekStart]);
+
+  
+
+  
 
   const handleSave = async () => {
     if (!selectedProvider) return;

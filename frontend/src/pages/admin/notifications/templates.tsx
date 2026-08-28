@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState , useCallback } from "react";
 import { apiClient } from "../../../lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -25,11 +25,7 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get<any>("/api/admin/notification-templates");
@@ -46,12 +42,18 @@ export default function TemplatesPage() {
       if (normalized.length > 0 && !selectedTemplate) {
         setSelectedTemplate(normalized[0]);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to fetch templates");
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedTemplate]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  
 
   const handleSave = async () => {
     if (!selectedTemplate) return;
@@ -71,7 +73,7 @@ export default function TemplatesPage() {
       }
       toast.success("Template saved successfully");
       fetchTemplates();
-    } catch (error) {
+    } catch {
       toast.error("Failed to save template");
     } finally {
       setSaving(false);

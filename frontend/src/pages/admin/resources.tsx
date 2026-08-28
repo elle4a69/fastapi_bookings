@@ -87,7 +87,7 @@ export default function ResourcesPage() {
       setServices(loadedServices);
       setLocations(loadedLocations);
       setRequirements(loadedRequirements);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load initial data');
     } finally {
       setIsLoading(false);
@@ -317,7 +317,7 @@ export default function ResourcesPage() {
       await fetchInitialData();
       setSelectedGroup(null);
       setSelectedGroupType(null);
-    } catch (error) {
+    } catch {
       toast.error('Failed to save resource group');
     } finally {
       setIsLoading(false);
@@ -347,7 +347,7 @@ export default function ResourcesPage() {
       await fetchInitialData();
       setSelectedGroup(null);
       setSelectedGroupType(null);
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete resource group');
     } finally {
       setIsLoading(false);

@@ -53,7 +53,7 @@ export default function AdditionalFieldsPage() {
     try {
       const data = await apiClient.get<AdditionalField[]>('/api/admin/additional-fields');
       setFields(data || []);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load additional fields');
     } finally {
       setLoading(false);
@@ -150,7 +150,7 @@ export default function AdditionalFieldsPage() {
         toast.success('Field updated successfully');
         handleSelectField(updatedField);
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save field');
     }
   };
@@ -166,7 +166,7 @@ export default function AdditionalFieldsPage() {
         setIsCreating(false);
       }
       toast.success('Field deleted');
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete field');
     }
   };

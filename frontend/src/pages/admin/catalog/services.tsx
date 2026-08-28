@@ -262,7 +262,7 @@ export default function ServicesPage() {
       setProviders(Array.isArray(provRes) ? provRes : (provRes?.data ?? []));
       setAddons(Array.isArray(addonRes) ? addonRes : (addonRes?.data ?? []));
       setProducts(Array.isArray(prodRes) ? prodRes : (prodRes?.data ?? []));
-    } catch (error) {
+    } catch {
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
@@ -341,7 +341,7 @@ export default function ServicesPage() {
         return updatedSvc;
       }
       return null;
-    } catch (error) {
+    } catch {
       toast.error('Failed to save service');
       return null;
     }
@@ -395,7 +395,7 @@ export default function ServicesPage() {
         setIsCreating(false);
       }
       toast.success('Service deleted');
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete service');
     }
   };
@@ -422,7 +422,7 @@ export default function ServicesPage() {
         setCategoryFormData({ name: updatedCat.name, description: updatedCat.description || "", active: updatedCat.active });
         setIsCategoryEditing(false);
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save category');
     }
   };
@@ -439,7 +439,7 @@ export default function ServicesPage() {
       setSelectedCategoryId(null);
       setIsCategoryEditing(false);
       setIsCategoryCreating(false);
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete category');
     }
   };
@@ -545,8 +545,8 @@ export default function ServicesPage() {
             size="icon" 
             onClick={() => {
               setRightPaneType("category");
-              isCategoryCreating || setIsCategoryCreating(true);
-              isCategoryEditing || setIsCategoryEditing(true);
+              if (!isCategoryCreating) setIsCategoryCreating(true);
+              if (!isCategoryEditing) setIsCategoryEditing(true);
               setSelectedCategoryId(null);
               setCategoryFormData({ name: "New Category", description: "", active: true });
             }} 

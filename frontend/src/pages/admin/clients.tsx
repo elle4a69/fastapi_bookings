@@ -69,7 +69,7 @@ export default function ClientsPage() {
       // If it's a list response
       const data = Array.isArray(res) ? res : (res.data || res.items || []);
       setClients(data);
-    } catch (error) {
+    } catch {
       toast.error('Failed to load clients');
       setClients([]);
     } finally {
@@ -117,7 +117,7 @@ export default function ClientsPage() {
         toast.success('Client created successfully');
       }
       setIsEditing(false);
-    } catch (error) {
+    } catch {
       toast.error('Failed to save client');
     }
   };
@@ -131,7 +131,7 @@ export default function ClientsPage() {
         handleClosePanel();
       }
       toast.success('Client deleted successfully');
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete client');
     }
   };
@@ -146,7 +146,7 @@ export default function ClientsPage() {
         handleClosePanel();
       }
       toast.success('Clients deleted successfully');
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete some clients');
     }
   };

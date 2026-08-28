@@ -26,7 +26,7 @@ export default function SystemPage() {
     try {
       const res: any = await apiClient.get('/api/admin/system/health');
       setHealth(res?.data ?? res);
-    } catch (e) {
+    } catch {
       // Endpoint not yet implemented — show static healthy state
       setHealth({
         api_status: 'operational',
@@ -43,8 +43,8 @@ export default function SystemPage() {
     try {
       await apiClient.post('/api/admin/system/cleanup');
       toast.success('System cleanup executed successfully');
-    } catch (e) {
-      console.error(e);
+    } catch {
+      console.error('Operation failed');
       toast.error('Failed to execute cleanup');
     } finally {
       setCleaning(false);

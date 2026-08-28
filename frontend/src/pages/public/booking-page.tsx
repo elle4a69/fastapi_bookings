@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect , useCallback } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { 
   Calendar as CalendarIcon, 
@@ -232,11 +232,7 @@ export default function PublicBookingPage() {
     };
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [formSlug]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [bootRes, formPublicRes, sRes, pRes, lRes, formsRes, addRes, prodRes] = await Promise.all([
@@ -344,7 +340,13 @@ export default function PublicBookingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formSlug, searchParams]);
+
+  useEffect(() => {
+    loadData();
+  }, [formSlug, loadData]);
+
+  
 
   // ── Reactive URL Parameter Synchronization ──────────────────────────
   // Dynamically syncs selectedLocation, selectedProvider, selectedService to URL search params

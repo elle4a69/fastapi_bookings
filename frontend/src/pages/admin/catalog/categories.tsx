@@ -56,6 +56,8 @@ function ImageUpload({ imagePreview, onImageSelect, onImageRemove }: { imagePrev
   );
 }
 
+const defaultForm = { name: '', description: '', active: true, is_visible: true, image: null as string | null };
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +69,6 @@ export default function CategoriesPage() {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-
-  const defaultForm = { name: '', description: '', active: true, is_visible: true, image: null as string | null };
   const [formData, setFormData] = useState(defaultForm);
 
   const rightScrollRef = useRef<HTMLDivElement>(null);

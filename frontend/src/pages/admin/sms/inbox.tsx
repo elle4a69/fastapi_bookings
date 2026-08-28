@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { MessageSquareText, Search, Send, Play, Ban, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -42,23 +42,7 @@ export default function SmsInboxTab() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadConversations();
-    // Poll for updates every 10 seconds
-    const interval = setInterval(loadConversations, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (selectedConversationId) {
-      loadMessages(selectedConversationId);
-    } else {
-      setMessages([]);
-      setActiveConv(null);
-    }
-  }, [selectedConversationId]);
-
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       const res = await apiClient.get<SmsConversation[]>("/api/admin/sms/conversations");
       setConversations(res);
@@ -73,7 +57,25 @@ export default function SmsInboxTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    loadConversations();
+    // Poll for updates every 10 seconds
+    const interval = setInterval(loadConversations, 10000);
+    return () => clearInterval(interval);
+  }, [loadConversations]);
+
+  useEffect(() => {
+    if (selectedConversationId) {
+      loadMessages(selectedConversationId);
+    } else {
+      setMessages([]);
+      setActiveConv(null);
+    }
+  }, [selectedConversationId]);
+
+  
 
   const loadMessages = async (convId: number) => {
     try {

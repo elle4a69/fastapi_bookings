@@ -51,7 +51,7 @@ export default function BusinessSettings() {
         address: data.address || "",
         openingHours: data.openingHours || DEFAULT_HOURS,
       })
-    } catch (error) {
+    } catch {
       toast.error("Failed to load business profile")
       setProfile({
         name: "",
@@ -71,7 +71,7 @@ export default function BusinessSettings() {
     try {
       await apiClient.put("/api/admin/business-profile", profile)
       toast.success("Business profile saved successfully")
-    } catch (error) {
+    } catch {
       toast.error("Failed to save profile")
     } finally {
       setSaving(false)

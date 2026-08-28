@@ -219,7 +219,7 @@ const INITIAL_MEDIA_ITEMS: MediaItem[] = [
 ]
 
 // Short URL Service Generator Helper
-export async function createShortUrl(longUrl: string, _resourceId?: string, _prefix?: "med" | "alb" | "upl"): Promise<string> {
+async function createShortUrl(longUrl: string, _resourceId?: string, _prefix?: "med" | "alb" | "upl"): Promise<string> {
   try {
     const res = await fetch("http://localhost:8002/api/v1/shorten/", {
       method: "POST",
@@ -387,7 +387,7 @@ export default function MediaPage() {
       setIsEditingImage(false)
       resetEditorParams()
     }
-  }, [selectedItem?.id])
+  }, [selectedItem])
 
   const resetEditorParams = () => {
     setRotation(0)

@@ -26,8 +26,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarRail,
-  useSidebar,
 } from "@/components/ui/sidebar"
+import { useSidebar } from "@/components/ui/sidebar-context"
 import { UserMenu } from "@/components/user-menu"
 
 function isCurrentPath(currentPath: string, url: string) {

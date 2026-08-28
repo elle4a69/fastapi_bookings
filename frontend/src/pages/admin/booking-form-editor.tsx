@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect , useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,11 +54,7 @@ export default function BookingFormEditorPage() {
   const [presetProviderId, setPresetProviderId] = useState<string>("none");
   const [presetServiceId, setPresetServiceId] = useState<string>("none");
 
-  useEffect(() => {
-    loadSetupData();
-  }, [formId]);
-
-  const loadSetupData = async () => {
+  const loadSetupData = useCallback(async () => {
     setLoading(true);
     try {
       const [lRes, pRes, sRes] = await Promise.all([
@@ -142,7 +138,13 @@ export default function BookingFormEditorPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formId]);
+
+  useEffect(() => {
+    loadSetupData();
+  }, [formId, loadSetupData]);
+
+  
 
   // ── Auto-generate Form Name and URL Slug ────────────────────────────
 

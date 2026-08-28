@@ -45,7 +45,7 @@ export default function SchedulingPage() {
           setSelectedProvider(mapped[0]);
         }
       } catch (err) {
-        console.error('Failed to load providers from backend:', err);
+console.error('Failed to load providers from backend:', err);
       } finally {
         setLoading(false);
       }
@@ -80,12 +80,12 @@ export default function SchedulingPage() {
           }
         });
         setSpecialDaysMap(map);
-      } catch (err) {
-        console.warn('Failed to fetch provider special days', err);
+      } catch {
+        console.warn('Failed to fetch provider special days');
       }
     };
     fetchSpecialDays();
-  }, [selectedProvider?.id]);
+  }, [selectedProvider]);
 
   const saveSchedule = async (updatedProvider: Provider) => {
     try {
@@ -101,7 +101,7 @@ export default function SchedulingPage() {
         setSaveStatus((current) => current === 'saved' ? 'idle' : current);
       }, 1500);
     } catch (err) {
-      console.warn('Auto-save failed:', err);
+console.warn('Auto-save failed:', err);
       setSaveStatus('saved');
       setTimeout(() => {
         setSaveStatus((current) => current === 'saved' ? 'idle' : current);
@@ -144,7 +144,7 @@ export default function SchedulingPage() {
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
         } catch (err) {
-          console.warn('Failed to save special day', err);
+console.warn('Failed to save special day', err);
         }
       } else {
         setSpecialDaysMap(prev => {
@@ -155,7 +155,7 @@ export default function SchedulingPage() {
         try {
           setSaveStatus('saving');
           await apiClient.delete(`/api/admin/providers/${selectedProvider.id}/special-days/${dateStr}`);
-        } catch (err) {
+        } catch {
           // Ignore
         }
 
@@ -189,7 +189,7 @@ export default function SchedulingPage() {
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
         } catch (err) {
-          console.warn('Failed to update special day', err);
+console.warn('Failed to update special day', err);
         }
       } else {
         const updatedWeeklySchedule = {
@@ -239,7 +239,7 @@ export default function SchedulingPage() {
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus(s => s === 'saved' ? 'idle' : s), 1500);
       } catch (err) {
-        console.warn('Failed to update special day slot', err);
+console.warn('Failed to update special day slot', err);
       }
     } else {
       const updatedWeeklySchedule = {

@@ -55,7 +55,7 @@ export default function WebhooksSettings() {
       if (list.length > 0) {
         setSelectedId(list[0].id)
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load webhooks")
       // Mock data for development
       setWebhooks([
@@ -92,7 +92,7 @@ export default function WebhooksSettings() {
         await apiClient.put(`/api/admin/webhooks/${webhook.id}`, payload)
       }
       toast.success("Webhook saved successfully")
-    } catch (error) {
+    } catch {
       toast.error("Failed to save webhook")
     } finally {
       setSaving(false)
@@ -107,7 +107,7 @@ export default function WebhooksSettings() {
       setWebhooks(webhooks.filter(w => w.id !== id))
       if (selectedId === id) setSelectedId(null)
       toast.success("Webhook deleted")
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete webhook")
     }
   }
