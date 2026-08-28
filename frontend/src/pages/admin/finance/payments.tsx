@@ -52,11 +52,13 @@ export function PaymentsPage() {
 
   const handleRefund = async (paymentId: number | string) => {
     try {
-      await apiClient.post(`/api/admin/payments/${paymentId}/refund`);
-      toast.success('Refund initiated successfully');
+      await apiClient.put(`/api/admin/payments/${paymentId}`, {
+        status: 'refunded'
+      });
+      toast.success('Payment marked as refunded');
       fetchPayments();
     } catch (error) {
-      toast.error('Failed to initiate refund');
+      toast.error('Failed to update payment status');
       console.error(error);
     }
   };
