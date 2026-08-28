@@ -179,3 +179,70 @@ def test_checkout_commit_atomic(client, setup_data, db_session):
     payload_diff["idempotency_key"] = "idemp-key-2"
     response_conflict = client.post("/api/public/checkout/commit", json=payload_diff, headers=headers)
     assert response_conflict.status_code == status.HTTP_409_CONFLICT
+
+
+def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_session):
+    """Verify tenant boundary enforcement and restriction policies on POST /api/public/bookings."""
+    token_a = create_access_token({"sub": "tenant-a"})
+    headers_a = {"X-Tenant": "tenant-a", "X-Token": token_a}
+
+    # Create a second tenant with foreign resources
+    tenant_b = Tenant(name="Tenant B", subdomain="tenant-b", created_at=datetime.now(timezone.utc))
+    db_session.add(tenant_b)
+    db_session.commit()
+
+    client_b = Client(tenant_id=tenant_b.id, name="Client B", email="b@example.com")
+    service_b = Service(tenant_id=tenant_b.id, name="Service B", duration=60, active=True, price=50.0)
+    provider_b = Provider(tenant_id=tenant_b.id, name="Provider B", active=True)
+    db_session.add_all([client_b, service_b, provider_b])
+    db_session.commit()
+
+    base_time = datetime.now(timezone.utc) + timedelta(days=5)
+    valid_payload = {
+        "client_id": setup_data["client_ok"].id,
+        "provider_id": setup_data["provider"].id,
+        "service_id": setup_data["service"].id,
+        "start_time": base_time.isoformat(),
+        "end_time": (base_time + timedelta(hours=1)).isoformat(),
+        "notes": "Valid booking"
+    }
+
+    initial_booking_count = db_session.query(Booking).count()
+
+    # 1. Cross-tenant Provider: Tenant A attempts to book Tenant B's provider -> 404
+    payload_bad_prov = valid_payload.copy()
+    payload_bad_prov["provider_id"] = provider_b.id
+    resp = client.post("/api/public/bookings", json=payload_bad_prov, headers=headers_a)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Provider not found" in resp.json()["error"]["message"]
+    assert db_session.query(Booking).count() == initial_booking_count
+
+    # 2. Cross-tenant Service: Tenant A attempts to book Tenant B's service -> 404
+    payload_bad_svc = valid_payload.copy()
+    payload_bad_svc["service_id"] = service_b.id
+    resp = client.post("/api/public/bookings", json=payload_bad_svc, headers=headers_a)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Service not found" in resp.json()["error"]["message"]
+    assert db_session.query(Booking).count() == initial_booking_count
+
+    # 3. Cross-tenant Client: Tenant A attempts to book for Tenant B's client -> 404
+    payload_bad_client = valid_payload.copy()
+    payload_bad_client["client_id"] = client_b.id
+    resp = client.post("/api/public/bookings", json=payload_bad_client, headers=headers_a)
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Client not found" in resp.json()["error"]["message"]
+    assert db_session.query(Booking).count() == initial_booking_count
+
+    # 4. Management Approval Required: restricted client -> 403
+    payload_restricted = valid_payload.copy()
+    payload_restricted["client_id"] = setup_data["client_restricted"].id
+    resp = client.post("/api/public/bookings", json=payload_restricted, headers=headers_a)
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    assert "management approval" in resp.json()["error"]["message"]
+    assert db_session.query(Booking).count() == initial_booking_count
+
+    # 5. Valid same-tenant public booking succeeds -> 200 and exactly 1 booking record created
+    resp_valid = client.post("/api/public/bookings", json=valid_payload, headers=headers_a)
+    assert resp_valid.status_code == status.HTTP_200_OK, resp_valid.text
+    assert resp_valid.json()["ok"] is True
+    assert db_session.query(Booking).count() == initial_booking_count + 1

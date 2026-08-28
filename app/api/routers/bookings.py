@@ -141,60 +141,6 @@ def create_booking(
     return {"ok": True, "data": booking}
 
 
-@router.post("/public/bookings", response_model=BookingResponse, tags=["bookings"])
-def create_public_booking(
-    booking_in: BookingCreate,
-    db: Session = Depends(get_db),
-    tenant: Tenant = Depends(get_public_tenant),
-) -> dict:
-    """Create a new booking via the public widget.
-
-    Public bookings are always created with ``pending`` status. They do not
-    require an authenticated user but must supply a valid public token.
-    """
-    booking_data = booking_in.dict()
-    booking_data["status"] = BookingStatus.PENDING
-    # Validate provider eligibility if provided
-    if booking_in.provider_id:
-        service_obj = db.query(Service).filter(
-            Service.id == booking_in.service_id,
-            Service.tenant_id == tenant.id
-        ).first()
-        if service_obj and service_obj.providers:
-            provider_ids = {sp.provider_id for sp in service_obj.providers}
-            if booking_in.provider_id not in provider_ids:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
-    
-    from sqlalchemy.exc import IntegrityError
-    booking = BookingModel(tenant_id=tenant.id, **booking_data)
-    db.add(booking)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
-    db.refresh(booking)
-    try:
-        scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except HTTPException as exc:
-        db.delete(booking)
-        db.commit()
-        raise exc
-
-    payload = {
-        "id": booking.id,
-        "client_id": booking.client_id,
-        "provider_id": booking.provider_id,
-        "service_id": booking.service_id,
-        "start_time": booking.start_time.isoformat() if booking.start_time else None,
-        "end_time": booking.end_time.isoformat() if booking.end_time else None,
-        "status": booking.status
-    }
-    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.subdomain)
-    db.commit()
-    return {"ok": True, "data": booking}
-
-
 @router.get("/bookings/{booking_id}", response_model=BookingResponse, tags=["bookings"])
 def get_booking(booking_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)) -> dict:
     """Retrieve a booking by its ID."""

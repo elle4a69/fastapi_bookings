@@ -15,6 +15,7 @@ from ...models import Service, Provider, Client, Location
 from ...models.booking import Booking as BookingModel
 from ...schemas.booking import BookingCreate, BookingResponse
 from ...services import scheduling_service
+from ...services.outbox_service import create_outbox_event
 
 router = APIRouter(prefix="/api/public", tags=["public-bookings"])
 
@@ -72,6 +73,15 @@ def create_public_booking(
         if not location_obj:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
 
+    # 5. Verify provider eligibility for service
+    if service_obj.providers:
+        provider_ids = {sp.provider_id for sp in service_obj.providers}
+        if booking_in.provider_id not in provider_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provider is not eligible for this service",
+            )
+
     booking_data = booking_in.dict()
     booking_data["status"] = BookingStatus.PENDING
     booking_data["tenant_id"] = tenant.id
@@ -86,10 +96,25 @@ def create_public_booking(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Slot already booked for this provider")
     db.refresh(booking)
 
+    # Allocate resources if needed
     try:
         scheduling_service.allocate_resources(db, booking=booking, commit=True)
-    except Exception:
-        pass
+    except HTTPException as exc:
+        db.delete(booking)
+        db.commit()
+        raise exc
+
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.subdomain)
+    db.commit()
 
     return {"ok": True, "data": booking}
 
