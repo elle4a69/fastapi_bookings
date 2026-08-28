@@ -113,7 +113,7 @@ def create_public_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.subdomain)
+    create_outbox_event(db, "booking.created", payload, tenant_id=tenant.id)
     db.commit()
 
     return {"ok": True, "data": booking}

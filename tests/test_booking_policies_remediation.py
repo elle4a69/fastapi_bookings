@@ -9,6 +9,7 @@ from app.models.client import Client
 from app.models.service import Service
 from app.models.provider import Provider
 from app.models.booking import Booking
+from app.models.outbox import OutboxEvent
 from app.models.management_review_request import ManagementReviewRequest
 from app.core.security import create_access_token
 
@@ -24,6 +25,7 @@ def mock_stripe():
 def setup_data(db_session):
     db_session.query(ManagementReviewRequest).delete()
     db_session.query(Booking).delete()
+    db_session.query(OutboxEvent).delete()
     db_session.commit()
 
     tenant = Tenant(name="Tenant A", subdomain="tenant-a", created_at=datetime.now(timezone.utc))
@@ -208,6 +210,7 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     }
 
     initial_booking_count = db_session.query(Booking).count()
+    initial_outbox_count = db_session.query(OutboxEvent).count()
 
     # 1. Cross-tenant Provider: Tenant A attempts to book Tenant B's provider -> 404
     payload_bad_prov = valid_payload.copy()
@@ -216,6 +219,7 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert resp.status_code == status.HTTP_404_NOT_FOUND
     assert "Provider not found" in resp.json()["error"]["message"]
     assert db_session.query(Booking).count() == initial_booking_count
+    assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
     # 2. Cross-tenant Service: Tenant A attempts to book Tenant B's service -> 404
     payload_bad_svc = valid_payload.copy()
@@ -224,6 +228,7 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert resp.status_code == status.HTTP_404_NOT_FOUND
     assert "Service not found" in resp.json()["error"]["message"]
     assert db_session.query(Booking).count() == initial_booking_count
+    assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
     # 3. Cross-tenant Client: Tenant A attempts to book for Tenant B's client -> 404
     payload_bad_client = valid_payload.copy()
@@ -232,6 +237,7 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert resp.status_code == status.HTTP_404_NOT_FOUND
     assert "Client not found" in resp.json()["error"]["message"]
     assert db_session.query(Booking).count() == initial_booking_count
+    assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
     # 4. Management Approval Required: restricted client -> 403
     payload_restricted = valid_payload.copy()
@@ -240,9 +246,18 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert resp.status_code == status.HTTP_403_FORBIDDEN
     assert "management approval" in resp.json()["error"]["message"]
     assert db_session.query(Booking).count() == initial_booking_count
+    assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
-    # 5. Valid same-tenant public booking succeeds -> 200 and exactly 1 booking record created
+    # 5. Valid same-tenant public booking succeeds -> 200 and exactly 1 booking record + 1 outbox event created
     resp_valid = client.post("/api/public/bookings", json=valid_payload, headers=headers_a)
     assert resp_valid.status_code == status.HTTP_200_OK, resp_valid.text
     assert resp_valid.json()["ok"] is True
     assert db_session.query(Booking).count() == initial_booking_count + 1
+    assert db_session.query(OutboxEvent).count() == initial_outbox_count + 1
+
+    # Verify outbox event record properties
+    created_outbox = db_session.query(OutboxEvent).order_by(OutboxEvent.id.desc()).first()
+    assert created_outbox is not None
+    assert created_outbox.type == "booking.created"
+    assert created_outbox.tenant_id == setup_data["tenant"].id
+    assert isinstance(created_outbox.tenant_id, int)
