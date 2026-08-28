@@ -10,6 +10,7 @@ from .provider import Provider
 from .client import Client
 from .location import Location, LocationProvider, LocationService, LocationCategory, LocationProduct, LocationProvider, LocationService, LocationCategory, LocationProduct
 from .booking import Booking
+from .booking_slot_allocation import BookingSlotAllocation
 from .audit import AuditLog
 from .payment import Payment
 from .notification import (
@@ -83,6 +84,7 @@ __all__ = [
     "Client",
     "Location",
     "Booking",
+    "BookingSlotAllocation",
     "AuditLog",
     "Payment",
     "Notification",

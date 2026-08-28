@@ -23,7 +23,7 @@ class Booking(Base):
             "provider_id",
             "start_time",
             unique=True,
-            sqlite_where=text("status != 'cancelled'"),
+            sqlite_where=text("status NOT IN ('CANCELLED', 'cancelled')"),
             postgresql_where=text("status != 'CANCELLED'::bookingstatus"),
         ),
     )
@@ -54,6 +54,14 @@ class Booking(Base):
     # Resources allocated to this booking
     resource_allocations = relationship(
         "BookingResourceAllocation",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    # Slot allocations for atomic first-submit-wins concurrency
+    slot_allocations = relationship(
+        "BookingSlotAllocation",
         back_populates="booking",
         cascade="all, delete-orphan",
         lazy="selectin",
