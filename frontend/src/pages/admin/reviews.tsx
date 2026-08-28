@@ -81,8 +81,8 @@ export default function ReviewsPage() {
       // Optimistic update
       setReviews(prev => prev.map(r => r.id === review.id ? { ...r, is_approved: newStatus } : r));
       
-      await apiClient.put(`/api/admin/management-reviews/${review.id}`, {
-        is_approved: newStatus
+      await apiClient.put(`/api/admin/management-reviews/${review.id}/resolve`, {
+        state: newStatus ? "approved" : "rejected"
       });
       
     } catch (error) {
