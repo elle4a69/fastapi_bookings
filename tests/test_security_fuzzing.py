@@ -118,7 +118,7 @@ def test_sql_injection_availability(client, base_security_data):
             },
             headers=headers
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 2. Test provider_id validation parameter
     for payload in sql_payloads:
@@ -131,7 +131,7 @@ def test_sql_injection_availability(client, base_security_data):
             },
             headers=headers
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 3. Test date validation parameter
     for payload in sql_payloads:
@@ -144,7 +144,7 @@ def test_sql_injection_availability(client, base_security_data):
             },
             headers=headers
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def test_sql_injection_search_availability(client, base_security_data):
@@ -168,7 +168,7 @@ def test_sql_injection_search_availability(client, base_security_data):
             },
             headers=headers
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 2. Test desired_time parameter (which allows string input)
     # The application should parameterize ORM queries, so the payload
@@ -229,7 +229,7 @@ def test_negative_pricing_and_duration_validation(client, base_security_data):
         "price": 50.0
     }
     response = client.post("/api/admin/services", json=payload_negative_duration, headers=headers)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     payload_zero_duration = {
         "name": "Zero Duration Service",
@@ -237,7 +237,7 @@ def test_negative_pricing_and_duration_validation(client, base_security_data):
         "price": 50.0
     }
     response = client.post("/api/admin/services", json=payload_zero_duration, headers=headers)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 2. Negative min_group_size / max_group_size should be rejected (ge=1)
     payload_invalid_group_size = {
@@ -247,7 +247,7 @@ def test_negative_pricing_and_duration_validation(client, base_security_data):
         "min_group_size": -5
     }
     response = client.post("/api/admin/services", json=payload_invalid_group_size, headers=headers)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 3. Test negative price and negative deposit amount
     payload_negative_price = {
@@ -260,7 +260,7 @@ def test_negative_pricing_and_duration_validation(client, base_security_data):
     
     # Verify that the server either validation blocks it or gracefully executes it (e.g. 200 OK or 422)
     # without returning 500 error.
-    assert response.status_code in [status.HTTP_200_OK, status.HTTP_422_UNPROCESSABLE_ENTITY]
+    assert response.status_code in [status.HTTP_200_OK, status.HTTP_422_UNPROCESSABLE_CONTENT]
     
     if response.status_code == status.HTTP_200_OK:
         service_id = response.json()["data"]["id"]
@@ -330,7 +330,7 @@ def test_extreme_timezone_offsets(client, base_security_data):
             },
             headers=headers
         )
-        assert resp_get.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert resp_get.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
         # POST search-availability
         resp_post = client.post(
@@ -342,7 +342,7 @@ def test_extreme_timezone_offsets(client, base_security_data):
             },
             headers=headers
         )
-        assert resp_post.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert resp_post.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 2. Maximum valid extreme offsets (+14:00, -12:00) should be parsed and processed successfully
     valid_extreme_offsets = [
@@ -391,7 +391,7 @@ def test_malformed_payloads_fuzzing(client, base_security_data):
         },
         headers=headers
     )
-    assert response_wrong_type.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response_wrong_type.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 3. Completely invalid JSON syntax (HTTP bad request / unprocessable content)
     response_invalid_json = client.post(
@@ -405,7 +405,7 @@ def test_malformed_payloads_fuzzing(client, base_security_data):
     )
     assert response_invalid_json.status_code in [
         status.HTTP_400_BAD_REQUEST,
-        status.HTTP_422_UNPROCESSABLE_ENTITY
+        status.HTTP_422_UNPROCESSABLE_CONTENT
     ]
 
 

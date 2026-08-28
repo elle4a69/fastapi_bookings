@@ -73,7 +73,7 @@ def list_public_categories(
         .distinct()
         .all()
     )
-    return [CategoryOut.from_orm(c) for c in categories]
+    return [CategoryOut.model_validate(c) for c in categories]
 
 
 @router.get("/locations", response_model=List[Location], deprecated=True)
@@ -83,4 +83,4 @@ def list_public_locations(
 ) -> List[Location]:
     """Return all locations."""
     locations = db.query(LocationModel).filter(LocationModel.tenant_id == tenant.id).all()
-    return [Location.from_orm(l) for l in locations]
+    return [Location.model_validate(l) for l in locations]

@@ -25,7 +25,7 @@ def list_packages(
     current_user = Depends(get_current_admin),
 ) -> List[PackageOut]:
     packages = db.query(PackageModel).filter(PackageModel.tenant_id == current_user.tenant_id).all()
-    return [PackageOut.from_orm(p) for p in packages]
+    return [PackageOut.model_validate(p) for p in packages]
 
 
 @router.post("", response_model=PackageOut)
@@ -34,11 +34,11 @@ def create_package(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
-    package = PackageModel(**package_in.dict(), tenant_id=current_user.tenant_id)
+    package = PackageModel(**package_in.model_dump(), tenant_id=current_user.tenant_id)
     db.add(package)
     db.commit()
     db.refresh(package)
-    return PackageOut.from_orm(package)
+    return PackageOut.model_validate(package)
 
 
 @router.get("/{package_id}", response_model=PackageOut)
@@ -53,7 +53,7 @@ def get_package(
     ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
-    return PackageOut.from_orm(package)
+    return PackageOut.model_validate(package)
 
 
 @router.put("/{package_id}", response_model=PackageOut)
@@ -69,11 +69,11 @@ def update_package(
     ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
-    for field, value in package_in.dict(exclude_unset=True).items():
+    for field, value in package_in.model_dump(exclude_unset=True).items():
         setattr(package, field, value)
     db.commit()
     db.refresh(package)
-    return PackageOut.from_orm(package)
+    return PackageOut.model_validate(package)
 
 
 @router.delete("/{package_id}", response_model=PackageOut)
@@ -90,7 +90,7 @@ def delete_package(
         raise HTTPException(status_code=404, detail="Package not found")
     db.delete(package)
     db.commit()
-    return PackageOut.from_orm(package)
+    return PackageOut.model_validate(package)
 
 
 @router.post("/{package_id}/steps", response_model=PackageStepOut)
@@ -107,11 +107,11 @@ def add_package_step(
     ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
-    step = StepModel(**step_in.dict())
+    step = StepModel(**step_in.model_dump())
     db.add(step)
     db.commit()
     db.refresh(step)
-    return PackageStepOut.from_orm(step)
+    return PackageStepOut.model_validate(step)
 
 
 @router.put("/steps/{step_id}", response_model=PackageStepOut)
@@ -124,11 +124,11 @@ def update_package_step(
     step = db.query(StepModel).filter(StepModel.id == step_id).first()
     if not step:
         raise HTTPException(status_code=404, detail="Package step not found")
-    for field, value in step_in.dict(exclude_unset=True).items():
+    for field, value in step_in.model_dump(exclude_unset=True).items():
         setattr(step, field, value)
     db.commit()
     db.refresh(step)
-    return PackageStepOut.from_orm(step)
+    return PackageStepOut.model_validate(step)
 
 
 @router.delete("/steps/{step_id}", response_model=PackageStepOut)
@@ -142,4 +142,4 @@ def delete_package_step(
         raise HTTPException(status_code=404, detail="Package step not found")
     db.delete(step)
     db.commit()
-    return PackageStepOut.from_orm(step)
+    return PackageStepOut.model_validate(step)

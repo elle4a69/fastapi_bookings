@@ -81,7 +81,7 @@ def create_workday(
         raise HTTPException(status_code=404, detail="Provider not found")
     if workday_in.location_id and not get_location_or_none(db, workday_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    workday = ProviderWorkDay(tenant_id=current_user.tenant_id, **workday_in.dict())
+    workday = ProviderWorkDay(tenant_id=current_user.tenant_id, **workday_in.model_dump())
     db.add(workday)
     db.commit()
     db.refresh(workday)
@@ -106,7 +106,7 @@ def update_workday(
         raise HTTPException(status_code=404, detail="Provider not found")
     if workday_in.location_id is not None and not get_location_or_none(db, workday_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    for field, value in workday_in.dict(exclude_unset=True).items():
+    for field, value in workday_in.model_dump(exclude_unset=True).items():
         setattr(workday, field, value)
     db.commit()
     db.refresh(workday)
@@ -149,7 +149,7 @@ def create_special_day(
         raise HTTPException(status_code=404, detail="Provider not found")
     if special_day_in.location_id and not get_location_or_none(db, special_day_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    day = ProviderSpecialDay(tenant_id=current_user.tenant_id, **special_day_in.dict())
+    day = ProviderSpecialDay(tenant_id=current_user.tenant_id, **special_day_in.model_dump())
     db.add(day)
     db.commit()
     db.refresh(day)
@@ -173,7 +173,7 @@ def update_special_day(
         raise HTTPException(status_code=404, detail="Provider not found")
     if special_in.location_id is not None and not get_location_or_none(db, special_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    for field, value in special_in.dict(exclude_unset=True).items():
+    for field, value in special_in.model_dump(exclude_unset=True).items():
         if field == "date" and value is None:
             continue
         setattr(day, field, value)
@@ -216,7 +216,7 @@ def create_blocked_time(
         raise HTTPException(status_code=404, detail="Provider not found")
     if block_in.location_id and not get_location_or_none(db, block_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    block = BlockedTime(tenant_id=current_user.tenant_id, **block_in.dict())
+    block = BlockedTime(tenant_id=current_user.tenant_id, **block_in.model_dump())
     db.add(block)
     db.commit()
     db.refresh(block)
@@ -240,7 +240,7 @@ def update_blocked_time(
         raise HTTPException(status_code=404, detail="Provider not found")
     if block_in.location_id is not None and not get_location_or_none(db, block_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    for field, value in block_in.dict(exclude_unset=True).items():
+    for field, value in block_in.model_dump(exclude_unset=True).items():
         setattr(block, field, value)
     db.commit()
     db.refresh(block)
@@ -281,7 +281,7 @@ def create_reserved_time(
         raise HTTPException(status_code=404, detail="Provider not found")
     if reserved_in.location_id and not get_location_or_none(db, reserved_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    reservation = ReservedTime(tenant_id=current_user.tenant_id, **reserved_in.dict())
+    reservation = ReservedTime(tenant_id=current_user.tenant_id, **reserved_in.model_dump())
     db.add(reservation)
     db.commit()
     db.refresh(reservation)
@@ -305,7 +305,7 @@ def update_reserved_time(
         raise HTTPException(status_code=404, detail="Provider not found")
     if reserved_in.location_id is not None and not get_location_or_none(db, reserved_in.location_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Location not found")
-    for field, value in reserved_in.dict(exclude_unset=True).items():
+    for field, value in reserved_in.model_dump(exclude_unset=True).items():
         setattr(reservation, field, value)
     db.commit()
     db.refresh(reservation)

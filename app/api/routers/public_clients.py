@@ -64,7 +64,7 @@ def create_public_client_contact(
     """Backward-compatible public contact creation endpoint."""
     client = ClientModel(
         tenant_id=tenant.id,
-        **client_in.dict()
+        **client_in.model_dump()
     )
     db.add(client)
     db.commit()
@@ -187,7 +187,7 @@ def update_my_profile(
     client: ClientModel = Depends(get_public_client_from_token),
 ) -> dict:
     """Update the current public client profile."""
-    for field, value in profile_in.dict(exclude_unset=True).items():
+    for field, value in profile_in.model_dump(exclude_unset=True).items():
         setattr(client, field, value)
     db.commit()
     db.refresh(client)

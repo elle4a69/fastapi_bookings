@@ -83,7 +83,7 @@ def validate_promotion(db: Session, code: Optional[str], subtotal: float, tenant
         return {"valid": False, "discount": 0.0, "reason": "Promotion code has reached its redemption limit"}
     discount = (subtotal * promo.discount_value / 100.0) if promo.discount_type == "percent" else promo.discount_value
     discount = max(0.0, min(float(discount), float(subtotal)))
-    return {"valid": True, "discount": round(discount, 2), "reason": None, "promotion": PromotionCodeOut.from_orm(promo)}
+    return {"valid": True, "discount": round(discount, 2), "reason": None, "promotion": PromotionCodeOut.model_validate(promo)}
 
 
 def build_quote(db: Session, payload: QuoteRequest, tenant_id: int) -> dict:
@@ -378,7 +378,7 @@ def create_promotion(
         PromotionCode.tenant_id == tenant.id
     ).first():
         raise HTTPException(status_code=409, detail="Promotion code already exists")
-    promo_dict = payload.dict()
+    promo_dict = payload.model_dump()
     promo_dict["tenant_id"] = tenant.id
     promo = PromotionCode(**promo_dict)
     db.add(promo)
@@ -401,7 +401,7 @@ def update_promotion(
     ).first()
     if not promo:
         raise HTTPException(status_code=404, detail="Promotion not found")
-    for field, value in payload.dict(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(promo, field, value)
     db.commit()
     db.refresh(promo)
@@ -441,7 +441,7 @@ def create_tax_rate(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin)
 ) -> TaxRate:
-    tax_dict = payload.dict()
+    tax_dict = payload.model_dump()
     tax_dict["tenant_id"] = tenant.id
     tax = TaxRate(**tax_dict)
     db.add(tax)
@@ -464,7 +464,7 @@ def update_tax_rate(
     ).first()
     if not tax:
         raise HTTPException(status_code=404, detail="Tax rate not found")
-    for field, value in payload.dict(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(tax, field, value)
     db.commit()
     db.refresh(tax)
@@ -504,7 +504,7 @@ def create_payment_processor_config(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin)
 ) -> PaymentProcessorConfig:
-    config_dict = payload.dict()
+    config_dict = payload.model_dump()
     config_dict["tenant_id"] = tenant.id
     config = PaymentProcessorConfig(**config_dict)
     db.add(config)
@@ -527,7 +527,7 @@ def update_payment_processor_config(
     ).first()
     if not config:
         raise HTTPException(status_code=404, detail="Payment processor config not found")
-    for field, value in payload.dict(exclude_unset=True).items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(config, field, value)
     config.updated_at = now_utc()
     db.commit()

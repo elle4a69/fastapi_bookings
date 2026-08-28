@@ -45,7 +45,7 @@ def create_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Payment amount must be at least 0.01"
         )
-    payment_dict = payment_in.dict()
+    payment_dict = payment_in.model_dump()
     payment_dict["tenant_id"] = tenant.id
     payment = PaymentModel(**payment_dict)
     db.add(payment)
@@ -69,7 +69,7 @@ def update_payment(
     ).first()
     if not payment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
-    for field, value in payment_in.dict(exclude_unset=True).items():
+    for field, value in payment_in.model_dump(exclude_unset=True).items():
         setattr(payment, field, value)
     db.commit()
     db.refresh(payment)

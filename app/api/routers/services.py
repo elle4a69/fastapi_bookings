@@ -81,7 +81,7 @@ def create_service(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new service."""
-    service_dict = service_in.dict(exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"})
+    service_dict = service_in.model_dump(exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"})
     service_dict["tenant_id"] = tenant.id
     service = ServiceModel(**service_dict)
     db.add(service)
@@ -137,7 +137,7 @@ def update_service(
     ).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
-    for field, value in service_in.dict(exclude_unset=True, exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"}).items():
+    for field, value in service_in.model_dump(exclude_unset=True, exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"}).items():
         setattr(service, field, value)
     db.commit()
     

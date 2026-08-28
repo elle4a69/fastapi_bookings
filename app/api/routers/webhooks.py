@@ -57,7 +57,7 @@ def create_webhook(
             status_code=400,
             detail={"error_code": "UNKNOWN_EVENT", "message": f"Unsupported event. Choose from: {sorted(SUPPORTED_EVENTS)}"},
         )
-    hook = WebhookRegistration(tenant_id=current_user.tenant_id, **webhook_in.dict())
+    hook = WebhookRegistration(tenant_id=current_user.tenant_id, **webhook_in.model_dump())
     db.add(hook)
     db.commit()
     db.refresh(hook)
@@ -77,7 +77,7 @@ def update_webhook(
         raise HTTPException(status_code=404, detail="Webhook not found")
     if webhook_in.event is not None and webhook_in.event not in SUPPORTED_EVENTS:
         raise HTTPException(status_code=400, detail={"error_code": "UNKNOWN_EVENT", "message": "Unsupported event"})
-    for field, value in webhook_in.dict(exclude_unset=True).items():
+    for field, value in webhook_in.model_dump(exclude_unset=True).items():
         setattr(hook, field, value)
     db.commit()
     db.refresh(hook)

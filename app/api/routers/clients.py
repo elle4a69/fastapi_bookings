@@ -38,7 +38,7 @@ def create_client(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new client."""
-    client = ClientModel(tenant_id=current_user.tenant_id, **client_in.dict())
+    client = ClientModel(tenant_id=current_user.tenant_id, **client_in.model_dump())
     db.add(client)
     db.commit()
     db.refresh(client)
@@ -69,7 +69,7 @@ def update_client(
     client = db.query(ClientModel).filter(ClientModel.id == client_id, ClientModel.tenant_id == current_user.tenant_id, ClientModel.deleted_at.is_(None)).first()
     if not client:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
-    for field, value in client_in.dict(exclude_unset=True).items():
+    for field, value in client_in.model_dump(exclude_unset=True).items():
         setattr(client, field, value)
     db.commit()
     db.refresh(client)

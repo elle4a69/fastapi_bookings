@@ -52,7 +52,7 @@ def add_to_waitlist(
     db.add(entry)
     db.commit()
     db.refresh(entry)
-    return WaitlistOut.from_orm(entry)
+    return WaitlistOut.model_validate(entry)
 
 
 @router.get("", response_model=List[WaitlistOut])
@@ -67,4 +67,4 @@ def list_waitlist(
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     entries = db.query(WaitlistEntry).filter(WaitlistEntry.service_id == service_id, WaitlistEntry.tenant_id == tenant.id).all()
-    return [WaitlistOut.from_orm(e) for e in entries]
+    return [WaitlistOut.model_validate(e) for e in entries]

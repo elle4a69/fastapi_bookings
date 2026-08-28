@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 class SmsKnowledgeEntryCreate(BaseModel):
     provider_id: Optional[int] = None
@@ -31,8 +31,7 @@ class SmsKnowledgeEntryResponse(BaseModel):
     approved_at: Optional[datetime] = None
     approved_by_id: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SmsPromptProfileCreate(BaseModel):
@@ -59,5 +58,4 @@ class SmsPromptProfileResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

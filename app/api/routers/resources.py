@@ -26,7 +26,7 @@ def list_resources(
     current_user = Depends(get_current_admin),
 ) -> List[ResourceOut]:
     resources = db.query(ResourceModel).filter(ResourceModel.tenant_id == tenant.id).all()
-    return [ResourceOut.from_orm(r) for r in resources]
+    return [ResourceOut.model_validate(r) for r in resources]
 
 
 @router.post("", response_model=ResourceOut)
@@ -36,13 +36,13 @@ def create_resource(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> ResourceOut:
-    resource_dict = resource_in.dict()
+    resource_dict = resource_in.model_dump()
     resource_dict["tenant_id"] = tenant.id
     resource = ResourceModel(**resource_dict)
     db.add(resource)
     db.commit()
     db.refresh(resource)
-    return ResourceOut.from_orm(resource)
+    return ResourceOut.model_validate(resource)
 
 @router.get("/requirements", response_model=List[ServiceResourceRequirementOut])
 def list_requirements(
@@ -50,7 +50,7 @@ def list_requirements(
     current_user = Depends(get_current_admin),
 ) -> List[ServiceResourceRequirementOut]:
     requirements = db.query(SRRModel).all()
-    return [ServiceResourceRequirementOut.from_orm(r) for r in requirements]
+    return [ServiceResourceRequirementOut.model_validate(r) for r in requirements]
 
 
 @router.get("/{resource_id}", response_model=ResourceOut)
@@ -66,7 +66,7 @@ def get_resource(
     ).first()
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
-    return ResourceOut.from_orm(resource)
+    return ResourceOut.model_validate(resource)
 
 
 @router.put("/{resource_id}", response_model=ResourceOut)
@@ -83,11 +83,11 @@ def update_resource(
     ).first()
     if not resource:
         raise HTTPException(status_code=404, detail="Resource not found")
-    for field, value in resource_in.dict(exclude_unset=True).items():
+    for field, value in resource_in.model_dump(exclude_unset=True).items():
         setattr(resource, field, value)
     db.commit()
     db.refresh(resource)
-    return ResourceOut.from_orm(resource)
+    return ResourceOut.model_validate(resource)
 
 
 @router.delete("/{resource_id}", response_model=ResourceOut)
@@ -105,7 +105,7 @@ def delete_resource(
         raise HTTPException(status_code=404, detail="Resource not found")
     db.delete(resource)
     db.commit()
-    return ResourceOut.from_orm(resource)
+    return ResourceOut.model_validate(resource)
 
 
 @router.post("/requirements", response_model=ServiceResourceRequirementOut)
@@ -114,11 +114,11 @@ def create_service_resource_requirement(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> ServiceResourceRequirementOut:
-    requirement = SRRModel(**requirement_in.dict())
+    requirement = SRRModel(**requirement_in.model_dump())
     db.add(requirement)
     db.commit()
     db.refresh(requirement)
-    return ServiceResourceRequirementOut.from_orm(requirement)
+    return ServiceResourceRequirementOut.model_validate(requirement)
 
 
 

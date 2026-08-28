@@ -116,7 +116,7 @@ def assign_product_to_service(
         ServiceProductModel.product_id == association.product_id,
     ).first()
     if existing:
-        return ServiceProductOut.from_orm(existing)
+        return ServiceProductOut.model_validate(existing)
     record = ServiceProductModel(tenant_id=tenant.id, **association.model_dump())
     db.add(record)
     try:
@@ -125,4 +125,4 @@ def assign_product_to_service(
         db.rollback()
         raise HTTPException(status_code=409, detail="Product is already assigned to this service") from exc
     db.refresh(record)
-    return ServiceProductOut.from_orm(record)
+    return ServiceProductOut.model_validate(record)

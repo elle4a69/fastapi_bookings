@@ -20,7 +20,7 @@ def list_series(
     current_user = Depends(get_current_admin),
 ) -> List[BookingSeriesOut]:
     series_list = db.query(SeriesModel).filter(SeriesModel.tenant_id == tenant.id).all()
-    return [BookingSeriesOut.from_orm(s) for s in series_list]
+    return [BookingSeriesOut.model_validate(s) for s in series_list]
 
 
 @router.post("", response_model=BookingSeriesOut)
@@ -30,13 +30,13 @@ def create_series(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> BookingSeriesOut:
-    series_dict = series_in.dict()
+    series_dict = series_in.model_dump()
     series_dict["tenant_id"] = tenant.id
     series = SeriesModel(**series_dict)
     db.add(series)
     db.commit()
     db.refresh(series)
-    return BookingSeriesOut.from_orm(series)
+    return BookingSeriesOut.model_validate(series)
 
 
 @router.get("/{series_id}", response_model=BookingSeriesOut)
@@ -52,4 +52,4 @@ def get_series(
     ).first()
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
-    return BookingSeriesOut.from_orm(series)
+    return BookingSeriesOut.model_validate(series)

@@ -38,7 +38,7 @@ async def update_business_profile(
     current_user: User = Depends(get_current_admin),
 ) -> dict:
     """Update details of the active tenant business profile (admin endpoint)."""
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for required_field in ("name", "timezone", "public_address_visibility", "max_advance_days"):
         if update_data.get(required_field) is None:
             update_data.pop(required_field, None)

@@ -96,7 +96,7 @@ def create_location(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new location."""
-    location_dict = location_in.dict(exclude={"provider_ids", "service_ids", "category_ids", "product_ids"})
+    location_dict = location_in.model_dump(exclude={"provider_ids", "service_ids", "category_ids", "product_ids"})
     location = LocationModel(tenant_id=current_user.tenant_id, **location_dict)
     db.add(location)
     db.commit()
@@ -141,7 +141,7 @@ def update_location(
     if not location:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Location not found")
     
-    for field, value in location_in.dict(exclude_unset=True, exclude={"provider_ids", "service_ids", "category_ids", "product_ids"}).items():
+    for field, value in location_in.model_dump(exclude_unset=True, exclude={"provider_ids", "service_ids", "category_ids", "product_ids"}).items():
         setattr(location, field, value)
     db.commit()
     

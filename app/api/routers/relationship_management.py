@@ -126,7 +126,7 @@ def create_and_connect(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Record could not be created or already exists") from exc
     except (TypeError, ValueError) as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid data provided") from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid data provided") from exc
     db.refresh(record)
     return {"ok": True, "data": {"record": _serialize(record), "relationship_id": link.id}}
 

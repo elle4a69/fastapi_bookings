@@ -56,7 +56,7 @@ def create_calendar_note(
         provider = db.query(Provider).filter(Provider.id == note_in.provider_id).first()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-    note = CalendarNote(**note_in.dict())
+    note = CalendarNote(**note_in.model_dump())
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -78,7 +78,7 @@ def update_calendar_note(
         provider = db.query(Provider).filter(Provider.id == note_in.provider_id).first()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-    for field, value in note_in.dict(exclude_unset=True).items():
+    for field, value in note_in.model_dump(exclude_unset=True).items():
         if value is None and field in {"date", "text"}:
             continue
         setattr(note, field, value)

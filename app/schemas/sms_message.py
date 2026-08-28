@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 class SmsMessageCreate(BaseModel):
     body: str
@@ -24,5 +24,4 @@ class SmsMessageResponse(BaseModel):
     occurred_at: datetime
     received_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

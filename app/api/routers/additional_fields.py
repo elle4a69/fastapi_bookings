@@ -119,7 +119,7 @@ def create_additional_field(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> AdditionalField:
-    field = AdditionalField(**field_in.dict(), tenant_id=current_user.tenant_id)
+    field = AdditionalField(**field_in.model_dump(), tenant_id=current_user.tenant_id)
     db.add(field)
     db.commit()
     db.refresh(field)
@@ -136,7 +136,7 @@ def update_additional_field(
     field = db.query(AdditionalField).filter(AdditionalField.id == field_id, AdditionalField.tenant_id == current_user.tenant_id).first()
     if not field:
         raise HTTPException(status_code=404, detail="Additional field not found")
-    for k, v in field_in.dict(exclude_unset=True).items():
+    for k, v in field_in.model_dump(exclude_unset=True).items():
         setattr(field, k, v)
     db.commit()
     db.refresh(field)

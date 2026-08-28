@@ -55,7 +55,7 @@ def create_notification(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new notification."""
-    notification_data = notification_in.dict()
+    notification_data = notification_in.model_dump()
     notification_data["tenant_id"] = tenant.id
     notification = NotificationModel(**notification_data)
     db.add(notification)
@@ -79,7 +79,7 @@ def update_notification(
     ).first()
     if not notification:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
-    for field, value in notification_in.dict(exclude_unset=True).items():
+    for field, value in notification_in.model_dump(exclude_unset=True).items():
         setattr(notification, field, value)
     db.commit()
     db.refresh(notification)
@@ -116,7 +116,7 @@ def create_notification_template(
             detail=f"Notification template code '{template_in.code}' already exists",
         )
 
-    tmpl_data = template_in.dict()
+    tmpl_data = template_in.model_dump()
     tmpl_data["tenant_id"] = tenant.id
     template = TemplateModel(**tmpl_data)
     db.add(template)
@@ -140,7 +140,7 @@ def update_notification_template(
     ).first()
     if not template:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
-    for field, value in template_in.dict(exclude_unset=True).items():
+    for field, value in template_in.model_dump(exclude_unset=True).items():
         setattr(template, field, value)
     try:
         db.commit()
@@ -196,7 +196,7 @@ def create_reminder_rule(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a reminder rule."""
-    rule_data = rule_in.dict()
+    rule_data = rule_in.model_dump()
     rule_data["tenant_id"] = tenant.id
     rule = RuleModel(**rule_data)
     db.add(rule)
@@ -220,7 +220,7 @@ def update_reminder_rule(
     ).first()
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder rule not found")
-    for field, value in rule_in.dict(exclude_unset=True).items():
+    for field, value in rule_in.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
     db.commit()
     db.refresh(rule)

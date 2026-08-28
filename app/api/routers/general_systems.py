@@ -52,7 +52,7 @@ def upsert_plugin_state(
         db.commit()
         db.refresh(existing)
         return {"ok": True, "data": existing}
-    state = PluginState(**state_in.dict(), tenant_id=current_user.tenant_id)
+    state = PluginState(**state_in.model_dump(), tenant_id=current_user.tenant_id)
     db.add(state)
     db.commit()
     db.refresh(state)

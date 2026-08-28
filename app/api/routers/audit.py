@@ -39,7 +39,7 @@ def create_audit_log(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new audit log entry."""
-    log_data = log_in.dict()
+    log_data = log_in.model_dump()
     log_data["tenant_id"] = tenant.id
     log = AuditModel(**log_data)
     db.add(log)

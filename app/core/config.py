@@ -9,10 +9,11 @@ values are used throughout the application.
 
 # BaseSettings moved to pydantic_settings in Pydantic v2
 try:
-    from pydantic_settings import BaseSettings
+    from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError:
     # Fallback for environments with Pydantic v1
     from pydantic import BaseSettings
+    SettingsConfigDict = dict
 from pydantic import Field, model_validator
 
 
@@ -97,9 +98,11 @@ class Settings(BaseSettings):
                 raise ValueError("SQLite database is not allowed in production environment")
         return self
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        case_sensitive=True,
+        env_file=".env",
+        extra="ignore",
+    )
 
 
 settings = Settings()

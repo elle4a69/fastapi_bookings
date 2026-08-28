@@ -89,7 +89,7 @@ def create_provider(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new provider."""
-    provider_dict = provider_in.dict()
+    provider_dict = provider_in.model_dump()
     provider_dict["tenant_id"] = tenant.id
     provider = ProviderModel(**provider_dict)
     db.add(provider)
@@ -155,7 +155,7 @@ def update_provider(
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
-    for field, value in provider_in.dict(exclude_unset=True, exclude={"service_ids"}).items():
+    for field, value in provider_in.model_dump(exclude_unset=True, exclude={"service_ids"}).items():
         setattr(provider, field, value)
 
     if provider_in.service_ids is not None:
