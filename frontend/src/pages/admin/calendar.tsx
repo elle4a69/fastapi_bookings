@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,23 +10,17 @@ import {
   Phone,
   Mail,
   MapPin,
-  Download,
   SlidersHorizontal,
   CalendarCheck,
   FileText,
-  Search,
-  User,
   RotateCcw,
   Edit2,
-  Calendar as CalendarIcon,
-  Tag,
-  DollarSign
+  Calendar as CalendarIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -98,11 +92,6 @@ function fmt12(date: Date) {
   const h = date.getHours() % 12 || 12;
   const min = String(date.getMinutes()).padStart(2, "0");
   return `${h}:${min} ${date.getHours() < 12 ? "AM" : "PM"}`;
-}
-
-function formatDatetimeLocal(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function isSameDay(d1: Date, d2: Date) {
@@ -409,7 +398,7 @@ export default function CalendarPage() {
   const [locations, setLocations] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewType, setViewType] = useState<"month" | "week" | "day">("month");

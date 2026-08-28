@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Search, Plus, Trash2, Save, ArrowLeft, Copy, Info, 
-  Wand2, 
-  List, ListOrdered, AlignLeft, AlignCenter, AlignRight, 
-  Link, Image as ImageIcon, Video, Code, HelpCircle, 
+import {
+  Search, Plus, Trash2, ArrowLeft, Copy, Info,
   X, Check,
-  ChevronDown, Link2, Upload, ExternalLink,
-  Eye, EyeOff, Loader2, Circle, CircleSlash, Layers, GripVertical
+  Link2, Upload, ExternalLink,
+  Eye, EyeOff, Loader2, Circle, CircleSlash, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -65,31 +62,6 @@ const COLOR_SWATCHES = [
   '#34bbf1', '#ff9295', '#fac94e', '#56dc86', '#c6a5e2', 
   '#b2ca3f', '#b07393', '#b09873', '#bb6a6a', '#71909f', 
   '#566993', '#1f9a7e', '#28c75f', '#2782e8'
-];
-
-const generateHalfHourSlots = (): string[] => {
-  const slots: string[] = [];
-  const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-  const periods = ['AM', 'PM'];
-  for (const period of periods) {
-    for (const hour of hours) {
-      slots.push(`${hour}:00 ${period}`);
-      slots.push(`${hour}:30 ${period}`);
-    }
-  }
-  return slots;
-};
-
-const HALF_HOUR_SLOTS = generateHalfHourSlots();
-
-const DAYS_OF_WEEK = [
-  { key: 'monday', label: 'Monday', short: 'Mo' },
-  { key: 'tuesday', label: 'Tuesday', short: 'Tu' },
-  { key: 'wednesday', label: 'Wednesday', short: 'We' },
-  { key: 'thursday', label: 'Thursday', short: 'Th' },
-  { key: 'friday', label: 'Friday', short: 'Fr' },
-  { key: 'saturday', label: 'Saturday', short: 'Sa' },
-  { key: 'sunday', label: 'Sunday', short: 'Su' },
 ];
 
 const getProviderAlbumShortUrl = (providerId: string | number): string => {
@@ -221,7 +193,6 @@ export default function ProvidersPage() {
     }, 60);
   };
 
-  const [activeMobileTab, setActiveMobileTab] = useState('monday');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [servicesSaveStatus, setServicesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -413,70 +384,6 @@ export default function ProvidersPage() {
     } catch (err: any) {
       toast.error(err.message || "Failed to update provider assignment");
       setLocations(prev => prev.map(l => String(l.id) === String(locationId) ? loc : l));
-    }
-  };
-
-  const handleUpdate = async () => {
-    if (!selectedProvider) return;
-    const targetId = selectedProvider.id;
-    
-    // Clean payload matching backend ProviderUpdate schema
-    const payload: any = {
-      name: selectedProvider.name || '',
-      email: selectedProvider.email || null,
-      phone: selectedProvider.phone || null,
-      active: selectedProvider.active ?? true,
-      is_visible: selectedProvider.is_visible ?? true,
-      capacity: selectedProvider.capacity || 1,
-      color: selectedProvider.color || null,
-      description: selectedProvider.description || null,
-      ignore_company_hours: selectedProvider.ignore_company_hours ?? false,
-    };
-
-    let updatedObj: Provider = { ...selectedProvider };
-
-    const isTempId = !targetId || targetId.startsWith('prov-') || isNaN(Number(targetId));
-
-    try {
-      if (isTempId) {
-        // Backend POST
-        const res = await apiClient.post<any>('/api/admin/providers', payload);
-        const dataObj = res?.data || res;
-        if (dataObj && dataObj.id) {
-          updatedObj = { ...selectedProvider, ...dataObj, id: String(dataObj.id) };
-        }
-      } else {
-        // Backend PUT
-        try {
-          const res = await apiClient.put<any>(`/api/admin/providers/${targetId}`, payload);
-          const dataObj = res?.data || res;
-          if (dataObj && dataObj.id) {
-            updatedObj = { ...selectedProvider, ...dataObj, id: String(dataObj.id) };
-          }
-        } catch (putErr) {
-          // If 404, fallback to POST
-          const res = await apiClient.post<any>('/api/admin/providers', payload);
-          const dataObj = res?.data || res;
-          if (dataObj && dataObj.id) {
-            updatedObj = { ...selectedProvider, ...dataObj, id: String(dataObj.id) };
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Backend save notice, saved state locally:", err);
-    }
-
-    setProviders(prev => prev.map(p => (p.id === targetId || p.id === updatedObj.id ? updatedObj : p)));
-    setSelectedProvider(updatedObj);
-    toast.success('Provider saved successfully');
-
-    if (location.state?.returnToServiceId) {
-      navigate('/admin/catalog/services', {
-        state: {
-          selectServiceId: location.state.returnToServiceId,
-          openSection: location.state.section
-        }
-      });
     }
   };
 

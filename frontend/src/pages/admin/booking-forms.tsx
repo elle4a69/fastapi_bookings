@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Pencil, Trash2, Plus, ExternalLink, Code, Eye, FileInput, Copy, Check } from "lucide-react";
+import { Pencil, Trash2, Plus, ExternalLink, Code, FileInput, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 
@@ -178,7 +178,7 @@ export default function BookingForms() {
         predefined_values: {}
       };
 
-      const created: any = await apiClient.post("/api/admin/booking-forms", payload);
+      await apiClient.post("/api/admin/booking-forms", payload);
       toast.success("New booking form created!");
       setCreateDialogOpen(false);
       setNewFormName("");

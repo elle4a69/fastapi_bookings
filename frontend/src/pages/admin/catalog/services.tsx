@@ -19,7 +19,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 // Data Types
 interface Service {
@@ -137,15 +137,12 @@ function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: {
   );
 }
 
-interface Resource { id: number; name: string; type: string; }
-
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [addons, setAddons] = useState<Addon[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [availableResources, setAvailableResources] = useState<Resource[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -153,7 +150,7 @@ export default function ServicesPage() {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [isListView, setIsListView] = useState(true);
+  const isListView = true;
   
   const [openSection, setOpenSection] = useState<string>('details');
   const [rightPaneType, setRightPaneType] = useState<"service" | "category">("service");
@@ -253,20 +250,18 @@ export default function ServicesPage() {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [svcRes, catRes, provRes, addonRes, prodRes, resRes] = await Promise.all([
+      const [svcRes, catRes, provRes, addonRes, prodRes] = await Promise.all([
         apiClient.get<any>('/api/admin/services').catch(() => ({ data: [] })),
         apiClient.get<any>('/api/admin/categories').catch(() => ({ data: [] })),
         apiClient.get<any>('/api/admin/providers').catch(() => ({ data: [] })),
         apiClient.get<any>('/api/admin/add-ons').catch(() => ({ data: [] })),
         apiClient.get<any>('/api/admin/products').catch(() => ({ data: [] })),
-        apiClient.get<any>('/api/admin/resources').catch(() => ({ data: [] })),
       ]);
       setServices(Array.isArray(svcRes) ? svcRes : (svcRes?.data ?? []));
       setCategories(Array.isArray(catRes) ? catRes : (catRes?.data ?? []));
       setProviders(Array.isArray(provRes) ? provRes : (provRes?.data ?? []));
       setAddons(Array.isArray(addonRes) ? addonRes : (addonRes?.data ?? []));
       setProducts(Array.isArray(prodRes) ? prodRes : (prodRes?.data ?? []));
-      setAvailableResources(Array.isArray(resRes) ? resRes : (resRes?.data ?? []));
     } catch (error) {
       toast.error('Failed to load data');
     } finally {
@@ -405,18 +400,6 @@ export default function ServicesPage() {
     }
   };
 
-  const toggleArrayItem = (key: keyof Omit<Service, 'id'>, id: string) => {
-    if (!isEditing) return;
-    setFormData(prev => {
-      const arr = prev[key] as string[];
-      if (arr.includes(id)) {
-        return { ...prev, [key]: arr.filter(i => i !== id) };
-      } else {
-        return { ...prev, [key]: [...arr, id] };
-      }
-    });
-  };
-
   const handleSaveCategory = async () => {
     if (!categoryFormData.name.trim()) {
       toast.error('Category Name is required');
@@ -459,32 +442,6 @@ export default function ServicesPage() {
     } catch (error) {
       toast.error('Failed to delete category');
     }
-  };
-
-  const addRequirementRow = () => {
-    if (!isEditing) return;
-    setFormData(prev => ({
-      ...prev,
-      requirements: [...prev.requirements, { resource_type: '', quantity: 1 }]
-    }));
-  };
-
-  const updateRequirement = (index: number, field: 'resource_type' | 'quantity', value: any) => {
-    if (!isEditing) return;
-    setFormData(prev => {
-      const reqs = [...prev.requirements];
-      reqs[index] = { ...reqs[index], [field]: value };
-      return { ...prev, requirements: reqs };
-    });
-  };
-
-  const removeRequirement = (index: number) => {
-    if (!isEditing) return;
-    setFormData(prev => {
-      const reqs = [...prev.requirements];
-      reqs.splice(index, 1);
-      return { ...prev, requirements: reqs };
-    });
   };
 
   const handleDragStartService = (e: React.DragEvent, id: string) => {
@@ -559,13 +516,6 @@ export default function ServicesPage() {
   };
 
   const filteredServices = services.filter(s => (s.name || '').toLowerCase().includes((search || '').toLowerCase()));
-
-  const distinctResourceTypes = Array.from(
-    new Set([
-      ...availableResources.map(r => r.type),
-      ...formData.requirements.map(req => req.resource_type)
-    ])
-  ).filter(Boolean);
 
   // Group services
   const groupedServices: Record<string, Service[]> = {};

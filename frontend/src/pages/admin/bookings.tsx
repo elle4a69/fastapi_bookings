@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { 
   Calendar as CalendarIcon, 
-  List, 
   Download, 
   MoreHorizontal, 
   Search,
@@ -11,8 +10,7 @@ import {
   Ban,
   Phone,
   Mail,
-  MapPin,
-  Plus
+  MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -66,8 +64,6 @@ const getStatusBadge = (status: string) => {
 
 export default function BookingsAdminPage() {
   const [bookings, setBookings] = useState<BookingItem[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,18 +78,8 @@ export default function BookingsAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [bRes, sRes, pRes] = await Promise.all([
-        apiClient.get<any>("/api/bookings?page_size=200").catch(() => []),
-        apiClient.get<any>("/api/admin/services").catch(() => []),
-        apiClient.get<any>("/api/admin/providers").catch(() => [])
-      ]);
-
+      const bRes = await apiClient.get<any>("/api/bookings?page_size=200").catch(() => []);
       const rawBookings = Array.isArray(bRes) ? bRes : (bRes?.data ?? bRes?.items ?? []);
-      const rawServices = Array.isArray(sRes) ? sRes : (sRes?.data ?? sRes?.items ?? []);
-      const rawProviders = Array.isArray(pRes) ? pRes : (pRes?.data ?? pRes?.items ?? []);
-
-      setServices(rawServices);
-      setProviders(rawProviders);
 
       const mapped: BookingItem[] = rawBookings.map((b: any) => {
         const start = new Date(b.start_time);

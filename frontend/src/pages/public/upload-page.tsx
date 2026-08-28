@@ -1,16 +1,13 @@
-import { useState, useEffect, ChangeEvent } from "react"
+import { useState, useEffect, type ChangeEvent } from "react"
 import { useSearchParams, Link } from "react-router-dom"
 import { 
   Upload, 
   CheckCircle2, 
   Clock, 
-  AlertCircle, 
-  FileText, 
   Image as ImageIcon, 
   Film, 
   Lock, 
   ArrowLeft,
-  Sparkles,
   Layers,
   Send,
   User,
@@ -121,7 +118,6 @@ export default function PublicUploadPage() {
     if (!e.target.files || e.target.files.length === 0) return
 
     const filesArr = Array.from(e.target.files)
-    const newItems: GuestQueuedFile[] = []
 
     // Quota check
     if (linkConfig && linkConfig.maxUploads > 0) {

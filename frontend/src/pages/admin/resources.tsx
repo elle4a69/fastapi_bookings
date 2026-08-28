@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -11,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Search, Plus, Save, Trash2, MapPin, Users, Box, ArrowLeft, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Plus, Save, Trash2, MapPin, Box, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface Resource {
   id?: string;
@@ -60,7 +59,7 @@ export default function ResourcesPage() {
   const [serviceSearchQuery, setServiceSearchQuery] = useState('');
   const [selectedGroupType, setSelectedGroupType] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<ResourceGroup | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [expandedLocations, setExpandedLocations] = useState<Record<string, boolean>>({});
@@ -355,13 +354,6 @@ export default function ResourcesPage() {
     }
   };
 
-  const toggleGroupExpand = (type: string) => {
-    setExpandedGroups(prev => ({
-      ...prev,
-      [type]: !prev[type]
-    }));
-  };
-
   const handleServiceCheck = (serviceId: number, checked: boolean) => {
     if (!selectedGroup) return;
     const current = [...selectedGroup.connected_services];
@@ -388,10 +380,6 @@ export default function ResourcesPage() {
       ...selectedGroup,
       connected_services: current
     });
-  };
-
-  const getLocationName = (locationId: string) => {
-    return locations.find((l) => String(l.id) === String(locationId))?.name || 'Unknown Location';
   };
 
   const filteredServices = services.filter(s => 

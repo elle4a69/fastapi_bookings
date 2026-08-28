@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Sparkles, Layers, Box, ShoppingBag, Gift, Clock, GripVertical, Eye, EyeOff, Circle, CircleSlash } from "lucide-react";
+import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Box, GripVertical, Eye, EyeOff, Circle, CircleSlash } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useAutoSave } from "@/hooks/use-auto-save";
@@ -24,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Location {
   id: string;
@@ -40,16 +39,6 @@ interface Location {
   service_ids?: string[];
   category_ids?: string[];
   product_ids?: string[];
-}
-
-interface ItemBase {
-  id: string;
-  name: string;
-  avatar?: string;
-  image?: string;
-  color?: string;
-  price?: number;
-  duration?: number;
 }
 
 interface Resource {
@@ -88,11 +77,6 @@ const DAYS_OF_WEEK = [
   { key: 'sunday', label: 'Sunday' },
 ];
 
-const TIME_OPTIONS = [
-  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00",
-  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00"
-];
-
 const createDefaultWeeklySchedule = (): Record<string, DaySchedule> => {
   const schedule: Record<string, DaySchedule> = {};
   DAYS_OF_WEEK.forEach((day) => {
@@ -123,17 +107,12 @@ export default function LocationsPage() {
   const [filteredServices, setFilteredServices] = useState<any[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   
-  const [categories, setCategories] = useState<ItemBase[]>([]);
-  const [addOns, setAddOns] = useState<ItemBase[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
-  const [products, setProducts] = useState<ItemBase[]>([]);
-  const [packages, setPackages] = useState<ItemBase[]>([]);
   
   const [resourceLocationIds, setResourceLocationIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isUpdatingRelation, setIsUpdatingRelation] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Location>>({});
@@ -230,23 +209,15 @@ export default function LocationsPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [locsRes, provsRes, servsRes, catsRes, addonsRes, resourcesRes, productsRes, packagesRes] = await Promise.all([
+      const [locsRes, provsRes, servsRes, resourcesRes] = await Promise.all([
         apiClient.get<any>("/api/admin/locations").catch(() => ({ data: [] })),
         apiClient.get<any>("/api/admin/providers").catch(() => ({ data: [] })),
         apiClient.get<any>("/api/admin/services").catch(() => ({ data: [] })),
-        apiClient.get<any>("/api/admin/categories").catch(() => ({ data: [] })),
-        apiClient.get<any>("/api/admin/add-ons").catch(() => []),
         apiClient.get<any>("/api/admin/resources").catch(() => []),
-        apiClient.get<any>("/api/admin/products").catch(() => []),
-        apiClient.get<any>("/api/admin/packages").catch(() => []),
       ]);
 
       setLocations(Array.isArray(locsRes) ? locsRes : (locsRes?.data ?? []));
-      setCategories(Array.isArray(catsRes) ? catsRes : (catsRes?.data ?? []));
-      setAddOns(Array.isArray(addonsRes) ? addonsRes : (addonsRes?.data ?? []));
       setResources(Array.isArray(resourcesRes) ? resourcesRes : (resourcesRes?.data ?? []));
-      setProducts(Array.isArray(productsRes) ? productsRes : (productsRes?.data ?? []));
-      setPackages(Array.isArray(packagesRes) ? packagesRes : (packagesRes?.data ?? []));
 
       const rawProviders = Array.isArray(provsRes) ? provsRes : (provsRes?.data ?? []);
       const mappedProviders = rawProviders.map((p: any) => ({
@@ -419,32 +390,6 @@ export default function LocationsPage() {
     });
   };
 
-  const handleResourceCheckboxChange = async (id: string, checked: boolean) => {
-    if (checked) {
-      setResourceLocationIds(prev => [...prev, String(id)]);
-    } else {
-      setResourceLocationIds(prev => prev.filter(rid => String(rid) !== String(id)));
-    }
-
-    if (selectedLocation) {
-      try {
-        const resObj = resources.find(r => String(r.id) === String(id));
-        if (resObj) {
-          await apiClient.put(`/api/admin/resources/${id}`, {
-            ...resObj,
-            location_id: checked ? parseInt(selectedLocation.id) : null
-          });
-          toast.success("Resource assignment updated");
-          
-          const refreshedResources = await apiClient.get<any>("/api/admin/resources").catch(() => []);
-          setResources(Array.isArray(refreshedResources) ? refreshedResources : (refreshedResources?.data ?? []));
-        }
-      } catch (error: any) {
-        toast.error(error.message || "Failed to update resource assignment.");
-      }
-    }
-  };
-
   const handleAccordionChange = (value: string) => {
     if (value) {
       // Dynamic Left Pane Mode Switching depending on Accordion Tab
@@ -477,54 +422,6 @@ export default function LocationsPage() {
       }, 250);
     }
   };
-
-  // Provider schedule update
-  const handleSaveProviderSchedule = async (providerId: string, schedule: Record<string, DaySchedule>) => {
-    setIsUpdatingRelation(true);
-    try {
-      const provider = providers.find(p => String(p.id) === String(providerId));
-      if (!provider) return;
-      
-      const payload = {
-        name: provider.name,
-        active: provider.active,
-        weekly_schedule: schedule
-      };
-      
-      await apiClient.put(`/api/admin/providers/${providerId}`, payload);
-      setProviders(providers.map(p => String(p.id) === String(providerId) ? { ...p, weekly_schedule: schedule } : p));
-      toast.success("Provider schedule updated successfully.");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update schedule.");
-    } finally {
-      setIsUpdatingRelation(false);
-    }
-  };
-
-  const updateProviderWorkDay = (dayKey: string, isWorking: boolean, startTime: string, endTime: string) => {
-    if (!selectedProviderId) return;
-    const provider = providers.find(p => String(p.id) === String(selectedProviderId));
-    if (!provider) return;
-
-    const currentSchedule = provider.weekly_schedule || createDefaultWeeklySchedule();
-    const updatedSchedule = {
-      ...currentSchedule,
-      [dayKey]: { is_working: isWorking, start_time: startTime, end_time: endTime }
-    };
-
-    handleSaveProviderSchedule(selectedProviderId, updatedSchedule);
-  };
-
-
-
-  const activeProvider = providers.find(p => String(p.id) === String(selectedProviderId));
-  const activeService = services.find(s => String(s.id) === String(selectedServiceId));
-
-  const resourcesByType = resources.reduce<Record<string, Resource[]>>((acc, res) => {
-    if (!acc[res.type]) acc[res.type] = [];
-    acc[res.type].push(res);
-    return acc;
-  }, {});
 
   if (isLoading) {
     return (

@@ -23,20 +23,14 @@ import {
   FlipVertical,
   Sun,
   Contrast,
-  Sliders,
   Undo,
   Save,
-  Check,
   Crop,
   Link as LinkIcon,
   Copy,
-  ExternalLink,
-  RefreshCw,
   Share2,
   Clock,
-  Lock,
-  ShieldCheck,
-  Plus
+  Lock
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -225,7 +219,7 @@ const INITIAL_MEDIA_ITEMS: MediaItem[] = [
 ]
 
 // Short URL Service Generator Helper
-export async function createShortUrl(longUrl: string, resourceId: string, prefix: "med" | "alb" | "upl"): Promise<string> {
+export async function createShortUrl(longUrl: string, _resourceId?: string, _prefix?: "med" | "alb" | "upl"): Promise<string> {
   try {
     const res = await fetch("http://localhost:8002/api/v1/shorten/", {
       method: "POST",
@@ -484,7 +478,6 @@ export default function MediaPage() {
     if (!e.target.files || e.target.files.length === 0) return
 
     const filesArr = Array.from(e.target.files)
-    const newQueueItems: QueuedUploadItem[] = []
 
     filesArr.forEach((file, index) => {
       const isVideo = file.type.startsWith("video/")

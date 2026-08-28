@@ -166,7 +166,7 @@ export default function RelationshipsMatrixPage() {
     category: new Set(),
   });
 
-  const [updatingKeys, setUpdatingKeys] = useState<Set<string>>(new Set());
+  const [, setUpdatingKeys] = useState<Set<string>>(new Set());
   const [draggedCardIndex, setDraggedCardIndex] = useState<{ col: ColumnType; index: number } | null>(null);
 
   const [createModalCol, setCreateModalCol] = useState<ColumnType | null>(null);
