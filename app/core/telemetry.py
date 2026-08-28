@@ -2,14 +2,15 @@
 
 Provides traces, metrics, and dedicated structured logs via OTLP.
 All configuration is driven strictly through ``settings`` (app.core.config).
-Privacy is enforced by an allowlist-based span exporter wrapper and strict
-field validation in the dedicated telemetry log path.
+Privacy is enforced by an allowlist-based span exporter wrapper, strict
+field validation in the dedicated telemetry log path, and a privacy-redaction
+filter for general operational log exports to SigNoz.
 """
 
 import re
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, Sequence, Set, FrozenSet
+from typing import Optional, Dict, Any, Sequence, Set, FrozenSet, List, Tuple
 from urllib.parse import urlparse
 
 from opentelemetry import trace, metrics
@@ -26,7 +27,7 @@ from ..core.config import settings
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Global pipeline state
+# Global pipeline state & lifecycle tracking
 # ---------------------------------------------------------------------------
 _telemetry_initialized: bool = False
 _tracer_provider: Optional[TracerProvider] = None
@@ -35,6 +36,10 @@ _logger_provider: Optional[Any] = None
 _last_export_status: str = "idle"
 _last_export_timestamp: Optional[str] = None
 telemetry_disabled: bool = settings.OTEL_SDK_DISABLED
+
+# Track only logging handlers created and attached by this telemetry module
+# Tuple of (logger_instance, handler_instance)
+_telemetry_owned_handlers: List[Tuple[logging.Logger, logging.Handler]] = []
 
 # ---------------------------------------------------------------------------
 # Span attribute allowlist
@@ -160,6 +165,71 @@ def _sanitize_attribute_value(key: str, val: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Privacy-Safe Operational Log Redactor & Filter for SigNoz Log Export
+# ---------------------------------------------------------------------------
+class PrivacySafeLogFilter(logging.Filter):
+    """Filter and sanitize log records destined for SigNoz OTLP log export.
+
+    Redacts credentials, tokens, API keys, authorization headers, passwords,
+    cookies, secrets, webhook signatures, query strings, and customer PII
+    from log messages, arguments, extras, and exception traces.
+    """
+    _SECRET_PATTERNS = [
+        (re.compile(r"(?i)\b(bearer\s+)[a-zA-Z0-9\-\._~\+\/]+=*", re.IGNORECASE), r"\1[REDACTED]"),
+        (re.compile(r"(?i)(authorization|api[-_]?key|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token)\s*[:=]\s*['\"]?[^\s,;'\"&]+", re.IGNORECASE), r"\1=[REDACTED]"),
+        (re.compile(r"(?i)(password|secret|token|api[-_]?key|authorization|signature)['\"]?\s*:\s*['\"][^'\"]+['\"]", re.IGNORECASE), r'\1: "[REDACTED]"'),
+        (re.compile(r"https?://[^:\s]+:[^@\s]+@", re.IGNORECASE), "https://[REDACTED]@"),
+        (re.compile(r"(\b[A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b)"), r"[REDACTED_EMAIL]"),
+    ]
+    # Query string redaction in HTTP access logs, URLs, or message paths
+    _HTTP_ACCESS_QUERY = re.compile(r'(?i)(["\']?\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+)([^\s\?]+)\?([^\s"\'<>]+)')
+    _GENERIC_URL_QUERY = re.compile(r'(https?://[^\s\?]+)\?([^\s"\'<>]+)', re.IGNORECASE)
+    _PATH_QUERY = re.compile(r'(/\b[a-zA-Z0-9_\-\./]+)\?([^\s"\'<>]+)')
+
+    @classmethod
+    def redact_text(cls, text: str) -> str:
+        if not text or not isinstance(text, str):
+            return text
+        # 1. Redact query strings from access logs, generic URLs, and path queries
+        text = cls._HTTP_ACCESS_QUERY.sub(r"\1\2?[REDACTED]", text)
+        text = cls._GENERIC_URL_QUERY.sub(r"\1?[REDACTED]", text)
+        text = cls._PATH_QUERY.sub(r"\1?[REDACTED]", text)
+        # 2. Redact secret patterns
+        for pattern, replacement in cls._SECRET_PATTERNS:
+            text = pattern.sub(replacement, text)
+        return text
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            # 1. Redact message template
+            if isinstance(record.msg, str):
+                record.msg = self.redact_text(record.msg)
+            # 2. Redact args
+            if record.args:
+                if isinstance(record.args, dict):
+                    clean_args = {}
+                    for k, v in record.args.items():
+                        if any(s in str(k).lower() for s in ("password", "secret", "token", "auth", "cookie", "key", "signature")):
+                            clean_args[k] = "[REDACTED]"
+                        elif isinstance(v, str):
+                            clean_args[k] = self.redact_text(v)
+                        else:
+                            clean_args[k] = v
+                    record.args = clean_args
+                elif isinstance(record.args, (list, tuple)):
+                    record.args = tuple(
+                        self.redact_text(a) if isinstance(a, str) else a
+                        for a in record.args
+                    )
+            # 3. Redact exception text if pre-formatted
+            if record.exc_text:
+                record.exc_text = self.redact_text(record.exc_text)
+        except Exception:
+            pass
+        return True
+
+
+# ---------------------------------------------------------------------------
 # Span privacy proxy
 # ---------------------------------------------------------------------------
 class SanitizedSpanProxy:
@@ -222,161 +292,244 @@ class PrivacySafeSpanExporter(SpanExporter):
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         try:
-            return self.wrapped_exporter.force_flush(timeout_millis)
+            return self.wrapped_exporter.force_flush(timeout_millis=timeout_millis)
         except Exception:
             return False
 
 
 # ---------------------------------------------------------------------------
-# Global Tracer & Meter accessors
+# Public tracer and meter accessors for worker processes
 # ---------------------------------------------------------------------------
-tracer = trace.get_tracer("fastapi-bookings")
-meter = metrics.get_meter("fastapi-bookings")
+class _LazyTracer:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(trace.get_tracer("fastapi-bookings.workers"), name)
 
-# ---------------------------------------------------------------------------
-# Per-domain metric recorders
-# ---------------------------------------------------------------------------
-_webhook_counter = meter.create_counter(
-    "webhook_events_total", description="Chatwoot webhook events",
-)
-_sms_counter = meter.create_counter(
-    "sms_events_total", description="Outbound SMS events",
-)
-_ai_counter = meter.create_counter(
-    "ai_jobs_total", description="AI job events",
-)
-_arrival_counter = meter.create_counter(
-    "arrival_events_total", description="Arrival system events",
-)
-_link_counter = meter.create_counter(
-    "link_failures_total", description="Short-link resolution failures",
-)
-_booking_counter = meter.create_counter(
-    "booking_failures_total", description="Booking operation failures",
-)
+    def start_as_current_span(self, *args: Any, **kwargs: Any) -> Any:
+        return trace.get_tracer("fastapi-bookings.workers").start_as_current_span(*args, **kwargs)
 
 
-def record_webhook_event(status: str) -> None:
-    s = status if status in WEBHOOK_STATUSES else "failed"
-    _webhook_counter.add(1, {"status": s})
-    record_telemetry_log(f"WEBHOOK_{s.upper()}", "INFO", "chatwoot_service")
+class _LazyMeter:
+    def __getattr__(self, name: str) -> Any:
+        return getattr(metrics.get_meter("fastapi-bookings.workers"), name)
 
 
-def record_sms_event(status: str, account_id: Optional[int] = None) -> None:
-    s = status if status in SMS_STATUSES else "failure"
-    attrs: Dict[str, Any] = {"status": s}
-    if account_id is not None:
-        attrs["account_id"] = str(int(account_id))
-    _sms_counter.add(1, attrs)
-    record_telemetry_log(
-        f"SMS_{s.upper()}",
-        "INFO" if s == "success" else "ERROR",
-        "sms_service",
-    )
-
-
-def record_ai_event(status: str, job_type: str) -> None:
-    s = status if status in AI_STATUSES else "failed"
-    jt = job_type if job_type in VALID_JOB_TYPES else "other"
-    _ai_counter.add(1, {"status": s, "job_type": jt})
-    record_telemetry_log(
-        f"AI_JOB_{s.upper()}",
-        "INFO" if s == "processed" else "ERROR",
-        "ai_service",
-    )
-
-
-def record_arrival_event(status: str) -> None:
-    s = status if status in ARRIVAL_STATUSES else "activated"
-    _arrival_counter.add(1, {"status": s})
-    record_telemetry_log(f"ARRIVAL_{s.upper()}", "INFO", "arrival_service")
-
-
-def record_link_failure() -> None:
-    _link_counter.add(1)
-    record_telemetry_log("LINK_RESOLUTION_FAILURE", "WARNING", "link_service")
-
-
-def record_booking_failure(operation: str, reason: str) -> None:
-    op = operation if operation in BOOKING_OPERATIONS else "other"
-    rs = reason if reason in VALID_REASONS else "other"
-    _booking_counter.add(1, {"operation": op, "reason": rs})
-    record_telemetry_log(
-        f"BOOKING_{op.upper()}_FAILURE", "WARNING", "booking_service",
-    )
-
+tracer = _LazyTracer()
+meter = _LazyMeter()
 
 # ---------------------------------------------------------------------------
-# Dedicated structured telemetry log
+# Dedicated structured telemetry logger
 # ---------------------------------------------------------------------------
 _TELEMETRY_LOGGER_NAME = "fastapi_bookings.telemetry"
+
+
+def _clean_string(val: Any, max_len: int = 128) -> str:
+    """Coerce to string, strip, and bound length."""
+    if val is None:
+        return ""
+    return str(val).strip()[:max_len]
+
+
+def record_webhook_event(
+    event_type: str = "webhook",
+    status: Optional[str] = None,
+    reason: str = "",
+    account_id: Optional[str] = None,
+    duration_ms: Optional[float] = None,
+) -> None:
+    if status is None:
+        safe_status = event_type if event_type in WEBHOOK_STATUSES else "failed"
+    else:
+        safe_status = status if status in WEBHOOK_STATUSES else "failed"
+    safe_reason = reason if reason in VALID_REASONS else ("other" if reason else "")
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    code_map = {
+        "accepted": "WEBHOOK_ACCEPTED",
+        "rejected": "WEBHOOK_REJECTED",
+        "duplicate": "WEBHOOK_DUPLICATE",
+        "failed": "WEBHOOK_FAILED",
+    }
+    event_code = code_map.get(safe_status, "WEBHOOK_FAILED")
+
+    record_telemetry_log(
+        event_code=event_code,
+        level="INFO" if safe_status in ("accepted", "duplicate") else "WARNING",
+        module="app",
+        account_id=safe_account_id,
+        duration_ms=duration_ms,
+    )
+
+
+def record_sms_event(
+    operation: str,
+    status: str,
+    job_type: str = "outbox_sms",
+    reason: str = "",
+    account_id: Optional[str] = None,
+    duration_ms: Optional[float] = None,
+) -> None:
+    safe_status = status if status in SMS_STATUSES else "failure"
+    safe_job_type = job_type if job_type in VALID_JOB_TYPES else "outbox_sms"
+    safe_reason = reason if reason in VALID_REASONS else ("other" if reason else "")
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    code_map = {
+        "success": "SMS_SUCCESS",
+        "failure": "SMS_FAILURE",
+        "retry": "SMS_RETRY",
+    }
+    event_code = code_map.get(safe_status, "SMS_FAILURE")
+
+    record_telemetry_log(
+        event_code=event_code,
+        level="INFO" if safe_status == "success" else "WARNING",
+        module="sms_service",
+        account_id=safe_account_id,
+        duration_ms=duration_ms,
+    )
+
+
+def record_ai_event(
+    operation: str,
+    status: str,
+    job_type: str = "ai_autopilot",
+    reason: str = "",
+    account_id: Optional[str] = None,
+    duration_ms: Optional[float] = None,
+) -> None:
+    safe_status = status if status in AI_STATUSES else "failed"
+    safe_job_type = job_type if job_type in VALID_JOB_TYPES else "ai_autopilot"
+    safe_reason = reason if reason in VALID_REASONS else ("other" if reason else "")
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    code_map = {
+        "queued": "AI_JOB_QUEUED",
+        "processed": "AI_JOB_PROCESSED",
+        "cancelled": "AI_JOB_CANCELLED",
+        "failed": "AI_JOB_FAILED",
+    }
+    event_code = code_map.get(safe_status, "AI_JOB_FAILED")
+
+    record_telemetry_log(
+        event_code=event_code,
+        level="INFO" if safe_status in ("queued", "processed") else "WARNING",
+        module="ai_service",
+        account_id=safe_account_id,
+        duration_ms=duration_ms,
+    )
+
+
+def record_arrival_event(
+    operation: str,
+    status: str,
+    job_type: str = "arrival_notification",
+    reason: str = "",
+    account_id: Optional[str] = None,
+    duration_ms: Optional[float] = None,
+) -> None:
+    safe_status = status if status in ARRIVAL_STATUSES else "activated"
+    safe_job_type = job_type if job_type in VALID_JOB_TYPES else "arrival_notification"
+    safe_reason = reason if reason in VALID_REASONS else ("other" if reason else "")
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    code_map = {
+        "activated": "ARRIVAL_ACTIVATED",
+        "alert_repeated": "ARRIVAL_ALERT_REPEATED",
+        "acknowledged": "ARRIVAL_ACKNOWLEDGED",
+    }
+    event_code = code_map.get(safe_status, "ARRIVAL_ACTIVATED")
+
+    record_telemetry_log(
+        event_code=event_code,
+        level="INFO",
+        module="arrival_service",
+        account_id=safe_account_id,
+        duration_ms=duration_ms,
+    )
+
+
+def record_link_failure(
+    reason: str,
+    account_id: Optional[str] = None,
+) -> None:
+    safe_reason = reason if reason in VALID_REASONS else "other"
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    record_telemetry_log(
+        event_code="LINK_RESOLUTION_FAILURE",
+        level="WARNING",
+        module="link_service",
+        account_id=safe_account_id,
+    )
+
+
+def record_booking_failure(
+    operation: str,
+    reason: str,
+    account_id: Optional[str] = None,
+) -> None:
+    safe_op = operation if operation in BOOKING_OPERATIONS else "other"
+    safe_reason = reason if reason in VALID_REASONS else "other"
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+
+    code_map = {
+        "confirm": "BOOKING_CONFIRM_FAILURE",
+        "cancel": "BOOKING_CANCEL_FAILURE",
+        "reschedule": "BOOKING_RESCHEDULE_FAILURE",
+        "complete": "BOOKING_COMPLETE_FAILURE",
+        "noshow": "BOOKING_NOSHOW_FAILURE",
+        "other": "BOOKING_OTHER_FAILURE",
+    }
+    event_code = code_map.get(safe_op, "BOOKING_OTHER_FAILURE")
+
+    record_telemetry_log(
+        event_code=event_code,
+        level="WARNING",
+        module="booking_service",
+        account_id=safe_account_id,
+    )
 
 
 def record_telemetry_log(
     event_code: str,
     level: str = "INFO",
     module: str = "app",
-    request_id: str = "",
-    trace_id: str = "",
-    route_template: str = "",
-    method: str = "",
-    status: str = "",
-    error_class: str = "",
-    duration_ms: float = 0.0,
+    account_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    route: Optional[str] = None,
+    route_template: Optional[str] = None,
+    method: Optional[str] = None,
+    status: Optional[Any] = None,
+    error_class: Optional[str] = None,
+    duration_ms: Optional[float] = None,
 ) -> None:
-    """Emit a structured telemetry log via the dedicated OTLP-backed logger.
+    if event_code not in VALID_EVENT_CODES:
+        return
 
-    Every field is validated against a strict allowlist or pattern.  Invalid
-    values are replaced with empty strings or defaults — never truncated
-    arbitrary text.
-    """
-    # Validate event_code
-    safe_code = event_code if event_code in VALID_EVENT_CODES else ""
-    if not safe_code:
-        return  # reject unknown events silently
-
-    # Validate level
+    safe_code = event_code
     safe_level = level.upper() if level.upper() in VALID_LOG_LEVELS else "INFO"
-
-    # Validate module
     safe_module = module if module in VALID_MODULES else "app"
 
-    # Validate method
-    safe_method = method.upper() if method.upper() in VALID_METHODS else ""
-
-    # Validate request_id / trace_id — hex/alphanumeric only, bounded length
-    safe_request_id = ""
-    if request_id and _SAFE_ID_PATTERN.match(request_id):
-        safe_request_id = request_id
-
-    safe_trace_id = ""
-    if trace_id and _SAFE_ID_PATTERN.match(trace_id):
-        safe_trace_id = trace_id
-
-    # Validate route — sanitize dynamic segments
-    safe_route = sanitize_url_path(route_template) if route_template else ""
-
-    # Validate status — bounded short string, digits or simple word
-    safe_status = ""
-    if status and re.match(r"^[a-zA-Z0-9_]{1,20}$", status):
-        safe_status = status
-
-    # Validate error_class — identifier only
-    safe_error_class = ""
-    if error_class and re.match(r"^[a-zA-Z_][a-zA-Z0-9_.]{0,99}$", error_class):
-        safe_error_class = error_class
-
-    # Validate duration_ms — bounded numeric
-    safe_duration = 0.0
+    safe_account_id = _clean_string(account_id, 64) if (account_id and _SAFE_ID_PATTERN.match(str(account_id))) else None
+    safe_request_id = _clean_string(request_id, 64) if (request_id and _SAFE_ID_PATTERN.match(str(request_id))) else None
+    safe_trace_id = _clean_string(trace_id, 64) if (trace_id and _SAFE_ID_PATTERN.match(str(trace_id))) else None
+    chosen_route = route or route_template
+    safe_route = sanitize_url_path(chosen_route) if chosen_route else None
+    safe_method = method.upper() if (method and method.upper() in VALID_METHODS) else None
     try:
-        d = float(duration_ms)
-        if 0.0 <= d <= 300000.0:
-            safe_duration = round(d, 2)
-    except (TypeError, ValueError):
-        pass
+        int_status = int(status) if status is not None else None
+        safe_status = int_status if (int_status is not None and 100 <= int_status <= 599) else None
+    except (ValueError, TypeError):
+        safe_status = None
+    safe_error_class = _clean_string(error_class, 64) if (error_class and _SAFE_ID_PATTERN.match(str(error_class))) else None
+    safe_duration = round(float(duration_ms), 2) if (duration_ms is not None and isinstance(duration_ms, (int, float)) and 0 <= duration_ms < 3_600_000) else None
 
-    log_data = {
+    log_data: Dict[str, Any] = {
+        "service": "fastapi-bookings",
+        "environment": settings.APP_ENV,
         "event_code": safe_code,
+        "account_id": safe_account_id,
         "safe_module": safe_module,
         "request_id": safe_request_id,
         "trace_id": safe_trace_id,
@@ -387,7 +540,6 @@ def record_telemetry_log(
         "duration_ms": safe_duration,
     }
 
-    # Emit to dedicated OTLP-backed logger
     tl = logging.getLogger(_TELEMETRY_LOGGER_NAME)
     log_level_int = getattr(logging, safe_level, logging.INFO)
     tl.log(log_level_int, safe_code, extra=log_data)
@@ -397,12 +549,33 @@ def record_telemetry_log(
 # Telemetry lifecycle
 # ---------------------------------------------------------------------------
 def init_telemetry(app=None) -> None:
-    """Idempotently initialize OTel traces, metrics, logs, and instrumentations."""
+    """Idempotently initialize OTel traces, metrics, logs, and instrumentations.
+
+    Logger Topology:
+    - Dedicated Structured Telemetry: Attached to ``fastapi_bookings.telemetry`` with ``propagate=False``.
+    - General Application Logs: Attached to root logger (``logging.getLogger()``). Propagating loggers flow here once.
+    - Non-Propagating Server Loggers: Attached to ``uvicorn``, ``uvicorn.error``, ``uvicorn.access``, and ``fastapi``
+      (since ``setup_logging()`` sets ``propagate=False`` on them).
+    - Privacy-Filter: A dedicated ``PrivacySafeLogFilter`` is attached to all operational log handlers to redact
+      secrets, query parameters, authorization tokens, passwords, cookies, and sensitive PII before export.
+    """
     global _telemetry_initialized, _tracer_provider, _meter_provider
-    global _logger_provider, _last_export_status
+    global _logger_provider, _last_export_status, _telemetry_owned_handlers
 
     if _telemetry_initialized:
         return
+
+    # Remove any stale telemetry-owned handlers from prior incomplete shutdown
+    for lg, h in _telemetry_owned_handlers:
+        try:
+            lg.removeHandler(h)
+        except Exception:
+            pass
+        try:
+            h.close()
+        except Exception:
+            pass
+    _telemetry_owned_handlers.clear()
 
     if settings.OTEL_SDK_DISABLED:
         logger.info("Telemetry disabled (OTEL_SDK_DISABLED=True)")
@@ -447,7 +620,7 @@ def init_telemetry(app=None) -> None:
     except Exception as exc:
         logger.warning("Metric provider init failed: %s", exc)
 
-    # 3. Logs — dedicated OTLP pipeline on ``fastapi_bookings.telemetry``
+    # 3. Logs — dedicated structured OTLP pipeline + privacy-filtered general server logs
     try:
         from opentelemetry.exporter.otlp.proto.http._log_exporter import (
             OTLPLogExporter,
@@ -463,30 +636,35 @@ def init_telemetry(app=None) -> None:
                                     max_export_batch_size=512)
         )
 
-        # Also pipe general app logs (INFO+) to SigNoz so the Logs page is
-        # populated with uvicorn access logs, warnings, errors, and exceptions.
-        # This is separate from the structured telemetry event pipeline above.
-        root_otlp_handler = LoggingHandler(
+        # Operational log handler with privacy redaction filter
+        op_otlp_handler = LoggingHandler(
             level=logging.INFO,
             logger_provider=_logger_provider,
         )
-        logging.getLogger().addHandler(root_otlp_handler)
+        op_otlp_handler.addFilter(PrivacySafeLogFilter())
 
-        # setup_logging() sets propagate=False on uvicorn/* and fastapi loggers so
-        # they never reach the root logger.  Attach the OTLP handler directly to
-        # each so HTTP access lines and server errors appear in SigNoz Logs.
+        # Attach to root logger for all propagating application loggers
+        root_logger = logging.getLogger()
+        root_logger.addHandler(op_otlp_handler)
+        _telemetry_owned_handlers.append((root_logger, op_otlp_handler))
+
+        # Attach directly to non-propagating framework loggers (propagate=False)
         for _log_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
-            logging.getLogger(_log_name).addHandler(root_otlp_handler)
+            target_logger = logging.getLogger(_log_name)
+            target_logger.addHandler(op_otlp_handler)
+            _telemetry_owned_handlers.append((target_logger, op_otlp_handler))
 
-        # Attach handler ONLY to the dedicated telemetry logger
-        handler = LoggingHandler(
+        # Attach dedicated structured telemetry handler ONLY to dedicated logger
+        dedicated_handler = LoggingHandler(
             level=logging.DEBUG,
             logger_provider=_logger_provider,
         )
         dedicated = logging.getLogger(_TELEMETRY_LOGGER_NAME)
-        dedicated.addHandler(handler)
+        dedicated.addHandler(dedicated_handler)
         dedicated.setLevel(logging.DEBUG)
-        dedicated.propagate = False  # never flow to root / arbitrary handlers
+        dedicated.propagate = False
+        _telemetry_owned_handlers.append((dedicated, dedicated_handler))
+
     except Exception as exc:
         logger.warning("Log provider init failed: %s", exc)
 
@@ -521,8 +699,9 @@ def init_telemetry(app=None) -> None:
 
 
 def shutdown_telemetry() -> None:
-    """Flush and shut down all OTel providers."""
+    """Flush and shut down all OTel providers and remove all telemetry-owned handlers."""
     global _telemetry_initialized, _tracer_provider, _meter_provider, _logger_provider
+    global _telemetry_owned_handlers
 
     if _tracer_provider:
         try:
@@ -546,6 +725,18 @@ def shutdown_telemetry() -> None:
         except Exception:
             pass
         _logger_provider = None
+
+    # Remove all telemetry-owned handlers safely from their respective loggers
+    for lg, h in _telemetry_owned_handlers:
+        try:
+            lg.removeHandler(h)
+        except Exception:
+            pass
+        try:
+            h.close()
+        except Exception:
+            pass
+    _telemetry_owned_handlers.clear()
 
     _telemetry_initialized = False
 

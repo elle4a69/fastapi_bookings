@@ -393,3 +393,138 @@ def test_worker_tracer_accessor_compatibility():
     with tracer.start_as_current_span("worker_test_span") as span:
         assert span is not None
 
+
+
+# ── 10. Lifecycle & Handler Ownership ─────────────────────────────────────
+
+def test_init_telemetry_repeated_adds_no_duplicate_handlers(monkeypatch):
+    """Calling init_telemetry repeatedly must not install duplicate OTLP handlers on any logger."""
+    monkeypatch.setattr(settings, "OTEL_SDK_DISABLED", False)
+    shutdown_telemetry()
+    init_telemetry(app)
+    init_telemetry(app)
+    init_telemetry(app)
+
+    target_loggers = [
+        logging.getLogger(),
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.error"),
+        logging.getLogger("uvicorn.access"),
+        logging.getLogger("fastapi"),
+        logging.getLogger(_TELEMETRY_LOGGER_NAME),
+    ]
+
+    for lg in target_loggers:
+        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        assert len(otlp_handlers) == 1, f"Logger {lg.name or 'root'} has {len(otlp_handlers)} OTLP handlers instead of 1"
+
+
+def test_init_shutdown_init_lifecycle_leaves_exactly_one_handler(monkeypatch):
+    """Cycle of init -> shutdown -> init must completely clean up and leave exactly one handler per logger."""
+    monkeypatch.setattr(settings, "OTEL_SDK_DISABLED", False)
+    init_telemetry(app)
+    shutdown_telemetry()
+
+    target_loggers = [
+        logging.getLogger(),
+        logging.getLogger("uvicorn"),
+        logging.getLogger("uvicorn.error"),
+        logging.getLogger("uvicorn.access"),
+        logging.getLogger("fastapi"),
+        logging.getLogger(_TELEMETRY_LOGGER_NAME),
+    ]
+
+    # After shutdown, all OTLP handlers must be removed
+    for lg in target_loggers:
+        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        assert len(otlp_handlers) == 0, f"Logger {lg.name or 'root'} still has {len(otlp_handlers)} OTLP handlers after shutdown"
+
+    # Re-initialize
+    init_telemetry(app)
+    for lg in target_loggers:
+        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        assert len(otlp_handlers) == 1, f"Logger {lg.name or 'root'} has {len(otlp_handlers)} OTLP handlers after re-init"
+
+
+def test_repeated_shutdown_is_safe():
+    """Calling shutdown_telemetry multiple times in succession must not raise or corrupt state."""
+    shutdown_telemetry()
+    shutdown_telemetry()
+    shutdown_telemetry()
+    status = get_telemetry_status_data()
+    assert status["trace_exporter_active"] is False
+    assert status["log_exporter_active"] is False
+
+
+def test_non_telemetry_handlers_never_removed():
+    """Shutdown of telemetry must never detach user or third-party logging handlers."""
+    custom_handler = logging.NullHandler()
+    root = logging.getLogger()
+    root.addHandler(custom_handler)
+
+    try:
+        init_telemetry(app)
+        assert custom_handler in root.handlers
+        shutdown_telemetry()
+        assert custom_handler in root.handlers, "Custom handler was unexpectedly removed by shutdown_telemetry"
+    finally:
+        root.removeHandler(custom_handler)
+
+
+# ── 11. Privacy-Safe Log Filter & Redaction ───────────────────────────────
+
+def test_privacy_safe_log_filter_redacts_tokens_passwords_and_secrets():
+    """PrivacySafeLogFilter must redact bearer tokens, passwords, API keys, cookies, and secrets."""
+    from app.core.telemetry import PrivacySafeLogFilter
+
+    filter_obj = PrivacySafeLogFilter()
+
+    # 1. Bearer token in message
+    record1 = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="test.py", lineno=1,
+        msg="User authenticated with Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xyz123 and access_token=secret_abc_987",
+        args=(), exc_info=None,
+    )
+    filter_obj.filter(record1)
+    assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in record1.msg
+    assert "secret_abc_987" not in record1.msg
+    assert "Bearer [REDACTED]" in record1.msg
+    assert "access_token=[REDACTED]" in record1.msg
+
+    # 2. Passwords and secrets in structured args
+    record2 = logging.LogRecord(
+        name="test", level=logging.ERROR, pathname="test.py", lineno=1,
+        msg="Failed login attempt for user",
+        args={"password": "MySuperSecretPassword123!", "api_key": "sk_test_555", "user": "test_user"},
+        exc_info=None,
+    )
+    filter_obj.filter(record2)
+    assert record2.args["password"] == "[REDACTED]"
+    assert record2.args["api_key"] == "[REDACTED]"
+    assert record2.args["user"] == "test_user"
+
+
+def test_privacy_safe_log_filter_redacts_url_query_parameters():
+    """PrivacySafeLogFilter must redact query parameters from access logs and URLs."""
+    from app.core.telemetry import PrivacySafeLogFilter
+
+    filter_obj = PrivacySafeLogFilter()
+
+    record = logging.LogRecord(
+        name="uvicorn.access", level=logging.INFO, pathname="access.py", lineno=1,
+        msg='127.0.0.1:50123 - "GET /api/public/availability?service_id=7&provider_id=1&secret_token=abc123xyz HTTP/1.1" 200 OK',
+        args=(), exc_info=None,
+    )
+    filter_obj.filter(record)
+    assert "secret_token=abc123xyz" not in record.msg
+    assert "service_id=7" not in record.msg
+    assert "/api/public/availability?[REDACTED] HTTP/1.1" in record.msg
+
+
+def test_operational_uvicorn_fastapi_logs_no_duplicate_propagation():
+    """Verify non-propagating server loggers (uvicorn, fastapi) have propagate=False to avoid double export."""
+    init_telemetry(app)
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        lg = logging.getLogger(name)
+        # Verify propagation is false to prevent double export to root
+        assert lg.propagate is False
