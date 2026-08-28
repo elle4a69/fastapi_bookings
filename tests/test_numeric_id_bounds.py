@@ -187,3 +187,70 @@ def test_providers_string_route_oversized_bounds_check(client, auth_headers):
     data = response.json()
     assert data["ok"] is False
     assert data["error"]["code"] == "NOT_FOUND"
+
+
+def test_relationship_create_and_connect_route_precedence(client, auth_headers, db_session):
+    """Prove literal 'create-and-connect' subpath is not shadowed by dynamic '{right_id}' route."""
+    from app.models.provider import Provider as ProviderModel
+    tenant = db_session.query(Tenant).filter(Tenant.subdomain == "boundstest").first()
+    provider = ProviderModel(tenant_id=tenant.id, name="Dr. Precedence", active=True)
+    db_session.add(provider)
+    db_session.commit()
+    db_session.refresh(provider)
+
+    payload = {
+        "record": {
+            "name": "Precedence Service",
+            "duration": 45,
+            "price": 75.0,
+            "active": True,
+        }
+    }
+    response = client.post(
+        f"/api/admin/relationships/provider/{provider.id}/service/create-and-connect",
+        json=payload,
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, f"Expected 201 Created, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["ok"] is True
+    assert "record" in data["data"]
+    assert data["data"]["record"]["name"] == "Precedence Service"
+    assert "relationship_id" in data["data"]
+
+
+def test_relationship_dynamic_link_and_bounds(client, auth_headers, db_session):
+    """Prove dynamic relationship linking accepts valid DatabaseIds and rejects oversized IDs at validation."""
+    from app.models.provider import Provider as ProviderModel
+    from app.models.service import Service as ServiceModel
+
+    tenant = db_session.query(Tenant).filter(Tenant.subdomain == "boundstest").first()
+    provider = ProviderModel(tenant_id=tenant.id, name="Dr. Dynamic", active=True)
+    service = ServiceModel(tenant_id=tenant.id, name="Dynamic Service", duration=30, price=50.0, active=True)
+    db_session.add_all([provider, service])
+    db_session.commit()
+    db_session.refresh(provider)
+    db_session.refresh(service)
+
+    # 1. Valid link creation
+    response = client.post(
+        f"/api/admin/relationships/provider/{provider.id}/service/{service.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["ok"] is True
+
+    # 2. Oversized right_id rejected at validation (422)
+    response = client.post(
+        f"/api/admin/relationships/provider/{provider.id}/service/{MAX_DATABASE_ID + 1}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    # 3. Valid unlink
+    response = client.delete(
+        f"/api/admin/relationships/provider/{provider.id}/service/{service.id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 204

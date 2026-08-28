@@ -96,6 +96,41 @@ def list_explicit_relationships(
     return {"ok": True, "data": [_serialize(record) for record in records if record]}
 
 
+@router.post("/relationships/{left_type}/{left_id}/{right_type}/create-and-connect", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
+def create_and_connect(
+    left_type: str,
+    left_id: DatabaseId,
+    right_type: str,
+    payload: CreateAndConnectRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+    _admin=Depends(get_current_admin),
+):
+    left_type, right_type = _normalize(left_type), _normalize(right_type)
+    if frozenset((left_type, right_type)) not in ALLOWED_CREATE_LINKS:
+        raise HTTPException(status_code=422, detail="Unsupported create-and-connect relationship")
+    _source_or_404(db, tenant.id, left_type, left_id)
+    spec, left_col, right_col = _spec_and_columns(left_type, right_type)
+    model = ENTITY_MODELS[right_type]
+    protected = {"id", "tenant_id", "created_at", "updated_at", "deleted_at"}
+    values = {key: value for key, value in payload.record.items() if key not in protected}
+    record = model(tenant_id=tenant.id, **values)
+    db.add(record)
+    try:
+        db.flush()
+        link = spec.model(tenant_id=tenant.id, **{left_col.key: left_id, right_col.key: record.id})
+        db.add(link)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Record could not be created or already exists") from exc
+    except (TypeError, ValueError) as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid data provided") from exc
+    db.refresh(record)
+    return {"ok": True, "data": {"record": _serialize(record), "relationship_id": link.id}}
+
+
 @router.post("/relationships/{left_type}/{left_id}/{right_type}/{right_id}", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
 def link_records(
     left_type: str,
@@ -137,41 +172,6 @@ def unlink_records(
         raise HTTPException(status_code=404, detail="Relationship not found")
     db.delete(link)
     db.commit()
-
-
-@router.post("/relationships/{left_type}/{left_id}/{right_type}/create-and-connect", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
-def create_and_connect(
-    left_type: str,
-    left_id: DatabaseId,
-    right_type: str,
-    payload: CreateAndConnectRequest,
-    tenant: Tenant = Depends(get_current_tenant),
-    db: Session = Depends(get_db),
-    _admin=Depends(get_current_admin),
-):
-    left_type, right_type = _normalize(left_type), _normalize(right_type)
-    if frozenset((left_type, right_type)) not in ALLOWED_CREATE_LINKS:
-        raise HTTPException(status_code=422, detail="Unsupported create-and-connect relationship")
-    _source_or_404(db, tenant.id, left_type, left_id)
-    spec, left_col, right_col = _spec_and_columns(left_type, right_type)
-    model = ENTITY_MODELS[right_type]
-    protected = {"id", "tenant_id", "created_at", "updated_at", "deleted_at"}
-    values = {key: value for key, value in payload.record.items() if key not in protected}
-    record = model(tenant_id=tenant.id, **values)
-    db.add(record)
-    try:
-        db.flush()
-        link = spec.model(tenant_id=tenant.id, **{left_col.key: left_id, right_col.key: record.id})
-        db.add(link)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Record could not be created or already exists") from exc
-    except (TypeError, ValueError) as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid data provided") from exc
-    db.refresh(record)
-    return {"ok": True, "data": {"record": _serialize(record), "relationship_id": link.id}}
 
 
 EDITOR_RELATIONS = {
