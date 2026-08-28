@@ -228,24 +228,30 @@ class PrivacySafeSpanExporter(SpanExporter):
 
 
 # ---------------------------------------------------------------------------
+# Global Tracer & Meter accessors
+# ---------------------------------------------------------------------------
+tracer = trace.get_tracer("fastapi-bookings")
+meter = metrics.get_meter("fastapi-bookings")
+
+# ---------------------------------------------------------------------------
 # Per-domain metric recorders
 # ---------------------------------------------------------------------------
-_webhook_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_webhook_counter = meter.create_counter(
     "webhook_events_total", description="Chatwoot webhook events",
 )
-_sms_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_sms_counter = meter.create_counter(
     "sms_events_total", description="Outbound SMS events",
 )
-_ai_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_ai_counter = meter.create_counter(
     "ai_jobs_total", description="AI job events",
 )
-_arrival_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_arrival_counter = meter.create_counter(
     "arrival_events_total", description="Arrival system events",
 )
-_link_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_link_counter = meter.create_counter(
     "link_failures_total", description="Short-link resolution failures",
 )
-_booking_counter = metrics.get_meter("fastapi-bookings").create_counter(
+_booking_counter = meter.create_counter(
     "booking_failures_total", description="Booking operation failures",
 )
 

@@ -379,3 +379,17 @@ def test_sanitize_url_path_coverage():
     ) == "/verify/{id}/confirm"
     assert sanitize_url_path("") == ""
     assert sanitize_url_path("/plain") == "/plain"
+
+
+# ── Worker Compatibility ──────────────────────────────────────────────────
+
+def test_worker_tracer_accessor_compatibility():
+    """Verify tracer can be imported from app.core.telemetry and used in worker spans."""
+    from app.core.telemetry import tracer, meter
+    assert tracer is not None
+    assert meter is not None
+
+    # Must support start_as_current_span as a context manager without raising
+    with tracer.start_as_current_span("worker_test_span") as span:
+        assert span is not None
+
