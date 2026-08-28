@@ -261,3 +261,58 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert created_outbox.type == "booking.created"
     assert created_outbox.tenant_id == setup_data["tenant"].id
     assert isinstance(created_outbox.tenant_id, int)
+
+
+def test_public_booking_client_resolution_and_creation(client, setup_data, db_session):
+    headers_a = {"X-Tenant": "tenant-a", "X-Token": create_access_token({"sub": "tenant-a"})}
+    tenant_a = setup_data["tenant"]
+
+    # 1. New Client Registration via Public Booking
+    new_client_time = datetime.now(timezone.utc) + timedelta(days=10)
+    payload_new_client = {
+        "client_name": "Alice Wonderland",
+        "client_email": "alice@example.com",
+        "client_phone": "+61411222333",
+        "provider_id": setup_data["provider"].id,
+        "service_id": setup_data["service"].id,
+        "start_time": new_client_time.isoformat(),
+        "end_time": (new_client_time + timedelta(hours=1)).isoformat(),
+        "notes": "New guest booking"
+    }
+    resp = client.post("/api/public/bookings", json=payload_new_client, headers=headers_a)
+    assert resp.status_code == status.HTTP_200_OK, resp.text
+    
+    # Assert client created in Tenant A
+    created_client = db_session.query(Client).filter(
+        Client.tenant_id == tenant_a.id,
+        Client.email == "alice@example.com"
+    ).first()
+    assert created_client is not None
+    assert created_client.name == "Alice Wonderland"
+    assert created_client.phone == "+61411222333"
+
+    # 2. Existing Client matched by email (no duplicate client row created)
+    initial_client_count = db_session.query(Client).filter(Client.tenant_id == tenant_a.id).count()
+    second_time = new_client_time + timedelta(days=1)
+    payload_existing_client = {
+        "client_name": "Alice W.",
+        "client_email": "alice@example.com",
+        "provider_id": setup_data["provider"].id,
+        "service_id": setup_data["service"].id,
+        "start_time": second_time.isoformat(),
+        "end_time": (second_time + timedelta(hours=1)).isoformat(),
+    }
+    resp2 = client.post("/api/public/bookings", json=payload_existing_client, headers=headers_a)
+    assert resp2.status_code == status.HTTP_200_OK, resp2.text
+    final_client_count = db_session.query(Client).filter(Client.tenant_id == tenant_a.id).count()
+    assert final_client_count == initial_client_count
+
+    # 3. Missing all client identification fields -> 400 Bad Request
+    payload_no_client = {
+        "provider_id": setup_data["provider"].id,
+        "service_id": setup_data["service"].id,
+        "start_time": (second_time + timedelta(days=1)).isoformat(),
+        "end_time": (second_time + timedelta(days=1, hours=1)).isoformat(),
+    }
+    resp3 = client.post("/api/public/bookings", json=payload_no_client, headers=headers_a)
+    assert resp3.status_code == status.HTTP_400_BAD_REQUEST

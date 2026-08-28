@@ -9,7 +9,10 @@ from ..core.state_machine import BookingStatus
 
 
 class BookingBase(BaseModel):
-    client_id: int = Field(..., description="Identifier of the client")
+    client_id: Optional[int] = Field(None, description="Identifier of the client")
+    client_name: Optional[str] = Field(None, description="Name of the client for public bookings")
+    client_email: Optional[str] = Field(None, description="Email of the client for public bookings")
+    client_phone: Optional[str] = Field(None, description="Phone of the client for public bookings")
     provider_id: int = Field(..., description="Identifier of the provider")
     service_id: int = Field(..., description="Identifier of the service")
     location_id: Optional[int] = Field(None, description="Identifier of the location")

@@ -621,20 +621,6 @@ export default function PublicBookingPage() {
 
     setSubmitting(true);
     try {
-      let clientId = 1;
-      const targetEmail = clientEmail || `${(clientPhone || "client").replace(/[^0-9a-zA-Z]/g, "")}@client.local`;
-
-      try {
-        const clientRes = await apiClient.post<any>("/api/admin/clients", {
-          name: clientName,
-          email: targetEmail,
-          phone: clientPhone || null
-        });
-        clientId = clientRes?.id || clientRes?.data?.id || 1;
-      } catch {
-        clientId = 1;
-      }
-
       const [hours, mins] = selectedTime.split(':').map(Number);
       const [year, month, day] = selectedDate.split('-').map(Number);
       const start = new Date(year, month - 1, day, hours, mins, 0, 0);
@@ -645,7 +631,9 @@ export default function PublicBookingPage() {
       const end = new Date(start.getTime() + computedTotalDuration * 60000);
 
       const payload = {
-        client_id: Number(normId(clientId)),
+        client_name: clientName,
+        client_email: clientEmail || null,
+        client_phone: clientPhone || null,
         service_id: Number(normId(selectedService.id)),
         provider_id: selectedProvider ? Number(normId(selectedProvider.id)) : null,
         location_id: selectedLocation?.id ? Number(normId(selectedLocation.id)) : null,

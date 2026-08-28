@@ -49,14 +49,47 @@ def create_public_booking(
     if not provider_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
-    # 3. Verify client belongs to active tenant
-    client_obj = db.query(Client).filter(
-        Client.id == booking_in.client_id,
-        Client.tenant_id == tenant.id,
-        Client.deleted_at.is_(None)
-    ).first()
-    if not client_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    # 3. Resolve or verify client belonging to active tenant
+    client_obj = None
+    if booking_in.client_id is not None:
+        client_obj = db.query(Client).filter(
+            Client.id == booking_in.client_id,
+            Client.tenant_id == tenant.id,
+            Client.deleted_at.is_(None)
+        ).first()
+        if not client_obj:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+    elif booking_in.client_email or booking_in.client_phone or booking_in.client_name:
+        # Match existing client by email or phone within active tenant
+        if booking_in.client_email:
+            client_obj = db.query(Client).filter(
+                Client.tenant_id == tenant.id,
+                Client.email == booking_in.client_email.strip().lower(),
+                Client.deleted_at.is_(None)
+            ).first()
+        if not client_obj and booking_in.client_phone:
+            client_obj = db.query(Client).filter(
+                Client.tenant_id == tenant.id,
+                Client.phone == booking_in.client_phone.strip(),
+                Client.deleted_at.is_(None)
+            ).first()
+        if not client_obj:
+            client_name = (booking_in.client_name or "").strip() or (booking_in.client_email.split('@')[0] if booking_in.client_email else "Guest Client")
+            client_obj = Client(
+                tenant_id=tenant.id,
+                name=client_name,
+                email=booking_in.client_email.strip().lower() if booking_in.client_email else None,
+                phone=booking_in.client_phone.strip() if booking_in.client_phone else None,
+                active=True,
+                management_approval_required=False
+            )
+            db.add(client_obj)
+            db.flush()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client identification (client_id or client_name/email/phone) is required."
+        )
 
     if client_obj.management_approval_required:
         raise HTTPException(
@@ -82,7 +115,8 @@ def create_public_booking(
                 detail="Provider is not eligible for this service",
             )
 
-    booking_data = booking_in.dict()
+    booking_data = booking_in.dict(exclude={"client_name", "client_email", "client_phone"})
+    booking_data["client_id"] = client_obj.id
     booking_data["status"] = BookingStatus.PENDING
     booking_data["tenant_id"] = tenant.id
 
