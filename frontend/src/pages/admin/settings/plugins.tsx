@@ -38,7 +38,7 @@ export default function PluginsSettings() {
   const fetchPlugins = async () => {
     try {
       // Trying to fetch from ui-config or similar plugin config
-      const data = await apiClient.get<{ plugins: PluginConfig[] }>("/api/admin/ui-config")
+      const data = await apiClient.get<{ plugins: PluginConfig[] }>("/api/public/ui-config/admin")
       if (data && data.plugins) {
         setPlugins(data.plugins)
       } else {

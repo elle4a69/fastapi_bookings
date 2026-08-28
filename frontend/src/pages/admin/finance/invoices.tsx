@@ -68,7 +68,7 @@ export function InvoicesPage() {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<Invoice[]>('/api/admin/finance/invoices');
+      const data = await apiClient.get<Invoice[]>('/api/admin/invoices');
       setInvoices(data || []);
     } catch (error) {
       toast.error('Failed to load invoices');

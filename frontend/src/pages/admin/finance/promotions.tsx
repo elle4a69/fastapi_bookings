@@ -44,7 +44,7 @@ export function PromotionsPage() {
     try {
       setLoading(true);
       const [promosData, servicesData] = await Promise.all([
-        apiClient.get<Promotion[]>('/api/admin/finance/promotions').catch(() => []),
+        apiClient.get<Promotion[]>('/api/admin/promotions').catch(() => []),
         apiClient.get<Service[]>('/api/admin/services').catch(() => []) // Adjust endpoint if needed
       ]);
       setPromotions(promosData);
@@ -95,10 +95,10 @@ export function PromotionsPage() {
       };
 
       if (selectedPromoId) {
-        await apiClient.put(`/api/admin/finance/promotions/${selectedPromoId}`, payload);
+        await apiClient.put(`/api/admin/promotions/${selectedPromoId}`, payload);
         toast.success('Promotion updated successfully');
       } else {
-        await apiClient.post('/api/admin/finance/promotions', payload);
+        await apiClient.post('/api/admin/promotions', payload);
         toast.success('Promotion created successfully');
       }
       fetchData();

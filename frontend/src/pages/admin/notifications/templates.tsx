@@ -31,7 +31,7 @@ export default function TemplatesPage() {
 
   const fetchTemplates = async () => {
     try {
-      const data = await apiClient.get<Template[]>("/api/admin/notifications/templates");
+      const data = await apiClient.get<Template[]>("/api/admin/notification-templates");
       setTemplates(data);
       if (data.length > 0 && !selectedTemplate) {
         setSelectedTemplate(data[0]);
@@ -48,9 +48,9 @@ export default function TemplatesPage() {
     setSaving(true);
     try {
       if (selectedTemplate.id.startsWith("new_")) {
-        await apiClient.post("/api/admin/notifications/templates", selectedTemplate);
+        await apiClient.post("/api/admin/notification-templates", selectedTemplate);
       } else {
-        await apiClient.put(`/api/admin/notifications/templates/${selectedTemplate.id}`, selectedTemplate);
+        await apiClient.put(`/api/admin/notification-templates/${selectedTemplate.id}`, selectedTemplate);
       }
       toast.success("Template saved successfully");
       fetchTemplates();

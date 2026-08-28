@@ -32,7 +32,7 @@ export function PaymentsPage() {
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<Payment[]>('/api/admin/finance/payments');
+      const data = await apiClient.get<Payment[]>('/api/admin/payments');
       setPayments(data || []);
     } catch (error) {
       toast.error('Failed to load payments');

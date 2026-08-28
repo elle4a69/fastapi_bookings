@@ -38,7 +38,7 @@ export default function RemindersPage() {
     try {
       const [rulesData, templatesData] = await Promise.all([
         apiClient.get<ReminderRule[]>("/api/admin/reminder-rules"),
-        apiClient.get<Template[]>("/api/admin/notifications/templates")
+        apiClient.get<Template[]>("/api/admin/notification-templates")
       ]);
       setRules(rulesData);
       setTemplates(templatesData);
