@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...core.pagination import paginate_query, pagination_params
 from ...models.location import Location as LocationModel
 from ...schemas.location import (
@@ -118,7 +118,7 @@ def create_location(
 
 @router.get("/locations/{location_id}", response_model=LocationResponse, tags=["locations"])
 def get_location(
-    location_id: int,
+    location_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -131,7 +131,7 @@ def get_location(
 
 @router.put("/locations/{location_id}", response_model=LocationResponse, tags=["locations"])
 def update_location(
-    location_id: int,
+    location_id: DatabaseId,
     location_in: LocationUpdate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -161,7 +161,7 @@ def update_location(
 
 @router.delete("/locations/{location_id}", response_model=LocationResponse, tags=["locations"])
 def delete_location(
-    location_id: int,
+    location_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:

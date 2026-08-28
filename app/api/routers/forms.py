@@ -1,3 +1,4 @@
+from ..deps import DatabaseId
 """Form schema endpoints.
 
 These endpoints provide JSON schemas describing the forms used in the

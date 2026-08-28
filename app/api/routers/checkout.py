@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ...core.config import settings
 
-from ..deps import get_current_admin, get_db, get_current_tenant, get_public_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, get_public_tenant, DatabaseId
 from ...models import (
     AddOn,
     Booking,
@@ -271,7 +271,7 @@ def create_public_invoice(
 
 @router.get("/api/public/invoices/{invoice_id}", response_model=InvoiceResponse)
 def get_public_invoice(
-    invoice_id: int,
+    invoice_id: DatabaseId,
     tenant: Tenant = Depends(get_public_tenant),
     db: Session = Depends(get_db)
 ) -> dict:
@@ -286,7 +286,7 @@ def get_public_invoice(
 
 @router.post("/api/public/invoices/{invoice_id}/tips", response_model=TipOut)
 def add_public_tip(
-    invoice_id: int,
+    invoice_id: DatabaseId,
     payload: TipCreate,
     tenant: Tenant = Depends(get_public_tenant),
     db: Session = Depends(get_db)
@@ -320,7 +320,7 @@ def list_admin_invoices(
 
 @router.get("/api/admin/invoices/{invoice_id}", response_model=InvoiceResponse)
 def get_admin_invoice(
-    invoice_id: int,
+    invoice_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin)
@@ -336,7 +336,7 @@ def get_admin_invoice(
 
 @router.put("/api/admin/invoices/{invoice_id}/status", response_model=InvoiceResponse)
 def update_invoice_status(
-    invoice_id: int,
+    invoice_id: DatabaseId,
     payload: InvoiceStatusUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -389,7 +389,7 @@ def create_promotion(
 
 @router.put("/api/admin/promotions/{promotion_id}", response_model=PromotionCodeOut)
 def update_promotion(
-    promotion_id: int,
+    promotion_id: DatabaseId,
     payload: PromotionCodeUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -410,7 +410,7 @@ def update_promotion(
 
 @router.delete("/api/admin/promotions/{promotion_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_promotion(
-    promotion_id: int,
+    promotion_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin)
@@ -452,7 +452,7 @@ def create_tax_rate(
 
 @router.put("/api/admin/tax-rates/{tax_rate_id}", response_model=TaxRateOut)
 def update_tax_rate(
-    tax_rate_id: int,
+    tax_rate_id: DatabaseId,
     payload: TaxRateUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -473,7 +473,7 @@ def update_tax_rate(
 
 @router.delete("/api/admin/tax-rates/{tax_rate_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_tax_rate(
-    tax_rate_id: int,
+    tax_rate_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin)
@@ -515,7 +515,7 @@ def create_payment_processor_config(
 
 @router.put("/api/admin/payment-processor/configs/{config_id}", response_model=PaymentProcessorConfigOut)
 def update_payment_processor_config(
-    config_id: int,
+    config_id: DatabaseId,
     payload: PaymentProcessorConfigUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),

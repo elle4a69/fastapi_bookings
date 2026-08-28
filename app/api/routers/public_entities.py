@@ -10,7 +10,7 @@ from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, get_public_tenant
+from ..deps import get_db, get_public_tenant, DatabaseId
 from ...models.tenant import Tenant
 from ...models.category import Category as CategoryModel, ServiceCategory as ServiceCategoryModel
 from ...models.location import Location as LocationModel

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...core.pagination import paginate_query, pagination_params
 from ...models.service import Service as ServiceModel
 from ...models.tenant import Tenant
@@ -105,7 +105,7 @@ def create_service(
 
 @router.get("/services/{service_id}", response_model=ServiceResponse, tags=["services"])
 def get_service(
-    service_id: int,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -123,7 +123,7 @@ def get_service(
 
 @router.put("/services/{service_id}", response_model=ServiceResponse, tags=["services"])
 def update_service(
-    service_id: int,
+    service_id: DatabaseId,
     service_in: ServiceUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -158,7 +158,7 @@ def update_service(
 
 @router.delete("/services/{service_id}", response_model=ServiceResponse, tags=["services"])
 def delete_service(
-    service_id: int,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

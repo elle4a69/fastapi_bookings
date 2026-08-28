@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from ..deps import get_db, get_current_tenant, get_current_admin
+from ..deps import get_db, get_current_tenant, get_current_admin, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.location import Location, LocationProvider, LocationService, LocationCategory
@@ -26,8 +26,8 @@ router = APIRouter(prefix="/api/admin/locations", tags=["location-relationships"
 
 @router.post("/{location_id}/providers/{provider_id}", status_code=status.HTTP_201_CREATED)
 def link_location_provider(
-    location_id: int,
-    provider_id: int,
+    location_id: DatabaseId,
+    provider_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -61,8 +61,8 @@ def link_location_provider(
 
 @router.delete("/{location_id}/providers/{provider_id}")
 def unlink_location_provider(
-    location_id: int,
-    provider_id: int,
+    location_id: DatabaseId,
+    provider_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -83,7 +83,7 @@ def unlink_location_provider(
 
 @router.get("/{location_id}/providers", response_model=List[ProviderSchema])
 def list_location_providers(
-    location_id: int,
+    location_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -106,8 +106,8 @@ def list_location_providers(
 
 @router.post("/{location_id}/services/{service_id}", status_code=status.HTTP_201_CREATED)
 def link_location_service(
-    location_id: int,
-    service_id: int,
+    location_id: DatabaseId,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -137,8 +137,8 @@ def link_location_service(
 
 @router.delete("/{location_id}/services/{service_id}")
 def unlink_location_service(
-    location_id: int,
-    service_id: int,
+    location_id: DatabaseId,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -159,7 +159,7 @@ def unlink_location_service(
 
 @router.get("/{location_id}/services", response_model=List[ServiceSchema])
 def list_location_services(
-    location_id: int,
+    location_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -182,8 +182,8 @@ def list_location_services(
 
 @router.post("/{location_id}/categories/{category_id}", status_code=status.HTTP_201_CREATED)
 def link_location_category(
-    location_id: int,
-    category_id: int,
+    location_id: DatabaseId,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -213,8 +213,8 @@ def link_location_category(
 
 @router.delete("/{location_id}/categories/{category_id}")
 def unlink_location_category(
-    location_id: int,
-    category_id: int,
+    location_id: DatabaseId,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -235,7 +235,7 @@ def unlink_location_category(
 
 @router.get("/{location_id}/categories", response_model=List[CategorySchema])
 def list_location_categories(
-    location_id: int,
+    location_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),

@@ -7,7 +7,7 @@ and providers, and services and categories.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models import (
     Category as CategoryModel,
@@ -22,7 +22,7 @@ from ...schemas.provider import Provider as ProviderSchema
 router = APIRouter(prefix="/services", tags=["service-relations"])
 
 
-def get_service_or_404(db: Session, service_id: int, tenant_id: int) -> ServiceModel:
+def get_service_or_404(db: Session, service_id: DatabaseId, tenant_id: int) -> ServiceModel:
     service = db.query(ServiceModel).filter(ServiceModel.id == service_id, ServiceModel.tenant_id == tenant_id).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
@@ -31,7 +31,7 @@ def get_service_or_404(db: Session, service_id: int, tenant_id: int) -> ServiceM
 
 @router.get("/{service_id}/providers", response_model=list[ProviderSchema])
 def list_service_providers(
-    service_id: int,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -43,8 +43,8 @@ def list_service_providers(
 
 @router.post("/{service_id}/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def assign_provider_to_service(
-    service_id: int,
-    provider_id: int,
+    service_id: DatabaseId,
+    provider_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -65,8 +65,8 @@ def assign_provider_to_service(
 
 @router.delete("/{service_id}/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def unassign_provider_from_service(
-    service_id: int,
-    provider_id: int,
+    service_id: DatabaseId,
+    provider_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -84,7 +84,7 @@ def unassign_provider_from_service(
 
 @router.get("/{service_id}/categories", response_model=list[CategoryOut])
 def list_service_categories(
-    service_id: int,
+    service_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -96,8 +96,8 @@ def list_service_categories(
 
 @router.post("/{service_id}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def assign_category_to_service(
-    service_id: int,
-    category_id: int,
+    service_id: DatabaseId,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -118,8 +118,8 @@ def assign_category_to_service(
 
 @router.delete("/{service_id}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def unassign_category_from_service(
-    service_id: int,
-    category_id: int,
+    service_id: DatabaseId,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),

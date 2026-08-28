@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, get_public_tenant, get_current_tenant, get_current_admin
+from ..deps import get_db, get_public_tenant, get_current_tenant, get_current_admin, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.client import Client as ClientModel
@@ -121,7 +121,7 @@ def list_review_requests(
 
 @router.get("/api/admin/management-reviews/{review_id}", response_model=ManagementReviewRequestResponse, tags=["management-reviews"])
 def get_review_request(
-    review_id: int,
+    review_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -135,7 +135,7 @@ def get_review_request(
 
 @router.put("/api/admin/management-reviews/{review_id}/resolve", response_model=ManagementReviewRequestResponse, tags=["management-reviews"])
 def resolve_review_request(
-    review_id: int,
+    review_id: DatabaseId,
     payload: ManagementReviewRequestUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),

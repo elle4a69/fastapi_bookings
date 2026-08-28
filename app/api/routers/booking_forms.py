@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db, get_public_tenant
+from ..deps import get_current_admin, get_current_tenant, get_db, get_public_tenant, DatabaseId
 from ...core.config import settings
 from ...core.state_machine import BookingStatus
 from ...models import Booking, BookingForm, Client, Location, Provider, Service, Tenant
@@ -173,7 +173,7 @@ admin_router = APIRouter(prefix="/api/admin/booking-forms", tags=["booking-forms
 public_router = APIRouter(prefix="/api/public/booking-forms", tags=["booking-forms-widget"])
 
 
-def _form_or_404(db: Session, tenant_id: int, form_id: int) -> BookingForm:
+def _form_or_404(db: Session, tenant_id: int, form_id: DatabaseId) -> BookingForm:
     form = db.query(BookingForm).filter(
         BookingForm.id == form_id,
         BookingForm.tenant_id == tenant_id,
@@ -264,7 +264,7 @@ def create_booking_form(
 
 @admin_router.get("/{form_id}", response_model=BookingFormOut)
 def get_booking_form(
-    form_id: int,
+    form_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -274,7 +274,7 @@ def get_booking_form(
 
 @admin_router.put("/{form_id}", response_model=BookingFormOut)
 def update_booking_form(
-    form_id: int,
+    form_id: DatabaseId,
     payload: BookingFormUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -310,7 +310,7 @@ def update_booking_form(
 
 @admin_router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_booking_form(
-    form_id: int,
+    form_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -322,7 +322,7 @@ def delete_booking_form(
 
 @admin_router.post("/{form_id}/duplicate", response_model=BookingFormOut, status_code=status.HTTP_201_CREATED)
 def duplicate_booking_form(
-    form_id: int,
+    form_id: DatabaseId,
     payload: DuplicateBookingFormRequest,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -360,7 +360,7 @@ def duplicate_booking_form(
 
 @admin_router.get("/{form_id}/design", response_model=EmbedConfiguration)
 def get_booking_form_design(
-    form_id: int,
+    form_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -370,7 +370,7 @@ def get_booking_form_design(
 
 @admin_router.put("/{form_id}/design", response_model=EmbedConfiguration)
 def update_booking_form_design(
-    form_id: int,
+    form_id: DatabaseId,
     payload: EmbedConfigurationPatch,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -396,7 +396,7 @@ def update_booking_form_design(
 
 @admin_router.get("/{form_id}/preview", response_model=FormPreviewResponse)
 def preview_booking_form(
-    form_id: int,
+    form_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -407,7 +407,7 @@ def preview_booking_form(
 
 @admin_router.get("/{form_id}/embed", response_model=FormEmbedResponse)
 def booking_form_embed(
-    form_id: int,
+    form_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),

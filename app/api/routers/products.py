@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.service import Service
 from ...models.product import Product as ProductModel, ServiceProduct as ServiceProductModel
@@ -50,7 +50,7 @@ def create_product(
 
 @router.get("/{product_id}", response_model=ProductOut)
 def get_product(
-    product_id: int,
+    product_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -63,7 +63,7 @@ def get_product(
 
 @router.put("/{product_id}", response_model=ProductOut)
 def update_product(
-    product_id: int,
+    product_id: DatabaseId,
     product_in: ProductUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -86,7 +86,7 @@ def update_product(
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
-    product_id: int,
+    product_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

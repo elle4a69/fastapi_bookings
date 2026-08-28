@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...core.pagination import paginate_query, pagination_params
 from ...models.payment import Payment as PaymentModel
 from ...models.tenant import Tenant
@@ -56,7 +56,7 @@ def create_payment(
 
 @router.put("/payments/{payment_id}", response_model=PaymentResponse, tags=["payments"])
 def update_payment(
-    payment_id: int,
+    payment_id: DatabaseId,
     payment_in: PaymentUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),

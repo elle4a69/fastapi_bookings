@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
@@ -76,7 +76,7 @@ async def list_knowledge_entries(
 
 @router.get("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
 async def get_knowledge_entry(
-    entry_id: int,
+    entry_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -91,7 +91,7 @@ async def get_knowledge_entry(
 
 @router.put("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
 async def update_knowledge_entry(
-    entry_id: int,
+    entry_id: DatabaseId,
     payload: SmsKnowledgeEntryUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     admin_user: User = Depends(get_current_admin),
@@ -133,7 +133,7 @@ async def update_knowledge_entry(
 
 @router.delete("/knowledge/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_knowledge_entry(
-    entry_id: int,
+    entry_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -212,7 +212,7 @@ async def list_prompt_profiles(
 
 @router.get("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
 async def get_prompt_profile(
-    profile_id: int,
+    profile_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -227,7 +227,7 @@ async def get_prompt_profile(
 
 @router.put("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
 async def update_prompt_profile(
-    profile_id: int,
+    profile_id: DatabaseId,
     payload: SmsPromptProfileUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
@@ -280,7 +280,7 @@ async def update_prompt_profile(
 
 @router.delete("/prompts/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_prompt_profile(
-    profile_id: int,
+    profile_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)

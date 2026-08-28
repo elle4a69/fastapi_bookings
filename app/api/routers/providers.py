@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, MAX_DATABASE_ID
 from ...core.pagination import paginate_query, pagination_params
 from ...models.provider import Provider as ProviderModel
 from ...models.tenant import Tenant
@@ -113,6 +113,8 @@ def get_provider(
     """Retrieve a single provider by ID."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
@@ -137,6 +139,8 @@ def update_provider(
     """Update an existing provider."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         numeric_id = None
 
@@ -191,6 +195,8 @@ def get_provider_special_days(
     """Retrieve all special-day overrides for a specific provider."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
@@ -232,6 +238,8 @@ def upsert_provider_special_day(
     """Create or update a one-off ProviderSpecialDay for a specific calendar date."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
@@ -309,6 +317,8 @@ def delete_provider_special_day(
     """Delete a special-day override for a specific provider and date."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
@@ -340,6 +350,8 @@ def delete_provider(
     """Delete a provider."""
     try:
         numeric_id = int(provider_id.replace("prov-", ""))
+        if numeric_id < 1 or numeric_id > MAX_DATABASE_ID:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
     except ValueError:
         numeric_id = None
 

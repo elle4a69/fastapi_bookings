@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.category import Category as CategoryModel, ServiceCategory as ServiceCategoryModel
 from ...schemas.category import CategoryCreate, CategoryOut, CategoryUpdate
@@ -39,7 +39,7 @@ def create_category(
 
 @router.get("/{category_id}", response_model=CategoryOut)
 def get_category(
-    category_id: int,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -52,7 +52,7 @@ def get_category(
 
 @router.put("/{category_id}", response_model=CategoryOut)
 def update_category(
-    category_id: int,
+    category_id: DatabaseId,
     category_in: CategoryUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -70,7 +70,7 @@ def update_category(
 
 @router.delete("/{category_id}", response_model=CategoryOut)
 def delete_category(
-    category_id: int,
+    category_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

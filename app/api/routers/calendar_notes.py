@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...models.calendar_note import CalendarNote
 from ...models.provider import Provider
 from ...schemas.calendar_note import (
@@ -65,7 +65,7 @@ def create_calendar_note(
 
 @router.put("/{note_id}", response_model=CalendarNoteResponse)
 def update_calendar_note(
-    note_id: int,
+    note_id: DatabaseId,
     note_in: CalendarNoteUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -89,7 +89,7 @@ def update_calendar_note(
 
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_calendar_note(
-    note_id: int,
+    note_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:

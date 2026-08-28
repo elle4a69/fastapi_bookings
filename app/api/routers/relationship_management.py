@@ -10,7 +10,7 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models import Booking, Client, ProviderSpecialDay, ProviderWorkDay, Tenant
 from ...services.booking_relationship_resolver import ENTITY_MODELS, RELATIONS, get_entity, get_valid_records
 
@@ -82,7 +82,7 @@ def _source_or_404(db: Session, tenant_id: int, entity: str, entity_id: int):
 @router.get("/relationships/{left_type}/{left_id}/{right_type}", response_model=RelationshipListResponse)
 def list_explicit_relationships(
     left_type: str,
-    left_id: int,
+    left_id: DatabaseId,
     right_type: str,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -96,12 +96,12 @@ def list_explicit_relationships(
     return {"ok": True, "data": [_serialize(record) for record in records if record]}
 
 
-@router.post("/relationships/{left_type}/{left_id}/{right_type}/{right_id:int}", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
+@router.post("/relationships/{left_type}/{left_id}/{right_type}/{right_id}", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
 def link_records(
     left_type: str,
-    left_id: int,
+    left_id: DatabaseId,
     right_type: str,
-    right_id: int,
+    right_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -120,12 +120,12 @@ def link_records(
     return {"ok": True, "data": {"id": link.id}}
 
 
-@router.delete("/relationships/{left_type}/{left_id}/{right_type}/{right_id:int}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/relationships/{left_type}/{left_id}/{right_type}/{right_id}", status_code=status.HTTP_204_NO_CONTENT)
 def unlink_records(
     left_type: str,
-    left_id: int,
+    left_id: DatabaseId,
     right_type: str,
-    right_id: int,
+    right_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     _admin=Depends(get_current_admin),
@@ -142,7 +142,7 @@ def unlink_records(
 @router.post("/relationships/{left_type}/{left_id}/{right_type}/create-and-connect", status_code=status.HTTP_201_CREATED, response_model=RelationshipLinkResponse)
 def create_and_connect(
     left_type: str,
-    left_id: int,
+    left_id: DatabaseId,
     right_type: str,
     payload: CreateAndConnectRequest,
     tenant: Tenant = Depends(get_current_tenant),
@@ -207,32 +207,32 @@ def _editor(db: Session, tenant_id: int, entity: str, entity_id: int) -> dict[st
 
 
 @router.get("/providers/{record_id}/editor", response_model=RelationshipEditorResponse)
-def provider_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def provider_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     return {"ok": True, "data": _editor(db, tenant.id, "provider", record_id)}
 
 
 @router.get("/services/{record_id}/editor", response_model=RelationshipEditorResponse)
-def service_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def service_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     return {"ok": True, "data": _editor(db, tenant.id, "service", record_id)}
 
 
 @router.get("/locations/{record_id}/editor", response_model=RelationshipEditorResponse)
-def location_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def location_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     return {"ok": True, "data": _editor(db, tenant.id, "location", record_id)}
 
 
 @router.get("/categories/{record_id}/editor", response_model=RelationshipEditorResponse)
-def category_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def category_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     return {"ok": True, "data": _editor(db, tenant.id, "category", record_id)}
 
 
 @router.get("/products/{record_id}/editor", response_model=RelationshipEditorResponse)
-def product_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def product_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     return {"ok": True, "data": _editor(db, tenant.id, "product", record_id)}
 
 
 @router.get("/clients/{record_id}/editor", response_model=RelationshipEditorResponse)
-def client_editor(record_id: int, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
+def client_editor(record_id: DatabaseId, tenant: Tenant = Depends(get_current_tenant), db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     client = db.query(Client).filter(Client.id == record_id, Client.tenant_id == tenant.id, Client.deleted_at.is_(None)).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")

@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...models.resource import Resource as ResourceModel, ServiceResourceRequirement as SRRModel
 from ...models.tenant import Tenant
 from ...schemas.resource import (
@@ -55,7 +55,7 @@ def list_requirements(
 
 @router.get("/{resource_id}", response_model=ResourceOut)
 def get_resource(
-    resource_id: int,
+    resource_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -71,7 +71,7 @@ def get_resource(
 
 @router.put("/{resource_id}", response_model=ResourceOut)
 def update_resource(
-    resource_id: int,
+    resource_id: DatabaseId,
     resource_in: ResourceUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -92,7 +92,7 @@ def update_resource(
 
 @router.delete("/{resource_id}", response_model=ResourceOut)
 def delete_resource(
-    resource_id: int,
+    resource_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -124,7 +124,7 @@ def create_service_resource_requirement(
 
 @router.delete("/requirements/{requirement_id}", response_model=None, status_code=204)
 def delete_requirement(
-    requirement_id: int,
+    requirement_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> None:

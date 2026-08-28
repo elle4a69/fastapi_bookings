@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.service import Service
 from ...models.addon import AddOn as AddOnModel, ServiceAddOn
@@ -48,7 +48,7 @@ def create_addon(
 
 @router.get("/{add_on_id}", response_model=AddOnOut)
 def get_addon(
-    add_on_id: int,
+    add_on_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -61,7 +61,7 @@ def get_addon(
 
 @router.put("/{add_on_id}", response_model=AddOnOut)
 def update_addon(
-    add_on_id: int,
+    add_on_id: DatabaseId,
     addon_in: AddOnUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -79,7 +79,7 @@ def update_addon(
 
 @router.delete("/{add_on_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_addon(
-    add_on_id: int,
+    add_on_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

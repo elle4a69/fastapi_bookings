@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...core.pagination import paginate_query, pagination_params
 from ...models.client import Client as ClientModel
 from ...schemas.client import (
@@ -47,7 +47,7 @@ def create_client(
 
 @router.get("/clients/{client_id}", response_model=ClientResponse, tags=["clients"])
 def get_client(
-    client_id: int,
+    client_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -60,7 +60,7 @@ def get_client(
 
 @router.put("/clients/{client_id}", response_model=ClientResponse, tags=["clients"])
 def update_client(
-    client_id: int,
+    client_id: DatabaseId,
     client_in: ClientUpdate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -78,7 +78,7 @@ def update_client(
 
 @router.delete("/clients/{client_id}", response_model=ClientResponse, tags=["clients"])
 def delete_client(
-    client_id: int,
+    client_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:

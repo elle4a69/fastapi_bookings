@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_public_tenant
+from ..deps import get_current_admin, get_db, get_public_tenant, DatabaseId
 from ...models import AdditionalField, AdditionalFieldResponse, Service, Tenant
 from ...schemas.additional_field import (
     AdditionalFieldCreate,
@@ -60,7 +60,7 @@ def list_public_additional_fields(
 
 @router.get("/api/public/services/{service_id}/intake-form", response_model=list[AdditionalFieldOut])
 def get_public_service_intake_form(
-    service_id: int,
+    service_id: DatabaseId,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_public_tenant),
 ) -> list:
@@ -128,7 +128,7 @@ def create_additional_field(
 
 @router.put("/api/admin/additional-fields/{field_id}", response_model=AdditionalFieldOut)
 def update_additional_field(
-    field_id: int,
+    field_id: DatabaseId,
     field_in: AdditionalFieldUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -145,7 +145,7 @@ def update_additional_field(
 
 @router.delete("/api/admin/additional-fields/{field_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_additional_field(
-    field_id: int,
+    field_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:

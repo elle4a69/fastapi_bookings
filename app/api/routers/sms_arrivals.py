@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_arrival import SmsArrivalSession
@@ -41,7 +41,7 @@ async def client_arrive(
 
 @router.post("/{arrival_id}/acknowledge", status_code=status.HTTP_200_OK)
 async def acknowledge_arrival(
-    arrival_id: int,
+    arrival_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)

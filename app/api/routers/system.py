@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from ..deps import get_db, get_current_tenant, get_current_admin
+from ..deps import get_db, get_current_tenant, get_current_admin, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...services import retention_service
@@ -50,7 +50,7 @@ def run_historic_cleanup(
 
 @router.post("/clients/{client_id}/anonymize")
 def anonymize_client_record(
-    client_id: int,
+    client_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),

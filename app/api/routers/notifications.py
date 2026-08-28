@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...models.notification import (
@@ -66,7 +66,7 @@ def create_notification(
 
 @router.put("/notifications/{notification_id}", response_model=NotificationResponse, tags=["notifications"])
 def update_notification(
-    notification_id: int,
+    notification_id: DatabaseId,
     notification_in: NotificationUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -127,7 +127,7 @@ def create_notification_template(
 
 @router.put("/notification-templates/{template_id}", response_model=NotificationTemplateResponse, tags=["notification-templates"])
 def update_notification_template(
-    template_id: int,
+    template_id: DatabaseId,
     template_in: NotificationTemplateUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -156,7 +156,7 @@ def update_notification_template(
 
 @router.delete("/notification-templates/{template_id}", response_model=NotificationTemplateResponse, tags=["notification-templates"])
 def delete_notification_template(
-    template_id: int,
+    template_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -207,7 +207,7 @@ def create_reminder_rule(
 
 @router.put("/reminder-rules/{rule_id}", response_model=ReminderRuleResponse, tags=["reminder-rules"])
 def update_reminder_rule(
-    rule_id: int,
+    rule_id: DatabaseId,
     rule_in: ReminderRuleUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
@@ -229,7 +229,7 @@ def update_reminder_rule(
 
 @router.delete("/reminder-rules/{rule_id}", response_model=ReminderRuleResponse, tags=["reminder-rules"])
 def delete_reminder_rule(
-    rule_id: int,
+    rule_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

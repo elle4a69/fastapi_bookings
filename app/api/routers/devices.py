@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from ..deps import get_db
+from ..deps import get_db, DatabaseId
 from ...models.notification import DeviceToken as DeviceTokenModel
 from ...schemas.notification import DeviceTokenCreate, DeviceTokenResponse
 

@@ -8,7 +8,7 @@ with an IP address for compliance auditing.
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...models.general_systems import GdprConsent, PluginState
 from ...models.client import Client
 from ...schemas.general_systems import (
@@ -116,7 +116,7 @@ def list_gdpr_consents(db: Session = Depends(get_db), current_user=Depends(get_c
 
 @router.get("/api/admin/gdpr-consents/{client_id}", response_model=GdprConsentListResponse)
 def list_gdpr_consents_for_client(
-    client_id: int,
+    client_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> dict:

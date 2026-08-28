@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, get_public_tenant
+from ..deps import get_db, get_public_tenant, DatabaseId
 from ...models.tenant import Tenant
 from ...models import Service, Provider, Location, Hold, HoldStatus, Booking, Client
 from ...schemas.hold import HoldCreate, HoldOut, HoldConfirm
@@ -67,7 +67,7 @@ def create_hold_endpoint(
 
 @router.post("/{hold_id}/confirm", response_model=BookingResponse)
 def confirm_hold_endpoint(
-    hold_id: int = Path(..., description="ID of the hold to confirm"),
+    hold_id: DatabaseId,
     payload: HoldConfirm | None = None,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_public_tenant),
@@ -186,7 +186,7 @@ def confirm_hold_endpoint(
 
 @router.delete("/{hold_id}", response_model=HoldOut)
 def cancel_hold_endpoint(
-    hold_id: int = Path(..., description="ID of the hold to cancel"),
+    hold_id: DatabaseId,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_public_tenant),
 ) -> HoldOut:

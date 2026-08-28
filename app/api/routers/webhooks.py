@@ -12,7 +12,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...models.webhook import WebhookRegistration
 from ...schemas.webhook import (
     WebhookCreate,
@@ -66,7 +66,7 @@ def create_webhook(
 
 @router.put("/{webhook_id}", response_model=WebhookResponse)
 def update_webhook(
-    webhook_id: int,
+    webhook_id: DatabaseId,
     webhook_in: WebhookUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -86,7 +86,7 @@ def update_webhook(
 
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_webhook(
-    webhook_id: int,
+    webhook_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:

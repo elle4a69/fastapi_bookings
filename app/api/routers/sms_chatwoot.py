@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_chatwoot import SmsChatwootBinding
@@ -105,7 +105,7 @@ async def list_chatwoot_bindings(
 
 @router.get("/bindings/{binding_id}", response_model=SmsChatwootBindingResponse)
 async def get_chatwoot_binding(
-    binding_id: int,
+    binding_id: DatabaseId,
     request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
@@ -122,7 +122,7 @@ async def get_chatwoot_binding(
 
 @router.put("/bindings/{binding_id}", response_model=SmsChatwootBindingResponse)
 async def update_chatwoot_binding(
-    binding_id: int,
+    binding_id: DatabaseId,
     payload: SmsChatwootBindingUpdate,
     request: Request,
     tenant: Tenant = Depends(get_current_tenant),
@@ -153,7 +153,7 @@ async def update_chatwoot_binding(
 
 @router.post("/bindings/{binding_id}/rotate-secret", response_model=SmsChatwootBindingResponse)
 async def rotate_chatwoot_webhook_secret(
-    binding_id: int,
+    binding_id: DatabaseId,
     request: Request,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
@@ -176,7 +176,7 @@ async def rotate_chatwoot_webhook_secret(
 
 @router.delete("/bindings/{binding_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chatwoot_binding(
-    binding_id: int,
+    binding_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)

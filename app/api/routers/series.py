@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant
+from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...models.booking_series import BookingSeries as SeriesModel
 from ...models.tenant import Tenant
 from ...schemas.booking_series import BookingSeriesCreate, BookingSeriesOut
@@ -41,7 +41,7 @@ def create_series(
 
 @router.get("/{series_id}", response_model=BookingSeriesOut)
 def get_series(
-    series_id: int,
+    series_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

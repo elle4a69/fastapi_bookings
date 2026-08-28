@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_account import SmsAccount
@@ -82,7 +82,7 @@ async def list_sms_accounts(
 
 @router.get("/{account_id}", response_model=SmsAccountResponse)
 async def get_sms_account(
-    account_id: int,
+    account_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -97,7 +97,7 @@ async def get_sms_account(
 
 @router.put("/{account_id}", response_model=SmsAccountResponse)
 async def update_sms_account(
-    account_id: int,
+    account_id: DatabaseId,
     payload: SmsAccountUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
@@ -138,7 +138,7 @@ async def update_sms_account(
 
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_sms_account(
-    account_id: int,
+    account_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)

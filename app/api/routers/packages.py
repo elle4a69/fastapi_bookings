@@ -5,7 +5,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...models.package import ServicePackage as PackageModel, PackageStep as StepModel
 from ...schemas.package import (
     PackageCreate,
@@ -43,7 +43,7 @@ def create_package(
 
 @router.get("/{package_id}", response_model=PackageOut)
 def get_package(
-    package_id: int,
+    package_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
@@ -58,7 +58,7 @@ def get_package(
 
 @router.put("/{package_id}", response_model=PackageOut)
 def update_package(
-    package_id: int,
+    package_id: DatabaseId,
     package_in: PackageUpdate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -78,7 +78,7 @@ def update_package(
 
 @router.delete("/{package_id}", response_model=PackageOut)
 def delete_package(
-    package_id: int,
+    package_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageOut:
@@ -95,7 +95,7 @@ def delete_package(
 
 @router.post("/{package_id}/steps", response_model=PackageStepOut)
 def add_package_step(
-    package_id: int,
+    package_id: DatabaseId,
     step_in: PackageStepCreate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -116,7 +116,7 @@ def add_package_step(
 
 @router.put("/steps/{step_id}", response_model=PackageStepOut)
 def update_package_step(
-    step_id: int,
+    step_id: DatabaseId,
     step_in: PackageStepUpdate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -133,7 +133,7 @@ def update_package_step(
 
 @router.delete("/steps/{step_id}", response_model=PackageStepOut)
 def delete_package_step(
-    step_id: int,
+    step_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageStepOut:

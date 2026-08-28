@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant
+from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant, DatabaseId
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
@@ -142,7 +142,7 @@ def create_booking(
 
 
 @router.get("/bookings/{booking_id}", response_model=BookingResponse, tags=["bookings"])
-def get_booking(booking_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin)) -> dict:
+def get_booking(booking_id: DatabaseId, db: Session = Depends(get_db), current_user = Depends(get_current_admin)) -> dict:
     """Retrieve a booking by its ID."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
@@ -152,7 +152,7 @@ def get_booking(booking_id: int, db: Session = Depends(get_db), current_user = D
 
 @router.put("/bookings/{booking_id}", response_model=BookingResponse, tags=["bookings"])
 def update_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     booking_in: BookingUpdate,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
@@ -179,7 +179,7 @@ def update_booking(
 
 @router.post("/bookings/{booking_id}/confirm", response_model=BookingResponse, tags=["bookings"])
 def confirm_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -207,7 +207,7 @@ def confirm_booking(
 
 @router.post("/bookings/{booking_id}/cancel", response_model=BookingResponse, tags=["bookings"])
 def cancel_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -241,7 +241,7 @@ def cancel_booking(
 
 @router.post("/bookings/{booking_id}/complete", response_model=BookingResponse, tags=["bookings"])
 def complete_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -271,7 +271,7 @@ def complete_booking(
 
 @router.post("/bookings/{booking_id}/noshow", response_model=BookingResponse, tags=["bookings"])
 def noshow_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> dict:
@@ -301,7 +301,7 @@ def noshow_booking(
 
 @router.post("/bookings/{booking_id}/reschedule", response_model=BookingResponse, tags=["bookings"])
 def reschedule_booking(
-    booking_id: int,
+    booking_id: DatabaseId,
     reschedule_in: BookingReschedule,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),

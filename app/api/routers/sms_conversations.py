@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_account import SmsAccount
@@ -84,7 +84,7 @@ async def list_outbound_jobs(
 
 @router.post("/jobs/{job_id}/retry", status_code=status.HTTP_200_OK)
 async def retry_outbound_job(
-    job_id: int,
+    job_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -113,7 +113,7 @@ async def retry_outbound_job(
 
 @router.post("/messages/{message_id}/approve", response_model=SmsMessageResponse)
 async def approve_draft_message(
-    message_id: int,
+    message_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -159,7 +159,7 @@ async def approve_draft_message(
 
 @router.post("/messages/{message_id}/discard", response_model=SmsMessageResponse)
 async def discard_draft_message(
-    message_id: int,
+    message_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -190,7 +190,7 @@ async def discard_draft_message(
 
 @router.get("/{conversation_id}", response_model=SmsConversationResponse)
 async def get_conversation(
-    conversation_id: int,
+    conversation_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -225,7 +225,7 @@ async def get_conversation(
 
 @router.get("/{conversation_id}/messages", response_model=List[SmsMessageResponse])
 async def list_conversation_messages(
-    conversation_id: int,
+    conversation_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -250,7 +250,7 @@ async def list_conversation_messages(
 
 @router.post("/{conversation_id}/messages", response_model=SmsMessageResponse)
 async def send_manual_reply(
-    conversation_id: int,
+    conversation_id: DatabaseId,
     payload: SmsMessageCreate,
     tenant: Tenant = Depends(get_current_tenant),
     admin_user: User = Depends(get_current_admin),
@@ -309,7 +309,7 @@ async def send_manual_reply(
 
 @router.post("/{conversation_id}/takeover", response_model=SmsConversationResponse)
 async def takeover_conversation(
-    conversation_id: int,
+    conversation_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -342,7 +342,7 @@ async def takeover_conversation(
 
 @router.post("/{conversation_id}/auto-reply", response_model=SmsConversationResponse)
 async def restore_auto_reply(
-    conversation_id: int,
+    conversation_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)

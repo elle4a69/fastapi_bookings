@@ -10,7 +10,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db
+from ..deps import get_current_admin, get_db, DatabaseId
 from ...models import (
     BlockedTime,
     Provider as ProviderModel,
@@ -39,7 +39,7 @@ from ...schemas.schedule import (
 router = APIRouter(prefix="/api/admin/schedule", tags=["schedule"])
 
 
-def get_provider_or_none(db: Session, provider_id: int | None, tenant_id: int) -> ProviderModel | None:
+def get_provider_or_none(db: Session, provider_id: DatabaseId | None, tenant_id: int) -> ProviderModel | None:
     if provider_id is None:
         return None
     provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id, ProviderModel.deleted_at.is_(None)).first()
@@ -50,7 +50,7 @@ def get_provider_or_none(db: Session, provider_id: int | None, tenant_id: int) -
     return provider
 
 
-def get_location_or_none(db: Session, location_id: int | None, tenant_id: int) -> LocationModel | None:
+def get_location_or_none(db: Session, location_id: DatabaseId | None, tenant_id: int) -> LocationModel | None:
     if location_id is None:
         return None
     location = db.query(LocationModel).filter(LocationModel.id == location_id).first()
@@ -90,7 +90,7 @@ def create_workday(
 
 @router.put("/workdays/{workday_id}", response_model=ProviderWorkDayOut)
 def update_workday(
-    workday_id: int,
+    workday_id: DatabaseId,
     workday_in: ProviderWorkDayUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -115,7 +115,7 @@ def update_workday(
 
 @router.delete("/workdays/{workday_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_workday(
-    workday_id: int,
+    workday_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
@@ -158,7 +158,7 @@ def create_special_day(
 
 @router.put("/special-days/{day_id}", response_model=ProviderSpecialDayOut)
 def update_special_day(
-    day_id: int,
+    day_id: DatabaseId,
     special_in: ProviderSpecialDayUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -184,7 +184,7 @@ def update_special_day(
 
 @router.delete("/special-days/{day_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_special_day(
-    day_id: int,
+    day_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
@@ -225,7 +225,7 @@ def create_blocked_time(
 
 @router.put("/blocked-times/{block_id}", response_model=BlockedTimeOut)
 def update_blocked_time(
-    block_id: int,
+    block_id: DatabaseId,
     block_in: BlockedTimeUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -249,7 +249,7 @@ def update_blocked_time(
 
 @router.delete("/blocked-times/{block_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_blocked_time(
-    block_id: int,
+    block_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:
@@ -290,7 +290,7 @@ def create_reserved_time(
 
 @router.put("/reserved-times/{reserved_id}", response_model=ReservedTimeOut)
 def update_reserved_time(
-    reserved_id: int,
+    reserved_id: DatabaseId,
     reserved_in: ReservedTimeUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
@@ -314,7 +314,7 @@ def update_reserved_time(
 
 @router.delete("/reserved-times/{reserved_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_reserved_time(
-    reserved_id: int,
+    reserved_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> None:

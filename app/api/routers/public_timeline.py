@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..deps import get_db
+from ..deps import get_db, DatabaseId
 from ...models import (
     Provider as ProviderModel,
     ProviderSpecialDay,
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/public/timeline", tags=["public-timeline"])
 
 
 @router.get("/schedule/{provider_id}")
-def get_provider_schedule(provider_id: int, db: Session = Depends(get_db)) -> dict:
+def get_provider_schedule(provider_id: DatabaseId, db: Session = Depends(get_db)) -> dict:
     """Return a provider's weekly workdays and special-day overrides."""
     provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
     if not provider:
@@ -55,7 +55,7 @@ def get_provider_schedule(provider_id: int, db: Session = Depends(get_db)) -> di
 
 @router.get("/slots")
 def get_available_slots(
-    service_id: int,
+    service_id: DatabaseId,
     provider_id: Optional[int] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -84,7 +84,7 @@ def get_available_slots(
 
 @router.get("/first-available-day")
 def get_first_available_day(
-    service_id: int,
+    service_id: DatabaseId,
     provider_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ) -> dict:
