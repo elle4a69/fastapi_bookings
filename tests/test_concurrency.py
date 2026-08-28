@@ -438,3 +438,117 @@ def test_waitlist_passive_safety(test_setup, db_session):
     allocs = db_session.query(BookingSlotAllocation).filter(BookingSlotAllocation.tenant_id == tenant.id).all()
     for a in allocs:
         assert a.booking_id is not None
+
+
+def test_unrelated_integrity_error_returns_500_and_not_converted_to_409(client, test_setup, monkeypatch):
+    """Simulate an unrelated IntegrityError and verify it returns a 500 server error and is NOT masked as 409."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
+
+    from app.services import slot_allocation_service
+    from sqlalchemy.exc import IntegrityError
+
+    def fake_create_allocations(*args, **kwargs):
+        raise IntegrityError("INSERT INTO other_table ...", params={}, orig=Exception("FOREIGN KEY constraint failed"))
+
+    monkeypatch.setattr(slot_allocation_service, "create_allocations_for_booking", fake_create_allocations)
+
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=15)).replace(hour=10, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
+
+    payload = {
+        "client_name": "Integrity Test Client",
+        "client_email": "integrity@example.com",
+        "client_phone": "+15558881111",
+        "provider_id": provider.id,
+        "service_id": service.id,
+        "start_time": start_dt.isoformat(),
+        "end_time": end_dt.isoformat(),
+        "idempotency_key": f"unrelated-{uuid.uuid4()}",
+    }
+
+    test_c = TestClient(client.app, raise_server_exceptions=False)
+    res = test_c.post("/api/public/bookings", json=payload, headers={"X-Tenant": tenant.subdomain})
+    assert res.status_code == 500
+    assert res.status_code != 409
+
+
+def test_resource_allocation_http_exception_preserves_status_and_detail(client, test_setup, monkeypatch):
+    """Verify HTTPException raised by resource allocation preserves its original HTTP status and error message."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
+
+    from app.services import scheduling_service
+    from fastapi import HTTPException
+
+    def fake_allocate_resources(*args, **kwargs):
+        raise HTTPException(status_code=422, detail="Specific resource quota exceeded")
+
+    monkeypatch.setattr(scheduling_service, "allocate_resources", fake_allocate_resources)
+
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=16)).replace(hour=10, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
+
+    payload = {
+        "client_name": "Resource Test Client",
+        "client_email": "resource@example.com",
+        "client_phone": "+15558882222",
+        "provider_id": provider.id,
+        "service_id": service.id,
+        "start_time": start_dt.isoformat(),
+        "end_time": end_dt.isoformat(),
+        "idempotency_key": f"res-exc-{uuid.uuid4()}",
+    }
+
+    res = client.post("/api/public/bookings", json=payload, headers={"X-Tenant": tenant.subdomain})
+    assert res.status_code == 422
+    assert "Specific resource quota exceeded" in res.text
+
+
+def test_unexpected_outbox_or_runtime_failure_rolls_back_everything(client, test_setup, db_session, monkeypatch):
+    """Verify an unexpected runtime error (e.g. outbox failure) returns 500 and leaves zero DB state."""
+    tenant = test_setup["tenant"]
+    service = test_setup["service"]
+    provider = test_setup["provider"]
+
+    from app.api.routers import public_bookings
+
+    def fake_create_outbox(*args, **kwargs):
+        raise RuntimeError("Simulated catastrophic outbox serialization crash")
+
+    monkeypatch.setattr(public_bookings, "create_outbox_event", fake_create_outbox)
+
+    start_dt = (datetime.now(timezone.utc) + timedelta(days=17)).replace(hour=10, minute=0, second=0, microsecond=0)
+    end_dt = start_dt + timedelta(minutes=30)
+    idem_key = f"crash-{uuid.uuid4()}"
+
+    payload = {
+        "client_name": "Crash Test Client",
+        "client_email": "crashtest@example.com",
+        "client_phone": "+15558883333",
+        "provider_id": provider.id,
+        "service_id": service.id,
+        "start_time": start_dt.isoformat(),
+        "end_time": end_dt.isoformat(),
+        "idempotency_key": idem_key,
+    }
+
+    test_c = TestClient(client.app, raise_server_exceptions=False)
+    res = test_c.post("/api/public/bookings", json=payload, headers={"X-Tenant": tenant.subdomain})
+    assert res.status_code == 500
+
+    db_session.expire_all()
+
+    # Verify zero booking persisted
+    bk = db_session.query(BookingModel).filter(BookingModel.idempotency_key == idem_key).first()
+    assert bk is None
+
+    # Verify zero slot allocations persisted for this time
+    allocs = (
+        db_session.query(BookingSlotAllocation)
+        .filter(BookingSlotAllocation.provider_id == provider.id, BookingSlotAllocation.slot_start == start_dt)
+        .all()
+    )
+    assert len(allocs) == 0

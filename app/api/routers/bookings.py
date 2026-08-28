@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -222,7 +223,7 @@ def create_booking(
         }
         create_outbox_event(db, "booking.created", payload, tenant_id=current_user.tenant_id)
         db.commit()
-    except (IntegrityError, Exception) as exc:
+    except IntegrityError as exc:
         db.rollback()
         if booking_in.idempotency_key:
             existing = (
@@ -235,10 +236,32 @@ def create_booking(
             )
             if existing:
                 return {"ok": True, "data": existing}
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The requested time slot or buffer has just been booked. Please select another available time.",
+        if slot_allocation_service.is_slot_allocation_conflict(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The requested time slot or buffer has just been booked. Please select another available time.",
+            )
+        logger.error(
+            "Unrelated database integrity error during admin booking creation (tenant_id=%s, booking_id=%s): %s",
+            current_user.tenant_id,
+            booking.id,
+            exc,
+            exc_info=True,
         )
+        raise
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Unexpected error during admin booking creation transaction (tenant_id=%s, booking_id=%s): %s",
+            current_user.tenant_id,
+            booking.id,
+            exc,
+            exc_info=True,
+        )
+        raise
 
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -454,12 +477,34 @@ def reschedule_booking(
         }
         create_outbox_event(db, "booking.rescheduled", payload, tenant_id=current_user.tenant_id)
         db.commit()
-    except (IntegrityError, Exception) as exc:
+    except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The requested new time slot is no longer available. Please select another time.",
+        if slot_allocation_service.is_slot_allocation_conflict(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The requested new time slot is no longer available. Please select another time.",
+            )
+        logger.error(
+            "Unrelated database integrity error during booking reschedule (tenant_id=%s, booking_id=%s): %s",
+            current_user.tenant_id,
+            booking.id,
+            exc,
+            exc_info=True,
         )
+        raise
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Unexpected error during booking reschedule transaction (tenant_id=%s, booking_id=%s): %s",
+            current_user.tenant_id,
+            booking.id,
+            exc,
+            exc_info=True,
+        )
+        raise
 
     db.refresh(booking)
     return {"ok": True, "data": booking}

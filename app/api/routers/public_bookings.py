@@ -1,3 +1,4 @@
+import logging
 """Public booking routes.
 
 This router exposes the intended public booking endpoint under
@@ -18,6 +19,8 @@ from ...models.booking import Booking as BookingModel
 from ...schemas.booking import BookingCreate, BookingResponse
 from ...services import scheduling_service, slot_allocation_service
 from ...services.outbox_service import create_outbox_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public", tags=["public-bookings"])
 
@@ -261,7 +264,7 @@ def create_public_booking(
 
         # Commit entire atomic transaction
         db.commit()
-    except (IntegrityError, Exception) as exc:
+    except IntegrityError as exc:
         db.rollback()
         if booking_in.idempotency_key:
             existing = (
@@ -274,10 +277,32 @@ def create_public_booking(
             )
             if existing:
                 return {"ok": True, "data": existing}
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The requested time slot or buffer has just been booked. Please select another available time.",
+        if slot_allocation_service.is_slot_allocation_conflict(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The requested time slot or buffer has just been booked. Please select another available time.",
+            )
+        logger.error(
+            "Unrelated database integrity error during public booking creation (tenant_id=%s, booking_id=%s): %s",
+            tenant.id,
+            booking.id,
+            exc,
+            exc_info=True,
         )
+        raise
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Unexpected error during public booking creation transaction (tenant_id=%s, booking_id=%s): %s",
+            tenant.id,
+            booking.id,
+            exc,
+            exc_info=True,
+        )
+        raise
 
     db.refresh(booking)
     return {"ok": True, "data": booking}
