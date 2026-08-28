@@ -44,13 +44,15 @@ export function PromotionsPage() {
     try {
       setLoading(true);
       const [promosData, servicesData] = await Promise.all([
-        apiClient.get<Promotion[]>('/api/admin/promotions').catch(() => []),
-        apiClient.get<Service[]>('/api/admin/services').catch(() => []) // Adjust endpoint if needed
+        apiClient.get<any>('/api/admin/promotions').catch(() => []),
+        apiClient.get<any>('/api/admin/services').catch(() => [])
       ]);
-      setPromotions(promosData);
-      setServices(servicesData);
-      if (promosData.length > 0) {
-        handleSelectPromo(promosData[0]);
+      const pList = Array.isArray(promosData) ? promosData : (promosData?.data || []);
+      const sList = Array.isArray(servicesData) ? servicesData : (servicesData?.data || []);
+      setPromotions(pList);
+      setServices(sList);
+      if (pList.length > 0) {
+        handleSelectPromo(pList[0]);
       }
     } catch (error) {
       toast.error('Failed to load data');

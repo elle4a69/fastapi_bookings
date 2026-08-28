@@ -68,8 +68,27 @@ export function InvoicesPage() {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<Invoice[]>('/api/admin/invoices');
-      setInvoices(data || []);
+      const res = await apiClient.get<any>('/api/admin/invoices');
+      const list = Array.isArray(res) ? res : res?.data || [];
+      const normalized: Invoice[] = list.map((inv: any) => ({
+        id: String(inv.id),
+        invoice_number: inv.invoice_number || `INV-${String(inv.id).padStart(4, '0')}`,
+        client_name: inv.client_name || (inv.client?.name ? inv.client.name : `Client #${inv.client_id || '—'}`),
+        issue_date: inv.issue_date || (inv.created_at ? inv.created_at.split('T')[0] : '—'),
+        due_date: inv.due_date || (inv.created_at ? inv.created_at.split('T')[0] : '—'),
+        amount: Number(inv.total ?? inv.amount ?? 0),
+        balance: Number((inv.total ?? inv.amount ?? 0) - (inv.amount_paid ?? 0)),
+        status: inv.status ? (inv.status.charAt(0).toUpperCase() + inv.status.slice(1).toLowerCase()) as any : 'Draft',
+        line_items: Array.isArray(inv.lines) ? inv.lines.map((l: any) => ({
+          id: String(l.id),
+          description: l.description,
+          quantity: Number(l.quantity || 1),
+          unit_price: Number(l.unit_price || 0),
+          total: Number(l.amount || (l.quantity * l.unit_price) || 0),
+        })) : [],
+        payments: Array.isArray(inv.payments) ? inv.payments : [],
+      }));
+      setInvoices(normalized);
     } catch (error) {
       toast.error('Failed to load invoices');
       console.error(error);

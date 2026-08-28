@@ -31,10 +31,20 @@ export default function TemplatesPage() {
 
   const fetchTemplates = async () => {
     try {
-      const data = await apiClient.get<Template[]>("/api/admin/notification-templates");
-      setTemplates(data);
-      if (data.length > 0 && !selectedTemplate) {
-        setSelectedTemplate(data[0]);
+      setLoading(true);
+      const res = await apiClient.get<any>("/api/admin/notification-templates");
+      const list = Array.isArray(res) ? res : res?.data || [];
+      const normalized: Template[] = list.map((tmpl: any) => ({
+        id: String(tmpl.id),
+        name: tmpl.code || tmpl.name || `Template ${tmpl.id}`,
+        type: ((tmpl.channel || tmpl.type || "EMAIL").toUpperCase() === "SMS" ? "SMS" : "EMAIL") as "EMAIL" | "SMS",
+        subject: tmpl.subject || "",
+        body: tmpl.body || "",
+        isActive: true,
+      }));
+      setTemplates(normalized);
+      if (normalized.length > 0 && !selectedTemplate) {
+        setSelectedTemplate(normalized[0]);
       }
     } catch (error) {
       toast.error("Failed to fetch templates");
@@ -47,10 +57,17 @@ export default function TemplatesPage() {
     if (!selectedTemplate) return;
     setSaving(true);
     try {
+      const payload = {
+        code: selectedTemplate.name.trim().toLowerCase().replace(/\s+/g, "_"),
+        channel: selectedTemplate.type.toLowerCase(),
+        subject: selectedTemplate.subject || null,
+        body: selectedTemplate.body || "",
+      };
+
       if (selectedTemplate.id.startsWith("new_")) {
-        await apiClient.post("/api/admin/notification-templates", selectedTemplate);
+        await apiClient.post("/api/admin/notification-templates", payload);
       } else {
-        await apiClient.put(`/api/admin/notification-templates/${selectedTemplate.id}`, selectedTemplate);
+        await apiClient.put(`/api/admin/notification-templates/${selectedTemplate.id}`, payload);
       }
       toast.success("Template saved successfully");
       fetchTemplates();

@@ -22,8 +22,18 @@ export default function MessagesPage() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const data = await apiClient.get<NotificationMessage[]>("/api/admin/notifications");
-        setMessages(data);
+        const res = await apiClient.get<any>("/api/admin/notifications");
+        const list = Array.isArray(res) ? res : res?.data || [];
+        const normalized: NotificationMessage[] = list.map((msg: any) => ({
+          id: String(msg.id),
+          recipient: msg.recipient_email || msg.recipient || (msg.booking_id ? `Booking #${msg.booking_id}` : "Recipient"),
+          type: (msg.type || "EMAIL").toUpperCase() as any,
+          subject: msg.subject || (msg.type === "sms" ? "SMS Notification" : "Email Notification"),
+          bodyPreview: msg.content || msg.bodyPreview || "(No content)",
+          dateSent: msg.created_at || msg.dateSent || new Date().toISOString(),
+          status: (msg.status || "PENDING").toUpperCase() as any,
+        }));
+        setMessages(normalized);
       } catch (error) {
         console.error("Failed to fetch messages", error);
       } finally {

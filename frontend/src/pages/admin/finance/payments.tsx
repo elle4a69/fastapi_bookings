@@ -15,14 +15,17 @@ import { Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Payment {
-  id: string;
-  payment_id: string;
-  transaction_date: string;
-  client_name: string;
-  invoice_number: string;
+  id: number | string;
+  payment_id?: string;
+  transaction_date?: string;
+  created_at?: string;
+  client_name?: string;
+  invoice_number?: string;
+  booking_id?: number;
   amount: number;
-  method: 'Stripe' | 'Cash' | 'PayPal';
-  status: 'Succeeded' | 'Refunded' | 'Failed';
+  currency?: string;
+  method?: string;
+  status: string;
 }
 
 export function PaymentsPage() {
@@ -32,8 +35,9 @@ export function PaymentsPage() {
   const fetchPayments = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<Payment[]>('/api/admin/payments');
-      setPayments(data || []);
+      const res = await apiClient.get<any>('/api/admin/payments');
+      const list = Array.isArray(res) ? res : res?.data || [];
+      setPayments(list);
     } catch (error) {
       toast.error('Failed to load payments');
       console.error(error);
@@ -46,9 +50,9 @@ export function PaymentsPage() {
     fetchPayments();
   }, []);
 
-  const handleRefund = async (paymentId: string) => {
+  const handleRefund = async (paymentId: number | string) => {
     try {
-      await apiClient.post(`/api/admin/finance/payments/${paymentId}/refund`);
+      await apiClient.post(`/api/admin/payments/${paymentId}/refund`);
       toast.success('Refund initiated successfully');
       fetchPayments();
     } catch (error) {
@@ -58,15 +62,18 @@ export function PaymentsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Succeeded':
+    const s = (status || '').toLowerCase();
+    switch (s) {
+      case 'succeeded':
+      case 'paid':
+      case 'completed':
         return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20">Succeeded</Badge>;
-      case 'Failed':
+      case 'failed':
         return <Badge variant="destructive">Failed</Badge>;
-      case 'Refunded':
+      case 'refunded':
         return <Badge variant="secondary">Refunded</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{status || 'Pending'}</Badge>;
     }
   };
 
@@ -89,7 +96,7 @@ export function PaymentsPage() {
                   <TableHead>Payment ID</TableHead>
                   <TableHead>Transaction Date</TableHead>
                   <TableHead>Client Name</TableHead>
-                  <TableHead>Invoice #</TableHead>
+                  <TableHead>Invoice / Booking</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Status</TableHead>
@@ -106,31 +113,41 @@ export function PaymentsPage() {
                     <TableCell colSpan={8} className="text-center h-24">No payments found.</TableCell>
                   </TableRow>
                 ) : (
-                  payments.map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell className="font-medium text-xs font-mono">{payment.payment_id}</TableCell>
-                      <TableCell>{new Date(payment.transaction_date).toLocaleString()}</TableCell>
-                      <TableCell>{payment.client_name}</TableCell>
-                      <TableCell>{payment.invoice_number}</TableCell>
-                      <TableCell>${payment.amount.toFixed(2)}</TableCell>
-                      <TableCell>{payment.method}</TableCell>
-                      <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                      <TableCell className="text-right">
-                        {payment.status === 'Succeeded' && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => handleRefund(payment.id)}
-                            className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
-                            title="Issue Refund"
-                          >
-                            <Undo2 className="h-4 w-4 mr-2" />
-                            Refund
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  payments.map((payment) => {
+                    const txDate = payment.transaction_date || payment.created_at;
+                    const formattedDate = txDate ? new Date(txDate).toLocaleString() : '—';
+                    const payCode = payment.payment_id || `PAY-${payment.id}`;
+                    const clientName = payment.client_name || (payment.booking_id ? `Booking #${payment.booking_id}` : 'Direct Client');
+                    const invNumber = payment.invoice_number || (payment.booking_id ? `INV-${payment.booking_id}` : '—');
+                    const method = payment.method || 'Credit Card';
+                    const isSucceeded = ['succeeded', 'paid', 'completed'].includes((payment.status || '').toLowerCase());
+
+                    return (
+                      <TableRow key={payment.id}>
+                        <TableCell className="font-medium text-xs font-mono">{payCode}</TableCell>
+                        <TableCell>{formattedDate}</TableCell>
+                        <TableCell>{clientName}</TableCell>
+                        <TableCell>{invNumber}</TableCell>
+                        <TableCell>${Number(payment.amount || 0).toFixed(2)}</TableCell>
+                        <TableCell>{method}</TableCell>
+                        <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                        <TableCell className="text-right">
+                          {isSucceeded && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleRefund(payment.id)}
+                              className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
+                              title="Issue Refund"
+                            >
+                              <Undo2 className="h-4 w-4 mr-2" />
+                              Refund
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

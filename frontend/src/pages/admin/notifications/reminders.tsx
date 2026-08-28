@@ -36,14 +36,32 @@ export default function RemindersPage() {
 
   const fetchData = async () => {
     try {
-      const [rulesData, templatesData] = await Promise.all([
-        apiClient.get<ReminderRule[]>("/api/admin/reminder-rules"),
-        apiClient.get<Template[]>("/api/admin/notification-templates")
+      setLoading(true);
+      const [rulesRes, templatesRes] = await Promise.all([
+        apiClient.get<any>("/api/admin/reminder-rules"),
+        apiClient.get<any>("/api/admin/notification-templates")
       ]);
-      setRules(rulesData);
-      setTemplates(templatesData);
-      if (rulesData.length > 0 && !selectedRule) {
-        setSelectedRule(rulesData[0]);
+      const rList = Array.isArray(rulesRes) ? rulesRes : rulesRes?.data || [];
+      const tList = Array.isArray(templatesRes) ? templatesRes : templatesRes?.data || [];
+
+      const normalizedRules: ReminderRule[] = rList.map((r: any) => ({
+        id: String(r.id),
+        name: r.name,
+        hoursTrigger: Number(r.trigger_hours_before ?? r.hoursTrigger ?? 24),
+        direction: "BEFORE",
+        templateId: String(r.template_id || ""),
+        isActive: Boolean(r.active ?? r.isActive ?? true),
+      }));
+
+      const normalizedTemplates: Template[] = tList.map((t: any) => ({
+        id: String(t.id),
+        name: t.code || t.name || `Template ${t.id}`,
+      }));
+
+      setRules(normalizedRules);
+      setTemplates(normalizedTemplates);
+      if (normalizedRules.length > 0 && !selectedRule) {
+        setSelectedRule(normalizedRules[0]);
       }
     } catch (error) {
       toast.error("Failed to fetch reminder rules");
@@ -56,10 +74,18 @@ export default function RemindersPage() {
     if (!selectedRule) return;
     setSaving(true);
     try {
+      const templateIdNum = selectedRule.templateId ? Number(selectedRule.templateId) : (templates[0]?.id ? Number(templates[0].id) : 1);
+      const payload = {
+        name: selectedRule.name,
+        trigger_hours_before: Number(selectedRule.hoursTrigger || 24),
+        template_id: templateIdNum,
+        active: Boolean(selectedRule.isActive),
+      };
+
       if (selectedRule.id.startsWith("new_")) {
-        await apiClient.post("/api/admin/reminder-rules", selectedRule);
+        await apiClient.post("/api/admin/reminder-rules", payload);
       } else {
-        await apiClient.put(`/api/admin/reminder-rules/${selectedRule.id}`, selectedRule);
+        await apiClient.put(`/api/admin/reminder-rules/${selectedRule.id}`, payload);
       }
       toast.success("Reminder rule saved successfully");
       fetchData();

@@ -18,7 +18,7 @@ import {
   Calendar as CalendarIcon
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api";
+import { apiClient, fetchAllPaginated } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -443,7 +443,7 @@ export default function CalendarPage() {
     setLoading(true);
     try {
       const [bRes, sRes, pRes, lRes, cRes, nRes] = await Promise.all([
-        apiClient.get<any>("/api/bookings?page_size=200").catch(() => []),
+        fetchAllPaginated<any>("/api/bookings", 100).catch(() => []),
         apiClient.get<any>("/api/admin/services").catch(() => []),
         apiClient.get<any>("/api/admin/providers").catch(() => []),
         apiClient.get<any>("/api/admin/locations").catch(() => []),
@@ -451,7 +451,7 @@ export default function CalendarPage() {
         apiClient.get<any>("/api/admin/calendar-notes").catch(() => [])
       ]);
 
-      const rawBookings = Array.isArray(bRes) ? bRes : (bRes?.data ?? bRes?.items ?? []);
+      const rawBookings = Array.isArray(bRes) ? bRes : [];
       const rawServices = Array.isArray(sRes) ? sRes : (sRes?.data ?? sRes?.items ?? []);
       const rawProviders = Array.isArray(pRes) ? pRes : (pRes?.data ?? pRes?.items ?? []);
       const rawLocations = Array.isArray(lRes) ? lRes : (lRes?.data ?? lRes?.items ?? []);

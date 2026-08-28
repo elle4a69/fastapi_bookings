@@ -13,7 +13,7 @@ import {
   MapPin
 } from "lucide-react";
 import { toast } from "sonner";
-import { apiClient } from "@/lib/api";
+import { apiClient, fetchAllPaginated } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -78,8 +78,7 @@ export default function BookingsAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const bRes = await apiClient.get<any>("/api/bookings?page_size=200").catch(() => []);
-      const rawBookings = Array.isArray(bRes) ? bRes : (bRes?.data ?? bRes?.items ?? []);
+      const rawBookings = await fetchAllPaginated("/api/bookings", 100);
 
       const mapped: BookingItem[] = rawBookings.map((b: any) => {
         const start = new Date(b.start_time);

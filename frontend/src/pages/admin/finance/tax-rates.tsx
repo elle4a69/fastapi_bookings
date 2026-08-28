@@ -32,8 +32,8 @@ export default function TaxRatesPage() {
   const fetchTaxRates = async () => {
     setIsLoading(true);
     try {
-      const data = await apiClient.get<TaxRate[]>('/api/admin/tax-rates');
-      setTaxRates(Array.isArray(data) ? data : []);
+      const data = await apiClient.get<any>('/api/admin/tax-rates');
+      setTaxRates(Array.isArray(data) ? data : (data?.data || []));
     } catch (error) {
       toast.error('Failed to fetch tax rates');
       console.error(error);

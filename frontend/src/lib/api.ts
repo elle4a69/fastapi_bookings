@@ -85,3 +85,27 @@ export const apiClient = {
   delete: <T>(endpoint: string, options?: ApiClientOptions) => request<T>(endpoint, 'DELETE', options),
   patch: <T>(endpoint: string, data?: any, options?: ApiClientOptions) => request<T>(endpoint, 'PATCH', { ...options, data }),
 };
+
+export async function fetchAllPaginated<T = any>(endpoint: string, basePageSize: number = 100): Promise<T[]> {
+  const separator = endpoint.includes('?') ? '&' : '?';
+  let page = 1;
+  let allItems: T[] = [];
+  let total = 0;
+
+  do {
+    try {
+      const res: any = await apiClient.get(`${endpoint}${separator}page=${page}&page_size=${basePageSize}`);
+      const items: T[] = Array.isArray(res) ? res : (res?.data || []);
+      allItems = allItems.concat(items);
+      total = res?.meta?.total ?? allItems.length;
+      if (!res?.meta || items.length === 0 || allItems.length >= total) {
+        break;
+      }
+      page++;
+    } catch {
+      break;
+    }
+  } while (allItems.length < total);
+
+  return allItems;
+}
