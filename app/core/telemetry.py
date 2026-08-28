@@ -463,6 +463,21 @@ def init_telemetry(app=None) -> None:
                                     max_export_batch_size=512)
         )
 
+        # Also pipe general app logs (INFO+) to SigNoz so the Logs page is
+        # populated with uvicorn access logs, warnings, errors, and exceptions.
+        # This is separate from the structured telemetry event pipeline above.
+        root_otlp_handler = LoggingHandler(
+            level=logging.INFO,
+            logger_provider=_logger_provider,
+        )
+        logging.getLogger().addHandler(root_otlp_handler)
+
+        # setup_logging() sets propagate=False on uvicorn/* and fastapi loggers so
+        # they never reach the root logger.  Attach the OTLP handler directly to
+        # each so HTTP access lines and server errors appear in SigNoz Logs.
+        for _log_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+            logging.getLogger(_log_name).addHandler(root_otlp_handler)
+
         # Attach handler ONLY to the dedicated telemetry logger
         handler = LoggingHandler(
             level=logging.DEBUG,
