@@ -1,7 +1,7 @@
 # FastAPI Bookings — Anti-Gravity Application Remediation and Audit Control Brief
 
 **Document role:** Authoritative remediation brief, acceptance standard, and future audit reference
-**Audience:** Anti-Gravity implementers, reviewers, auditors, and maintainers
+**Audience:** Anti-Gravity project manager/orchestrator, specialist implementation subagents, reviewers, auditors, and maintainers
 **Prepared:** 2026-08-29 (Australia/Sydney)
 **Audit baseline branch:** `telemetry/observability-baseline`
 **Audit baseline commit:** `350d72466410d51b272569038f10e00f8e77e297`
@@ -12,7 +12,7 @@
 
 ## 1. Purpose and authority
 
-This document gives Anti-Gravity a complete, ordered remediation programme for the confirmed application risks identified during the 2026-08-29 comprehensive audit. It also defines the evidence an implementer must produce and the method a later auditor must use to independently verify any claimed remediation.
+This document gives Anti-Gravity a complete, ordered remediation programme for the confirmed application risks identified during the 2026-08-29 comprehensive audit. It also defines the evidence a specialist implementation subagent must produce, the oversight the primary Anti-Gravity agent must perform as project manager, and the method a later auditor must use to independently verify any claimed remediation.
 
 This is not a request to repair every finding in one uncontrolled change. Each work package below is a separate, coherent task with its own changed-file allowlist, regression tests, runtime proof, review, and commit. Critical containment work comes first. Unrelated cleanup must not be folded into a security or tenant-isolation fix.
 
@@ -58,6 +58,39 @@ The application is a modular monolith:
 - backend tests under `tests/`
 
 The architectural shape is acceptable. The central weakness is inconsistent enforcement of authentication, tenant scope, secret handling, idempotency, and external-action safety across subsystems. The remediation should centralize those policies and apply them consistently, not introduce new distributed-system boundaries.
+
+### 2.1 Mandatory Anti-Gravity operating model
+
+The primary Anti-Gravity agent is the **project manager and orchestrator**, not an implementation agent. This separation of duties is mandatory for every work package in this brief.
+
+The primary Anti-Gravity agent must:
+
+1. inspect the repository state, applicable instructions, finding evidence, dependencies, and prior remediation before assigning work;
+2. break the approved work package into bounded tasks with explicit acceptance criteria, file/directory allowlists, prohibited actions, prerequisites, and verification duties;
+3. select or create specialist subagents whose roles match the task, such as authentication/security, payment integrity, tenant isolation, database migration, background delivery, frontend, testing, deployment, or privacy review;
+4. delegate all implementation, test-writing, migration-writing, configuration changes, and documentation changes associated with remediation to those specialist subagents;
+5. prevent concurrent edits to the same file or tightly coupled code path; use sequential assignments and reviewed checkpoints when scopes overlap;
+6. maintain the dependency order, risk register, assignment record, status, evidence inventory, decision log, and escalation points;
+7. review each subagent's diff and evidence against `AGENTS.md`, this brief, the assigned allowlist, and the work-package acceptance criteria;
+8. reject incomplete, over-broad, unsafe, or weakly evidenced work and return a bounded correction task to the appropriate subagent;
+9. coordinate integration and verification without silently repairing code itself; and
+10. report consolidated status, residual risk, blockers, commits, and release-gate results to the user.
+
+The primary Anti-Gravity agent must **not** write or modify application code, tests, migrations, configuration, deployment files, or remediation documentation itself. It must not take over implementation because a subagent failed, timed out, or returned an incomplete change. In that situation it must refine the task, reassign it to a suitable subagent, or report the blocker and request direction. The manager may perform read-only inspection, review diffs, run non-mutating verification commands, and maintain project-management records only when the user has authorized those record changes.
+
+Each specialist subagent assignment must include:
+
+- one named role and one coherent outcome;
+- the exact finding IDs and work package in scope;
+- an explicit changed-file allowlist and prohibited paths/actions;
+- relevant security, privacy, tenant, external-action, and worktree constraints;
+- required focused, adversarial, full-gate, and runtime verification;
+- required evidence and commit/report format; and
+- a stop-and-escalate rule for scope expansion, ambiguous product behavior, live-provider requirements, destructive data decisions, or conflicts with unrelated work.
+
+Subagents may be run in parallel only where their file scopes and behavior are genuinely independent. Shared migrations, shared models, authentication dependencies, common API clients, worker infrastructure, and cross-cutting configuration must be serialized unless the project manager demonstrates that collision and integration risk are controlled. A specialist subagent must not delegate onward unless the primary project manager explicitly authorizes that delegation and records the resulting ownership chain.
+
+No work package is complete merely because a subagent reports success. Completion requires primary-manager review of the exact diff and evidence, followed by the independent audit required by this brief. The same subagent must not act as the independent auditor of its own remediation.
 
 ---
 
@@ -642,20 +675,22 @@ All gates are cumulative. Passing a later gate does not waive an earlier one.
 Every Anti-Gravity remediation handoff must contain:
 
 1. **Finding IDs addressed.** No vague “security cleanup” labels.
-2. **Objective and non-goals.** State the exact behavior being changed.
-3. **Baseline reproduction.** Show the defect before the change where safe.
-4. **Changed-file allowlist.** Explain any deviation before editing further.
-5. **Design decision.** Describe transaction, tenant, auth, idempotency, privacy, and failure semantics.
-6. **Migration analysis.** Include data classification, backfill rule, constraints, rollback, and dialect proof if schema changes.
-7. **Diff summary.** List every changed file and why it changed.
-8. **Focused tests.** Include exact commands and results.
-9. **Adversarial tests.** Include negative, cross-tenant, retry, concurrency, tamper, and privacy cases relevant to the finding.
-10. **Full gates.** Backend suite and applicable frontend/build/security/migration gates.
-11. **Runtime proof.** HTTP/process/database/provider-fake evidence appropriate to the change.
-12. **External-action declaration.** Explicitly state that no live SMS/payment/booking/customer/provider action occurred.
-13. **Known limitations and residual risk.** Never hide skipped checks.
-14. **Repository state.** Final status, diff stat, staged paths, and unrelated changes preserved.
-15. **Commit hash.** One coherent commit unless a documented migration sequence requires more.
+2. **Delegation record.** Name the primary project manager, specialist subagent, assigned role, assignment text or durable reference, ownership chain, start/end state, and confirmation that the manager did not implement the change.
+3. **Objective and non-goals.** State the exact behavior being changed.
+4. **Baseline reproduction.** Show the defect before the change where safe.
+5. **Changed-file allowlist.** Explain any deviation before editing further.
+6. **Design decision.** Describe transaction, tenant, auth, idempotency, privacy, and failure semantics.
+7. **Migration analysis.** Include data classification, backfill rule, constraints, rollback, and dialect proof if schema changes.
+8. **Diff summary.** List every changed file and why it changed.
+9. **Focused tests.** Include exact commands and results.
+10. **Adversarial tests.** Include negative, cross-tenant, retry, concurrency, tamper, and privacy cases relevant to the finding.
+11. **Full gates.** Backend suite and applicable frontend/build/security/migration gates.
+12. **Runtime proof.** HTTP/process/database/provider-fake evidence appropriate to the change.
+13. **External-action declaration.** Explicitly state that no live SMS/payment/booking/customer/provider action occurred.
+14. **Manager review.** Record the manager's allowlist check, diff review, evidence review, integration assessment, acceptance/rejection decision, and any correction assignments.
+15. **Known limitations and residual risk.** Never hide skipped checks.
+16. **Repository state.** Final status, diff stat, staged paths, and unrelated changes preserved.
+17. **Commit hash.** One coherent commit unless a documented migration sequence requires more.
 
 Statements such as “imports pass,” “tests are green,” “looks tenant-scoped,” or “telemetry initialized” are insufficient without the required boundary-specific evidence.
 
@@ -672,6 +707,7 @@ This section governs future review of remediation performed by Anti-Gravity or a
 3. Reconstruct the finding's original exploit/failure path from source. Do not rely on the implementer's summary.
 4. Confirm the diff contains only the approved outcome and no hidden compatibility path or weakened authorization.
 5. Identify whether current local files differ from the claimed commit.
+6. Verify the delegation record: implementation came from the named specialist subagent, the primary Anti-Gravity agent remained in the project-manager role, scopes did not collide, and the remediation reviewer is independent of the implementing subagent.
 
 ### 10.2 Verification method
 
@@ -815,15 +851,26 @@ Until then, reports should use a qualified statement such as: **functional devel
 
 ## 14. Standing instructions to Anti-Gravity
 
-1. Treat this brief as the remediation backlog and acceptance contract, not as authorization for one broad rewrite.
-2. Start each task by naming the finding IDs and intended changed-file allowlist.
-3. Preserve unrelated staged, unstaged, and untracked work.
-4. Work from the existing canonical FastAPI and React contracts. Do not introduce a second backend or revive obsolete UI code.
-5. Make tenant scope, authorization, idempotency, and privacy behavior explicit in code and tests.
-6. Use synthetic labelled fixtures and mandatory provider fakes.
-7. Stop for user direction before any live external action, destructive migration decision, credential rotation, history rewrite, deployment, push, merge, or scope expansion.
-8. Never call a finding fixed solely because imports, static checks, or happy-path tests pass.
-9. Produce the complete evidence packet and one coherent commit per work package.
-10. Expect an independent auditor to reproduce adversarial behavior and reopen incomplete fixes.
+1. Act continuously as the primary project manager and orchestrator. Do not become the implementation agent at any point.
+2. Do not write remediation code, tests, migrations, configuration, deployment files, or remediation documentation yourself; assign those changes to task-specific specialist subagents.
+3. Treat this brief as the remediation backlog and acceptance contract, not as authorization for one broad rewrite.
+4. Start each work package by naming the finding IDs, dependencies, specialist role, subagent assignment, acceptance criteria, and intended changed-file allowlist.
+5. Give each subagent one coherent, bounded outcome. Use parallel execution only for non-overlapping files and independent behavior; serialize overlapping or cross-cutting work.
+6. Preserve unrelated staged, unstaged, and untracked work, and require every subagent to do the same.
+7. Work from the existing canonical FastAPI and React contracts. Do not introduce a second backend or revive obsolete UI code.
+8. Require subagents to make tenant scope, authorization, idempotency, and privacy behavior explicit in code and tests.
+9. Require synthetic labelled fixtures and mandatory provider fakes.
+10. Stop for user direction before any live external action, destructive migration decision, credential rotation, history rewrite, deployment, push, merge, or scope expansion.
+11. Review every subagent diff and evidence packet. Do not call a finding fixed solely because a subagent says it is complete or because imports, static checks, or happy-path tests pass.
+12. Return rejected work as a bounded correction assignment; do not silently fix it yourself.
+13. Produce the complete delegation and evidence record and one coherent commit per work package.
+14. Keep the remediation ledger, dependency map, residual-risk register, and user status current while acting as project manager.
+15. Require an independent auditor, separate from the implementing subagent, to reproduce adversarial behavior and reopen incomplete fixes.
+
+### 14.1 Mandatory work-package invocation
+
+Use the following directive, substituting only the approved work package and any user-authorized constraints:
+
+> Read `AGENTS.md` and `docs/ANTIGRAVITY_APPLICATION_REMEDIATION_BRIEF.md` completely. Act only as the primary project manager and orchestrator; do not write or modify remediation code, tests, migrations, configuration, deployment files, or remediation documentation yourself. Address **[WORK PACKAGE / FINDING IDS] only** by assigning bounded implementation and verification work to specialist subagents tailored to each task. Before any edit, inspect the current branch and worktree, record dependencies and risks, and state each subagent's role, exact outcome, changed-file allowlist, prohibited actions, acceptance criteria, and evidence obligations. Prevent overlapping concurrent edits and preserve all unrelated changes. Review every returned diff and evidence packet; reject and reassign incomplete work rather than fixing it yourself. Maintain the project ledger and continue acting as project manager through integration, independent audit, and final reporting. Stop and request user direction at every stop condition in `AGENTS.md` or this brief. Do not start another work package without explicit user authorization.
 
 This document should remain the durable reference for future Anti-Gravity briefing and independent remediation review.
