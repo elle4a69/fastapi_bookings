@@ -4,6 +4,11 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, T
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
+import logging
+from ..core.crypto import encrypt_dict, decrypt_dict, CryptoError
+
+logger = logging.getLogger(__name__)
+
 class SmsAccount(Base):
     __tablename__ = "sms_accounts"
 
@@ -24,25 +29,11 @@ class SmsAccount(Base):
             return {}
         if isinstance(self._credentials, dict) and "encrypted_data" in self._credentials:
             try:
-                import os
-                import base64
-                import hashlib
-                import json
-                from cryptography.fernet import Fernet
-                
-                secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-                key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-                fernet_key = base64.urlsafe_b64encode(key_bytes)
-                f = Fernet(fernet_key)
-                
-                encrypted_str = self._credentials["encrypted_data"]
-                decrypted_bytes = f.decrypt(encrypted_str.encode("utf-8"))
-                return json.loads(decrypted_bytes.decode("utf-8"))
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Failed to decrypt credentials for SmsAccount {self.id}: {e}")
+                return decrypt_dict(self._credentials)
+            except Exception:
+                logger.error("Failed to decrypt credentials for SmsAccount %s", self.id)
                 return {}
-        return self._credentials if isinstance(self._credentials, dict) else {}
+        return {}
 
     @credentials.setter
     def credentials(self, value: dict):
@@ -50,23 +41,8 @@ class SmsAccount(Base):
         if not value:
             self._credentials = {}
             return
-        try:
-            import os
-            import base64
-            import hashlib
-            import json
-            from cryptography.fernet import Fernet
-            
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-            key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-            fernet_key = base64.urlsafe_b64encode(key_bytes)
-            f = Fernet(fernet_key)
-            
-            serialized = json.dumps(value)
-            encrypted_str = f.encrypt(serialized.encode("utf-8")).decode("utf-8")
-            self._credentials = {"encrypted_data": encrypted_str}
-        except Exception:
-            self._credentials = value
+        # Fail closed: centralized crypto raises CryptoError if encryption fails. Never fall back to plaintext.
+        self._credentials = encrypt_dict(value)
     
     # Autoresponder config
     autoresponder_enabled = Column(Boolean, default=False, nullable=False)
