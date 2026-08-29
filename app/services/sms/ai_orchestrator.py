@@ -78,8 +78,8 @@ async def run_ai_orchestration(
     parent_id = burst_msgs[0].id
 
     # 2. Check OpenAI Key availability
-    creds = account.credentials or {}
-    openai_key = creds.get("openai_api_key") or creds.get("api_key") or os.getenv("OPENAI_API_KEY")
+    from ...core.config import settings
+    openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
     ai_reply = None
     
     if openai_key:
@@ -133,9 +133,9 @@ async def call_openai_chat_completions(
     import httpx
     from sqlalchemy import or_
 
-    # 1. Extract API key
-    creds = account.credentials or {}
-    api_key = creds.get("openai_api_key") or creds.get("api_key")
+    # 1. Extract API key from server-side config only
+    from ...core.config import settings
+    api_key = settings.OPENAI_API_KEY
     if not api_key:
         api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -213,40 +213,39 @@ async def call_openai_chat_completions(
         "content": message_body
     })
 
-    # 6. Call OpenAI
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": messages
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    # 6. Call OpenAI using Gateway
+    from ..gateway.responses_client import generate_response
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=30.0
-            )
-            response.raise_for_status()
-            result = response.json()
-            reply = result["choices"][0]["message"]["content"].strip()
-            return reply
+        result = await generate_response(
+            tenant_id=conversation.tenant_id,
+            messages=messages,
+            policy_name="luna",
+            api_key=api_key
+        )
+        reply = result["choices"][0]["message"]["content"].strip()
+        return reply
     except Exception as e:
-        logger.error(f"OpenAI chat completions HTTP request failed: {e}", exc_info=True)
+        logger.error(f"OpenAI chat completions gateway request failed: {e}", exc_info=True)
         raise e
 
 def run_local_rules_engine(
     db: Session, 
     account: SmsAccount, 
     conversation: SmsConversation, 
-    message_body: str
+    message_body: str,
+    compiled_rules: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """Deterministic, offline-friendly conversational booking engine."""
     clean_body = message_body.strip().lower()
+
+    if compiled_rules:
+        from ..gateway.rule_compiler import evaluate_deterministic_rules
+        matched_rule = evaluate_deterministic_rules(compiled_rules, clean_body)
+        if matched_rule:
+            # Here we would map matched_rule["action"] to the actual system actions
+            # For now, we log it and continue to standard behavior if it's a known action type
+            logger.info(f"Matched deterministic rule: {matched_rule['rule_type']}")
 
     # 1. Handle Selection of Slots (e.g. "1", "2", "3")
     if clean_body in ("1", "2", "3"):
