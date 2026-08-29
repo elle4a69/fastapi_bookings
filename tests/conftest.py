@@ -65,3 +65,20 @@ def client(db_session):
     with TestClient(fastapi_app) as test_client:
         yield test_client
     fastapi_app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clean_test_environment():
+    """Ensure complete isolation before and after every test."""
+    from app.core.telemetry import shutdown_telemetry
+    from app.core.config import settings
+
+    fastapi_app.dependency_overrides.clear()
+    settings.OTEL_SDK_DISABLED = True
+    shutdown_telemetry()
+
+    yield
+
+    fastapi_app.dependency_overrides.clear()
+    settings.OTEL_SDK_DISABLED = True
+    shutdown_telemetry()
