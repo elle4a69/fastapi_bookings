@@ -1,26 +1,63 @@
+# Python & Virtual Environments
 .venv/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+firebase-credentials.json
+
+# Databases & Local Storage
+*.db
+*.sqlite
+*.sqlite3
+fastapi_bookings.db
+
+# Test Execution & Coverage Artifacts
 .pytest_cache/
 .coverage
+.coverage*
+coverage.xml
 htmlcov/
-fastapi_bookings.db
-.remote-code-express/
+allure-results/
+allure-report/
+playwright-report/
+playwright_session/
+test-results/
+
+# Logs & Output
+*.log
+logs/
+*.out
+dev-dashboard/logs/
+dev-dashboard/pids.json
+
+# Node & Frontend Build Artifacts
+node_modules/
+dist/
+.turbo/
+.npm/
+
+# IDE & OS Metadata
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Project Scratch & Temp Artifacts
+.remote-code-express/
 .antigravity/
-.env
-firebase-credentials.json
 foundryctl.exe
 pours/
 scratch/
-node_modules/
 *.zip
 *_report.md
-
-# Databases
-*.db
-# Dev Dashboard logs and pids
-dev-dashboard/logs/*.log
-dev-dashboard/pids.json
-# Local scripts / temp
 list_chatwoot_tables.py
