@@ -1,10 +1,13 @@
 import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom"
+import { LogOutIcon } from "lucide-react"
 
 import { navigation } from "@/components/navigation"
 import { AdminLayout } from "@/layouts/admin-layout"
+import { getAdminToken, logoutAdmin } from "@/lib/api"
 
 // Lazy loaded page components
+const LoginPage = lazy(() => import("@/pages/login"))
 const CategoriesPage = lazy(() => import("@/pages/admin/catalog/categories"))
 const LocationsPage = lazy(() => import("@/pages/admin/catalog/locations"))
 const ServicesPage = lazy(() => import("@/pages/admin/catalog/services"))
@@ -97,17 +100,37 @@ function ErrorPage({ code, title, message }: { code: string; title: string; mess
 }
 
 function AdminAuthGuard({ children }: { children: React.ReactNode }) {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  const token = typeof window !== "undefined" ? getAdminToken() : null
+  const location = useLocation()
+
   if (!token) {
-    return (
-      <ErrorPage
-        code="401"
-        title="Authentication Required"
-        message="Please log in with valid administrative credentials to access the admin workspace."
-      />
-    )
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
   return <>{children}</>
+}
+
+function AdminWorkspaceLayout() {
+  const handleLogout = () => {
+    logoutAdmin()
+  }
+
+  return (
+    <div className="relative min-h-screen">
+      <AdminLayout />
+      <div className="fixed top-3.5 right-16 sm:right-20 z-40 flex items-center">
+        <button
+          onClick={handleLogout}
+          type="button"
+          aria-label="Log out of Admin Workspace"
+          title="Sign out of Admin Workspace"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/90 px-2.5 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
+        >
+          <LogOutIcon className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Log out</span>
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function PageLoader() {
@@ -126,7 +149,9 @@ function App() {
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route element={<AdminAuthGuard><AdminLayout /></AdminAuthGuard>}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+          <Route element={<AdminAuthGuard><AdminWorkspaceLayout /></AdminAuthGuard>}>
             {adminRoutes.map((route) => (
               <Route 
                 key={route.path} 
