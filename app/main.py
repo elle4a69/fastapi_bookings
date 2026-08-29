@@ -116,7 +116,6 @@ from .api.routers import (
     business_profile,
     location_relations,
     system,
-    notifications,
     booking_forms,
     relationship_management,
     discovery,
@@ -399,7 +398,6 @@ app.include_router(management_reviews.router)
 app.include_router(business_profile.router)
 app.include_router(location_relations.router)
 app.include_router(system.router)
-app.include_router(notifications.router)
 app.include_router(booking_forms.admin_router)
 app.include_router(booking_forms.public_router)
 app.include_router(relationship_management.router)
