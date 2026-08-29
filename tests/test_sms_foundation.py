@@ -51,7 +51,7 @@ def setup_sms_test_data(db_session):
     db_session.commit()
 
     # 5. Create a client with matching phone
-    client = Client(tenant_id=tenant.id, name="John Doe", phone="0412345678", active=True)
+    client = Client(tenant_id=tenant.id, name="John Doe", phone="0400000000", active=True)
     db_session.add(client)
     db_session.commit()
 
@@ -75,7 +75,7 @@ def test_provider_and_account_isolation(client, setup_sms_test_data, db_session)
     # Send inbound to Account A
     payload_a = {
         "message_id": "evt-a-1",
-        "sender": "0412 345 678",
+        "sender": "0400 000 000",
         "to": acc_a.sender_address,
         "message": "Hello Line A",
         "received_at": datetime.now(timezone.utc).isoformat()
@@ -87,7 +87,7 @@ def test_provider_and_account_isolation(client, setup_sms_test_data, db_session)
     # Send inbound to Account B from the SAME customer number
     payload_b = {
         "message_id": "evt-b-1",
-        "sender": "0412 345 678",
+        "sender": "0400 000 000",
         "to": acc_b.sender_address,
         "message": "Hello Line B",
         "received_at": datetime.now(timezone.utc).isoformat()
@@ -103,7 +103,7 @@ def test_provider_and_account_isolation(client, setup_sms_test_data, db_session)
     assert conversations[0].sms_account_id == acc_a.id
     assert conversations[1].sms_account_id == acc_b.id
 
-    # Check client linkage (0412 345 678 normalizes to 61412345678)
+    # Check client linkage (0400 000 000 normalizes to 61400000000)
     assert conversations[0].client_id == setup_sms_test_data["client"].id
     assert conversations[1].client_id == setup_sms_test_data["client"].id
 
@@ -126,7 +126,7 @@ def test_inbound_webhook_idempotency(client, setup_sms_test_data, db_session):
     acc_a = setup_sms_test_data["account_a"]
     payload = {
         "message_id": "evt-idemp-1",
-        "sender": "0412 345 678",
+        "sender": "0400 000 000",
         "to": acc_a.sender_address,
         "message": "First Send",
         "received_at": datetime.now(timezone.utc).isoformat()
@@ -161,7 +161,7 @@ def test_chronological_rendering_order(client, setup_sms_test_data, db_session):
         tenant_id=acc_a.tenant_id,
         provider_id=acc_a.provider_id,
         sms_account_id=acc_a.id,
-        customer_address="61412345678",
+        customer_address="61400000000",
         state="auto-reply",
         unread_count=0
     )
@@ -212,7 +212,7 @@ def test_durable_outbox_queue_and_leasing(client, setup_sms_test_data, db_sessio
         tenant_id=acc_a.tenant_id,
         provider_id=acc_a.provider_id,
         sms_account_id=acc_a.id,
-        customer_address="61412345678",
+        customer_address="61400000000",
         state="taken-over",
         unread_count=0
     )
@@ -252,7 +252,7 @@ def test_durable_outbox_queue_and_leasing(client, setup_sms_test_data, db_sessio
     # Check that message was delivered to fake adapter
     assert len(FakeTransportAdapter.sent_messages) == 1
     assert FakeTransportAdapter.sent_messages[0]["body"] == "Test manual outbound queueing"
-    assert FakeTransportAdapter.sent_messages[0]["to"] == "61412345678"
+    assert FakeTransportAdapter.sent_messages[0]["to"] == "61400000000"
 
 
 def test_sms_credentials_encryption(db_session, setup_sms_test_data):
@@ -281,7 +281,7 @@ def test_outbound_safety_blocklist(db_session, setup_sms_test_data):
         tenant_id=acc.tenant_id,
         provider_id=acc.provider_id,
         sms_account_id=acc.id,
-        customer_address="61412345678",
+        customer_address="61400000000",
         state="auto-reply",
         unread_count=0
     )
@@ -388,7 +388,7 @@ def test_list_conversation_messages_with_null_sms_account_id(client, db_session,
     conv = SmsConversation(
         tenant_id=tenant.id,
         provider_id=provider.id,
-        customer_address="61499999999",
+        customer_address="61400000099",
         state="active",
         unread_count=1
     )
@@ -435,7 +435,7 @@ def test_list_outbound_jobs_route_precedence(client, db_session, setup_sms_test_
         tenant_id=tenant.id,
         provider_id=provider.id,
         sms_account_id=account.id,
-        customer_address="61499999999",
+        customer_address="61400000099",
         state="active"
     )
     db_session.add(conv)
