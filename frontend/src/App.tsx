@@ -81,18 +81,33 @@ function RoutePlaceholder({ title }: { title: string }) {
   )
 }
 
-function ErrorPage({ code, title }: { code: string; title: string }) {
+function ErrorPage({ code, title, message }: { code: string; title: string; message?: string }) {
   return (
     <main className="grid min-h-svh place-items-center p-6">
       <section className="flex max-w-md flex-col gap-3 text-center">
         <p className="text-sm font-semibold text-primary">{code}</p>
         <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
         <a className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="/admin">
           Return to the admin workspace
         </a>
       </section>
     </main>
   )
+}
+
+function AdminAuthGuard({ children }: { children: React.ReactNode }) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  if (!token) {
+    return (
+      <ErrorPage
+        code="401"
+        title="Authentication Required"
+        message="Please log in with valid administrative credentials to access the admin workspace."
+      />
+    )
+  }
+  return <>{children}</>
 }
 
 function PageLoader() {
@@ -111,7 +126,7 @@ function App() {
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route element={<AdminLayout />}>
+          <Route element={<AdminAuthGuard><AdminLayout /></AdminAuthGuard>}>
             {adminRoutes.map((route) => (
               <Route 
                 key={route.path} 
@@ -166,6 +181,7 @@ function App() {
           <Route path="/booking" element={<PublicBookingPage />} />
           <Route path="/public/upload" element={<PublicUploadPage />} />
           <Route path="/book/upload" element={<PublicUploadPage />} />
+          <Route path="/401" element={<ErrorPage code="401" title="Authentication Required" message="Please log in with valid administrative credentials to access the admin workspace." />} />
           <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
           <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
           <Route path="/" element={<Navigate to="/admin" replace />} />

@@ -5,12 +5,13 @@ includes all route modules and initializes the database. It also
 exposes simple health and readiness endpoints.
 """
 
+import inspect
 import json
 import logging
 import os
 import traceback
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -149,15 +150,49 @@ async def app_lifespan(app: FastAPI):
 
 
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
+def get_client_ip(request: Request) -> str:
+    """Retrieve client IP address supporting X-Forwarded-For when behind a reverse proxy.
+
+    Extracts the leftmost (client) IP from X-Forwarded-For if present,
+    falling back to slowapi's get_remote_address.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+        if client_ip:
+            return client_ip
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=get_client_ip, default_limits=["10/minute"])
 
 
 class PublicRouteRateLimitMiddleware(SlowAPIMiddleware):
-    async def dispatch(self, request, call_next):
+    """Enforce rate limiting on public endpoints and administrative auth endpoints to prevent brute-force attacks."""
+
+    async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        is_auth_route = (
+            path.startswith("/api/admin/auth")
+            or path.startswith("/admin/auth")
+            or path.startswith("/api/public/auth")
+            or path.endswith("/auth")
+        )
+        if is_auth_route:
+            limiter = getattr(request.app.state, "limiter", None)
+            if limiter and limiter.enabled:
+                try:
+                    limiter._check_request_limit(request, None, True)
+                except RateLimitExceeded as e:
+                    handler = request.app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
+                    if inspect.iscoroutinefunction(handler):
+                        return await handler(request, e)
+                    return handler(request, e)
+
         is_public = path.startswith("/api/public") or "/public/" in path
-        if not is_public:
+        if not is_public and not is_auth_route:
             return await call_next(request)
+
         return await super().dispatch(request, call_next)
 
 

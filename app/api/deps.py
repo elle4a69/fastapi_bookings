@@ -47,9 +47,6 @@ async def get_current_tenant(
                 subdomain = first_part
 
     if not subdomain:
-        tenant = db.query(Tenant).first()
-        if tenant:
-            return tenant
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant subdomain is missing or invalid. Please access via [subdomain].localhost or provide X-Tenant header.",
@@ -69,21 +66,15 @@ async def get_current_user(
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> User:
-    if not x_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
-
-    if x_token == "mock-admin-token":
-        user = db.query(User).filter(User.tenant_id == tenant.id).first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
-        return user
-
     """Retrieve the current authenticated user from the X-Token header.
 
     The token must be a valid JWT containing a ``sub`` claim that
     corresponds to a user ID. Scopes the lookup to the active tenant to
     ensure proper multi-tenant boundary isolation.
     """
+    if not x_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
+
     payload = decode_access_token(x_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -121,7 +112,7 @@ async def get_public_tenant(
     tenant: Tenant = Depends(get_current_tenant),
 ) -> Tenant:
     """Validate public tenant for public booking intake endpoints."""
-    if not x_token or x_token == "mock-admin-token":
+    if not x_token:
         return tenant
 
     payload = decode_access_token(x_token)

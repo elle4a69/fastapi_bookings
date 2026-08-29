@@ -21,22 +21,25 @@ class ApiError extends Error {
 async function request<T>(endpoint: string, method: HttpMethod, options: ApiClientOptions = {}): Promise<T> {
   const { data, headers: customHeaders, ...customOptions } = options;
 
-  const token = localStorage.getItem('token') || 'mock-admin-token';
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
-  // Determine active tenant subdomain (default to simplydemo)
-  let tenant = 'simplydemo';
-  if (typeof window !== 'undefined' && window.location) {
+  // Determine active tenant subdomain
+  let tenant = typeof window !== 'undefined' ? localStorage.getItem('tenant') : null;
+  if (!tenant && typeof window !== 'undefined' && window.location) {
     const hostParts = window.location.hostname.split('.');
-    if (hostParts.length > 1 && hostParts[hostParts.length - 1] === 'localhost') {
+    if (hostParts.length > 1 && hostParts[hostParts.length - 1] === 'localhost' && !['www', 'api', 'localhost', '127'].includes(hostParts[0])) {
       tenant = hostParts[0];
     }
   }
+  if (!tenant) {
+    tenant = 'simplydemo';
+  }
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Token': token,
-    'X-Tenant': tenant,
-    ...customHeaders,
+    ...(tenant ? { 'X-Tenant': tenant } : {}),
+    ...(token ? { 'X-Token': token } : {}),
+    ...(customHeaders as Record<string, string> || {}),
   };
 
   const config: RequestInit = {
@@ -61,6 +64,9 @@ async function request<T>(endpoint: string, method: HttpMethod, options: ApiClie
     }
 
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+      }
       const errMsg = responseData?.error?.message || responseData?.detail || response.statusText || 'API Error';
       throw new ApiError(
         response.status,
