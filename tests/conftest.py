@@ -10,6 +10,7 @@ from typing import Optional
 # Force OTel SDK off before ANY app module is imported.
 # Uses a hard assignment so shell env overrides are also suppressed.
 os.environ["OTEL_SDK_DISABLED"] = "true"
+os.environ["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdC10ZXN0cw=="
 
 # ---------------------------------------------------------------------------
 import sys
@@ -305,6 +306,7 @@ def clean_test_environment():
 
     fastapi_app.dependency_overrides.clear()
     settings.OTEL_SDK_DISABLED = True
+    settings.ENCRYPTION_KEY = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdC10ZXN0cw=="
     try:
         limiter._storage.reset()
     except Exception:
@@ -315,6 +317,7 @@ def clean_test_environment():
 
     fastapi_app.dependency_overrides.clear()
     settings.OTEL_SDK_DISABLED = True
+    settings.ENCRYPTION_KEY = "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItdW5pdC10ZXN0cw=="
     try:
         limiter._storage.reset()
     except Exception:

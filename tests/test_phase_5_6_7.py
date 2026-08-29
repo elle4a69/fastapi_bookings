@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Client as ClientModel
+from app.models.tenant import Tenant as TenantModel
 from app.models.booking import Booking as BookingModel
 from app.models.outbox import OutboxEvent
 from app.models.notification import DeviceToken as DeviceTokenModel
@@ -14,13 +15,21 @@ from app.services.outbox_service import create_outbox_event
 
 def test_device_registration(client: TestClient, db_session: Session):
     """Test device token registration and upsert endpoint."""
+    tenant = db_session.query(TenantModel).filter_by(subdomain="simplydemo").first()
+    if not tenant:
+        tenant = TenantModel(name="Simply Demo", subdomain="simplydemo")
+        db_session.add(tenant)
+        db_session.commit()
+        db_session.refresh(tenant)
+
+    headers = {"X-Tenant": "simplydemo"}
     payload = {
         "token": "test_fcm_token_123",
         "platform": "ios",
         "device_id": "iphone_15_pro",
         "enabled": True
     }
-    response = client.post("/api/v1/devices/register", json=payload)
+    response = client.post("/api/v1/devices/register", json=payload, headers=headers)
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["ok"] is True
@@ -30,10 +39,11 @@ def test_device_registration(client: TestClient, db_session: Session):
     db_token = db_session.query(DeviceTokenModel).filter_by(token="test_fcm_token_123").first()
     assert db_token is not None
     assert db_token.platform == "ios"
+    assert db_token.tenant_id == tenant.id
 
     # Test update (upsert)
     payload["platform"] = "android"
-    response = client.post("/api/v1/devices/register", json=payload)
+    response = client.post("/api/v1/devices/register", json=payload, headers=headers)
     assert response.status_code == 200
     
     db_session.refresh(db_token)
