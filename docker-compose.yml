@@ -9,6 +9,7 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     environment:
       - APP_ENV=${APP_ENV:-production}
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-fastapi_bookings}}
@@ -32,7 +33,7 @@ services:
       dockerfile: Dockerfile
     container_name: fastapi_bookings_outbox_worker
     restart: unless-stopped
-    command: ["python", "-c", "import asyncio; from app.services.outbox_worker import start_outbox_worker; asyncio.run(start_outbox_worker())"]
+    command: ["sh", "-c", "alembic upgrade head && exec python -c 'import asyncio; from app.services.outbox_worker import start_outbox_worker; asyncio.run(start_outbox_worker())'"]
     environment:
       - APP_ENV=${APP_ENV:-production}
       - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-fastapi_bookings}}

@@ -126,6 +126,7 @@ from .api.routers import (
     sms_settings,
     sms_arrivals,
     sms_chatwoot,
+    assistant_facade,
 )
 
 
@@ -413,12 +414,36 @@ app.include_router(sms_chatwoot.router, prefix="/api/admin")
 app.include_router(sms_chatwoot.router, prefix="/api")
 app.include_router(sms_webhooks.router, prefix="/api")
 
+# Assistant UI Integration router
+app.include_router(assistant_facade.router)
+
 
 @app.get("/health", tags=["system"])
 @app.get("/healthcheck", tags=["system"], include_in_schema=False)
 def health() -> dict:
     """Simple health check endpoint."""
     return {"ok": True}
+
+
+def get_expected_alembic_heads() -> set[str]:
+    """Retrieve expected alembic revision head(s) from local migration scripts."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ini_path = os.path.join(base_dir, "alembic.ini")
+        if os.path.exists(ini_path):
+            cfg = Config(ini_path)
+            script_loc = cfg.get_main_option("script_location", "alembic")
+            if not os.path.isabs(script_loc):
+                cfg.set_main_option("script_location", os.path.join(base_dir, script_loc))
+            script = ScriptDirectory.from_config(cfg)
+            heads = set(script.get_heads())
+            if heads:
+                return heads
+    except Exception as e:
+        logging.warning(f"Could not load Alembic ScriptDirectory: {e}")
+    return {"b1c2d3e4f5a6"}
 
 
 @app.get("/ready", tags=["system"])
@@ -448,6 +473,26 @@ def readiness(db=Depends(get_db)) -> dict:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database schema incomplete or unmigrated.",
             )
+
+        # Deep revision verification if alembic_version table exists (OPS-004)
+        if "alembic_version" in existing_tables:
+            result = db.execute(text("SELECT version_num FROM alembic_version"))
+            applied_revisions = {row[0] for row in result.fetchall() if row and row[0]}
+            if not applied_revisions:
+                logging.error("Readiness check failed: alembic_version table is empty.")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Database schema incomplete or unmigrated.",
+                )
+            expected_heads = get_expected_alembic_heads()
+            if not (applied_revisions & expected_heads):
+                logging.error(
+                    f"Readiness check failed: DB revision {applied_revisions} does not match head {expected_heads}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Database schema version mismatch.",
+                )
     except HTTPException:
         raise
     except Exception as e:

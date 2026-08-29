@@ -84,7 +84,8 @@ def test_readiness_probe_missing_critical_core_table():
 
 
 def test_readiness_probe_persistent_db_requires_alembic_version(tmp_path):
-    """Ensure /ready returns 503 on persistent databases if alembic_version is absent."""
+    """Ensure /ready returns 503 on persistent databases if alembic_version is absent or unpopulated."""
+    from app.main import get_expected_alembic_heads
     db_file = tmp_path / "persistent_test.db"
     persistent_engine = create_engine(f"sqlite:///{db_file}")
     metadata = MetaData()
@@ -110,13 +111,82 @@ def test_readiness_probe_persistent_db_requires_alembic_version(tmp_path):
         msg = _extract_error_message(response.json())
         assert msg == "Database schema incomplete or unmigrated."
 
-        # Now add alembic_version and verify it passes
-        Table("alembic_version", metadata, Column("version_num", String(32), primary_key=True))
+        # Now add alembic_version with current head revision and verify it passes
+        alembic_table = Table("alembic_version", metadata, Column("version_num", String(32), primary_key=True))
         metadata.create_all(bind=persistent_engine)
+
+        heads = list(get_expected_alembic_heads())
+        assert len(heads) > 0
+        with persistent_engine.begin() as conn:
+            conn.execute(alembic_table.insert().values(version_num=heads[0]))
 
         response_ok = test_client.get("/ready")
         assert response_ok.status_code == status.HTTP_200_OK
         assert response_ok.json() == {"ok": True}
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_readiness_probe_version_mismatch(tmp_path):
+    """Ensure /ready returns 503 when alembic_version contains an outdated revision (OPS-004)."""
+    db_file = tmp_path / "version_mismatch_test.db"
+    persistent_engine = create_engine(f"sqlite:///{db_file}")
+    metadata = MetaData()
+    for table_name in ["tenants", "users", "bookings", "services", "providers"]:
+        Table(table_name, metadata, Column("id", Integer, primary_key=True))
+    alembic_table = Table("alembic_version", metadata, Column("version_num", String(32), primary_key=True))
+    metadata.create_all(bind=persistent_engine)
+
+    # Insert an outdated / non-matching revision
+    with persistent_engine.begin() as conn:
+        conn.execute(alembic_table.insert().values(version_num="outdated_migration_rev_000"))
+
+    PersistentSession = sessionmaker(bind=persistent_engine)
+
+    def override_get_db():
+        session = PersistentSession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        test_client = TestClient(app)
+        response = test_client.get("/ready")
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        msg = _extract_error_message(response.json())
+        assert msg == "Database schema version mismatch."
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_readiness_probe_empty_alembic_version_table(tmp_path):
+    """Ensure /ready returns 503 when alembic_version exists but contains no rows."""
+    db_file = tmp_path / "empty_alembic_test.db"
+    persistent_engine = create_engine(f"sqlite:///{db_file}")
+    metadata = MetaData()
+    for table_name in ["tenants", "users", "bookings", "services", "providers"]:
+        Table(table_name, metadata, Column("id", Integer, primary_key=True))
+    Table("alembic_version", metadata, Column("version_num", String(32), primary_key=True))
+    metadata.create_all(bind=persistent_engine)
+
+    PersistentSession = sessionmaker(bind=persistent_engine)
+
+    def override_get_db():
+        session = PersistentSession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        test_client = TestClient(app)
+        response = test_client.get("/ready")
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        msg = _extract_error_message(response.json())
+        assert msg == "Database schema incomplete or unmigrated."
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -145,7 +215,7 @@ def test_readiness_probe_database_disconnected():
 # ---------------------------------------------------------------------------
 
 def test_dockerfile_hardening_assertions():
-    """Verify Dockerfile meets non-root, pinned version, and healthcheck requirements."""
+    """Verify Dockerfile meets non-root, pinned version, healthcheck, and startup migration requirements."""
     dockerfile_path = os.path.join(os.path.dirname(__file__), "..", "Dockerfile")
     assert os.path.exists(dockerfile_path), "Dockerfile must exist at repository root"
 
@@ -167,6 +237,9 @@ def test_dockerfile_hardening_assertions():
 
     # Healthcheck instruction
     assert re.search(r"^\s*HEALTHCHECK\s+", content, re.MULTILINE), "Must define HEALTHCHECK instruction"
+
+    # Automated startup migration assertion (OPS-003)
+    assert "alembic upgrade head" in content, "Dockerfile CMD must execute alembic upgrade head on startup"
 
 
 # ---------------------------------------------------------------------------
@@ -200,11 +273,11 @@ def test_dockerignore_hardening_assertions():
 
 
 # ---------------------------------------------------------------------------
-# 4. Compose Hardening & Secret Removal Assertions (OPS-001, OPS-002)
+# 4. Compose Hardening & Secret Removal Assertions (OPS-001, OPS-002, OPS-003)
 # ---------------------------------------------------------------------------
 
 def test_docker_compose_security_assertions():
-    """Verify docker-compose.yml has no hardcoded secrets and separates web and worker."""
+    """Verify docker-compose.yml has no hardcoded secrets, separates web and worker, and runs migrations."""
     compose_path = os.path.join(os.path.dirname(__file__), "..", "docker-compose.yml")
     assert os.path.exists(compose_path), "docker-compose.yml must exist at repository root"
 
@@ -228,9 +301,12 @@ def test_docker_compose_security_assertions():
     # Database healthcheck verification
     assert "pg_isready" in content, "PostgreSQL service must define pg_isready healthcheck"
 
+    # Startup migration execution verification (OPS-003)
+    assert "alembic upgrade head" in content, "Compose must run alembic upgrade head on startup"
+
 
 # ---------------------------------------------------------------------------
-# 5. CI Pipeline & Dependency Governance Assertions (OPS-007, OPS-008)
+# 5. CI Pipeline & Dependency Governance Assertions (OPS-007, OPS-008, TEST-005)
 # ---------------------------------------------------------------------------
 
 def test_ci_workflow_assertions():
@@ -241,21 +317,31 @@ def test_ci_workflow_assertions():
     with open(ci_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Quality gate assertions
+    # Quality and security gate assertions (OPS-007, TEST-005)
     assert "pytest" in content, "CI workflow must run pytest tests"
+    assert "--cov=app" in content, "CI workflow must measure test coverage"
     assert "flake8" in content, "CI workflow must run linter"
+    assert "mypy" in content, "CI workflow must run mypy type checker"
+    assert "bandit" in content, "CI workflow must run bandit security scanner"
     assert "alembic upgrade head" in content, "CI workflow must validate migrations"
+    assert "alembic check" in content, "CI workflow must run alembic check"
     assert "frontend" in content, "CI workflow must include frontend verification"
+    assert "npm test" in content, "CI workflow must run frontend test suite"
+    assert "npm run build" in content, "CI workflow must run frontend build"
     assert "docker" in content, "CI workflow must include Docker build/compose checks"
 
 
 def test_requirements_governance():
-    """Verify requirements.txt declares runtime dependencies directly and removes unused ones."""
+    """Verify requirements.txt declares runtime dependencies directly, pins bcrypt, and removes unused ones."""
     req_path = os.path.join(os.path.dirname(__file__), "..", "requirements.txt")
     assert os.path.exists(req_path), "requirements.txt must exist"
 
     with open(req_path, "r", encoding="utf-8") as f:
         content = f.read()
 
+    # OPS-008 bcrypt / passlib compatibility pinning
+    assert "bcrypt==3.2.2" in content or "bcrypt<4.0.0" in content, "requirements.txt must pin bcrypt to avoid passlib TypeError"
+    assert "passlib" in content, "requirements.txt must declare passlib"
     assert "cryptography" in content, "requirements.txt must directly declare cryptography"
     assert "httpx2" not in content, "requirements.txt must remove unused httpx2"
+
