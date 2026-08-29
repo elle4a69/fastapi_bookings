@@ -68,9 +68,9 @@ async def get_current_user(
 ) -> User:
     """Retrieve the current authenticated user from the X-Token header.
 
-    The token must be a valid JWT containing a ``sub`` claim that
-    corresponds to a user ID. Scopes the lookup to the active tenant to
-    ensure proper multi-tenant boundary isolation.
+    The token must be a valid JWT containing standard claims (iss, aud, exp)
+    and a ``sub`` claim that corresponds to a user ID. Scopes the lookup
+    to the active tenant to ensure proper multi-tenant boundary isolation.
     """
     if not x_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
@@ -78,11 +78,21 @@ async def get_current_user(
     payload = decode_access_token(x_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     try:
         user_id = int(payload["sub"])
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    
+
+    # If tenant_id claim is present in token, enforce matching tenant context
+    if "tenant_id" in payload and payload["tenant_id"] is not None:
+        try:
+            token_tenant_id = int(payload["tenant_id"])
+            if token_tenant_id != tenant.id:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
     # Query user within active tenant scope
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant.id).first()
     if not user:

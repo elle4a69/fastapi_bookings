@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Known insecure fallback keys that must NEVER be used or accepted
 FORBIDDEN_FALLBACK_KEYS = {
+    "changeme",
+    "test-secret-key",
+    "local-secret-key",
     "fallback-default-secret-key-change-me",
     "local-public-key-change-me",
 }
@@ -48,12 +51,13 @@ class DecryptionError(CryptoError):
 
 def _derive_fernet_key(raw_key: str) -> bytes:
     """Derive a 32-byte urlsafe base64-encoded key suitable for Fernet from a string."""
-    if not raw_key or not isinstance(raw_key, str):
+    if not raw_key or not isinstance(raw_key, str) or not raw_key.strip():
         raise EncryptionKeyMissingError("Encryption key must be a non-empty string.")
     
     if raw_key in FORBIDDEN_FALLBACK_KEYS:
         raise EncryptionKeyMissingError(
-            "Forbidden insecure fallback key detected. Centralized crypto requires a valid application key."
+            f"Forbidden insecure fallback key detected ('{raw_key}'). "
+            "Centralized crypto requires a dedicated, non-default ENCRYPTION_KEY."
         )
 
     # Check if raw_key is already a valid 32-byte base64-encoded Fernet key
@@ -72,14 +76,20 @@ def _derive_fernet_key(raw_key: str) -> bytes:
 def get_fernet_cipher(key: Optional[str] = None) -> Fernet:
     """Instantiate a Fernet cipher with the configured or provided key.
     
-    Fails closed if key is missing or forbidden.
+    Fails closed if key is missing, empty, or forbidden. Does NOT fall back to SECRET_KEY.
     """
     if key is None:
-        key = getattr(settings, "ENCRYPTION_KEY", None) or getattr(settings, "SECRET_KEY", None)
+        key = getattr(settings, "ENCRYPTION_KEY", None)
 
     if not key or not isinstance(key, str) or not key.strip():
         raise EncryptionKeyMissingError(
-            "Application encryption key is not configured or is empty. Encryption fails closed."
+            "Application ENCRYPTION_KEY is not configured or is empty. Encryption fails closed."
+        )
+
+    if key in FORBIDDEN_FALLBACK_KEYS:
+        raise EncryptionKeyMissingError(
+            f"Forbidden insecure fallback key detected ('{key}'). "
+            "Application encryption requires a dedicated, non-default ENCRYPTION_KEY."
         )
 
     derived_key = _derive_fernet_key(key)

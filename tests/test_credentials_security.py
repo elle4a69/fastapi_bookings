@@ -40,6 +40,15 @@ from app.schemas.sms_chatwoot import SmsChatwootBindingResponse
 from app.core.security import create_access_token
 
 
+@pytest.fixture(autouse=True)
+def setup_encryption_key_for_tests():
+    """Ensure a valid non-default ENCRYPTION_KEY is available during tests unless explicitly overridden."""
+    original_key = settings.ENCRYPTION_KEY
+    settings.ENCRYPTION_KEY = "valid-test-encryption-key-32-chars-long"
+    yield
+    settings.ENCRYPTION_KEY = original_key
+
+
 @pytest.fixture
 def crypto_test_data(db_session):
     """Fixture providing Tenant, Provider, SmsAccount, and SmsChatwootBinding records."""
@@ -122,19 +131,36 @@ class TestCentralizedCryptoService:
 
     def test_missing_or_empty_key_fails_closed(self):
         """When encryption key is missing or blank, crypto fails closed by raising EncryptionKeyMissingError."""
-        with patch.object(settings, "SECRET_KEY", ""):
-            with pytest.raises(EncryptionKeyMissingError):
-                get_fernet_cipher()
+        for empty_val in ("", None, "   "):
+            with patch.object(settings, "ENCRYPTION_KEY", empty_val):
+                with pytest.raises(EncryptionKeyMissingError):
+                    get_fernet_cipher()
 
-            with pytest.raises(EncryptionKeyMissingError):
-                encrypt_string("plaintext")
+                with pytest.raises(EncryptionKeyMissingError):
+                    encrypt_string("plaintext")
 
-            with pytest.raises(EncryptionKeyMissingError):
-                encrypt_dict({"secret": "val"})
+                with pytest.raises(EncryptionKeyMissingError):
+                    encrypt_dict({"secret": "val"})
 
     def test_forbidden_fallback_keys_rejected(self):
         """Known fallback keys are strictly rejected and cannot be used."""
+        assert "changeme" in FORBIDDEN_FALLBACK_KEYS
+        assert "test-secret-key" in FORBIDDEN_FALLBACK_KEYS
+        assert "local-secret-key" in FORBIDDEN_FALLBACK_KEYS
+        assert "fallback-default-secret-key-change-me" in FORBIDDEN_FALLBACK_KEYS
+        assert "local-public-key-change-me" in FORBIDDEN_FALLBACK_KEYS
+
         for forbidden in FORBIDDEN_FALLBACK_KEYS:
+            with patch.object(settings, "ENCRYPTION_KEY", forbidden):
+                with pytest.raises(EncryptionKeyMissingError):
+                    get_fernet_cipher()
+
+                with pytest.raises(EncryptionKeyMissingError):
+                    encrypt_string("secret")
+
+                with pytest.raises(EncryptionKeyMissingError):
+                    encrypt_dict({"secret": "val"})
+
             with pytest.raises(EncryptionKeyMissingError):
                 get_fernet_cipher(key=forbidden)
 
@@ -171,7 +197,7 @@ class TestCentralizedCryptoService:
         import base64
         import hashlib
 
-        secret = settings.SECRET_KEY
+        secret = settings.ENCRYPTION_KEY
         key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
         fernet = Fernet(base64.urlsafe_b64encode(key_bytes))
         legacy_token = fernet.encrypt(b"legacy_unversioned_secret").decode("utf-8")
@@ -220,7 +246,7 @@ class TestSafeModelSetters:
         """When encryption key is missing, setting SmsAccount.credentials raises CryptoError and stores nothing."""
         account = crypto_test_data["account"]
         
-        with patch.object(settings, "SECRET_KEY", ""):
+        with patch.object(settings, "ENCRYPTION_KEY", ""):
             with pytest.raises(CryptoError):
                 account.credentials = {"leak_attempt": "plaintext_value"}
 
@@ -266,7 +292,7 @@ class TestSafeModelSetters:
         """When encryption key is missing, setting Chatwoot tokens raises CryptoError and does not store plaintext."""
         binding = crypto_test_data["binding"]
 
-        with patch.object(settings, "SECRET_KEY", ""):
+        with patch.object(settings, "ENCRYPTION_KEY", ""):
             with pytest.raises(CryptoError):
                 binding.chatwoot_api_token = "new_token_attempt"
 

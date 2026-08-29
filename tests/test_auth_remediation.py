@@ -143,15 +143,110 @@ def test_invalid_payload_sub_rejected(client, auth_test_data):
     tenant_sub = auth_test_data["tenant_a"].subdomain
 
     # Missing sub
-    no_sub_token = jwt.encode({"role": "admin", "exp": datetime.utcnow() + timedelta(hours=1)}, settings.SECRET_KEY, algorithm="HS256")
+    no_sub_token = create_access_token({"role": "admin"})
     res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": no_sub_token})
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
     # Non-integer sub
-    bad_sub_token = jwt.encode({"sub": "not-an-integer", "role": "admin", "exp": datetime.utcnow() + timedelta(hours=1)}, settings.SECRET_KEY, algorithm="HS256")
+    bad_sub_token = create_access_token({"sub": "not-an-integer", "role": "admin"})
     res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": bad_sub_token})
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
     assert res.json()["error"]["message"] == "Invalid token payload"
+
+
+def test_jwt_standard_claims_verification(client, auth_test_data):
+    """Ensure standard claims (iss, aud, exp, iat) are verified strictly (AUTH-004)."""
+    tenant_sub = auth_test_data["tenant_a"].subdomain
+    user = auth_test_data["admin_a"]
+    now = datetime.now(timezone.utc)
+
+    # 1. Invalid / mismatched issuer
+    wrong_iss_token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "role": user.role,
+            "iss": "untrusted-issuer",
+            "aud": settings.JWT_AUDIENCE,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+    res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": wrong_iss_token})
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error"]["message"] == "Invalid token"
+
+    # 2. Invalid / mismatched audience
+    wrong_aud_token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "role": user.role,
+            "iss": settings.JWT_ISSUER,
+            "aud": "wrong-audience-api",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+    res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": wrong_aud_token})
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error"]["message"] == "Invalid token"
+
+    # 3. Missing issuer claim
+    missing_iss_token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "role": user.role,
+            "aud": settings.JWT_AUDIENCE,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+    res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": missing_iss_token})
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error"]["message"] == "Invalid token"
+
+    # 4. Missing audience claim
+    missing_aud_token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "role": user.role,
+            "iss": settings.JWT_ISSUER,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=1)).timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+    res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": missing_aud_token})
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error"]["message"] == "Invalid token"
+
+    # 5. Expired token (exp in past)
+    expired_token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "role": user.role,
+            "iss": settings.JWT_ISSUER,
+            "aud": settings.JWT_AUDIENCE,
+            "iat": int((now - timedelta(hours=2)).timestamp()),
+            "exp": int((now - timedelta(hours=1)).timestamp()),
+        },
+        settings.SECRET_KEY,
+        algorithm="HS256",
+    )
+    res = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": expired_token})
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error"]["message"] == "Invalid token"
+
+    # 6. Valid standard claims token succeeds
+    valid_token = create_access_token({"sub": str(user.id), "role": user.role})
+    res_valid = client.get("/api/admin/bookings", headers={"X-Tenant": tenant_sub, "X-Token": valid_token})
+    assert res_valid.status_code == status.HTTP_200_OK
 
 
 def test_cross_tenant_token_rejected(client, auth_test_data):
