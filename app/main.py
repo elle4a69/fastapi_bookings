@@ -141,10 +141,19 @@ from .services.outbox_worker import start_outbox_worker, stop_outbox_worker
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     # Startup
-    worker_task = asyncio.create_task(start_outbox_worker())
+    worker_task = None
+    enable_workers = getattr(settings, "ENABLE_BACKGROUND_WORKERS", None)
+    if enable_workers is None:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            enable_workers = os.getenv("ENABLE_BACKGROUND_WORKERS", "false").lower() in ("true", "1", "yes")
+        else:
+            enable_workers = os.getenv("ENABLE_BACKGROUND_WORKERS", "true").lower() in ("true", "1", "yes")
+    if enable_workers:
+        worker_task = asyncio.create_task(start_outbox_worker())
     yield
     # Shutdown
-    await stop_outbox_worker(worker_task)
+    if worker_task is not None:
+        await stop_outbox_worker(worker_task)
     from .core.telemetry import shutdown_telemetry
     shutdown_telemetry()
 
@@ -303,7 +312,11 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
-    logging.exception(f"Unhandled exception occurred: {str(exc)}")
+    if isinstance(exc, HTTPException):
+        from fastapi.exception_handlers import http_exception_handler
+        return await http_exception_handler(request, exc)
+
+    logging.exception(f"Unhandled exception occurred: {type(exc).__name__}")
     current_span = trace.get_current_span()
     trace_id = ""
     if current_span and current_span.get_span_context().is_valid:
@@ -410,15 +423,38 @@ def health() -> dict:
 
 @app.get("/ready", tags=["system"])
 def readiness(db=Depends(get_db)) -> dict:
-    """Readiness check endpoint that verifies database connectivity."""
-    from sqlalchemy.sql import text
+    """Readiness check endpoint that verifies database connectivity and schema readiness (OPS-004)."""
+    from sqlalchemy import inspect, text
     try:
         db.execute(text("SELECT 1"))
+        bind = db.get_bind()
+        inspector = inspect(bind)
+        existing_tables = set(inspector.get_table_names())
+
+        required_tables = {"tenants", "users", "bookings", "services", "providers", "alembic_version"}
+
+        # Determine database URL for in-memory SQLite detection
+        engine_obj = getattr(bind, "engine", bind)
+        url_str = str(getattr(engine_obj, "url", ""))
+
+        # For in-memory test databases without alembic metadata, check core entity tables
+        if ":memory:" in url_str and "alembic_version" not in existing_tables:
+            required_tables = {"tenants", "users", "bookings", "services", "providers"}
+
+        missing_tables = required_tables - existing_tables
+        if missing_tables:
+            logging.error(f"Readiness check failed: missing required tables {missing_tables}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database schema incomplete or unmigrated.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Readiness check failed: {str(e)}")
+        logging.error(f"Readiness check failed: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connectivity failed."
+            detail="Database connectivity failed.",
         )
     return {"ok": True}
 

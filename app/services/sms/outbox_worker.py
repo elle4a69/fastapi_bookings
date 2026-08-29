@@ -111,14 +111,17 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 except Exception as ex:
                     db.rollback()
                     job.retry_count += 1
-                    job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                    ex_type = type(ex).__name__
+                    job.error_log = f"{ex_type}: Chatwoot delivery failure"
                     if job.retry_count >= 5:
                         job.status = "FAILED"
                         message.status = "failed"
+                        logger.error(f"Permanent failure for SmsOutboundJob {job.id} (Chatwoot retries exhausted): {ex_type}")
                     else:
                         job.status = "PENDING"
                         job.lease_expires_at = None
                         message.status = "queued"
+                        logger.warning(f"Temporary failure for SmsOutboundJob {job.id} (Chatwoot attempt {job.retry_count}): {ex_type}")
                     db.commit()
                     continue
 
@@ -155,7 +158,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 # Normalize target address
                 clean_to = adapter.normalise_address(conversation.customer_address)
                 if not clean_to:
-                    raise ValueError(f"Invalid customer phone number: {conversation.customer_address}")
+                    raise ValueError("Invalid customer phone number")
 
                 # Prepare command
                 command = OutboundSmsCommand(
@@ -178,23 +181,24 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     message.provider_message_id = result.provider_message_id
                     logger.info(f"Successfully sent outbound SMS (id={message.id}) via {account.transport_type}")
                 else:
-                    raise RuntimeError(f"Transport send failure: {result.error_message} ({result.error_code})")
+                    raise RuntimeError(f"Transport send failure: {result.error_code}")
 
             except Exception as ex:
                 db.rollback()
                 job.retry_count += 1
-                job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                ex_type = type(ex).__name__
+                job.error_log = f"{ex_type}: SMS transport delivery failure"
                 
                 if job.retry_count >= 5:
                     job.status = "FAILED"
                     message.status = "failed"
-                    logger.error(f"Permanent failure for SmsOutboundJob {job.id} (retries exhausted): {ex}")
+                    logger.error(f"Permanent failure for SmsOutboundJob {job.id} (retries exhausted): {ex_type}")
                 else:
                     # Return to PENDING for retry
                     job.status = "PENDING"
                     job.lease_expires_at = None
                     message.status = "queued"
-                    logger.warning(f"Temporary failure for SmsOutboundJob {job.id} (attempt {job.retry_count}): {ex}")
+                    logger.warning(f"Temporary failure for SmsOutboundJob {job.id} (attempt {job.retry_count}): {ex_type}")
 
             db.commit()
 
