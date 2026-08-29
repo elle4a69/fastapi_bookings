@@ -24,11 +24,3 @@ dev-dashboard/logs/*.log
 dev-dashboard/pids.json
 # Local scripts / temp
 list_chatwoot_tables.py
-
-# Databases
-*.db
-# Dev Dashboard logs and pids
-dev-dashboard/logs/*.log
-dev-dashboard/pids.json
-# Local scripts / temp
-list_chatwoot_tables.py
