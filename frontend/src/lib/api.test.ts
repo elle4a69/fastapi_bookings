@@ -65,15 +65,31 @@ describe("Frontend API Client & Auth Separation (FE-001, FE-002, FE-003)", () =>
     (globalThis as any).window.location.hostname = "simplydemo.localhost";
   });
 
-  it("resolves active tenant from storage or hostname", () => {
+  it("resolves active tenant from storage or hostname, and returns empty string when neither is present (AUTH-002)", () => {
+    // 1. Hostname with valid subdomain
+    (globalThis as any).window.location.hostname = "simplydemo.localhost";
     assert.strictEqual(getActiveTenant(), "simplydemo");
 
+    // 2. Explicit tenant in storage overrides hostname
     setActiveTenant("tenant-alpha");
     assert.strictEqual(getActiveTenant(), "tenant-alpha");
 
+    // 3. Different hostname subdomain
     mockLocalStorage.clear();
     (globalThis as any).window.location.hostname = "custom-tenant.localhost";
     assert.strictEqual(getActiveTenant(), "custom-tenant");
+
+    // 4. Naked localhost (no subdomain) and empty storage -> returns empty string (no 'simplydemo' fallback)
+    mockLocalStorage.clear();
+    (globalThis as any).window.location.hostname = "localhost";
+    assert.strictEqual(getActiveTenant(), "");
+
+    // 5. Excluded hostname prefix (e.g. www, api, 127) -> returns empty string
+    (globalThis as any).window.location.hostname = "www.localhost";
+    assert.strictEqual(getActiveTenant(), "");
+
+    (globalThis as any).window.location.hostname = "api.localhost";
+    assert.strictEqual(getActiveTenant(), "");
   });
 
   it("manages admin token in localStorage and sessionStorage", () => {

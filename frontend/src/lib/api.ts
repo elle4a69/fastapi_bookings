@@ -22,7 +22,7 @@ export class ApiError extends Error {
 }
 
 export function getActiveTenant(): string {
-  if (typeof window === 'undefined') return 'simplydemo';
+  if (typeof window === 'undefined') return '';
   const stored = localStorage.getItem('tenant') || sessionStorage.getItem('tenant');
   if (stored && stored.trim()) {
     return stored.trim();
@@ -33,7 +33,7 @@ export function getActiveTenant(): string {
       return hostParts[0];
     }
   }
-  return 'simplydemo';
+  return '';
 }
 
 export function setActiveTenant(tenant: string): void {

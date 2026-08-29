@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import DatabaseId, get_db
+from ..deps import DatabaseId, get_db, get_public_tenant
 from ...core.security import decode_access_token
 from ...models.client import Client
 from ...models.notification import DeviceToken as DeviceTokenModel
@@ -19,10 +19,11 @@ router = APIRouter(prefix="/api/v1/devices", tags=["devices"])
 def register_device(
     device_in: DeviceTokenCreate,
     request: Request,
+    tenant: Tenant = Depends(get_public_tenant),
     db: Session = Depends(get_db),
 ) -> dict:
     """Register or update a user device token bound to the active tenant."""
-    tenant_id: Optional[int] = None
+    tenant_id = tenant.id
 
     # 1. Check for token-based authentication / subject identity
     x_token = request.headers.get("X-Token")
@@ -32,69 +33,30 @@ def register_device(
             sub = payload["sub"]
             try:
                 uid = int(sub)
-                user = db.query(User).filter(User.id == uid).first()
+                user = db.query(User).filter(User.id == uid, User.tenant_id == tenant_id).first()
                 if user:
-                    tenant_id = user.tenant_id
                     if device_in.user_id is None:
                         device_in.user_id = user.id
                 else:
-                    client = db.query(Client).filter(Client.id == uid).first()
+                    client = db.query(Client).filter(Client.id == uid, Client.tenant_id == tenant_id).first()
                     if client:
-                        tenant_id = client.tenant_id
                         if device_in.client_id is None:
                             device_in.client_id = client.id
             except (ValueError, TypeError):
                 pass
 
-    # 2. Check X-Tenant header, query param, or host subdomain
-    subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
-    if not subdomain:
-        host = request.headers.get("host", "")
-        parts = host.split(":")
-        hostname = parts[0]
-        host_parts = hostname.split(".")
-        if len(host_parts) > 1 and not hostname.endswith(".run.app"):
-            first_part = host_parts[0]
-            if first_part.lower() not in ("www", "api", "localhost", "127"):
-                subdomain = first_part
+    # 2. Validate user_id / client_id strictly within the active tenant
+    if device_in.user_id is not None:
+        user = db.query(User).filter(User.id == device_in.user_id, User.tenant_id == tenant_id).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in this tenant")
 
-    if subdomain:
-        tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain.lower()).first()
-        if not tenant:
-            raise HTTPException(status_code=404, detail=f"Tenant '{subdomain}' not found")
-        tenant_id = tenant.id
+    if device_in.client_id is not None:
+        client = db.query(Client).filter(Client.id == device_in.client_id, Client.tenant_id == tenant_id).first()
+        if not client:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found in this tenant")
 
-    # 3. Validate user_id / client_id within tenant if provided
-    if tenant_id is not None:
-        if device_in.user_id is not None:
-            user = db.query(User).filter(User.id == device_in.user_id, User.tenant_id == tenant_id).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found in this tenant")
-        if device_in.client_id is not None:
-            client = db.query(Client).filter(Client.id == device_in.client_id, Client.tenant_id == tenant_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found in this tenant")
-    else:
-        if device_in.user_id is not None:
-            user = db.query(User).filter(User.id == device_in.user_id).first()
-            if user:
-                tenant_id = user.tenant_id
-            else:
-                raise HTTPException(status_code=404, detail="User not found")
-        elif device_in.client_id is not None:
-            client = db.query(Client).filter(Client.id == device_in.client_id).first()
-            if client:
-                tenant_id = client.tenant_id
-            else:
-                raise HTTPException(status_code=404, detail="Client not found")
-
-    # 4. Fallback to default tenant if available in unadorned environment
-    if tenant_id is None:
-        first_tenant = db.query(Tenant).first()
-        if first_tenant:
-            tenant_id = first_tenant.id
-
-    # Check if token already exists
+    # 3. Check if token already exists
     token_record = db.query(DeviceTokenModel).filter(DeviceTokenModel.token == device_in.token).first()
 
     if token_record:
@@ -126,3 +88,4 @@ def register_device(
     db.commit()
     db.refresh(token_record)
     return {"ok": True, "data": token_record}
+

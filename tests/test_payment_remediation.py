@@ -299,6 +299,51 @@ def test_webhook_duplicate_event_is_idempotent(client: TestClient, db_session: S
     assert payment_count_second == payment_count_first
 
 
+def test_webhook_missing_tenant_id_rejected_safe_quarantine(client: TestClient, db_session: Session, payment_fixture, monkeypatch):
+    """Event metadata missing tenant_id must be quarantined/rejected with 400 and not mutate bookings."""
+    monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", TEST_SECRET)
+    booking = payment_fixture["booking"]
+
+    event_payload = {
+        "id": "evt_missing_tenant_302",
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "id": "cs_test_session_302",
+                "object": "checkout.session",
+                "amount_total": 5000,
+                "currency": "aud",
+                "metadata": {
+                    "booking_id": str(booking.id),
+                    # Missing tenant_id
+                }
+            }
+        }
+    }
+    raw_payload = json.dumps(event_payload).encode("utf-8")
+    sig_header = create_signed_webhook_header(raw_payload, TEST_SECRET)
+
+    response = client.post(
+        "/api/v1/webhooks/stripe",
+        content=raw_payload,
+        headers={"Content-Type": "application/json", "Stripe-Signature": sig_header}
+    )
+    assert response.status_code == 400
+    assert "tenant_id" in get_error_message(response).lower()
+
+    # Verify no booking mutation occurred
+    db_session.refresh(booking)
+    assert booking.status == BookingStatus.PENDING
+    payment = db_session.query(PaymentModel).filter_by(stripe_event_id="evt_missing_tenant_302").first()
+    assert payment is None
+
+    # Verify event was quarantined
+    quarantined = db_session.query(ProcessedStripeEvent).filter_by(event_id="evt_missing_tenant_302").first()
+    assert quarantined is not None
+    assert quarantined.status == "quarantined"
+
+
 def test_webhook_tenant_mismatch_rejected_safe_rollback(client: TestClient, db_session: Session, payment_fixture, monkeypatch):
     """Event metadata tenant_id mismatching database booking tenant must be rejected and rolled back."""
     monkeypatch.setattr(settings, "STRIPE_WEBHOOK_SECRET", TEST_SECRET)
@@ -503,12 +548,65 @@ def test_webhook_payment_failed_cancels_booking_and_enqueues_outbox(client: Test
 # PAY-001: Authoritative Deposit Session Creation & URL Validation
 # ============================================================================
 
+def test_deposit_session_without_tenant_header_fails_closed(client: TestClient, payment_fixture):
+    """Creating deposit session without tenant header fails closed with HTTP 400."""
+    booking = payment_fixture["booking"]
+
+    response = client.post(
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel"
+    )
+    assert response.status_code == 400
+    assert "Tenant subdomain is missing or invalid" in get_error_message(response)
+
+
+def test_deposit_session_rejects_non_pending_booking(client: TestClient, db_session: Session, payment_fixture):
+    """Creating deposit session for confirmed or cancelled booking returns 400/409 Conflict."""
+    booking = payment_fixture["booking"]
+
+    # 1. Confirmed booking rejected
+    booking.status = BookingStatus.CONFIRMED
+    db_session.commit()
+
+    res_confirmed = client.post(
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
+    )
+    assert res_confirmed.status_code in (400, 409)
+
+    # 2. Cancelled booking rejected
+    booking.status = BookingStatus.CANCELLED
+    db_session.commit()
+
+    res_cancelled = client.post(
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
+    )
+    assert res_cancelled.status_code in (400, 409)
+
+
+def test_deposit_session_cross_tenant_returns_404(client: TestClient, db_session: Session, payment_fixture):
+    """Requesting deposit session for a booking belonging to another tenant returns 404 Not Found."""
+    booking = payment_fixture["booking"]
+
+    other_tenant = TenantModel(name="Other Salon", subdomain="other-salon")
+    db_session.add(other_tenant)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "other-salon"}
+    )
+    assert response.status_code == 404
+    assert "Booking not found" in get_error_message(response)
+
+
 def test_deposit_session_rejects_client_price_tampering(client: TestClient, payment_fixture):
     """Client attempting to supply a tampered deposit amount is rejected with 400."""
     booking = payment_fixture["booking"]
 
     response = client.post(
-        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&amount_cents=100&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel"
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&amount_cents=100&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
     )
     assert response.status_code == 400
     assert "Deposit amount mismatch" in get_error_message(response)
@@ -520,33 +618,25 @@ def test_deposit_session_rejects_untrusted_redirect_urls(client: TestClient, pay
 
     # 1. Untrusted external domain
     res1 = client.post(
-        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=https://attacker-phishing.com/steal&cancel_url=http://localhost:8000/cancel"
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=https://attacker-phishing.com/steal&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
     )
     assert res1.status_code == 400
     assert "Invalid redirect URL" in get_error_message(res1)
 
     # 2. Dangerous javascript scheme
     res2 = client.post(
-        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=javascript:alert(1)&cancel_url=http://localhost:8000/cancel"
+        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=javascript:alert(1)&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
     )
     assert res2.status_code == 400
 
 
-def test_deposit_session_nonexistent_booking_returns_404(client: TestClient):
+def test_deposit_session_nonexistent_booking_returns_404(client: TestClient, payment_fixture):
     """Requesting a deposit session for non-existent booking returns 404."""
     response = client.post(
-        "/api/v1/checkout/deposit-session?booking_id=999999&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel"
-    )
-    assert response.status_code == 404
-    assert "Booking not found" in get_error_message(response)
-
-
-def test_deposit_session_wrong_tenant_returns_404(client: TestClient, payment_fixture):
-    """Requesting deposit session with mismatched tenant filter returns 404."""
-    booking = payment_fixture["booking"]
-
-    response = client.post(
-        f"/api/v1/checkout/deposit-session?booking_id={booking.id}&tenant_id=999999&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel"
+        "/api/v1/checkout/deposit-session?booking_id=999999&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+        headers={"X-Tenant": "pay-sec-salon"}
     )
     assert response.status_code == 404
     assert "Booking not found" in get_error_message(response)
@@ -562,7 +652,8 @@ def test_deposit_session_creation_success_with_authoritative_deposit(client: Tes
 
     with patch("app.services.stripe_service.stripe_service.create_checkout_session", return_value=mock_session) as mock_create:
         response = client.post(
-            f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel"
+            f"/api/v1/checkout/deposit-session?booking_id={booking.id}&success_url=http://localhost:8000/success&cancel_url=http://localhost:8000/cancel",
+            headers={"X-Tenant": "pay-sec-salon"}
         )
         assert response.status_code == 200
         res_data = response.json()
@@ -577,3 +668,4 @@ def test_deposit_session_creation_success_with_authoritative_deposit(client: Tes
         assert kwargs["amount_cents"] == 5000
         assert kwargs["currency"] == "aud"
         assert kwargs["tenant_id"] == str(booking.tenant_id)
+

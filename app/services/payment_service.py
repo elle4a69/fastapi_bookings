@@ -93,17 +93,26 @@ class PaymentService:
         booking_id: int,
         success_url: str,
         cancel_url: str,
-        tenant_id: Optional[int] = None,
+        tenant_id: int,
         client_amount_cents: Optional[int] = None,
     ) -> dict:
         """Create a Stripe checkout session for a booking deposit with server-authoritative pricing."""
-        query = db.query(BookingModel).filter(BookingModel.id == booking_id)
-        if tenant_id is not None:
-            query = query.filter(BookingModel.tenant_id == tenant_id)
-        
-        booking = query.first()
+        if not tenant_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant ID is required")
+
+        booking = db.query(BookingModel).filter(
+            BookingModel.id == booking_id,
+            BookingModel.tenant_id == tenant_id
+        ).first()
         if not booking:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+
+        # Booking state validation: must be PENDING
+        if booking.status not in (BookingStatus.PENDING, "pending"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot create deposit session for booking with status '{booking.status}'. Only PENDING bookings are eligible."
+            )
 
         # Validate redirect URLs against allowed frontend origins
         if not validate_redirect_url(success_url) or not validate_redirect_url(cancel_url):
@@ -159,15 +168,33 @@ class PaymentService:
             return {"ok": True, "duplicate": True, "message": "Event already processed"}
 
         try:
-            if event_type == "checkout.session.completed":
+            if event_type in ["checkout.session.completed", "payment_intent.succeeded"]:
                 metadata = data_object.get("metadata", {}) or {}
                 booking_id_str = metadata.get("booking_id") or data_object.get("client_reference_id")
                 event_tenant_id = metadata.get("tenant_id")
 
+                if not event_tenant_id or not str(event_tenant_id).isdigit():
+                    logger.warning(f"Stripe event {event_id} missing or invalid tenant_id in metadata: {event_tenant_id}")
+                    event_record = ProcessedStripeEvent(
+                        tenant_id=None,
+                        event_id=event_id,
+                        event_type=event_type,
+                        status="quarantined",
+                        payload=json.dumps(event)
+                    )
+                    db.add(event_record)
+                    db.commit()
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Missing or invalid tenant_id in Stripe event metadata"
+                    )
+
+                tenant_id = int(event_tenant_id)
+
                 if not booking_id_str:
                     logger.warning(f"Stripe event {event_id} has no booking_id in metadata.")
                     event_record = ProcessedStripeEvent(
-                        tenant_id=int(event_tenant_id) if event_tenant_id and str(event_tenant_id).isdigit() else None,
+                        tenant_id=tenant_id,
                         event_id=event_id,
                         event_type=event_type,
                         status="ignored",
@@ -182,22 +209,26 @@ class PaymentService:
                 except (ValueError, TypeError):
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid booking_id format")
 
-                booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+                booking = db.query(BookingModel).filter(
+                    BookingModel.id == booking_id,
+                    BookingModel.tenant_id == tenant_id
+                ).first()
                 if not booking:
+                    other_booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+                    if other_booking:
+                        logger.error(f"Tenant mismatch on booking {booking_id}: expected {other_booking.tenant_id}, got {tenant_id}")
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Tenant mismatch between Stripe event and booking record"
+                        )
                     logger.error(f"Booking {booking_id} not found for Stripe event {event_id}")
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Booking {booking_id} not found")
-
-                # Tenant Scope & Authorization Check
-                if event_tenant_id is not None and str(booking.tenant_id) != str(event_tenant_id):
-                    logger.error(f"Tenant mismatch on booking {booking_id}: expected {booking.tenant_id}, got {event_tenant_id}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Tenant mismatch between Stripe event and booking record"
-                    )
 
                 # Amount & Currency Server-Authoritative Reconciliation
                 expected_cents, expected_currency = get_authoritative_deposit(booking)
                 amount_total = data_object.get("amount_total")
+                if amount_total is None:
+                    amount_total = data_object.get("amount")
                 if amount_total is None:
                     amount_total = data_object.get("amount_subtotal")
 
@@ -249,8 +280,8 @@ class PaymentService:
                     currency=(event_currency or expected_currency).upper(),
                     status="completed",
                     stripe_event_id=event_id,
-                    stripe_session_id=data_object.get("id"),
-                    stripe_payment_intent_id=data_object.get("payment_intent"),
+                    stripe_session_id=data_object.get("id") if event_type == "checkout.session.completed" else None,
+                    stripe_payment_intent_id=data_object.get("payment_intent") if event_type == "checkout.session.completed" else data_object.get("id"),
                 )
                 db.add(payment)
 
@@ -302,71 +333,93 @@ class PaymentService:
                 booking_id_str = metadata.get("booking_id") or data_object.get("client_reference_id")
                 event_tenant_id = metadata.get("tenant_id")
 
+                if not event_tenant_id or not str(event_tenant_id).isdigit():
+                    logger.warning(f"Stripe failure event {event_id} missing or invalid tenant_id in metadata.")
+                    event_record = ProcessedStripeEvent(
+                        tenant_id=None,
+                        event_id=event_id,
+                        event_type=event_type,
+                        status="quarantined",
+                        payload=json.dumps(event)
+                    )
+                    db.add(event_record)
+                    db.commit()
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Missing or invalid tenant_id in Stripe event metadata"
+                    )
+
+                tenant_id = int(event_tenant_id)
                 if booking_id_str:
                     try:
                         booking_id = int(booking_id_str)
                     except (ValueError, TypeError):
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid booking_id format")
 
-                    booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
-                    if booking:
-                        if event_tenant_id is not None and str(booking.tenant_id) != str(event_tenant_id):
+                    booking = db.query(BookingModel).filter(
+                        BookingModel.id == booking_id,
+                        BookingModel.tenant_id == tenant_id
+                    ).first()
+                    if not booking:
+                        other_booking = db.query(BookingModel).filter(BookingModel.id == booking_id).first()
+                        if other_booking:
                             raise HTTPException(
                                 status_code=status.HTTP_400_BAD_REQUEST,
                                 detail="Tenant mismatch between Stripe event and booking record"
                             )
+                        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Booking {booking_id} not found")
 
-                        if is_valid_transition(booking.status, BookingStatus.CANCELLED):
-                            booking.status = BookingStatus.CANCELLED
+                    if is_valid_transition(booking.status, BookingStatus.CANCELLED):
+                        booking.status = BookingStatus.CANCELLED
 
-                            payment = PaymentModel(
-                                tenant_id=booking.tenant_id,
-                                booking_id=booking.id,
-                                amount=Decimal("0.00"),
-                                currency="AUD",
-                                status="failed",
-                                stripe_event_id=event_id,
-                                stripe_session_id=data_object.get("id"),
-                                stripe_payment_intent_id=data_object.get("payment_intent") or data_object.get("id"),
-                            )
-                            db.add(payment)
+                        payment = PaymentModel(
+                            tenant_id=booking.tenant_id,
+                            booking_id=booking.id,
+                            amount=Decimal("0.00"),
+                            currency="AUD",
+                            status="failed",
+                            stripe_event_id=event_id,
+                            stripe_session_id=data_object.get("id"),
+                            stripe_payment_intent_id=data_object.get("payment_intent") or data_object.get("id"),
+                        )
+                        db.add(payment)
 
-                            client_phone = booking.client.phone if booking.client and booking.client.phone else "+61411111111"
-                            client_name = booking.client.name if booking.client and booking.client.name else "Customer"
-                            sms_payload = {
-                                "to": client_phone,
-                                "body": f"Hi {client_name}, your deposit payment for booking #{booking.id} failed. The booking has been cancelled."
-                            }
-                            create_outbox_event(db, "SEND_SMS", sms_payload, tenant_id=booking.tenant_id)
+                        client_phone = booking.client.phone if booking.client and booking.client.phone else "+61411111111"
+                        client_name = booking.client.name if booking.client and booking.client.name else "Customer"
+                        sms_payload = {
+                            "to": client_phone,
+                            "body": f"Hi {client_name}, your deposit payment for booking #{booking.id} failed. The booking has been cancelled."
+                        }
+                        create_outbox_event(db, "SEND_SMS", sms_payload, tenant_id=booking.tenant_id)
 
-                            booking_payload = {
-                                "id": booking.id,
-                                "client_id": booking.client_id,
-                                "status": booking.status
-                            }
-                            create_outbox_event(db, "booking.cancelled", booking_payload, tenant_id=booking.tenant_id)
+                        booking_payload = {
+                            "id": booking.id,
+                            "client_id": booking.client_id,
+                            "status": booking.status
+                        }
+                        create_outbox_event(db, "booking.cancelled", booking_payload, tenant_id=booking.tenant_id)
 
-                            payment_payload = {
-                                "booking_id": booking.id,
-                                "status": "failed",
-                                "stripe_event_id": event_id
-                            }
-                            create_outbox_event(db, "payment.failed", payment_payload, tenant_id=booking.tenant_id)
+                        payment_payload = {
+                            "booking_id": booking.id,
+                            "status": "failed",
+                            "stripe_event_id": event_id
+                        }
+                        create_outbox_event(db, "payment.failed", payment_payload, tenant_id=booking.tenant_id)
 
-                            event_record = ProcessedStripeEvent(
-                                tenant_id=booking.tenant_id,
-                                event_id=event_id,
-                                event_type=event_type,
-                                booking_id=booking.id,
-                                status="processed",
-                                payload=json.dumps(event)
-                            )
-                            db.add(event_record)
-                            db.commit()
-                            return {"ok": True, "message": f"Booking {booking.id} cancelled due to payment failure"}
+                        event_record = ProcessedStripeEvent(
+                            tenant_id=booking.tenant_id,
+                            event_id=event_id,
+                            event_type=event_type,
+                            booking_id=booking.id,
+                            status="processed",
+                            payload=json.dumps(event)
+                        )
+                        db.add(event_record)
+                        db.commit()
+                        return {"ok": True, "message": f"Booking {booking.id} cancelled due to payment failure"}
 
                 event_record = ProcessedStripeEvent(
-                    tenant_id=int(event_tenant_id) if event_tenant_id and str(event_tenant_id).isdigit() else None,
+                    tenant_id=tenant_id,
                     event_id=event_id,
                     event_type=event_type,
                     status="ignored",

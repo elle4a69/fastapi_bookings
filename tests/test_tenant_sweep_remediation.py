@@ -613,3 +613,16 @@ def test_device_registration_tenant_binding(client: TestClient, db_session: Sess
     assert token_auth is not None
     assert token_auth.tenant_id == t_a.id
     assert token_auth.user_id == u_a.id
+
+    # 6. Device registration without tenant header returns 400 Bad Request (fails closed)
+    resp_no_tenant = client.post("/api/v1/devices/register", json=payload_a)
+    assert resp_no_tenant.status_code == 400
+
+    # 7. Device registration with unknown tenant returns 404 Not Found
+    resp_unknown_tenant = client.post(
+        "/api/v1/devices/register",
+        json=payload_a,
+        headers={"X-Tenant": "unknown-nonexistent-tenant"}
+    )
+    assert resp_unknown_tenant.status_code == 404
+

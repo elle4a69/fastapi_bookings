@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..deps import get_db
+from ..deps import get_db, get_public_tenant
 from ...core.config import settings
+from ...models.tenant import Tenant
 from ...services.payment_service import payment_service
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ def create_deposit_session(
     success_url: str,
     cancel_url: str,
     amount_cents: Optional[int] = None,
-    tenant_id: Optional[int] = None,
+    tenant: Tenant = Depends(get_public_tenant),
     db: Session = Depends(get_db)
 ) -> dict:
     """Create a Stripe Checkout Session for a booking deposit with server-authoritative pricing."""
@@ -36,7 +37,7 @@ def create_deposit_session(
         booking_id=booking_id,
         success_url=success_url,
         cancel_url=cancel_url,
-        tenant_id=tenant_id,
+        tenant_id=tenant.id,
         client_amount_cents=amount_cents,
     )
     return {"ok": True, "data": result}
