@@ -2,43 +2,18 @@ version: "3.9"
 
 services:
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fastapi_bookings_web
-    restart: unless-stopped
+    build: .
+    container_name: fastapi_bookings
     ports:
       - "8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     environment:
-      - APP_ENV=${APP_ENV:-production}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-fastapi_bookings}}
-      - SECRET_KEY=${SECRET_KEY}
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - FRONTEND_ORIGINS=${FRONTEND_ORIGINS:-http://localhost:3000,http://localhost:5173}
-      - ENABLE_BACKGROUND_WORKERS=false
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-
-  outbox-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fastapi_bookings_outbox_worker
-    restart: unless-stopped
-    command: ["sh", "-c", "alembic upgrade head && exec python -c 'import asyncio; from app.services.outbox_worker import start_outbox_worker; asyncio.run(start_outbox_worker())'"]
-    environment:
-      - APP_ENV=${APP_ENV:-production}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-fastapi_bookings}}
-      - SECRET_KEY=${SECRET_KEY}
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - APP_ENV=production
+      - FRONTEND_ORIGINS=http://localhost:3000,http://localhost:5173
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fastapi_bookings
+      - SECRET_KEY=production-secret-key-must-be-configured
+      - PUBLIC_API_KEY=production-public-key-must-be-configured
+    volumes:
+      - ./app:/app/app
     depends_on:
       db:
         condition: service_healthy
@@ -46,17 +21,16 @@ services:
   db:
     image: postgres:16-alpine
     container_name: fastapi_bookings_db
-    restart: unless-stopped
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-fastapi_bookings}
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fastapi_bookings
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-fastapi_bookings}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fastapi_bookings"]
       interval: 5s
       timeout: 5s
       retries: 5

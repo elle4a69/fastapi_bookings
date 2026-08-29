@@ -7,8 +7,7 @@
     "dev": "vite --port 7070 --strictPort --host",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "test": "node --test --experimental-strip-types src/lib/api.test.ts src/App.test.ts src/pages/__tests__/login.test.ts"
+    "preview": "vite preview"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

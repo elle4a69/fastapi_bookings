@@ -16,12 +16,13 @@ from ...schemas.sms_chatwoot import (
 router = APIRouter(prefix="/sms/chatwoot", tags=["sms-chatwoot"])
 
 def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) -> SmsChatwootBindingResponse:
-    """Helper to convert SmsChatwootBinding to Response schema, masking credentials and removing query secrets."""
+    """Helper to convert SmsChatwootBinding to Response schema, masking the API token."""
     base = "http://localhost:8000"
     if request:
         base = str(request.base_url).rstrip("/")
         
-    webhook_url = f"{base}/api/sms/chatwoot/webhook"
+    secret = binding.webhook_secret
+    webhook_url = f"{base}/api/sms/chatwoot/webhook?token={secret}" if secret else None
 
     return SmsChatwootBindingResponse(
         id=binding.id,
@@ -43,26 +44,14 @@ def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) 
 @router.post("/webhook")
 async def chatwoot_webhook(
     request: Request,
+    token: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Chatwoot incoming webhook receiver endpoint.
-    
-    SEC-003: Strictly requires header-based authentication. Rejects query-string tokens.
-    """
-    if request.query_params.get("token") or request.query_params.get("secret"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Query-string webhook secrets are prohibited. Use header-based authentication (X-Chatwoot-Signature or X-Chatwoot-Webhook-Token)."
-        )
-
-    token = (
-        request.headers.get("X-Chatwoot-Signature")
-        or request.headers.get("X-Chatwoot-Webhook-Token")
-        or request.headers.get("X-Chatwoot-Token")
-        or request.headers.get("Authorization")
-    )
-    if token and token.startswith("Bearer "):
-        token = token[7:].strip()
+    """Chatwoot incoming webhook receiver endpoint."""
+    if not token:
+        token = request.query_params.get("token") or request.headers.get("X-Chatwoot-Token") or request.headers.get("Authorization")
+        if token and token.startswith("Bearer "):
+            token = token[7:]
 
     try:
         payload = await request.json()

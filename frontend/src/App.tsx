@@ -1,13 +1,10 @@
 import { Suspense, lazy } from "react"
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom"
-import { LogOutIcon } from "lucide-react"
 
 import { navigation } from "@/components/navigation"
 import { AdminLayout } from "@/layouts/admin-layout"
-import { getAdminToken, logoutAdmin } from "@/lib/api"
 
 // Lazy loaded page components
-const LoginPage = lazy(() => import("@/pages/login"))
 const CategoriesPage = lazy(() => import("@/pages/admin/catalog/categories"))
 const LocationsPage = lazy(() => import("@/pages/admin/catalog/locations"))
 const ServicesPage = lazy(() => import("@/pages/admin/catalog/services"))
@@ -84,52 +81,17 @@ function RoutePlaceholder({ title }: { title: string }) {
   )
 }
 
-function ErrorPage({ code, title, message }: { code: string; title: string; message?: string }) {
+function ErrorPage({ code, title }: { code: string; title: string }) {
   return (
     <main className="grid min-h-svh place-items-center p-6">
       <section className="flex max-w-md flex-col gap-3 text-center">
         <p className="text-sm font-semibold text-primary">{code}</p>
         <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-        {message && <p className="text-sm text-muted-foreground">{message}</p>}
         <a className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="/admin">
           Return to the admin workspace
         </a>
       </section>
     </main>
-  )
-}
-
-function AdminAuthGuard({ children }: { children: React.ReactNode }) {
-  const token = typeof window !== "undefined" ? getAdminToken() : null
-  const location = useLocation()
-
-  if (!token) {
-    return <Navigate to="/login" state={{ from: location }} replace />
-  }
-  return <>{children}</>
-}
-
-function AdminWorkspaceLayout() {
-  const handleLogout = () => {
-    logoutAdmin()
-  }
-
-  return (
-    <div className="relative min-h-screen">
-      <AdminLayout />
-      <div className="fixed top-3.5 right-16 sm:right-20 z-40 flex items-center">
-        <button
-          onClick={handleLogout}
-          type="button"
-          aria-label="Log out of Admin Workspace"
-          title="Sign out of Admin Workspace"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/90 px-2.5 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
-        >
-          <LogOutIcon className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Log out</span>
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -149,9 +111,7 @@ function App() {
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/admin/login" element={<Navigate to="/login" replace />} />
-          <Route element={<AdminAuthGuard><AdminWorkspaceLayout /></AdminAuthGuard>}>
+          <Route element={<AdminLayout />}>
             {adminRoutes.map((route) => (
               <Route 
                 key={route.path} 
@@ -206,7 +166,6 @@ function App() {
           <Route path="/booking" element={<PublicBookingPage />} />
           <Route path="/public/upload" element={<PublicUploadPage />} />
           <Route path="/book/upload" element={<PublicUploadPage />} />
-          <Route path="/401" element={<ErrorPage code="401" title="Authentication Required" message="Please log in with valid administrative credentials to access the admin workspace." />} />
           <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
           <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
           <Route path="/" element={<Navigate to="/admin" replace />} />

@@ -19,7 +19,6 @@ class CalendarNote(Base):
     __tablename__ = "calendar_notes"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"), nullable=True, index=True)
     date = Column(Date, nullable=False, index=True)
     start_time = Column(String, nullable=True)   # HH:MM
@@ -29,8 +28,7 @@ class CalendarNote(Base):
     is_time_blocked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    tenant = relationship("Tenant")
     provider = relationship("Provider")
 
     def __repr__(self) -> str:
-        return f"<CalendarNote id={self.id} tenant_id={self.tenant_id} date={self.date}>"
+        return f"<CalendarNote id={self.id} date={self.date}>"

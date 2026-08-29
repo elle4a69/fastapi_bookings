@@ -5,13 +5,12 @@ includes all route modules and initializes the database. It also
 exposes simple health and readiness endpoints.
 """
 
-import inspect
 import json
 import logging
 import os
 import traceback
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -116,6 +115,7 @@ from .api.routers import (
     business_profile,
     location_relations,
     system,
+    notifications,
     booking_forms,
     relationship_management,
     discovery,
@@ -125,7 +125,6 @@ from .api.routers import (
     sms_settings,
     sms_arrivals,
     sms_chatwoot,
-    assistant_facade,
 )
 
 
@@ -141,67 +140,24 @@ from .services.outbox_worker import start_outbox_worker, stop_outbox_worker
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     # Startup
-    worker_task = None
-    enable_workers = getattr(settings, "ENABLE_BACKGROUND_WORKERS", None)
-    if enable_workers is None:
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            enable_workers = os.getenv("ENABLE_BACKGROUND_WORKERS", "false").lower() in ("true", "1", "yes")
-        else:
-            enable_workers = os.getenv("ENABLE_BACKGROUND_WORKERS", "true").lower() in ("true", "1", "yes")
-    if enable_workers:
-        worker_task = asyncio.create_task(start_outbox_worker())
+    worker_task = asyncio.create_task(start_outbox_worker())
     yield
     # Shutdown
-    if worker_task is not None:
-        await stop_outbox_worker(worker_task)
+    await stop_outbox_worker(worker_task)
     from .core.telemetry import shutdown_telemetry
     shutdown_telemetry()
 
 
 
-def get_client_ip(request: Request) -> str:
-    """Retrieve client IP address supporting X-Forwarded-For when behind a reverse proxy.
-
-    Extracts the leftmost (client) IP from X-Forwarded-For if present,
-    falling back to slowapi's get_remote_address.
-    """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-        if client_ip:
-            return client_ip
-    return get_remote_address(request)
-
-
-limiter = Limiter(key_func=get_client_ip, default_limits=["10/minute"])
+limiter = Limiter(key_func=get_remote_address, default_limits=["10/minute"])
 
 
 class PublicRouteRateLimitMiddleware(SlowAPIMiddleware):
-    """Enforce rate limiting on public endpoints and administrative auth endpoints to prevent brute-force attacks."""
-
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request, call_next):
         path = request.url.path
-        is_auth_route = (
-            path.startswith("/api/admin/auth")
-            or path.startswith("/admin/auth")
-            or path.startswith("/api/public/auth")
-            or path.endswith("/auth")
-        )
-        if is_auth_route:
-            limiter = getattr(request.app.state, "limiter", None)
-            if limiter and limiter.enabled:
-                try:
-                    limiter._check_request_limit(request, None, True)
-                except RateLimitExceeded as e:
-                    handler = request.app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
-                    if inspect.iscoroutinefunction(handler):
-                        return await handler(request, e)
-                    return handler(request, e)
-
         is_public = path.startswith("/api/public") or "/public/" in path
-        if not is_public and not is_auth_route:
+        if not is_public:
             return await call_next(request)
-
         return await super().dispatch(request, call_next)
 
 
@@ -312,11 +268,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
-    if isinstance(exc, HTTPException):
-        from fastapi.exception_handlers import http_exception_handler
-        return await http_exception_handler(request, exc)
-
-    logging.exception(f"Unhandled exception occurred: {type(exc).__name__}")
+    logging.exception(f"Unhandled exception occurred: {str(exc)}")
     current_span = trace.get_current_span()
     trace_id = ""
     if current_span and current_span.get_span_context().is_valid:
@@ -398,6 +350,7 @@ app.include_router(management_reviews.router)
 app.include_router(business_profile.router)
 app.include_router(location_relations.router)
 app.include_router(system.router)
+app.include_router(notifications.router)
 app.include_router(booking_forms.admin_router)
 app.include_router(booking_forms.public_router)
 app.include_router(relationship_management.router)
@@ -412,9 +365,6 @@ app.include_router(sms_chatwoot.router, prefix="/api/admin")
 app.include_router(sms_chatwoot.router, prefix="/api")
 app.include_router(sms_webhooks.router, prefix="/api")
 
-# Assistant UI Integration router
-app.include_router(assistant_facade.router)
-
 
 @app.get("/health", tags=["system"])
 @app.get("/healthcheck", tags=["system"], include_in_schema=False)
@@ -423,81 +373,17 @@ def health() -> dict:
     return {"ok": True}
 
 
-def get_expected_alembic_heads() -> set[str]:
-    """Retrieve expected alembic revision head(s) from local migration scripts."""
-    try:
-        from alembic.config import Config
-        from alembic.script import ScriptDirectory
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        ini_path = os.path.join(base_dir, "alembic.ini")
-        if os.path.exists(ini_path):
-            cfg = Config(ini_path)
-            script_loc = cfg.get_main_option("script_location", "alembic")
-            if not os.path.isabs(script_loc):
-                cfg.set_main_option("script_location", os.path.join(base_dir, script_loc))
-            script = ScriptDirectory.from_config(cfg)
-            heads = set(script.get_heads())
-            if heads:
-                return heads
-    except Exception as e:
-        logging.warning(f"Could not load Alembic ScriptDirectory: {e}")
-    return {"b1c2d3e4f5a6"}
-
-
 @app.get("/ready", tags=["system"])
 def readiness(db=Depends(get_db)) -> dict:
-    """Readiness check endpoint that verifies database connectivity and schema readiness (OPS-004)."""
-    from sqlalchemy import inspect, text
+    """Readiness check endpoint that verifies database connectivity."""
+    from sqlalchemy.sql import text
     try:
         db.execute(text("SELECT 1"))
-        bind = db.get_bind()
-        inspector = inspect(bind)
-        existing_tables = set(inspector.get_table_names())
-
-        required_tables = {"tenants", "users", "bookings", "services", "providers", "alembic_version"}
-
-        # Determine database URL for in-memory SQLite detection
-        engine_obj = getattr(bind, "engine", bind)
-        url_str = str(getattr(engine_obj, "url", ""))
-
-        # For in-memory test databases without alembic metadata, check core entity tables
-        if ":memory:" in url_str and "alembic_version" not in existing_tables:
-            required_tables = {"tenants", "users", "bookings", "services", "providers"}
-
-        missing_tables = required_tables - existing_tables
-        if missing_tables:
-            logging.error(f"Readiness check failed: missing required tables {missing_tables}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database schema incomplete or unmigrated.",
-            )
-
-        # Deep revision verification if alembic_version table exists (OPS-004)
-        if "alembic_version" in existing_tables:
-            result = db.execute(text("SELECT version_num FROM alembic_version"))
-            applied_revisions = {row[0] for row in result.fetchall() if row and row[0]}
-            if not applied_revisions:
-                logging.error("Readiness check failed: alembic_version table is empty.")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Database schema incomplete or unmigrated.",
-                )
-            expected_heads = get_expected_alembic_heads()
-            if not (applied_revisions & expected_heads):
-                logging.error(
-                    f"Readiness check failed: DB revision {applied_revisions} does not match head {expected_heads}"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Database schema version mismatch.",
-                )
-    except HTTPException:
-        raise
     except Exception as e:
-        logging.error(f"Readiness check failed: {type(e).__name__}")
+        logging.error(f"Readiness check failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database connectivity failed.",
+            detail="Database connectivity failed."
         )
     return {"ok": True}
 

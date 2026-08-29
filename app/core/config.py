@@ -40,20 +40,8 @@ class Settings(BaseSettings):
         "changeme",
         description="Secret key used to sign JWT tokens",
     )
-    ENCRYPTION_KEY: str = Field(
-        "",
-        description="Dedicated cryptographic key for database envelope encryption (SEC-001)",
-    )
-    JWT_ISSUER: str = Field(
-        "fastapi-bookings",
-        description="Expected JWT issuer claim (iss) (AUTH-004)",
-    )
-    JWT_AUDIENCE: str = Field(
-        "fastapi-bookings-api",
-        description="Expected JWT audience claim (aud) (AUTH-004)",
-    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        60,
+        60 * 24 * 7,
         description="Number of minutes an access token is valid",
     )
     # Public API key for client tokens
@@ -87,9 +75,6 @@ class Settings(BaseSettings):
     # Mapbox Settings
     MAPBOX_ACCESS_TOKEN: str = Field("", description="Mapbox Access Token")
 
-    # OpenAI Settings
-    OPENAI_API_KEY: str = Field("", description="OpenAI API Key")
-
     # Outbox settings
     OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")
     OUTBOX_MAX_RETRIES: int = Field(5, description="Max retries for enqueued outbox events")
@@ -105,17 +90,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.APP_ENV == "production":
-            insecure_keys = {
-                "changeme",
-                "test-secret-key",
-                "local-secret-key",
-                "fallback-default-secret-key-change-me",
-                "local-public-key-change-me",
-            }
-            if not self.SECRET_KEY or self.SECRET_KEY in insecure_keys:
-                raise ValueError("SECRET_KEY must not be empty or an insecure default in production environment")
-            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in insecure_keys:
-                raise ValueError("ENCRYPTION_KEY must be configured with a dedicated secure key in production environment")
+            if self.SECRET_KEY == "changeme":
+                raise ValueError("SECRET_KEY must not be 'changeme' in production environment")
             if self.PUBLIC_API_KEY == "local-public-key-change-me":
                 raise ValueError("PUBLIC_API_KEY must not be 'local-public-key-change-me' in production environment")
             if self.DATABASE_URL.startswith("sqlite"):

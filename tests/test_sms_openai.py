@@ -168,8 +168,7 @@ def test_openai_integration_success(db_session, setup_openai_test_data):
     mock_resp.raise_for_status = MagicMock()
 
     # Mock AsyncClient
-    with patch("httpx.AsyncClient") as mock_client_class, \
-         patch("app.core.config.settings.OPENAI_API_KEY", "sk-test-mock-key"):
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client_class.return_value = mock_client
@@ -233,7 +232,7 @@ def test_openai_fallback_missing_key(db_session, setup_openai_test_data):
     account.credentials = {}
     db_session.commit()
 
-    with patch("app.core.config.settings.OPENAI_API_KEY", None), patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {}, clear=True):
         # Create current turn inbound message
         msg_current = SmsMessage(
             tenant_id=conv.tenant_id,
@@ -291,8 +290,7 @@ def test_openai_fallback_http_error(db_session, setup_openai_test_data):
     db_session.commit()
 
     # Mock HTTP Error
-    with patch("httpx.AsyncClient") as mock_client_class, \
-         patch("app.core.config.settings.OPENAI_API_KEY", "sk-test-mock-key"):
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client_class.return_value = mock_client
@@ -338,8 +336,7 @@ def test_openai_fallback_timeout(db_session, setup_openai_test_data):
     db_session.commit()
 
     # Mock Timeout Exception
-    with patch("httpx.AsyncClient") as mock_client_class, \
-         patch("app.core.config.settings.OPENAI_API_KEY", "sk-test-mock-key"):
+    with patch("httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client_class.return_value = mock_client
