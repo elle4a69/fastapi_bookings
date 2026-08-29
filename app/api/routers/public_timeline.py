@@ -8,11 +8,12 @@ scheduling service's availability output.
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, DatabaseId
+from ..deps import get_db, DatabaseId, get_public_tenant
+from ...models.tenant import Tenant
 from ...models import (
     Provider as ProviderModel,
     ProviderSpecialDay,
@@ -26,20 +27,33 @@ router = APIRouter(prefix="/api/public/timeline", tags=["public-timeline"])
 
 
 @router.get("/schedule/{provider_id}")
-def get_provider_schedule(provider_id: DatabaseId, db: Session = Depends(get_db)) -> dict:
+def get_provider_schedule(
+    provider_id: DatabaseId,
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
+) -> dict:
     """Return a provider's weekly workdays and special-day overrides."""
-    provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+    provider = db.query(ProviderModel).filter(
+        ProviderModel.id == provider_id,
+        ProviderModel.tenant_id == tenant.id,
+    ).first()
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     workdays = (
         db.query(ProviderWorkDay)
-        .filter(or_(ProviderWorkDay.provider_id == provider_id, ProviderWorkDay.provider_id.is_(None)))
+        .filter(
+            ProviderWorkDay.tenant_id == tenant.id,
+            or_(ProviderWorkDay.provider_id == provider_id, ProviderWorkDay.provider_id.is_(None)),
+        )
         .order_by(ProviderWorkDay.weekday.asc(), ProviderWorkDay.provider_id.desc())
         .all()
     )
     special_days = (
         db.query(ProviderSpecialDay)
-        .filter(or_(ProviderSpecialDay.provider_id == provider_id, ProviderSpecialDay.provider_id.is_(None)))
+        .filter(
+            ProviderSpecialDay.tenant_id == tenant.id,
+            or_(ProviderSpecialDay.provider_id == provider_id, ProviderSpecialDay.provider_id.is_(None)),
+        )
         .order_by(ProviderSpecialDay.date.asc(), ProviderSpecialDay.provider_id.desc())
         .all()
     )
@@ -55,19 +69,26 @@ def get_provider_schedule(provider_id: DatabaseId, db: Session = Depends(get_db)
 
 @router.get("/slots")
 def get_available_slots(
-    service_id: DatabaseId,
-    provider_id: Optional[int] = None,
-    date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
+    service_id: int = Query(..., ge=1, description="Service identifier"),
+    provider_id: Optional[int] = Query(None, description="Optional provider identifier"),
+    date_from: Optional[date] = Query(None, description="Start date"),
+    date_to: Optional[date] = Query(None, description="End date"),
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Return available slots for a service over an optional date range."""
-    service = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+    service = db.query(ServiceModel).filter(
+        ServiceModel.id == service_id,
+        ServiceModel.tenant_id == tenant.id,
+    ).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if provider_id:
-        provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+        provider = db.query(ProviderModel).filter(
+            ProviderModel.id == provider_id,
+            ProviderModel.tenant_id == tenant.id,
+        ).first()
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
     start = datetime.combine(date_from, datetime.min.time()) if date_from else datetime.utcnow()
@@ -84,17 +105,26 @@ def get_available_slots(
 
 @router.get("/first-available-day")
 def get_first_available_day(
-    service_id: DatabaseId,
-    provider_id: Optional[int] = None,
+    service_id: int = Query(..., ge=1, description="Service identifier"),
+    provider_id: Optional[int] = Query(None, description="Optional provider identifier"),
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Return the first date that has at least one available slot."""
-    service = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+    service = db.query(ServiceModel).filter(
+        ServiceModel.id == service_id,
+        ServiceModel.tenant_id == tenant.id,
+    ).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if provider_id:
-        provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+        provider = db.query(ProviderModel).filter(
+            ProviderModel.id == provider_id,
+            ProviderModel.tenant_id == tenant.id,
+        ).first()
+        if not provider:
+            raise HTTPException(status_code=404, detail="Provider not found")
     now = datetime.utcnow()
     for day_offset in range(60):
         day_start = now + timedelta(days=day_offset)

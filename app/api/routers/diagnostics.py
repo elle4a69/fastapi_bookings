@@ -58,16 +58,17 @@ def get_system_diagnostics(
     current_admin = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Return minimal system entity counts and module flags."""
+    """Return minimal system entity counts and module flags for active tenant."""
+    tenant_id = current_admin.tenant_id
     diagnostics: Dict[str, Any] = {
         "counts": {
-            "services": db.query(Service).count(),
-            "providers": db.query(Provider).count(),
-            "clients": db.query(Client).count(),
-            "bookings": db.query(Booking).count(),
-            "resources": db.query(Resource).count(),
-            "waitlist_entries": db.query(WaitlistEntry).count(),
-            "outbox_events": db.query(OutboxEvent).filter(OutboxEvent.processed == False).count(),
+            "services": db.query(Service).filter(Service.tenant_id == tenant_id).count(),
+            "providers": db.query(Provider).filter(Provider.tenant_id == tenant_id).count(),
+            "clients": db.query(Client).filter(Client.tenant_id == tenant_id).count(),
+            "bookings": db.query(Booking).filter(Booking.tenant_id == tenant_id).count(),
+            "resources": db.query(Resource).filter(Resource.tenant_id == tenant_id).count(),
+            "waitlist_entries": db.query(WaitlistEntry).filter(WaitlistEntry.tenant_id == tenant_id).count(),
+            "outbox_events": db.query(OutboxEvent).filter(OutboxEvent.tenant_id == tenant_id, OutboxEvent.processed == False).count(),
         },
         "modules": {
             "locations": True,

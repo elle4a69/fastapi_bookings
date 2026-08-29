@@ -143,3 +143,48 @@ async def get_public_tenant(
         pass
 
     return tenant
+
+
+async def get_current_assistant_channel(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> "AssistantChannelBinding":
+    """Authenticate an incoming server-to-server request from Assistant UI.
+    
+    Extracts the secret key from X-Assistant-Key or Authorization: Bearer <token>.
+    Resolves the bound tenant and provider from AssistantChannelBinding. Fails closed.
+    """
+    from ..models.assistant_binding import AssistantChannelBinding
+
+    raw_token = request.headers.get("X-Assistant-Key")
+    if not raw_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            raw_token = auth_header[7:].strip()
+
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing integration secret key header (X-Assistant-Key or Authorization: Bearer).",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token_hash = AssistantChannelBinding.hash_key(raw_token)
+    binding = db.query(AssistantChannelBinding).filter(
+        AssistantChannelBinding.api_key_hash == token_hash
+    ).first()
+
+    if not binding:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid integration secret key.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not binding.is_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Integration channel binding is disabled.",
+        )
+
+    return binding

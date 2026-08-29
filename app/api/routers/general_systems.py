@@ -8,9 +8,10 @@ with an IP address for compliance auditing.
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, DatabaseId
+from ..deps import get_current_admin, get_db, DatabaseId, get_public_tenant
 from ...models.general_systems import GdprConsent, PluginState
 from ...models.client import Client
+from ...models.tenant import Tenant
 from ...schemas.general_systems import (
     GdprConsentCreate,
     GdprConsentListResponse,
@@ -86,16 +87,21 @@ def record_gdpr_consent(
     consent_in: GdprConsentCreate,
     request: Request,
     db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Record a client's GDPR or privacy consent decision.
 
     The IP address is taken from the incoming request if not supplied.
     """
-    client = db.query(Client).filter(Client.id == consent_in.client_id).first()
+    client = db.query(Client).filter(
+        Client.id == consent_in.client_id,
+        Client.tenant_id == tenant.id,
+    ).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     ip = consent_in.ip_address or (request.client.host if request.client else "unknown")
     consent = GdprConsent(
+        tenant_id=tenant.id,
         client_id=consent_in.client_id,
         consent_type=consent_in.consent_type,
         is_approved=consent_in.is_approved,
@@ -109,8 +115,13 @@ def record_gdpr_consent(
 
 @router.get("/api/admin/gdpr-consents", response_model=GdprConsentListResponse)
 def list_gdpr_consents(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
-    """Return all GDPR consent log entries (admin only)."""
-    consents = db.query(GdprConsent).order_by(GdprConsent.created_at.desc()).all()
+    """Return all GDPR consent log entries for the active tenant (admin only)."""
+    consents = (
+        db.query(GdprConsent)
+        .filter(GdprConsent.tenant_id == current_user.tenant_id)
+        .order_by(GdprConsent.created_at.desc())
+        .all()
+    )
     return {"ok": True, "data": consents}
 
 
@@ -120,10 +131,19 @@ def list_gdpr_consents_for_client(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
 ) -> dict:
-    """Return all GDPR consent entries for a specific client."""
+    """Return all GDPR consent entries for a specific client within the active tenant."""
+    client = db.query(Client).filter(
+        Client.id == client_id,
+        Client.tenant_id == current_user.tenant_id,
+    ).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
     consents = (
         db.query(GdprConsent)
-        .filter(GdprConsent.client_id == client_id)
+        .filter(
+            GdprConsent.client_id == client_id,
+            GdprConsent.tenant_id == current_user.tenant_id,
+        )
         .order_by(GdprConsent.created_at.desc())
         .all()
     )
