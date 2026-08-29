@@ -76,7 +76,7 @@ export function InvoicesPage() {
         client_name: inv.client_name || (inv.client?.name ? inv.client.name : `Client #${inv.client_id || '—'}`),
         issue_date: inv.issue_date || (inv.created_at ? inv.created_at.split('T')[0] : '—'),
         due_date: inv.due_date || (inv.created_at ? inv.created_at.split('T')[0] : '—'),
-        amount: Number(inv.total ?? inv.amount ?? 0),
+        total: Number(inv.total ?? inv.amount ?? 0),
         balance: Number((inv.total ?? inv.amount ?? 0) - (inv.amount_paid ?? 0)),
         status: inv.status ? (inv.status.charAt(0).toUpperCase() + inv.status.slice(1).toLowerCase()) as any : 'Draft',
         line_items: Array.isArray(inv.lines) ? inv.lines.map((l: any) => ({

@@ -40,6 +40,7 @@ interface Provider {
   color?: string;
   avatar?: string;
   image?: string;
+  thumbnail?: string;
   deep_link?: string;
   ignore_company_hours: boolean;
   weekly_schedule?: any;
@@ -78,6 +79,71 @@ const getProviderAlbumShortUrl = (providerId: string | number): string => {
   return `http://localhost:8002/api/v1/alb-prov-${providerId}`;
 };
 
+const AVATAR_MAX_DIMENSION = 256;
+const AVATAR_MAX_BYTES = 100 * 1024;
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error('Unable to create image thumbnail'));
+      }
+    }, 'image/webp', quality);
+  });
+}
+
+async function createAvatarThumbnail(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please select an image file');
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Unable to read image file'));
+      element.src = objectUrl;
+    });
+
+    let width = image.naturalWidth;
+    let height = image.naturalHeight;
+    const largestDimension = Math.max(width, height);
+    if (largestDimension > AVATAR_MAX_DIMENSION) {
+      const scale = AVATAR_MAX_DIMENSION / largestDimension;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Image thumbnailing is not available in this browser');
+    }
+
+    let quality = 0.82;
+    let blob: Blob;
+    do {
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(image, 0, 0, width, height);
+      blob = await canvasToBlob(canvas, quality);
+      quality -= 0.12;
+    } while (blob.size > AVATAR_MAX_BYTES && quality >= 0.46);
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Unable to save image thumbnail'));
+      reader.readAsDataURL(blob);
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const navigate = useNavigate();
@@ -113,8 +179,13 @@ export default function ProvidersPage() {
         color: updatedData.color || null,
         description: updatedData.description || null,
         ignore_company_hours: updatedData.ignore_company_hours ?? false,
-        image: updatedData.image || null,
       };
+
+      // Collection responses deliberately omit large base64 images.  Do not
+      // erase an existing image when saving an unrelated provider field.
+      if (Object.prototype.hasOwnProperty.call(updatedData, 'image')) {
+        payload.image = updatedData.image || null;
+      }
 
       try {
         const res = await apiClient.put<any>(`/api/admin/providers/${targetId}`, payload);
@@ -179,6 +250,7 @@ export default function ProvidersPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const rightScrollRef = useRef<HTMLDivElement>(null);
+  const createdFromServiceRef = useRef(false);
 
   const handleAccordionChange = (openValues: string[]) => {
     const lastVal = openValues[openValues.length - 1];
@@ -197,21 +269,22 @@ export default function ProvidersPage() {
   const [servicesSaveStatus, setServicesSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        if (selectedProvider) {
-          // Update both fields and immediately persist via auto-save
-          const next = { ...selectedProvider, image: dataUrl, avatar: dataUrl };
-          setSelectedProvider(next);
-          triggerSave(next, true);
-        }
-        toast.success('Provider image uploaded');
-      };
-      reader.readAsDataURL(file);
+    if (!file || !selectedProvider) {
+      return;
+    }
+
+    try {
+      const dataUrl = await createAvatarThumbnail(file);
+      const next = { ...selectedProvider, image: dataUrl, avatar: dataUrl };
+      setSelectedProvider(next);
+      triggerSave(next, true);
+      toast.success('Provider image uploaded as an optimized thumbnail');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to optimize image');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -343,12 +416,18 @@ export default function ProvidersPage() {
   }, [locations]);
 
   useEffect(() => {
-    fetchProviders();
-    fetchServicesAndLocations();
-    if (location.state?.returnToServiceId) {
-      handleCreate();
+    void fetchProviders();
+    void fetchServicesAndLocations();
+  }, [fetchProviders, fetchServicesAndLocations]);
+
+  useEffect(() => {
+    if (!location.state?.returnToServiceId || createdFromServiceRef.current) {
+      return;
     }
-  }, [location.state, fetchProviders, fetchServicesAndLocations, handleCreate]);
+
+    createdFromServiceRef.current = true;
+    void handleCreate();
+  }, [location.state?.returnToServiceId, handleCreate]);
 
   const handleCancel = () => {
     if (location.state?.returnToServiceId) {
@@ -900,7 +979,7 @@ console.warn('Failed to update special day slot', err);
                         >
                           <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                             <Avatar className="w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: provider.color || '#e2e8f0' }}>
-                              <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
+                              <AvatarImage src={provider.thumbnail || provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
                               <AvatarFallback className="text-white bg-transparent font-medium rounded-lg">
                                 {getInitials(provider.name)}
                               </AvatarFallback>
@@ -976,7 +1055,7 @@ console.warn('Failed to update special day slot', err);
                         >
                           <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
                             <Avatar className="w-10 h-10 rounded-lg shrink-0" style={{ backgroundColor: provider.color || '#e2e8f0' }}>
-                              <AvatarImage src={provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
+                              <AvatarImage src={provider.thumbnail || provider.avatar || provider.image} alt={provider.name} className="object-cover rounded-lg" />
                               <AvatarFallback className="text-white bg-transparent font-medium rounded-lg">
                                 {getInitials(provider.name)}
                               </AvatarFallback>

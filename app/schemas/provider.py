@@ -51,9 +51,34 @@ class Provider(ProviderInDBBase):
     service_ids: list[int] = []
 
 
+class ProviderListItem(BaseModel):
+    """Provider fields needed in collection views.
+
+    Full base64 profile images are intentionally excluded.  They can be several
+    megabytes each and are available from the individual-provider endpoint.
+    """
+
+    id: int
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    active: bool = True
+    is_visible: bool = True
+    capacity: int = 1
+    color: Optional[str] = None
+    description: Optional[str] = None
+    ignore_company_hours: bool = False
+    thumbnail: Optional[str] = None
+    weekly_schedule: Optional[dict] = None
+    created_at: datetime
+    service_ids: list[int] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProviderListResponse(BaseModel):
     ok: bool
-    data: list[Provider]
+    data: list[ProviderListItem]
     meta: dict
 
 

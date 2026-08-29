@@ -48,5 +48,12 @@ class Provider(Base):
     def service_ids(self) -> list[int]:
         return [s.service_id for s in self.services]
 
+    @property
+    def thumbnail(self) -> str | None:
+        """Return only images safe to include in provider collection views."""
+        if self.image and len(self.image) <= 150 * 1024:
+            return self.image
+        return None
+
     def __repr__(self) -> str:
         return f"<Provider id={self.id} name={self.name}>"
