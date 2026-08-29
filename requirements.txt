@@ -19,4 +19,4 @@ slowapi>=0.1.9
 stripe>=8.0
 firebase-admin>=6.2
 httpx>=0.25
-httpx2>=2.10
+cryptography>=42.0.0

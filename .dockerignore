@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Environment and secrets (allow only .env.example)
+.env*
+!.env.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Databases and storage
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sql
+postgres_data/
+storage/
+
+# Logs and runtime artifacts
+*.log
+logs/
+*.pid
+
+# Backups and temporary files
+*.bak
+*.backup
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Obsolete / Untracked Integrations
+integrations/assistant-ui-v2/
+
+# Frontend node_modules and build artifacts
+node_modules/
+*/node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Local docs / scratch / test outputs
+scratch/
+test-reports/
+coverage/
+.idea/
+.vscode/
