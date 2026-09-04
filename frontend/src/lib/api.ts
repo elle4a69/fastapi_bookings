@@ -1,9 +1,86 @@
 const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+const ADMIN_TOKEN_STORAGE_KEY = 'token';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 interface ApiClientOptions extends RequestInit {
   data?: any;
+}
+
+/**
+ * Resolve the tenant solely from the hostname serving this application.
+ * Only tenant.localhost and tenant.<base-domain> are tenant contexts.
+ */
+export function getActiveTenantFromHost(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const hostname = window.location.hostname.toLowerCase().replace(/\.$/, '');
+  const hostParts = hostname.split('.');
+  const tenant = hostParts[0];
+  const isTenantLocalhost = hostParts.length === 2 && hostParts[1] === 'localhost';
+  const isTenantDomain = hostParts.length >= 3;
+
+  if (
+    hostname.endsWith('.run.app') ||
+    (!isTenantLocalhost && !isTenantDomain) ||
+    !tenant ||
+    ['www', 'api', 'localhost', '127', '0'].includes(tenant) ||
+    hostname.includes(':') ||
+    /^(?:\d{1,3}\.){3}\d{1,3}$/.test(hostname) ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(tenant)
+  ) {
+    return null;
+  }
+
+  return tenant;
+}
+
+export function getAdminAccessToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const token = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)?.trim();
+  if (token === 'mock-admin-token') {
+    localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    return null;
+  }
+
+  return token || null;
+}
+
+export function setAdminAccessToken(token: string): void {
+  localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAdminAccessToken(): void {
+  localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+}
+
+export function safePostLoginReturnPath(pathname: unknown): string {
+  return typeof pathname === 'string' && /^\/admin(?:\/.*)?$/.test(pathname)
+    ? pathname
+    : '/admin';
+}
+
+type LoginNavigator = (path: string, options: { replace: true }) => void;
+
+export function endAdminSession(navigate: LoginNavigator): void {
+  clearAdminAccessToken();
+  navigate('/login', { replace: true });
+}
+
+function clearUnauthorizedAdminSession(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const { pathname } = window.location;
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    endAdminSession((target) => window.location.replace(target));
+  }
 }
 
 class ApiError extends Error {
@@ -21,23 +98,24 @@ class ApiError extends Error {
 async function request<T>(endpoint: string, method: HttpMethod, options: ApiClientOptions = {}): Promise<T> {
   const { data, headers: customHeaders, ...customOptions } = options;
 
-  const token = localStorage.getItem('token') || 'mock-admin-token';
+  const token = getAdminAccessToken();
+  const tenant = getActiveTenantFromHost();
 
-  // Determine active tenant subdomain (default to simplydemo)
-  let tenant = 'simplydemo';
-  if (typeof window !== 'undefined' && window.location) {
-    const hostParts = window.location.hostname.split('.');
-    if (hostParts.length > 1 && hostParts[hostParts.length - 1] === 'localhost') {
-      tenant = hostParts[0];
-    }
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+  });
+
+  new Headers(customHeaders).forEach((value, name) => {
+    headers.set(name, value);
+  });
+
+  if (token) {
+    headers.set('X-Token', token);
   }
 
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    'X-Token': token,
-    'X-Tenant': tenant,
-    ...customHeaders,
-  };
+  if (tenant) {
+    headers.set('X-Tenant', tenant);
+  }
 
   const config: RequestInit = {
     method,
@@ -52,7 +130,7 @@ async function request<T>(endpoint: string, method: HttpMethod, options: ApiClie
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
     const contentType = response.headers.get('content-type');
-    
+
     let responseData;
     if (contentType && contentType.includes('application/json')) {
       responseData = await response.json();
@@ -61,6 +139,10 @@ async function request<T>(endpoint: string, method: HttpMethod, options: ApiClie
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        clearUnauthorizedAdminSession();
+      }
+
       const errMsg = responseData?.error?.message || responseData?.detail || response.statusText || 'API Error';
       throw new ApiError(
         response.status,

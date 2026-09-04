@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 7070 --strictPort --host",
+    "test": "node --experimental-strip-types --test src/lib/api.test.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

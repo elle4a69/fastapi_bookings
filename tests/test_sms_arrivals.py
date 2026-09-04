@@ -12,6 +12,7 @@ from app.models.sms_arrival import SmsArrivalSession
 from app.models.sms_outbox import SmsConversationEvent
 from app.models.outbox import OutboxEvent
 from app.services.sms.arrival_service import create_arrival_session, process_repeated_arrival_alerts
+from app.core.security import create_access_token
 
 @pytest.fixture
 def setup_arrival_test_data(db_session):
@@ -102,7 +103,10 @@ def setup_arrival_test_data(db_session):
         "booking": booking,
         "conversation": conversation,
         "arrival_session": arrival_session,
-        "headers": {"X-Tenant": "arrival-test", "X-Token": "mock-admin-token"}
+        "headers": {
+            "X-Tenant": "arrival-test",
+            "X-Token": create_access_token({"sub": str(admin.id)}),
+        }
     }
 
 def test_client_arrival_triggers_initial_event(client, setup_arrival_test_data, db_session):

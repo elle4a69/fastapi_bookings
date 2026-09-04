@@ -12,6 +12,7 @@ from app.models.sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
 from app.models.user import User
 
 from app.services.sms.ai_orchestrator import run_ai_orchestration
+from app.core.security import create_access_token
 
 @pytest.fixture
 def setup_hierarchy_test_data(db_session):
@@ -179,7 +180,10 @@ def setup_hierarchy_test_data(db_session):
         "pk_a": pk_a,
         "pk_b": pk_b,
         "msg_prior_a": msg_prior_a,
-        "headers": {"X-Tenant": "hierarchy-test", "X-Token": "mock-admin-token"}
+        "headers": {
+            "X-Tenant": "hierarchy-test",
+            "X-Token": create_access_token({"sub": str(admin.id)}),
+        }
     }
 
 def test_exact_7_layer_ordering_and_isolation(db_session, setup_hierarchy_test_data):

@@ -20,6 +20,7 @@ from app.models import (
     WaitlistStatus,
 )
 from app.core.state_machine import BookingStatus
+from app.core.security import create_access_token
 
 
 @pytest.fixture
@@ -260,6 +261,7 @@ def test_cancellation_releases_slot_allocations(client, test_setup, db_session):
     tenant = test_setup["tenant"]
     service = test_setup["service"]
     provider = test_setup["provider"]
+    admin_token = create_access_token({"sub": str(test_setup["admin"].id)})
 
     start_dt = (datetime.now(timezone.utc) + timedelta(days=7)).replace(hour=11, minute=0, second=0, microsecond=0)
     end_dt = start_dt + timedelta(minutes=30)
@@ -289,7 +291,7 @@ def test_cancellation_releases_slot_allocations(client, test_setup, db_session):
     # 2. Cancel the booking via admin endpoint
     res_cancel = client.post(
         f"/api/bookings/{booking_id}/cancel",
-        headers={"X-Tenant": tenant.subdomain, "X-Token": "mock-admin-token"},
+        headers={"X-Tenant": tenant.subdomain, "X-Token": admin_token},
     )
     assert res_cancel.status_code == 200
 
@@ -320,6 +322,7 @@ def test_reschedule_atomically_updates_allocations(client, test_setup, db_sessio
     tenant = test_setup["tenant"]
     service = test_setup["service"]
     provider = test_setup["provider"]
+    admin_token = create_access_token({"sub": str(test_setup["admin"].id)})
 
     orig_start = (datetime.now(timezone.utc) + timedelta(days=8)).replace(hour=9, minute=0, second=0, microsecond=0)
     orig_end = orig_start + timedelta(minutes=30)
@@ -351,7 +354,7 @@ def test_reschedule_atomically_updates_allocations(client, test_setup, db_sessio
             "new_start": target_start.isoformat(),
             "new_end": target_end.isoformat(),
         },
-        headers={"X-Tenant": tenant.subdomain, "X-Token": "mock-admin-token"},
+        headers={"X-Tenant": tenant.subdomain, "X-Token": admin_token},
     )
     assert res_resched.status_code == 200
 

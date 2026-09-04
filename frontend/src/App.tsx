@@ -1,8 +1,9 @@
 import { Suspense, lazy } from "react"
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom"
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom"
 
 import { navigation } from "@/components/navigation"
 import { AdminLayout } from "@/layouts/admin-layout"
+import { getAdminAccessToken } from "@/lib/api"
 
 // Lazy loaded page components
 const CategoriesPage = lazy(() => import("@/pages/admin/catalog/categories"))
@@ -48,6 +49,7 @@ const AuditLogsPage = lazy(() => import("@/pages/admin/audit"))
 const SystemPage = lazy(() => import("@/pages/admin/system"))
 const PublicBookingPage = lazy(() => import("@/pages/public/booking-page"))
 const PublicUploadPage = lazy(() => import("@/pages/public/upload-page"))
+const LoginPage = lazy(() => import("@/pages/login"))
 
 const adminRoutes = navigation.flatMap((section) =>
   section.items.flatMap((item) => {
@@ -106,60 +108,73 @@ function PageLoader() {
   )
 }
 
+function RequireAdminSession() {
+  const location = useLocation()
+
+  if (!getAdminAccessToken()) {
+    return <Navigate to="/login" replace state={{ from: { pathname: location.pathname } }} />
+  }
+
+  return <Outlet />
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route element={<AdminLayout />}>
-            {adminRoutes.map((route) => (
-              <Route 
-                key={route.path} 
-                path={route.path} 
-                element={
-                  route.path === '/admin/catalog/categories' ? <CategoriesPage /> : 
-                  route.path === '/admin/catalog/locations' ? <LocationsPage /> :
-                  route.path === '/admin/catalog/services' ? <ServicesPage /> :
-                  route.path === '/admin/catalog/providers' ? <ProvidersPage /> :
-                  route.path === '/admin/catalog/scheduling' ? <SchedulingPage /> :
-                  route.path === '/admin/clients' ? <ClientsPage /> :
-                  route.path === '/admin/schedule/workdays' ? <WorkdaysPage /> :
-                  route.path === '/admin/schedule/exceptions' ? <ExceptionsPage /> :
-                  route.path === '/admin/bookings' ? <BookingsPage /> :
-                  route.path === '/admin/calendar' ? <CalendarPage /> :
-                  route.path === '/admin/booking-forms' ? <BookingFormsPage /> :
-                  route.path === '/admin/catalog/add-ons' ? <AddOnsPage /> :
-                  route.path === '/admin/catalog/products' ? <ProductsPage /> :
-                  route.path === '/admin/catalog/packages' ? <PackagesPage /> :
-                  route.path === '/admin/resources' ? <ResourcesPage /> :
-                  route.path === '/admin/relationships' ? <RelationshipsPage /> :
-                  route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
-                  route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
-                  route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
-                  route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
-                  route.path === '/admin/finance/invoices' ? <InvoicesPage /> :
-                  route.path === '/admin/finance/payments' ? <PaymentsPage /> :
-                  route.path === '/admin/finance/promotions' ? <PromotionsPage /> :
-                  route.path === '/admin/reviews' ? <ReviewsPage /> :
-                  route.path === '/admin/media' ? <MediaPage /> :
-                  route.path === '/admin/sms-assistant' ? <SmsAssistantPage /> :
-                  route.path === '/admin/configuration/additional-fields' ? <AdditionalFieldsPage /> :
-                  route.path === '/admin/notifications/messages' ? <MessagesPage /> :
-                  route.path === '/admin/notifications/templates' ? <TemplatesPage /> :
-                  route.path === '/admin/notifications/reminders' ? <RemindersPage /> :
-                  route.path === '/admin/settings/business' ? <BusinessSettings /> :
-                  route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
-                  route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
-                  route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
-                  route.path === '/admin/audit' ? <AuditLogsPage /> :
-                  route.path === '/admin/system' ? <SystemPage /> :
-                  <RoutePlaceholder title={route.title} />
-                } 
-              />
-            ))}
-            <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
-            <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
-            <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireAdminSession />}>
+            <Route element={<AdminLayout />}>
+              {adminRoutes.map((route) => (
+                <Route
+                  key={route.path}
+                  path={route.path}
+                  element={
+                    route.path === '/admin/catalog/categories' ? <CategoriesPage /> :
+                    route.path === '/admin/catalog/locations' ? <LocationsPage /> :
+                    route.path === '/admin/catalog/services' ? <ServicesPage /> :
+                    route.path === '/admin/catalog/providers' ? <ProvidersPage /> :
+                    route.path === '/admin/catalog/scheduling' ? <SchedulingPage /> :
+                    route.path === '/admin/schedule/exceptions' ? <ExceptionsPage /> :
+                    route.path === '/admin/clients' ? <ClientsPage /> :
+                    route.path === '/admin/schedule/workdays' ? <WorkdaysPage /> :
+                    route.path === '/admin/bookings' ? <BookingsPage /> :
+                    route.path === '/admin/calendar' ? <CalendarPage /> :
+                    route.path === '/admin/booking-forms' ? <BookingFormsPage /> :
+                    route.path === '/admin/catalog/add-ons' ? <AddOnsPage /> :
+                    route.path === '/admin/catalog/products' ? <ProductsPage /> :
+                    route.path === '/admin/catalog/packages' ? <PackagesPage /> :
+                    route.path === '/admin/resources' ? <ResourcesPage /> :
+                    route.path === '/admin/relationships' ? <RelationshipsPage /> :
+                    route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
+                    route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
+                    route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
+                    route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
+                    route.path === '/admin/finance/invoices' ? <InvoicesPage /> :
+                    route.path === '/admin/finance/payments' ? <PaymentsPage /> :
+                    route.path === '/admin/finance/promotions' ? <PromotionsPage /> :
+                    route.path === '/admin/reviews' ? <ReviewsPage /> :
+                    route.path === '/admin/media' ? <MediaPage /> :
+                    route.path === '/admin/sms-assistant' ? <SmsAssistantPage /> :
+                    route.path === '/admin/configuration/additional-fields' ? <AdditionalFieldsPage /> :
+                    route.path === '/admin/notifications/messages' ? <MessagesPage /> :
+                    route.path === '/admin/notifications/templates' ? <TemplatesPage /> :
+                    route.path === '/admin/notifications/reminders' ? <RemindersPage /> :
+                    route.path === '/admin/settings/business' ? <BusinessSettings /> :
+                    route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
+                    route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
+                    route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
+                    route.path === '/admin/audit' ? <AuditLogsPage /> :
+                    route.path === '/admin/system' ? <SystemPage /> :
+                    <RoutePlaceholder title={route.title} />
+                  }
+                />
+              ))}
+              <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
+              <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
+              <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
+            </Route>
           </Route>
           <Route path="/book/*" element={<PublicBookingPage />} />
           <Route path="/book" element={<PublicBookingPage />} />

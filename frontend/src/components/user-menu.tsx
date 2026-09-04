@@ -1,4 +1,5 @@
 import { LogOutIcon, SettingsIcon, UserRoundIcon } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { endAdminSession } from "@/lib/api"
 
 type UserMenuProps = {
   compact?: boolean
@@ -18,6 +20,12 @@ type UserMenuProps = {
 }
 
 export function UserMenu({ compact = false, className }: UserMenuProps) {
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    endAdminSession(navigate)
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -56,7 +64,7 @@ export function UserMenu({ compact = false, className }: UserMenuProps) {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem variant="destructive">
+          <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
             <LogOutIcon />
             Log out
           </DropdownMenuItem>

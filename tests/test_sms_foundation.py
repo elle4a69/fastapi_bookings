@@ -11,6 +11,7 @@ from app.models.sms_message import SmsMessage
 from app.models.sms_receipt import SmsInboundReceipt
 from app.models.sms_outbox import SmsOutboundJob
 from app.services.sms.transports.fake import FakeTransportAdapter
+from app.core.security import create_access_token
 
 @pytest.fixture
 def setup_sms_test_data(db_session):
@@ -63,7 +64,10 @@ def setup_sms_test_data(db_session):
         "account_a": account_a,
         "account_b": account_b,
         "client": client,
-        "headers": {"X-Tenant": "sms-test", "X-Token": "mock-admin-token"}
+        "headers": {
+            "X-Tenant": "sms-test",
+            "X-Token": create_access_token({"sub": str(admin.id)}),
+        }
     }
 
 

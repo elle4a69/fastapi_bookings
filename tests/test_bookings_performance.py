@@ -8,6 +8,7 @@ from app.models.service import Service
 from app.models.service_provider import ServiceProvider
 from app.models.location import Location, LocationProvider, LocationService
 from app.models.booking import Booking
+from app.core.security import create_access_token
 
 def test_bookings_performance_and_pagination(db_session, client):
     # 1. Seed Tenant
@@ -79,7 +80,7 @@ def test_bookings_performance_and_pagination(db_session, client):
 
     # 9. Request the bookings list via endpoint with pagination
     headers = {
-        "X-Token": "mock-admin-token",
+        "X-Token": create_access_token({"sub": str(admin.id)}),
         "X-Tenant": "test-subdomain"
     }
     

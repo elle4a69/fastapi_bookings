@@ -20,36 +20,54 @@ from ..models.tenant import Tenant
 from ..models.client import Client
 
 
+def _tenant_subdomain_from_host(hostname: str | None) -> str | None:
+    """Return a tenant slug only from an unambiguous tenant host.
+
+    ``tenant.localhost`` is supported for local development.  Deployed hosts
+    must have a tenant label plus a base domain (at least three labels), so a
+    root host such as ``example.com`` cannot be mistaken for a tenant named
+    ``example``.  Cloud Run hosts are platform routing names, never tenants.
+    """
+    hostname = (hostname or "").rstrip(".").lower()
+    if not hostname or hostname.endswith(".run.app"):
+        return None
+
+    labels = hostname.split(".")
+    if len(labels) == 2 and labels[1] == "localhost":
+        candidate = labels[0]
+    elif len(labels) >= 3:
+        candidate = labels[0]
+    else:
+        return None
+
+    if candidate in {"www", "api", "localhost", "127"}:
+        return None
+    return candidate
+
+
 async def get_current_tenant(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Tenant:
     """Resolve the active tenant from the request host subdomain.
 
-    Extracts subdomain from the HTTP Host header. If no subdomain exists,
-    falls back to the X-Tenant header or 'tenant' query parameter.
+    Prefer an unambiguous tenant hostname.  When no tenant hostname is
+    present, fall back to X-Tenant or the ``tenant`` query parameter for
+    isolated test and development proxies.
     """
-    subdomain = request.headers.get("X-Tenant")
-    if not subdomain:
-        subdomain = request.query_params.get("tenant")
+    supplied_subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
+    host_subdomain = _tenant_subdomain_from_host(request.url.hostname)
+
+    if host_subdomain and supplied_subdomain:
+        if host_subdomain != supplied_subdomain.lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tenant host and supplied tenant context do not match.",
+            )
+
+    subdomain = host_subdomain or supplied_subdomain
 
     if not subdomain:
-        host = request.headers.get("host", "")
-        parts = host.split(":")
-        hostname = parts[0]
-
-        host_parts = hostname.split(".")
-        # Extract subdomain from host only if it is not a Cloud Run domain
-        if len(host_parts) > 1 and not hostname.endswith(".run.app"):
-            first_part = host_parts[0]
-            # Ignore common non-tenant prefixes
-            if first_part.lower() not in ("www", "api", "localhost", "127"):
-                subdomain = first_part
-
-    if not subdomain:
-        tenant = db.query(Tenant).first()
-        if tenant:
-            return tenant
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant subdomain is missing or invalid. Please access via [subdomain].localhost or provide X-Tenant header.",
@@ -71,12 +89,6 @@ async def get_current_user(
 ) -> User:
     if not x_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
-
-    if x_token == "mock-admin-token":
-        user = db.query(User).filter(User.tenant_id == tenant.id).first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
-        return user
 
     """Retrieve the current authenticated user from the X-Token header.
 
@@ -121,8 +133,11 @@ async def get_public_tenant(
     tenant: Tenant = Depends(get_current_tenant),
 ) -> Tenant:
     """Validate public tenant for public booking intake endpoints."""
-    if not x_token or x_token == "mock-admin-token":
+    if not x_token:
         return tenant
+
+    if x_token == "mock-admin-token":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     payload = decode_access_token(x_token)
     if not payload or "sub" not in payload:
