@@ -7,8 +7,6 @@ matches.  The optional secret is used to sign the payload body with
 HMAC-SHA256 so the receiving server can verify the request.
 """
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -19,6 +17,7 @@ from ...schemas.webhook import (
     WebhookListResponse,
     WebhookOut,
     WebhookResponse,
+    WebhookSecretRotate,
     WebhookUpdate,
 )
 
@@ -35,11 +34,25 @@ SUPPORTED_EVENTS = {
 }
 
 
+def _webhook_response(hook: WebhookRegistration) -> dict:
+    """Serialize webhook metadata without ever returning its signing secret."""
+    return {
+        "id": hook.id,
+        "event": hook.event,
+        "target_url": hook.target_url,
+        "is_active": hook.is_active,
+        "has_secret": bool(hook.secret),
+        "created_at": hook.created_at,
+    }
+
+
 @router.get("", response_model=WebhookListResponse)
 def list_webhooks(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
-    """Return all registered webhooks."""
-    hooks = db.query(WebhookRegistration).order_by(WebhookRegistration.id).all()
-    return {"ok": True, "data": hooks}
+    """Return the current tenant's webhook registrations."""
+    hooks = db.query(WebhookRegistration).filter(
+        WebhookRegistration.tenant_id == current_user.tenant_id,
+    ).order_by(WebhookRegistration.id).all()
+    return {"ok": True, "data": [_webhook_response(hook) for hook in hooks]}
 
 
 @router.post("", response_model=WebhookResponse, status_code=status.HTTP_201_CREATED)
@@ -58,7 +71,7 @@ def create_webhook(
     db.add(hook)
     db.commit()
     db.refresh(hook)
-    return {"ok": True, "data": hook}
+    return {"ok": True, "data": _webhook_response(hook)}
 
 
 @router.put("/{webhook_id}", response_model=WebhookResponse)
@@ -69,7 +82,10 @@ def update_webhook(
     current_user=Depends(get_current_admin),
 ) -> dict:
     """Update a webhook registration."""
-    hook = db.query(WebhookRegistration).filter(WebhookRegistration.id == webhook_id).first()
+    hook = db.query(WebhookRegistration).filter(
+        WebhookRegistration.id == webhook_id,
+        WebhookRegistration.tenant_id == current_user.tenant_id,
+    ).first()
     if not hook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     if webhook_in.event is not None and webhook_in.event not in SUPPORTED_EVENTS:
@@ -78,7 +94,27 @@ def update_webhook(
         setattr(hook, field, value)
     db.commit()
     db.refresh(hook)
-    return {"ok": True, "data": hook}
+    return {"ok": True, "data": _webhook_response(hook)}
+
+
+@router.post("/{webhook_id}/rotate-secret", response_model=WebhookResponse)
+def rotate_webhook_secret(
+    webhook_id: DatabaseId,
+    secret_in: WebhookSecretRotate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+) -> dict:
+    """Replace a tenant-owned signing secret without reading it back."""
+    hook = db.query(WebhookRegistration).filter(
+        WebhookRegistration.id == webhook_id,
+        WebhookRegistration.tenant_id == current_user.tenant_id,
+    ).first()
+    if not hook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    hook.secret = secret_in.secret
+    db.commit()
+    db.refresh(hook)
+    return {"ok": True, "data": _webhook_response(hook)}
 
 
 @router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -88,7 +124,10 @@ def delete_webhook(
     current_user=Depends(get_current_admin),
 ) -> None:
     """Delete a webhook registration."""
-    hook = db.query(WebhookRegistration).filter(WebhookRegistration.id == webhook_id).first()
+    hook = db.query(WebhookRegistration).filter(
+        WebhookRegistration.id == webhook_id,
+        WebhookRegistration.tenant_id == current_user.tenant_id,
+    ).first()
     if not hook:
         raise HTTPException(status_code=404, detail="Webhook not found")
     db.delete(hook)

@@ -62,7 +62,7 @@ from .checkout import (
 )
 
 # System models (from FastBook merge)
-from .webhook import WebhookRegistration
+from .webhook import WebhookDelivery, WebhookRegistration
 from .calendar_note import CalendarNote
 from .general_systems import PluginState, GdprConsent
 from .management_review_request import ManagementReviewRequest
@@ -104,6 +104,7 @@ __all__ = [
     "OutboxEvent",
     "BookingEvent",
     "BookingEventType",
+    "WebhookDelivery",
     "WaitlistEntry",
     "WaitlistStatus",
 
