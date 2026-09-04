@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import socket
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -131,7 +132,7 @@ def test_event_snapshots_tenant_recipients_and_delivery_is_deduplicated(db_sessi
     expected = hmac.new(SECRET_A.encode(), request["data"].encode(), hashlib.sha256).hexdigest()
     assert request["headers"]["X-Webhook-Signature"] == f"v1={expected}"
     assert '"version":"v1"' in request["data"]
-    assert db_session.query(WebhookDelivery).one().status == "PROCESSED"
+    assert db_session.query(WebhookDelivery).one().status == "SUCCEEDED"
 
 
 def test_resolver_rejects_mixed_or_rebound_private_answers(monkeypatch):
@@ -151,7 +152,7 @@ def test_tenantless_unsnapshotted_domain_event_is_quarantined(db_session):
     asyncio.run(outbox_worker.process_pending_outbox_events(db_session))
     db_session.refresh(event)
     assert event.status == "QUARANTINED"
-    assert event.error_log == "WEBHOOK_TENANT_CONTEXT_MISSING"
+    assert event.error_code == "WEBHOOK_TENANT_CONTEXT_MISSING"
 
 
 def test_claim_is_atomic_and_snapshot_survives_registration_changes(db_session, monkeypatch):
@@ -162,13 +163,17 @@ def test_claim_is_atomic_and_snapshot_survives_registration_changes(db_session, 
     event = create_outbox_event(db_session, "booking.created", {}, tenant_id=tenant.id)
     db_session.commit()
     delivery = db_session.query(WebhookDelivery).filter(WebhookDelivery.outbox_event_id == event.id).one()
-    assert outbox_worker._claim_webhook_delivery(db_session, delivery.id) is not None
+    claimed_delivery = outbox_worker._claim_webhook_delivery(db_session, delivery.id)
+    assert claimed_delivery is not None
+    assert not db_session.in_transaction()
     assert outbox_worker._claim_webhook_delivery(db_session, delivery.id) is None
 
     db_session.query(WebhookDelivery).filter(WebhookDelivery.id == delivery.id).update({
         WebhookDelivery.status: "PENDING",
+        WebhookDelivery.lease_owner: None,
         WebhookDelivery.lease_token: None,
         WebhookDelivery.lease_expires_at: None,
+        WebhookDelivery.next_attempt_at: datetime.now(timezone.utc),
     }, synchronize_session=False)
     db_session.expire_all()
     # The event-time encrypted recipient snapshot must remain independent of
@@ -183,7 +188,7 @@ def test_claim_is_atomic_and_snapshot_survives_registration_changes(db_session, 
     monkeypatch.setattr(outbox_worker, "validate_webhook_target_url", lambda _url: _url)
     asyncio.run(outbox_worker.dispatch_outbound_webhooks(db_session, event=event, payload={}))
     db_session.refresh(delivery)
-    assert delivery.status == "PROCESSED"
+    assert delivery.status == "SUCCEEDED"
     request = _FakeSession.calls[0][1]
     expected = hmac.new(SECRET_A.encode(), request["data"].encode(), hashlib.sha256).hexdigest()
     assert request["headers"]["X-Webhook-Signature"] == f"v1={expected}"
@@ -204,7 +209,7 @@ def test_failure_uses_generic_error_and_retry_state_without_logging_secrets(db_s
     with pytest.raises(outbox_worker.WebhookDeliveryError):
         asyncio.run(outbox_worker.dispatch_outbound_webhooks(db_session, event=event, payload={"sensitive": "payload"}))
     delivery = db_session.query(WebhookDelivery).filter(WebhookDelivery.outbox_event_id == event.id).one()
-    assert delivery.status == "FAILED" and delivery.error_code == "WEBHOOK_DELIVERY_FAILED"
+    assert delivery.status == "RETRY" and delivery.error_code == "WEBHOOK_DELIVERY_FAILED"
     assert delivery.next_attempt_at is not None
     assert SECRET_A not in caplog.text and target not in caplog.text and "payload" not in caplog.text
     _FakeSession.response_status = 200
@@ -227,7 +232,7 @@ def test_snapshot_cipher_is_domain_separated_and_fails_closed_in_production(monk
         webhook_model.encrypt_webhook_secret(SECRET_A)
 
 
-def test_legacy_active_null_secret_is_skipped_without_rolling_back_event(db_session):
+def test_legacy_active_null_secret_is_skipped_without_rolling_back_event(db_session, caplog):
     tenant, _ = _admin_headers(db_session, "legacy-secret", "legacy_secret_owner")
     db_session.add(WebhookRegistration(
         tenant_id=tenant.id,
@@ -237,7 +242,11 @@ def test_legacy_active_null_secret_is_skipped_without_rolling_back_event(db_sess
         is_active=True,
     ))
     db_session.commit()
+    caplog.clear()
     event = create_outbox_event(db_session, "booking.created", {"booking": 9}, tenant_id=tenant.id)
     db_session.commit()
     assert event.id is not None and event.webhook_snapshot_at is not None
     assert db_session.query(WebhookDelivery).filter(WebhookDelivery.outbox_event_id == event.id).count() == 0
+    assert "webhook_registration_skipped_unsigned" in caplog.messages
+    assert "legacy-secret" not in caplog.text
+    assert "booking.created" not in caplog.text

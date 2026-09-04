@@ -77,7 +77,13 @@ class Settings(BaseSettings):
 
     # Outbox settings
     OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")
-    OUTBOX_MAX_RETRIES: int = Field(5, description="Max retries for enqueued outbox events")
+    OUTBOX_MAX_RETRIES: int = Field(5, ge=1, le=100, description="Maximum attempts snapshotted on new outbox events")
+    OUTBOX_LEASE_SECONDS: int = Field(120, ge=30, description="Generic outbox claim lease duration")
+    OUTBOX_SHUTDOWN_GRACE_SECONDS: float = Field(30.0, ge=0.1, description="Worker in-flight shutdown grace period")
+    OUTBOX_BATCH_SIZE: int = Field(20, ge=1, le=100, description="Maximum events handled per poll")
+    OUTBOX_RETRY_BASE_SECONDS: float = Field(5.0, ge=0.1, description="Initial outbox retry delay")
+    OUTBOX_RETRY_MAX_SECONDS: float = Field(300.0, ge=1.0, description="Maximum outbox retry delay")
+    OUTBOX_RETRY_JITTER_RATIO: float = Field(0.2, ge=0.0, le=1.0, description="Bounded outbox retry jitter")
 
     # OpenTelemetry / observability
     OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
@@ -89,6 +95,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        if self.OUTBOX_SHUTDOWN_GRACE_SECONDS >= self.OUTBOX_LEASE_SECONDS:
+            raise ValueError("OUTBOX_SHUTDOWN_GRACE_SECONDS must be shorter than OUTBOX_LEASE_SECONDS")
         if self.APP_ENV == "production":
             if self.SECRET_KEY == "changeme":
                 raise ValueError("SECRET_KEY must not be 'changeme' in production environment")

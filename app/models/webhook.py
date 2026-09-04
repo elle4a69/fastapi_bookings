@@ -11,7 +11,7 @@ import base64
 import hashlib
 import hmac
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -76,6 +76,46 @@ class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
     __table_args__ = (
         UniqueConstraint("outbox_event_id", "webhook_id", name="uq_webhook_delivery_event_hook"),
+        UniqueConstraint("idempotency_key", name="uq_webhook_deliveries_idempotency_key"),
+        CheckConstraint(
+            "status IN ('PENDING','PROCESSING','RETRY','SUCCEEDED','DEAD_LETTER','QUARANTINED')",
+            name="ck_webhook_deliveries_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0 AND max_attempts BETWEEN 1 AND 100 AND attempt_count <= max_attempts",
+            name="ck_webhook_deliveries_attempts",
+        ),
+        CheckConstraint(
+            "(status = 'PROCESSING' AND lease_owner IS NOT NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) "
+            "OR (status <> 'PROCESSING' AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL)",
+            name="ck_webhook_deliveries_lease_state",
+        ),
+        CheckConstraint(
+            "(status IN ('SUCCEEDED','DEAD_LETTER','QUARANTINED') AND terminal_at IS NOT NULL) "
+            "OR (status NOT IN ('SUCCEEDED','DEAD_LETTER','QUARANTINED') AND terminal_at IS NULL)",
+            name="ck_webhook_deliveries_terminal_state",
+        ),
+        CheckConstraint(
+            "(status IN ('PENDING','RETRY') AND next_attempt_at IS NOT NULL) "
+            "OR (status NOT IN ('PENDING','RETRY') AND next_attempt_at IS NULL)",
+            name="ck_webhook_deliveries_next_attempt_state",
+        ),
+        CheckConstraint(
+            "error_code IS NULL OR (length(error_code) BETWEEN 1 AND 64 AND error_code = upper(error_code) AND error_code NOT LIKE '% %')",
+            name="ck_webhook_deliveries_error_code",
+        ),
+        Index(
+            "ix_webhook_deliveries_dispatch_due",
+            "next_attempt_at",
+            "id",
+            postgresql_where=text("status IN ('PENDING','RETRY')"),
+        ),
+        Index(
+            "ix_webhook_deliveries_expired_lease",
+            "lease_expires_at",
+            "id",
+            postgresql_where=text("status = 'PROCESSING'"),
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -84,12 +124,16 @@ class WebhookDelivery(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     target_url = Column(String, nullable=False)
     encrypted_signing_secret = Column(String, nullable=False)
+    idempotency_key = Column(String(128), nullable=False)
     status = Column(String, nullable=False, default="PENDING", index=True)
     attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=5, server_default="5")
+    lease_owner = Column(String(128), nullable=True)
     lease_token = Column(String, nullable=True, index=True)
     lease_expires_at = Column(DateTime(timezone=True), nullable=True)
-    next_attempt_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    next_attempt_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=True, index=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
+    terminal_at = Column(DateTime(timezone=True), nullable=True)
     error_code = Column(String, nullable=True)
 
     outbox_event = relationship("OutboxEvent")

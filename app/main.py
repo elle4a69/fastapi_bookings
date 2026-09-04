@@ -132,18 +132,12 @@ from .api.routers import (
 
 
 
-import asyncio
 from contextlib import asynccontextmanager
-from .services.outbox_worker import start_outbox_worker, stop_outbox_worker
 
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    # Startup
-    worker_task = asyncio.create_task(start_outbox_worker())
     yield
-    # Shutdown
-    await stop_outbox_worker(worker_task)
     from .core.telemetry import shutdown_telemetry
     shutdown_telemetry()
 
