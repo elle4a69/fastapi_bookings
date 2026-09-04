@@ -1,6 +1,8 @@
 """Conftest file for setting up pytest fixtures and overriding app dependencies."""
 
 import os
+import socket
+import threading
 
 # Force OTel SDK off before ANY app module is imported.
 # Uses a hard assignment so shell env overrides are also suppressed.
@@ -17,6 +19,38 @@ import app.models  # Crucial: imports all models to register them on Base.metada
 
 # SQLite in-memory database URL for tests
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+
+_ORIGINAL_SOCKET_CONNECT = socket.socket.connect
+_ORIGINAL_SOCKETPAIR = socket.socketpair
+_socketpair_permit = threading.local()
+
+
+def _block_outbound_network(*args, **kwargs):
+    """Fail closed if a test attempts to open a real network connection."""
+    raise RuntimeError(
+        "Outbound network access is disabled during tests. "
+        "Use an explicit fake transport or mocked client instead."
+    )
+
+
+def _guard_socket_connect(socket_instance, address):
+    """Permit only socketpair's private connection in its creating thread."""
+    if getattr(_socketpair_permit, "allow_connect", False):
+        return _ORIGINAL_SOCKET_CONNECT(socket_instance, address)
+    return _block_outbound_network(socket_instance, address)
+
+
+def _create_local_socketpair(*args, **kwargs):
+    """Allow asyncio to create its private self-pipe without opening a network path."""
+    # On Windows, socket.socketpair() constructs a loopback-only socket pair by
+    # calling socket.connect internally. The guard stays installed globally;
+    # only this thread may use the original connect during construction.
+    previous_permit = getattr(_socketpair_permit, "allow_connect", False)
+    _socketpair_permit.allow_connect = True
+    try:
+        return _ORIGINAL_SOCKETPAIR(*args, **kwargs)
+    finally:
+        _socketpair_permit.allow_connect = previous_permit
 
 @pytest.fixture(scope="session")
 def engine():
@@ -68,10 +102,19 @@ def client(db_session):
 
 
 @pytest.fixture(scope="function", autouse=True)
-def clean_test_environment():
+def clean_test_environment(monkeypatch):
     """Ensure complete isolation before and after every test."""
     from app.core.telemetry import shutdown_telemetry
     from app.core.config import settings
+
+    # Block below HTTP-client libraries so requests, httpx, SDKs, and direct
+    # socket users all fail before a real connection can be established.
+    # FastAPI's in-process TestClient uses an ASGI transport and does not open
+    # a socket, while tests that patch a client method remain unaffected.
+    monkeypatch.setattr(socket, "create_connection", _block_outbound_network)
+    monkeypatch.setattr(socket.socket, "connect", _guard_socket_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", _block_outbound_network)
+    monkeypatch.setattr(socket, "socketpair", _create_local_socketpair)
 
     fastapi_app.dependency_overrides.clear()
     settings.OTEL_SDK_DISABLED = True

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pytest
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -40,8 +41,17 @@ def test_device_registration(client: TestClient, db_session: Session):
     assert db_token.platform == "android"
 
 
-def test_outbox_worker_and_webhook_dispatch(db_session: Session):
-    """Test OutboxEvent helper creation and background polling worker."""
+def test_outbox_worker_processes_send_sms_with_fake_transport(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+):
+    """A SEND_SMS event is processed through an explicit fake transport."""
+    from app.core.config import settings
+
+    # The fake transport must make this test independent of any configured
+    # credentials and must prevent an accidental provider request.
+    monkeypatch.setattr(settings, "CLICKSEND_API_USERNAME", "plausible-test-user")
+    monkeypatch.setattr(settings, "CLICKSEND_API_KEY", "plausible-test-key")
+
     # Create a SEND_SMS outbox event
     payload = {
         "to": "+61411111111",
@@ -52,17 +62,20 @@ def test_outbox_worker_and_webhook_dispatch(db_session: Session):
     
     assert event.status == "PENDING"
     
-    # Process it (ClickSend is stubbed/mocked as it runs without valid API keys in test environment)
-    # The ClickSend client will try to call the real API and fail due to credentials (or pass if valid keys).
-    # To prevent calling ClickSend in unit tests, we can verify that the worker logs attempts.
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(process_pending_outbox_events(db_session))
-    loop.close()
-    
+    fake_send_sms = AsyncMock(return_value={"data": {"messages": [{"status": "SUCCESS"}]}})
+    with patch(
+        "app.services.outbox_worker.clicksend_client.send_sms", new=fake_send_sms
+    ):
+        asyncio.run(process_pending_outbox_events(db_session))
+
+    fake_send_sms.assert_awaited_once_with(
+        to=payload["to"], body=payload["body"], sender=None
+    )
+
     db_session.refresh(event)
-    # The event should be FAILED or PROCESSED depending on ClickSend response
-    # (usually FAILED with ValueError/HTTP Error because credentials are dummy)
-    assert event.status in ["PROCESSED", "FAILED"]
+    assert event.status == "PROCESSED"
+    assert event.processed is True
+    assert event.retry_count == 0
 
 
 def test_stripe_webhook_completion(client: TestClient, db_session: Session):
