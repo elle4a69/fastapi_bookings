@@ -325,7 +325,7 @@ def confirm_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.confirmed", payload)
+    create_outbox_event(db, "booking.confirmed", payload, tenant_id=booking.tenant_id)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -356,7 +356,7 @@ def cancel_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.cancelled", payload)
+    create_outbox_event(db, "booking.cancelled", payload, tenant_id=booking.tenant_id)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -386,7 +386,7 @@ def complete_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.completed", payload)
+    create_outbox_event(db, "booking.completed", payload, tenant_id=booking.tenant_id)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -416,7 +416,7 @@ def noshow_booking(
         "end_time": booking.end_time.isoformat() if booking.end_time else None,
         "status": booking.status
     }
-    create_outbox_event(db, "booking.no_show", payload)
+    create_outbox_event(db, "booking.no_show", payload, tenant_id=booking.tenant_id)
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}

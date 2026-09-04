@@ -17,16 +17,18 @@ interface WebhookEndpoint {
   id: string
   url: string
   isActive: boolean
-  secret: string
+  hasSecret: boolean
+  secretInput: string
   events: string[]
 }
 
 const AVAILABLE_EVENTS = [
   "booking.created",
-  "booking.updated",
+  "booking.confirmed",
   "booking.cancelled",
-  "payment.succeeded",
-  "payment.failed",
+  "booking.completed",
+  "booking.rescheduled",
+  "booking.no_show",
   "client.created",
 ]
 
@@ -48,7 +50,10 @@ export default function WebhooksSettings() {
         id: String(item.id),
         url: item.target_url || item.url || "",
         isActive: item.is_active ?? item.isActive ?? true,
-        secret: item.secret || "",
+        hasSecret: Boolean(item.has_secret),
+        // Secrets are intentionally write-only.  Never copy a response value
+        // into state, including for legacy servers that may still return one.
+        secretInput: "",
         events: item.events || (item.event ? [item.event] : [])
       }))
       setWebhooks(list)
@@ -57,23 +62,28 @@ export default function WebhooksSettings() {
       }
     } catch {
       toast.error("Failed to load webhooks")
-      // Mock data for development
-      setWebhooks([
-        { id: "1", url: "https://example.com/webhook", isActive: true, secret: "whsec_mock_123", events: ["booking.created"] }
-      ])
-      setSelectedId("1")
+      setWebhooks([])
+      setSelectedId(null)
     } finally {
       setLoading(false)
     }
   }
 
   const handleSave = async (webhook: WebhookEndpoint) => {
+    if (webhook.id.startsWith("new_") && webhook.secretInput.trim().length < 32) {
+      toast.error("A new webhook requires a signing secret of at least 32 characters")
+      return
+    }
+    if (webhook.secretInput && webhook.secretInput.trim().length < 32) {
+      toast.error("A replacement signing secret must be at least 32 characters")
+      return
+    }
     setSaving(true)
     try {
       const payload = {
         target_url: webhook.url,
         is_active: webhook.isActive,
-        secret: webhook.secret || undefined,
+        ...(webhook.secretInput ? { secret: webhook.secretInput } : {}),
         event: webhook.events[0] || "booking.created"
       }
       if (webhook.id.startsWith("new_")) {
@@ -83,13 +93,23 @@ export default function WebhooksSettings() {
           id: String(created.id),
           url: created.target_url || webhook.url,
           isActive: created.is_active ?? webhook.isActive,
-          secret: created.secret || webhook.secret,
+          hasSecret: Boolean(created.has_secret) || Boolean(webhook.secretInput),
+          secretInput: "",
           events: webhook.events
         }
         setWebhooks(webhooks.map(w => w.id === webhook.id ? newEndpoint : w))
         setSelectedId(newEndpoint.id)
       } else {
-        await apiClient.put(`/api/admin/webhooks/${webhook.id}`, payload)
+        const res: any = await apiClient.put(`/api/admin/webhooks/${webhook.id}`, payload)
+        const updated = res?.data ?? res
+        setWebhooks(webhooks.map(w => w.id === webhook.id ? {
+          ...w,
+          url: updated.target_url || webhook.url,
+          isActive: updated.is_active ?? webhook.isActive,
+          hasSecret: Boolean(updated.has_secret) || Boolean(webhook.secretInput),
+          secretInput: "",
+          events: webhook.events,
+        } : w))
       }
       toast.success("Webhook saved successfully")
     } catch {
@@ -118,7 +138,8 @@ export default function WebhooksSettings() {
       id: newId,
       url: "",
       isActive: true,
-      secret: `whsec_new_${Date.now()}`,
+      hasSecret: false,
+      secretInput: "",
       events: []
     }
     setWebhooks([...webhooks, newWebhook])
@@ -227,12 +248,18 @@ export default function WebhooksSettings() {
 
                 <div className="space-y-2">
                   <Label>Signing Secret</Label>
-                  <div className="flex items-center gap-2">
-                    <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold flex-1">
-                      {selectedWebhook.secret}
-                    </code>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Use this secret to verify the webhook payload signature.</p>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={selectedWebhook.secretInput}
+                    onChange={(e) => updateSelected({ secretInput: e.target.value })}
+                    placeholder={selectedWebhook.hasSecret ? "Enter a new value to rotate the existing secret" : "Required signing secret (32+ characters)"}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {selectedWebhook.hasSecret
+                      ? "A signing secret is configured. Enter a new value only to rotate it; the existing value cannot be viewed."
+                      : "Required for a new endpoint. Once saved, a signing secret cannot be viewed again."}
+                  </p>
                 </div>
 
                 <Separator />

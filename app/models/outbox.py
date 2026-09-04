@@ -49,6 +49,7 @@ class OutboxEvent(Base):
     processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     processed_at = Column(DateTime(timezone=True), nullable=True)
+    webhook_snapshot_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<OutboxEvent id={self.id} type={self.type} status={self.status}>"
