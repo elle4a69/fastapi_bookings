@@ -1,5 +1,4 @@
 import asyncio
-import json
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
@@ -78,8 +77,10 @@ def test_outbox_worker_processes_send_sms_with_fake_transport(
     assert event.retry_count == 0
 
 
-def test_stripe_webhook_completion(client: TestClient, db_session: Session):
-    """Test Stripe webhook processing updates booking status to confirmed."""
+def test_stripe_webhook_is_disabled_without_changing_booking_or_outbox(
+    client: TestClient, db_session: Session
+):
+    """Legacy webhook events are rejected before they can mutate local state."""
     from app.models.tenant import Tenant as TenantModel
     from app.models.provider import Provider as ProviderModel
     from app.models.service import Service as ServiceModel
@@ -139,7 +140,8 @@ def test_stripe_webhook_completion(client: TestClient, db_session: Session):
     
     assert booking.status == BookingStatus.PENDING
 
-    # Mock stripe checkout session completed payload
+    # This otherwise-valid event must not be parsed or processed while payments
+    # are disabled.
     webhook_payload = {
         "type": "checkout.session.completed",
         "data": {
@@ -153,15 +155,12 @@ def test_stripe_webhook_completion(client: TestClient, db_session: Session):
         }
     }
     
-    # POST to stripe webhook endpoint (verification will be bypassed because STRIPE_WEBHOOK_SECRET is empty)
+    outbox_count_before = db_session.query(OutboxEvent).count()
     response = client.post("/api/v1/webhooks/stripe", json=webhook_payload)
-    assert response.status_code == 200
+    assert response.status_code == 503
+    assert response.json()["error"]["message"] == "Stripe payments are temporarily unavailable"
     
-    # Refresh booking and verify it transitioned to CONFIRMED
+    # Confirm the webhook did not transition the booking or enqueue side effects.
     db_session.refresh(booking)
-    assert booking.status == BookingStatus.CONFIRMED
-
-    # Verify a SEND_SMS and a booking.confirmed outbox event were enqueued
-    sms_event = db_session.query(OutboxEvent).filter_by(type="SEND_SMS").first()
-    assert sms_event is not None
-    assert "CONFIRMED" in sms_event.payload
+    assert booking.status == BookingStatus.PENDING
+    assert db_session.query(OutboxEvent).count() == outbox_count_before
