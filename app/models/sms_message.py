@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, ForeignKey, Text, String, JSON
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, Integer, ForeignKey, ForeignKeyConstraint, Text, String, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
@@ -18,7 +18,14 @@ class SmsMessage(Base):
     author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     status = Column(String, default="received", nullable=False)  # 'received', 'queued', 'sending', 'sent', 'delivered', 'failed', 'cancelled', 'draft', 'discarded'
     provider_message_id = Column(String, nullable=True, index=True)
-    chatwoot_message_id = Column(Integer, nullable=True, index=True)
+    chatwoot_binding_id = Column(Integer, nullable=True, index=True)
+    chatwoot_message_id = Column(BigInteger, nullable=True, index=True)
+    chatwoot_message_type = Column(String(32), nullable=True)
+    chatwoot_content_type = Column(String(64), nullable=True)
+    chatwoot_private = Column(Boolean, nullable=True)
+    chatwoot_sender_type = Column(String(64), nullable=True)
+    chatwoot_sender_reference = Column(String(255), nullable=True)
+    chatwoot_attachment_metadata = Column(JSON, nullable=True)
     parent_message_id = Column(Integer, ForeignKey("sms_messages.id", ondelete="SET NULL"), nullable=True)
     client_request_id = Column(String, nullable=True, index=True)
     customer_turn_ref = Column(String, nullable=True, index=True)
@@ -27,11 +34,46 @@ class SmsMessage(Base):
     occurred_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     received_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint(
+            "chatwoot_binding_id",
+            "chatwoot_message_id",
+            name="uq_sms_messages_binding_chatwoot_message",
+        ),
+        ForeignKeyConstraint(
+            ["chatwoot_binding_id", "tenant_id"],
+            ["sms_chatwoot_bindings.id", "sms_chatwoot_bindings.tenant_id"],
+            name="fk_sms_messages_chatwoot_binding_tenant",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["conversation_id", "chatwoot_binding_id"],
+            ["sms_conversations.id", "sms_conversations.chatwoot_binding_id"],
+            name="fk_sms_messages_conversation_chatwoot_binding",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "chatwoot_message_id IS NULL OR chatwoot_message_id > 0",
+            name="ck_sms_messages_chatwoot_message_positive",
+        ),
+    )
+
     # Relationships
-    tenant = relationship("Tenant")
+    tenant = relationship("Tenant", foreign_keys=[tenant_id], overlaps="chatwoot_binding,messages")
     provider = relationship("Provider")
     sms_account = relationship("SmsAccount")
-    conversation = relationship("SmsConversation", back_populates="messages")
+    conversation = relationship(
+        "SmsConversation",
+        back_populates="messages",
+        foreign_keys=[conversation_id],
+        overlaps="chatwoot_binding,messages",
+    )
+    chatwoot_binding = relationship(
+        "SmsChatwootBinding",
+        back_populates="messages",
+        foreign_keys=[chatwoot_binding_id, tenant_id],
+        overlaps="conversation,messages,tenant",
+    )
     author = relationship("User")
     
     # Self-referential relationship for drafts / replies

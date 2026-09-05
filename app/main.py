@@ -8,10 +8,10 @@ exposes simple health and readiness endpoints.
 import json
 import logging
 import os
+import re
 import traceback
 
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -49,12 +49,64 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
+_URL_WITH_QUERY = re.compile(r"(?P<base>(?:https?://|/)[^?\s\"]*)\?[^\s\"]*")
+
+
+def _remove_query_strings(value: str) -> str:
+    """Remove URL query strings before an access record reaches a handler."""
+    return _URL_WITH_QUERY.sub(lambda match: match.group("base"), value)
+
+
+def _sanitize_log_argument(value):
+    if isinstance(value, str):
+        return _remove_query_strings(value)
+    rendered = str(value)
+    sanitized = _remove_query_strings(rendered)
+    return sanitized if sanitized != rendered else value
+
+
+class AccessLogQuerySanitizer(logging.Filter):
+    """Prevent URL query secrets from entering console/access log output."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _remove_query_strings(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _sanitize_log_argument(item) for item in record.args
+            )
+        elif isinstance(record.args, dict):
+            record.args = {
+                key: _sanitize_log_argument(item)
+                for key, item in record.args.items()
+            }
+        return True
+
+
+def install_access_log_record_sanitizer() -> None:
+    """Sanitize access records before any handler, including test capture."""
+    current_factory = logging.getLogRecordFactory()
+    if getattr(current_factory, "_removes_url_queries", False):
+        return
+    sanitizer = AccessLogQuerySanitizer()
+
+    def sanitized_factory(*args, **kwargs):
+        record = current_factory(*args, **kwargs)
+        sanitizer.filter(record)
+        return record
+
+    sanitized_factory._removes_url_queries = True
+    logging.setLogRecordFactory(sanitized_factory)
+
+
 def setup_logging() -> None:
     root = logging.getLogger()
     for h in root.handlers[:]:
         root.removeHandler(h)
     handler = logging.StreamHandler()
     handler.setFormatter(JSONFormatter())
+    query_sanitizer = AccessLogQuerySanitizer()
+    handler.addFilter(query_sanitizer)
     root.addHandler(handler)
     root.setLevel(logging.INFO)
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
@@ -62,7 +114,12 @@ def setup_logging() -> None:
         for h in lg.handlers[:]:
             lg.removeHandler(h)
         lg.addHandler(handler)
+        lg.addFilter(query_sanitizer)
         lg.propagate = False
+    # TestClient/httpx emits access-style records through these loggers. The
+    # logger-level filter runs before every handler, including test capture.
+    logging.getLogger("httpx").addFilter(query_sanitizer)
+    logging.getLogger("httpx2").addFilter(query_sanitizer)
 
 
 setup_logging()
@@ -125,6 +182,8 @@ from .api.routers import (
     sms_settings,
     sms_arrivals,
     sms_chatwoot,
+    chatwoot_admin,
+    chatwoot_webhooks,
 )
 
 
@@ -170,6 +229,7 @@ app = FastAPI(
 
 # Initialize OpenTelemetry instrumentation
 init_telemetry(app)
+install_access_log_record_sanitizer()
 
 # Configure SlowAPI limiter
 app.state.limiter = limiter
@@ -245,6 +305,25 @@ async def validation_exception_handler(request, exc: RequestValidationError):
     if current_span and current_span.get_span_context().is_valid:
         trace_id = f"{current_span.get_span_context().trace_id:032x}"
         
+    safe_details = []
+    for error in exc.errors():
+        raw_location = error.get("loc") or ()
+        scope = raw_location[0] if raw_location else "request"
+        if scope not in {"body", "path", "query", "header", "cookie"}:
+            scope = "request"
+        error_type = error.get("type")
+        if not isinstance(error_type, str) or not re.fullmatch(
+            r"[a-z0-9_.-]{1,80}", error_type
+        ):
+            error_type = "value_error"
+        safe_details.append(
+            {
+                "loc": [scope],
+                "type": error_type,
+                "msg": "Invalid request value.",
+            }
+        )
+
     response = JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
@@ -252,7 +331,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Validation failed for the request.",
-                "details": jsonable_encoder(exc.errors()),
+                "details": safe_details,
                 "request_id": trace_id
             }
         }
@@ -262,7 +341,8 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
-    logging.exception(f"Unhandled exception occurred: {str(exc)}")
+    del exc
+    logging.error("unhandled_exception")
     current_span = trace.get_current_span()
     trace_id = ""
     if current_span and current_span.get_span_context().is_valid:
@@ -355,9 +435,10 @@ app.include_router(sms_accounts.router, prefix="/api/admin")
 app.include_router(sms_conversations.router, prefix="/api/admin")
 app.include_router(sms_settings.router, prefix="/api/admin")
 app.include_router(sms_arrivals.router, prefix="/api/admin")
-app.include_router(sms_chatwoot.router, prefix="/api/admin")
 app.include_router(sms_chatwoot.router, prefix="/api")
 app.include_router(sms_webhooks.router, prefix="/api")
+app.include_router(chatwoot_admin.router, prefix="/api/admin")
+app.include_router(chatwoot_webhooks.router, prefix="/api")
 
 
 @app.get("/health", tags=["system"])

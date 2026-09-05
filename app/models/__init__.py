@@ -75,7 +75,11 @@ from .sms_receipt import SmsInboundReceipt, SmsDeliveryReceipt
 from .sms_outbox import SmsOutboundJob, SmsAiJob, SmsConversationEvent, SmsNote
 from .sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
 from .sms_arrival import SmsArrivalSession
-from .sms_chatwoot import SmsChatwootBinding
+from .sms_chatwoot import (
+    ChatwootConnection,
+    ChatwootWebhookReceipt,
+    SmsChatwootBinding,
+)
 
 __all__ = [
     "User",
@@ -131,4 +135,6 @@ __all__ = [
     "SmsPromptProfile",
     "SmsArrivalSession",
     "SmsChatwootBinding",
+    "ChatwootConnection",
+    "ChatwootWebhookReceipt",
 ]

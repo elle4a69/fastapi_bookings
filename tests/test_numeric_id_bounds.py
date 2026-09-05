@@ -45,18 +45,25 @@ ADMIN_GET_ID_ROUTES = [
     "/api/admin/sms/conversations/{id}",
     "/api/admin/sms/settings/knowledge/{id}",
     "/api/admin/sms/settings/prompts/{id}",
-    "/api/admin/sms/chatwoot/bindings/{id}",
+    "/api/admin/messaging/chatwoot/connections/{id}",
 ]
 
 # Database-backed numeric path parameter mutating (PUT/POST/DELETE) routes
 ADMIN_MUTATING_ID_ROUTES = [
-    ("PUT", "/api/admin/payments/{id}"),
-    ("PUT", "/api/admin/webhooks/{id}"),
-    ("PUT", "/api/admin/calendar-notes/{id}"),
-    ("PUT", "/api/admin/additional-fields/{id}"),
-    ("POST", "/api/admin/sms/conversations/jobs/{id}/retry"),
-    ("POST", "/api/admin/sms/conversations/messages/{id}/approve"),
-    ("POST", "/api/admin/bookings/{id}/cancel"),
+    ("PUT", "/api/admin/payments/{id}", {}),
+    ("PUT", "/api/admin/webhooks/{id}", {}),
+    ("PUT", "/api/admin/calendar-notes/{id}", {}),
+    ("PUT", "/api/admin/additional-fields/{id}", {}),
+    ("POST", "/api/admin/sms/conversations/jobs/{id}/retry", {}),
+    ("POST", "/api/admin/sms/conversations/messages/{id}/approve", {}),
+    ("PATCH", "/api/admin/messaging/chatwoot/connections/{id}", {}),
+    ("PATCH", "/api/admin/messaging/chatwoot/inbox-bindings/{id}", {}),
+    (
+        "PUT",
+        "/api/admin/messaging/chatwoot/connections/{id}/signing-secret",
+        {"signing_secret": "synthetic-bounds-signing-secret-value-000001"},
+    ),
+    ("POST", "/api/admin/bookings/{id}/cancel", {}),
 ]
 
 
@@ -95,12 +102,12 @@ def test_oversized_numeric_id_rejected_at_validation(client, auth_headers, endpo
     assert data["error"]["code"] == "VALIDATION_ERROR"
 
 
-@pytest.mark.parametrize("method,endpoint_template", ADMIN_MUTATING_ID_ROUTES)
+@pytest.mark.parametrize("method,endpoint_template,payload", ADMIN_MUTATING_ID_ROUTES)
 @pytest.mark.parametrize("oversized_id", OVERSIZED_IDS)
-def test_mutating_oversized_numeric_id_rejected_at_validation(client, auth_headers, method, endpoint_template, oversized_id):
+def test_mutating_oversized_numeric_id_rejected_at_validation(client, auth_headers, method, endpoint_template, payload, oversized_id):
     """Ensure mutating endpoints with oversized path IDs return HTTP 422 VALIDATION_ERROR."""
     url = endpoint_template.format(id=oversized_id)
-    response = client.request(method, url, headers=auth_headers, json={})
+    response = client.request(method, url, headers=auth_headers, json=payload)
     assert response.status_code == 422, f"Expected 422 for {method} {url}, got {response.status_code}: {response.text}"
     data = response.json()
     assert data["ok"] is False
@@ -119,12 +126,12 @@ def test_non_positive_numeric_id_rejected_at_validation(client, auth_headers, en
     assert data["error"]["code"] == "VALIDATION_ERROR"
 
 
-@pytest.mark.parametrize("method,endpoint_template", ADMIN_MUTATING_ID_ROUTES)
+@pytest.mark.parametrize("method,endpoint_template,payload", ADMIN_MUTATING_ID_ROUTES)
 @pytest.mark.parametrize("invalid_id", INVALID_IDS)
-def test_mutating_non_positive_numeric_id_rejected_at_validation(client, auth_headers, method, endpoint_template, invalid_id):
+def test_mutating_non_positive_numeric_id_rejected_at_validation(client, auth_headers, method, endpoint_template, payload, invalid_id):
     """Ensure mutating endpoints with non-positive integer path IDs (< 1) return HTTP 422 VALIDATION_ERROR."""
     url = endpoint_template.format(id=invalid_id)
-    response = client.request(method, url, headers=auth_headers, json={})
+    response = client.request(method, url, headers=auth_headers, json=payload)
     assert response.status_code == 422, f"Expected 422 for {method} {url}, got {response.status_code}: {response.text}"
     data = response.json()
     assert data["ok"] is False
