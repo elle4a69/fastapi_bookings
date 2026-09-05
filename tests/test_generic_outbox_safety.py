@@ -26,7 +26,9 @@ from app.services.outbox_service import create_outbox_event
 from app import worker as worker_entrypoint
 
 
-NOW = datetime(2026, 9, 5, 1, 0, tzinfo=timezone.utc)
+# Keep the injected clock deterministically later than real enqueue timestamps.
+# Tests exercise due/lease semantics, not the wall-clock date on which they run.
+NOW = datetime(2100, 1, 1, 1, 0, tzinfo=timezone.utc)
 _REAL_SOCKET_CONNECT = socket.socket.connect
 
 
@@ -268,7 +270,7 @@ def test_parent_waits_for_latest_child_without_refunding_claims(db_session):
     )
     event.webhook_snapshot_at = NOW
     db_session.flush()
-    latest_due = datetime.now(timezone.utc) + timedelta(hours=2)
+    latest_due = NOW + timedelta(hours=2)
     earlier_due = latest_due - timedelta(hours=1)
     db_session.add_all(
         [
