@@ -8,11 +8,23 @@ from ...models.sms_account import SmsAccount
 from ...models.sms_message import SmsMessage
 from ...models.sms_receipt import SmsDeliveryReceipt
 from ...services.sms.inbound_service import process_inbound_webhook
-from ...services.sms.transports import get_transport_adapter
+from ...services.sms.transports import (
+    DIRECT_PROVIDER_DISABLED_DETAIL,
+    get_transport_adapter,
+    is_disabled_direct_transport,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sms/webhooks", tags=["sms-webhooks"])
+
+
+def _reject_disabled_direct_transport(transport_type: str) -> None:
+    if is_disabled_direct_transport(transport_type):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=DIRECT_PROVIDER_DISABLED_DETAIL,
+        )
 
 @router.post("/{transport_type}/{account_public_id}")
 async def inbound_webhook(
@@ -22,6 +34,8 @@ async def inbound_webhook(
     db: Session = Depends(get_db)
 ):
     """Public webhook intake endpoint for incoming SMS events."""
+    _reject_disabled_direct_transport(transport_type)
+
     try:
         result = await process_inbound_webhook(
             db=db,
@@ -47,6 +61,8 @@ async def delivery_receipt_webhook(
     db: Session = Depends(get_db)
 ):
     """Public webhook endpoint for delivery status receipt updates."""
+    _reject_disabled_direct_transport(transport_type)
+
     # 1. Resolve SMS Account
     account = db.query(SmsAccount).filter(
         SmsAccount.public_id == account_public_id,

@@ -1,5 +1,4 @@
 from typing import List, Optional
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,9 +11,17 @@ from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsOutboundJob, SmsConversationEvent, SmsAiJob
 from ...schemas.sms_conversation import SmsConversationResponse
 from ...schemas.sms_message import SmsMessageCreate, SmsMessageResponse
-from ...services.sms.outbound_service import enqueue_outbound_message_transactional
 
 router = APIRouter(prefix="/sms/conversations", tags=["sms-conversations"])
+
+LOCAL_MESSAGING_DISABLED_DETAIL = "Local messaging controls are disabled; use Chatwoot."
+
+
+def _reject_local_messaging_control() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=LOCAL_MESSAGING_DISABLED_DETAIL,
+    )
 
 @router.get("", response_model=List[SmsConversationResponse])
 async def list_conversations(
@@ -89,27 +96,7 @@ async def retry_outbound_job(
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    job = db.query(SmsOutboundJob).join(
-        SmsAccount, SmsAccount.id == SmsOutboundJob.sms_account_id
-    ).filter(
-        SmsOutboundJob.id == job_id,
-        SmsAccount.tenant_id == tenant.id
-    ).first()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Outbound job not found.")
-        
-    job.status = "PENDING"
-    job.retry_count = 0
-    job.error_log = None
-    
-    # Also reset the message status to queued
-    message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
-    if message:
-        message.status = "queued"
-        
-    db.commit()
-    return {"status": "success", "detail": "Job marked for retry."}
+    _reject_local_messaging_control()
 
 @router.post("/messages/{message_id}/approve", response_model=SmsMessageResponse)
 async def approve_draft_message(
@@ -118,44 +105,7 @@ async def approve_draft_message(
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    # Retrieve message, checking tenant boundary
-    message = db.query(SmsMessage).filter(
-        SmsMessage.id == message_id,
-        SmsMessage.tenant_id == tenant.id
-    ).first()
-    
-    if not message:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-        
-    if message.status != "draft":
-        # Already approved/processed; return current message (idempotency!)
-        return message
-
-    # Mark message as queued for outbound send
-    message.direction = "outbound"
-    message.status = "queued"
-    
-    # Create the SmsOutboundJob record transactionally
-    job = SmsOutboundJob(
-        message_id=message.id,
-        sms_account_id=message.sms_account_id,
-        status="PENDING",
-        retry_count=0,
-        created_at=datetime.now(timezone.utc)
-    )
-    db.add(job)
-
-    # Log approval event
-    event = SmsConversationEvent(
-        conversation_id=message.conversation_id,
-        type="draft_approved",
-        meta={"message_id": message.id}
-    )
-    db.add(event)
-    db.commit()
-    db.refresh(message)
-    
-    return message
+    _reject_local_messaging_control()
 
 @router.post("/messages/{message_id}/discard", response_model=SmsMessageResponse)
 async def discard_draft_message(
@@ -256,56 +206,7 @@ async def send_manual_reply(
     admin_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    conv = db.query(SmsConversation).filter(
-        SmsConversation.id == conversation_id,
-        SmsConversation.tenant_id == tenant.id
-    ).first()
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found.")
-
-    account = db.query(SmsAccount).filter(SmsAccount.id == conv.sms_account_id).first()
-    if not account or not account.is_enabled:
-        raise HTTPException(status_code=400, detail="SMS account is disabled or missing.")
-
-    # 1. Enqueue message
-    msg = enqueue_outbound_message_transactional(
-        db=db,
-        account=account,
-        conversation=conv,
-        body=payload.body,
-        author_type="staff",
-        author_id=admin_user.id,
-        status="queued",
-        client_request_id=payload.client_request_id
-    )
-
-    # 2. Cancel pending AI jobs (since staff took action, current turn is resolved)
-    db.query(SmsAiJob).filter(
-        SmsAiJob.conversation_id == conv.id,
-        SmsAiJob.status == "PENDING"
-    ).update({"status": "CANCELLED"})
-
-    # 3. Log event
-    event = SmsConversationEvent(
-        conversation_id=conv.id,
-        type="staff_replied",
-        meta={"body": payload.body}
-    )
-    db.add(event)
-    
-    # 4. Takeover automatically if not already
-    if conv.state != "taken-over":
-        conv.state = "taken-over"
-        takeover_event = SmsConversationEvent(
-            conversation_id=conv.id,
-            type="takeover",
-            meta={"trigger": "manual_reply"}
-        )
-        db.add(takeover_event)
-
-    db.commit()
-    db.refresh(msg)
-    return msg
+    _reject_local_messaging_control()
 
 @router.post("/{conversation_id}/takeover", response_model=SmsConversationResponse)
 async def takeover_conversation(
@@ -347,22 +248,4 @@ async def restore_auto_reply(
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    conv = db.query(SmsConversation).filter(
-        SmsConversation.id == conversation_id,
-        SmsConversation.tenant_id == tenant.id
-    ).first()
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found.")
-
-    conv.state = "auto-reply"
-
-    # Log event
-    event = SmsConversationEvent(
-        conversation_id=conv.id,
-        type="restore_auto_reply",
-        meta={}
-    )
-    db.add(event)
-    db.commit()
-    
-    return conv
+    _reject_local_messaging_control()

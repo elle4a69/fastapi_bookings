@@ -7,7 +7,11 @@ from ...models.sms_outbox import SmsOutboundJob
 from ...models.sms_account import SmsAccount
 from ...models.sms_message import SmsMessage
 from ...models.sms_conversation import SmsConversation
-from .transports import get_transport_adapter
+from .transports import (
+    DIRECT_TRANSPORT_TERMINAL_REASON,
+    get_transport_adapter,
+    is_disabled_direct_transport,
+)
 from .transports.base import OutboundSmsCommand
 
 logger = logging.getLogger(__name__)
@@ -81,6 +85,22 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 db.commit()
                 continue
 
+            account = None
+            if job.sms_account_id is not None:
+                account = db.query(SmsAccount).filter(
+                    SmsAccount.id == job.sms_account_id
+                ).first()
+
+            if account and is_disabled_direct_transport(account.transport_type):
+                job.status = "FAILED"
+                job.error_log = DIRECT_TRANSPORT_TERMINAL_REASON
+                job.lease_expires_at = None
+                job.processed_at = datetime.now(timezone.utc)
+                message.status = "failed"
+                db.commit()
+                logger.warning("Disabled direct-provider outbound job quarantined.")
+                continue
+
             # Route Chatwoot-bound outbound messages directly
             if conversation.chatwoot_conversation_id is not None:
                 try:
@@ -123,7 +143,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     continue
 
             # SMS specific flow requires account
-            account = db.query(SmsAccount).filter(SmsAccount.id == job.sms_account_id).first()
+            if account is None:
+                account = db.query(SmsAccount).filter(SmsAccount.id == job.sms_account_id).first()
             if not account:
                 logger.error(f"SmsOutboundJob {job.id} refers to non-existent account.")
                 job.status = "FAILED"

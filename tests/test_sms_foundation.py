@@ -208,7 +208,6 @@ def test_chronological_rendering_order(client, setup_sms_test_data, db_session):
 
 def test_durable_outbox_queue_and_leasing(client, setup_sms_test_data, db_session):
     import asyncio
-    headers = setup_sms_test_data["headers"]
     acc_a = setup_sms_test_data["account_a"]
 
     # Pre-create conversation
@@ -226,14 +225,20 @@ def test_durable_outbox_queue_and_leasing(client, setup_sms_test_data, db_sessio
     # Clear prior fake sent messages
     FakeTransportAdapter.sent_messages.clear()
 
-    # Post manual reply (triggers queueing)
-    reply_payload = {
-        "body": "Test manual outbound queueing",
-        "client_request_id": "req-outbound-1"
-    }
-    resp = client.post(f"/api/admin/sms/conversations/{conv.id}/messages", json=reply_payload, headers=headers)
-    assert resp.status_code == status.HTTP_200_OK
-    message_id = resp.json()["id"]
+    # Queue directly with synthetic data. The local HTTP composer is retired;
+    # this test remains focused on durable queue and lease behavior.
+    from app.services.sms.outbound_service import enqueue_outbound_message_transactional
+
+    message = enqueue_outbound_message_transactional(
+        db=db_session,
+        account=acc_a,
+        conversation=conv,
+        body="Test manual outbound queueing",
+        author_type="staff",
+        client_request_id="req-outbound-1",
+    )
+    db_session.commit()
+    message_id = message.id
 
     # Verify SMS job is created and status is PENDING
     job = db_session.query(SmsOutboundJob).filter(SmsOutboundJob.message_id == message_id).first()

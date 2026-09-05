@@ -8,6 +8,10 @@ from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_account import SmsAccount
 from ...schemas.sms_account import SmsAccountCreate, SmsAccountUpdate, SmsAccountResponse
+from ...services.sms.transports import (
+    DIRECT_PROVIDER_DISABLED_DETAIL,
+    is_disabled_direct_transport,
+)
 
 router = APIRouter(prefix="/sms/accounts", tags=["sms-accounts"])
 
@@ -45,6 +49,12 @@ async def create_sms_account(
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
+    if is_disabled_direct_transport(payload.transport_type):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=DIRECT_PROVIDER_DISABLED_DETAIL,
+        )
+
     # Verify account sender address is normalized
     from ...services.sms.transports.base import normalize_sms_destination
     norm_address = normalize_sms_destination(payload.sender_address)
@@ -111,6 +121,19 @@ async def update_sms_account(
         raise HTTPException(status_code=404, detail="SMS account not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+
+    if is_disabled_direct_transport(account.transport_type):
+        if update_data != {"is_enabled": False}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DIRECT_PROVIDER_DISABLED_DETAIL,
+            )
+
+        account.is_enabled = False
+        account.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(account)
+        return redact_credentials(account)
     
     # Handle credentials merge
     if "credentials" in update_data:
@@ -149,5 +172,10 @@ async def delete_sms_account(
     ).first()
     if not account:
         raise HTTPException(status_code=404, detail="SMS account not found.")
+    if is_disabled_direct_transport(account.transport_type):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=DIRECT_PROVIDER_DISABLED_DETAIL,
+        )
     db.delete(account)
     db.commit()

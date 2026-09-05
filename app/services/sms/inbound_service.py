@@ -3,9 +3,13 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, status
 
-from .transports import get_transport_adapter
+from .transports import (
+    DIRECT_PROVIDER_DISABLED_DETAIL,
+    get_transport_adapter,
+    is_disabled_direct_transport,
+)
 from ...models.sms_account import SmsAccount
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
@@ -23,6 +27,12 @@ async def process_inbound_webhook(
     request: Request
 ) -> dict:
     """Intake pipeline for incoming SMS webhooks."""
+    if is_disabled_direct_transport(transport_type):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=DIRECT_PROVIDER_DISABLED_DETAIL,
+        )
+
     # 1. Resolve enabled SMS account
     account = db.query(SmsAccount).filter(
         SmsAccount.public_id == account_public_id,
