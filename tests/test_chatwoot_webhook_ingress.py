@@ -179,7 +179,12 @@ def test_signed_created_message_projects_without_automation_or_identity_matching
     assert receipt.outcome == "projected"
     assert db_session.query(SmsAiJob).count() == 0
     assert db_session.query(SmsOutboundJob).count() == 0
-    assert db_session.query(SmsConversationEvent).count() == 0
+    event = db_session.query(SmsConversationEvent).one()
+    assert event.type == "chatwoot_operator_review"
+    assert event.meta == {
+        "reason_code": "automation_disabled",
+        "identity_code": "untrusted_client_identity",
+    }
 
 
 @pytest.mark.parametrize(
@@ -373,7 +378,9 @@ def test_message_update_reconciles_projection_without_side_effects(
     assert conversation.state == original_state
     assert db_session.query(SmsAiJob).count() == 0
     assert db_session.query(SmsOutboundJob).count() == 0
-    assert db_session.query(SmsConversationEvent).count() == 0
+    # The single event came from the initial created projection. Updates only
+    # reconcile the durable message and never re-run policy processing.
+    assert db_session.query(SmsConversationEvent).count() == 1
 
 
 @pytest.mark.parametrize(
@@ -399,7 +406,8 @@ def test_private_template_unsupported_and_activity_never_store_content_or_automa
         assert message.body == ""
     assert db_session.query(SmsAiJob).count() == 0
     assert db_session.query(SmsOutboundJob).count() == 0
-    assert db_session.query(SmsConversationEvent).count() == 0
+    expected_events = 0 if changes.get("message_type") == "activity" else 1
+    assert db_session.query(SmsConversationEvent).count() == expected_events
 
 
 def test_sender_classification_and_attachment_allowlist(client, db_session):

@@ -22,6 +22,8 @@ from .contracts import (
     SUPPORTED_EVENTS,
     normalize_message,
 )
+from .policy import ProcessingProvenance
+from .processor import process_projected_message
 
 
 @dataclass(frozen=True)
@@ -133,30 +135,39 @@ def _project_created(
         db.flush()
 
     normalized = normalize_message(event)
-    db.add(
-        SmsMessage(
-            tenant_id=binding.tenant_id,
-            provider_id=binding.provider_id,
-            sms_account_id=None,
-            conversation_id=conversation.id,
-            body=normalized.body,
-            normalized_body=normalized.normalized_body,
-            direction=normalized.direction,
-            author_type=normalized.author_type,
-            status="received" if normalized.direction == "inbound" else "sent",
-            chatwoot_binding_id=binding.id,
-            chatwoot_message_id=event.message_id,
-            chatwoot_message_type=event.message_type,
-            chatwoot_content_type=event.content_type,
-            chatwoot_private=event.private,
-            chatwoot_sender_type=event.sender_type,
-            chatwoot_sender_reference=event.sender_reference,
-            chatwoot_attachment_metadata=event.attachments or None,
-            occurred_at=event.occurred_at,
-            received_at=datetime.now(timezone.utc),
-        )
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body=normalized.body,
+        normalized_body=normalized.normalized_body,
+        direction=normalized.direction,
+        author_type=normalized.author_type,
+        status="received" if normalized.direction == "inbound" else "sent",
+        chatwoot_binding_id=binding.id,
+        chatwoot_message_id=event.message_id,
+        chatwoot_message_type=event.message_type,
+        chatwoot_content_type=event.content_type,
+        chatwoot_private=event.private,
+        chatwoot_sender_type=event.sender_type,
+        chatwoot_sender_reference=event.sender_reference,
+        chatwoot_attachment_metadata=event.attachments or None,
+        occurred_at=event.occurred_at,
+        received_at=datetime.now(timezone.utc),
     )
+    db.add(message)
     db.flush()
+    # Only a successful, newly persisted ``message_created`` projection reaches
+    # policy processing. Caller-controlled metadata is never used to select the
+    # reserved FastAPI-echo provenance.
+    process_projected_message(
+        db,
+        binding=binding,
+        conversation=conversation,
+        message=message,
+        provenance=ProcessingProvenance.UNVERIFIED,
+    )
     return "projected"
 
 

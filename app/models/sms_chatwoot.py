@@ -188,6 +188,11 @@ class SmsChatwootBinding(Base):
     ingress_enabled = Column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
+    # Package C deliberately has no control that can enable automation. This
+    # remains a disabled-by-default future policy input only.
+    automation_enabled = Column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     channel_metadata = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
