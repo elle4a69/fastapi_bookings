@@ -59,6 +59,13 @@ class Settings(BaseSettings):
         "/static/booking-widget.js",
         description="URL used in generated booking-form embed metadata",
     )
+    CHATWOOT_TRUSTED_ORIGINS: str = Field(
+        "",
+        description=(
+            "Comma separated HTTPS Chatwoot origins permitted to receive "
+            "credentialed outbound requests; empty disables Chatwoot origin setup"
+        ),
+    )
 
     # ClickSend SMS/MMS Settings
     CLICKSEND_API_USERNAME: str = Field("", description="ClickSend API username")

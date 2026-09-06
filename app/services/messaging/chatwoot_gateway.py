@@ -15,6 +15,7 @@ from ...models.sms_chatwoot import (
 )
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
+from ...schemas.sms_chatwoot import trusted_chatwoot_instance_origin
 from .chatwoot_reconciliation import (
     outbound_message_is_trusted,
     reconcile_remote_message,
@@ -147,9 +148,14 @@ def _mark_quarantined(db: Session, intent: ChatwootOutboundIntent) -> None:
     db.commit()
 
 
-def _messages_url(connection: ChatwootConnection, conversation: SmsConversation) -> str:
+def _trusted_messages_url(
+    connection: ChatwootConnection, conversation: SmsConversation
+) -> str | None:
+    origin = trusted_chatwoot_instance_origin(connection.instance_origin)
+    if origin is None:
+        return None
     return (
-        f"{connection.instance_origin}/api/v1/accounts/"
+        f"{origin}/api/v1/accounts/"
         f"{connection.chatwoot_account_id}/conversations/"
         f"{conversation.chatwoot_conversation_id}/messages"
     )
@@ -178,6 +184,10 @@ async def reconcile_unknown_outbound_intent(
     ):
         _mark_quarantined(db, intent)
         return "QUARANTINED"
+    messages_url = _trusted_messages_url(connection, conversation)
+    if messages_url is None:
+        _mark_quarantined(db, intent)
+        return "QUARANTINED"
     try:
         token = decrypt_api_token(connection._api_token_ciphertext)
     except ApiTokenUnavailable:
@@ -195,7 +205,7 @@ async def reconcile_unknown_outbound_intent(
             trust_env=False,
         ) as client:
             response = await client.get(
-                _messages_url(connection, conversation),
+                messages_url,
                 headers={"api_access_token": token},
                 params={"after": str(intent.pre_send_cursor or 0)},
             )
@@ -259,6 +269,10 @@ async def dispatch_outbound_intent(db: Session, *, intent_id: int) -> str:
     ):
         _mark_failed(db, intent)
         return "FAILED"
+    messages_url = _trusted_messages_url(connection, conversation)
+    if messages_url is None:
+        _mark_failed(db, intent)
+        return "FAILED"
     try:
         token = decrypt_api_token(connection._api_token_ciphertext)
     except ApiTokenUnavailable:
@@ -282,7 +296,7 @@ async def dispatch_outbound_intent(db: Session, *, intent_id: int) -> str:
             trust_env=False,
         ) as client:
             response = await client.post(
-                _messages_url(connection, conversation),
+                messages_url,
                 headers={"api_access_token": token},
                 json=payload,
             )

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+import ipaddress
 from typing import Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+
+from ..core.config import settings
 
 
 __all__ = [
@@ -21,30 +24,71 @@ __all__ = [
 ]
 
 
-def _canonical_instance_origin(value: str) -> str:
+def _canonical_https_instance_origin(value: str) -> str:
     raw = value.strip()
     parsed = urlsplit(raw)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("instance_origin must be an absolute HTTP(S) origin")
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        raise ValueError("instance_origin must be an absolute HTTPS origin")
     if parsed.username or parsed.password:
         raise ValueError("instance_origin must not contain credentials")
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise ValueError("instance_origin must not contain a path, query, or fragment")
 
-    scheme = parsed.scheme.lower()
     try:
         port = parsed.port
     except ValueError as exc:
         raise ValueError("instance_origin contains an invalid port") from exc
 
-    hostname = parsed.hostname.lower()
-    if ":" in hostname:
-        hostname = f"[{hostname}]"
-    default_port = (scheme == "https" and port == 443) or (
-        scheme == "http" and port == 80
-    )
+    hostname = parsed.hostname.rstrip(".").lower()
+    if (
+        not hostname
+        or hostname == "localhost"
+        or hostname.endswith(".localhost")
+    ):
+        raise ValueError("instance_origin must use a public DNS hostname")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("instance_origin must use a public DNS hostname")
+    try:
+        hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError("instance_origin contains an invalid hostname") from exc
+
+    default_port = port == 443
     netloc = hostname if port is None or default_port else f"{hostname}:{port}"
-    return urlunsplit((scheme, netloc, "", "", ""))
+    return urlunsplit(("https", netloc, "", "", ""))
+
+
+def _configured_trusted_chatwoot_origins() -> frozenset[str]:
+    configured = [
+        origin.strip()
+        for origin in settings.CHATWOOT_TRUSTED_ORIGINS.split(",")
+        if origin.strip()
+    ]
+    if not configured:
+        return frozenset()
+    try:
+        return frozenset(
+            _canonical_https_instance_origin(origin) for origin in configured
+        )
+    except ValueError:
+        # A malformed deployment setting must not leave any other configured
+        # origin usable by mistake.
+        return frozenset()
+
+
+def trusted_chatwoot_instance_origin(value: str) -> str | None:
+    """Return a configured safe origin, or fail closed without logging it."""
+    try:
+        origin = _canonical_https_instance_origin(value)
+    except (AttributeError, ValueError):
+        return None
+    if origin not in _configured_trusted_chatwoot_origins():
+        return None
+    return origin
 
 
 class ChatwootConnectionCreate(BaseModel):
@@ -57,7 +101,12 @@ class ChatwootConnectionCreate(BaseModel):
     @field_validator("instance_origin")
     @classmethod
     def canonicalize_instance_origin(cls, value: str) -> str:
-        return _canonical_instance_origin(value)
+        origin = trusted_chatwoot_instance_origin(value)
+        if origin is None:
+            raise ValueError(
+                "instance_origin must be a configured trusted HTTPS origin"
+            )
+        return origin
 
 
 class ChatwootConnectionUpdate(BaseModel):

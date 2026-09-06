@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.provider import Provider
 from app.models.sms_chatwoot import (
@@ -17,7 +18,19 @@ from app.models.sms_conversation import SmsConversation
 from app.models.sms_message import SmsMessage
 from app.models.tenant import Tenant
 from app.models.user import User
-from app.schemas.sms_chatwoot import ChatwootInboxBindingUpdate
+from app.schemas.sms_chatwoot import (
+    ChatwootConnectionCreate,
+    ChatwootInboxBindingUpdate,
+)
+
+
+@pytest.fixture(autouse=True)
+def _configure_trusted_chatwoot_origin(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "CHATWOOT_TRUSTED_ORIGINS",
+        "https://chatwoot.example.test",
+    )
 
 
 def _admin_context(db_session, suffix: str):
@@ -395,3 +408,36 @@ def test_validation_error_never_reflects_credential_bearing_origin(
     assert response.status_code == 422
     assert sentinel not in response.text
     assert sentinel not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://chatwoot.example.test",
+        "https://localhost",
+        "https://127.0.0.1",
+        "https://169.254.169.254",
+        "https://attacker.example.test",
+    ],
+)
+def test_admin_connection_rejects_non_trusted_or_non_public_origins(
+    origin,
+):
+    """The admin create payload is a strict HTTPS allowlist, not an open URL."""
+    with pytest.raises(ValidationError):
+        ChatwootConnectionCreate(instance_origin=origin, chatwoot_account_id=403)
+
+
+@pytest.mark.parametrize(
+    "configured_origins",
+    ["", "https://chatwoot.example.test,not-an-origin"],
+)
+def test_admin_connection_fails_closed_when_the_trusted_origin_setting_is_empty_or_invalid(
+    monkeypatch, configured_origins
+):
+    monkeypatch.setattr(settings, "CHATWOOT_TRUSTED_ORIGINS", configured_origins)
+    with pytest.raises(ValidationError):
+        ChatwootConnectionCreate(
+            instance_origin="https://chatwoot.example.test",
+            chatwoot_account_id=404,
+        )

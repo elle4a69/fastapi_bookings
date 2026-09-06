@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from app.core.config import settings
 from app.models.provider import Provider
 from app.models.sms_chatwoot import (
     ChatwootConnection,
@@ -37,6 +38,15 @@ from app.services.sms.outbox_worker import (
     CHATWOOT_GENERIC_JOB_TERMINAL_REASON,
     process_pending_sms_outbound_jobs,
 )
+
+
+@pytest.fixture(autouse=True)
+def _configure_trusted_chatwoot_origin(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "CHATWOOT_TRUSTED_ORIGINS",
+        "https://chatwoot.synthetic.test",
+    )
 
 
 @pytest.fixture
@@ -624,6 +634,82 @@ def test_dispatch_requires_effective_ingress_and_consistent_local_tuple(
     fake.post.assert_not_awaited()
     db_session.refresh(intent)
     assert intent.status == "FAILED"
+
+
+def test_unsafe_stored_origin_blocks_dispatch_before_token_or_content_reaches_client(
+    db_session, outbound_boundary
+):
+    """Historical unsafe records cannot decrypt a credential or build a POST."""
+    *_prefix, connection, _binding, conversation = outbound_boundary
+    message = enqueue_outbound_message_transactional(
+        db_session,
+        None,
+        conversation,
+        "Synthetic blocked dispatch body",
+        "ai",
+        status="queued",
+    )
+    db_session.commit()
+    intent = db_session.query(ChatwootOutboundIntent).filter_by(message_id=message.id).one()
+    assert claim_outbound_intent_for_dispatch(db_session, intent_id=intent.id) is True
+    connection.instance_origin = "https://127.0.0.1"
+    db_session.commit()
+
+    with patch(
+        "app.services.messaging.chatwoot_gateway.decrypt_api_token",
+        side_effect=AssertionError("token decryption reached"),
+    ) as decrypt, patch(
+        "app.services.messaging.chatwoot_gateway.httpx.AsyncClient",
+        side_effect=AssertionError("credentialed client reached"),
+    ) as client_factory:
+        assert asyncio.run(dispatch_outbound_intent(db_session, intent_id=intent.id)) == "FAILED"
+
+    decrypt.assert_not_called()
+    client_factory.assert_not_called()
+    db_session.refresh(intent)
+    db_session.refresh(message)
+    assert intent.status == "FAILED"
+    assert message.status == "failed"
+
+
+def test_unsafe_stored_origin_blocks_reconciliation_before_token_or_client(
+    db_session, outbound_boundary
+):
+    """An unsafe historical record cannot leak a token during its one-shot GET."""
+    *_prefix, connection, _binding, conversation = outbound_boundary
+    message = enqueue_outbound_message_transactional(
+        db_session,
+        None,
+        conversation,
+        "Synthetic blocked reconciliation body",
+        "ai",
+        status="queued",
+    )
+    db_session.commit()
+    intent = db_session.query(ChatwootOutboundIntent).filter_by(message_id=message.id).one()
+    intent.status = "OUTCOME_UNKNOWN"
+    connection.instance_origin = "https://169.254.169.254"
+    db_session.commit()
+
+    with patch(
+        "app.services.messaging.chatwoot_gateway.decrypt_api_token",
+        side_effect=AssertionError("token decryption reached"),
+    ) as decrypt, patch(
+        "app.services.messaging.chatwoot_gateway.httpx.AsyncClient",
+        side_effect=AssertionError("credentialed client reached"),
+    ) as client_factory:
+        assert (
+            asyncio.run(reconcile_unknown_outbound_intent(db_session, intent_id=intent.id))
+            == "QUARANTINED"
+        )
+
+    decrypt.assert_not_called()
+    client_factory.assert_not_called()
+    db_session.refresh(intent)
+    db_session.refresh(message)
+    assert intent.status == "QUARANTINED"
+    assert intent.reconciliation_attempted is False
+    assert message.status == "failed"
 
 
 def test_legacy_sender_and_generic_chatwoot_job_fail_closed(

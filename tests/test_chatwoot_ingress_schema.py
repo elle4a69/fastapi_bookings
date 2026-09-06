@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401 - populate SQLAlchemy metadata
 import app.schemas.sms_chatwoot as chatwoot_schemas
+from app.core.config import settings
 from app.db.database import Base
 from app.models.provider import Provider
 from app.models.sms_chatwoot import (
@@ -470,7 +471,12 @@ def test_receipt_is_scoped_to_connection_and_uses_structural_fields_only(db_sess
         db_session.commit()
 
 
-def test_connection_schemas_are_disabled_first_canonical_and_secret_safe():
+def test_connection_schemas_are_disabled_first_canonical_and_secret_safe(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "CHATWOOT_TRUSTED_ORIGINS",
+        "https://chatwoot.example.test",
+    )
     create = ChatwootConnectionCreate(
         instance_origin="HTTPS://Chatwoot.Example.Test:443/",
         chatwoot_account_id=700,
