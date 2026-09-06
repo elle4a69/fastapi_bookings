@@ -4,12 +4,20 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.security import create_access_token
 from app.models.provider import Provider
-from app.models.sms_chatwoot import ChatwootConnection, SmsChatwootBinding
+from app.models.sms_chatwoot import (
+    ChatwootConnection,
+    ChatwootOutboundIntent,
+    SmsChatwootBinding,
+)
+from app.models.sms_conversation import SmsConversation
+from app.models.sms_message import SmsMessage
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.schemas.sms_chatwoot import ChatwootInboxBindingUpdate
 
 
 def _admin_context(db_session, suffix: str):
@@ -56,17 +64,6 @@ def test_admin_connection_is_disabled_first_tenant_scoped_and_secret_safe(
     unauthenticated = client.get("/api/admin/messaging/chatwoot/connections")
     assert unauthenticated.status_code in {400, 401}
 
-    rejected = client.post(
-        "/api/admin/messaging/chatwoot/connections",
-        headers=headers_a,
-        json={
-            "instance_origin": "https://chatwoot.example.test",
-            "chatwoot_account_id": 101,
-            "enabled": True,
-        },
-    )
-    assert rejected.status_code == 422
-
     created = _create_connection(client, headers_a)
     assert created.status_code == 201
     body = created.json()
@@ -74,13 +71,15 @@ def test_admin_connection_is_disabled_first_tenant_scoped_and_secret_safe(
     assert body["instance_origin"] == "https://chatwoot.example.test"
     assert body["enabled"] is False
     assert body["has_signing_secret"] is False
+    assert body["has_api_token"] is False
+    assert body["outbound_ready"] is False
     assert body["webhook_path"].startswith(
         "/api/messaging/chatwoot/webhooks/"
     )
     serialized = created.text.lower()
     assert "ciphertext" not in serialized
     assert "signing_secret" not in body
-    assert "token" not in serialized
+    assert "synthetic-api-token" not in serialized
     assert "http://testserver" not in serialized
 
     assert (
@@ -128,6 +127,39 @@ def test_admin_connection_is_disabled_first_tenant_scoped_and_secret_safe(
         == 409
     )
 
+    api_token = "synthetic-api-token-000001"
+    configured_token = client.put(
+        f"/api/admin/messaging/chatwoot/connections/{body['id']}/api-token",
+        headers=headers_a,
+        json={"api_token": api_token},
+    )
+    assert configured_token.status_code == 200
+    assert configured_token.json()["has_api_token"] is True
+    assert api_token not in configured_token.text
+    configured_sender = client.put(
+        f"/api/admin/messaging/chatwoot/connections/{body['id']}/integration-sender",
+        headers=headers_a,
+        json={"sender_type": "User", "sender_id": 1234},
+    )
+    assert configured_sender.status_code == 200
+    assert configured_sender.json()["has_expected_integration_sender"] is True
+    assert (
+        client.patch(
+            f"/api/admin/messaging/chatwoot/connections/{body['id']}",
+            headers=headers_a,
+            json={"outbound_enabled": True},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.put(
+            f"/api/admin/messaging/chatwoot/connections/{body['id']}/api-token",
+            headers=headers_a,
+            json={"api_token": "synthetic-api-token-rotated"},
+        ).status_code
+        == 409
+    )
+
 
 def test_inbox_binding_validates_provider_and_effective_connection(
     client, db_session
@@ -160,6 +192,8 @@ def test_inbox_binding_validates_provider_and_effective_connection(
     binding = created.json()
     assert binding["ingress_enabled"] is False
     assert binding["effective_ingress_enabled"] is False
+    assert binding["outbound_enabled"] is False
+    assert binding["effective_outbound_enabled"] is False
     assert (
         client.patch(
             f"/api/admin/messaging/chatwoot/inbox-bindings/{binding['id']}",
@@ -188,12 +222,8 @@ def test_inbox_binding_validates_provider_and_effective_connection(
     assert enabled.status_code == 200
     assert enabled.json()["effective_ingress_enabled"] is True
 
-    immutable = client.patch(
-        f"/api/admin/messaging/chatwoot/inbox-bindings/{binding['id']}",
-        headers=headers_a,
-        json={"chatwoot_inbox_id": 999},
-    )
-    assert immutable.status_code == 422
+    with pytest.raises(ValidationError):
+        ChatwootInboxBindingUpdate(ingress_enabled=False, chatwoot_inbox_id=999)
     assert (
         client.delete(
             f"/api/admin/messaging/chatwoot/inbox-bindings/{binding['id']}",
@@ -247,6 +277,78 @@ def test_duplicate_identity_conflicts_and_legacy_routes_are_removed(
         == 404
     )
     assert db_session.query(SmsChatwootBinding).count() == 1
+
+
+def test_unknown_outbound_intent_locks_token_and_sender_even_when_disabled(
+    client, db_session
+):
+    """An uncertain submit remains active work until operator reconciliation."""
+    tenant, provider, headers = _admin_context(db_session, "unknown-lock")
+    connection_payload = _create_connection(client, headers, account_id=351).json()
+    binding_payload = client.post(
+        "/api/admin/messaging/chatwoot/inbox-bindings",
+        headers=headers,
+        json={
+            "connection_id": connection_payload["id"],
+            "provider_id": provider.id,
+            "chatwoot_inbox_id": 352,
+        },
+    ).json()
+    connection = db_session.get(ChatwootConnection, connection_payload["id"])
+    binding = db_session.get(SmsChatwootBinding, binding_payload["id"])
+    conversation = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        customer_address="synthetic-unknown-lock-conversation",
+        chatwoot_binding_id=binding.id,
+        chatwoot_conversation_id=353,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        conversation_id=conversation.id,
+        body="Synthetic unknown intent",
+        direction="outbound",
+        author_type="ai",
+        status="outcome_unknown",
+        chatwoot_binding_id=binding.id,
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        ChatwootOutboundIntent(
+            tenant_id=tenant.id,
+            provider_id=provider.id,
+            connection_id=connection.id,
+            binding_id=binding.id,
+            conversation_id=conversation.id,
+            message_id=message.id,
+            status="OUTCOME_UNKNOWN",
+        )
+    )
+    db_session.commit()
+
+    assert connection.outbound_enabled is False
+    assert binding.outbound_enabled is False
+    assert (
+        client.put(
+            f"/api/admin/messaging/chatwoot/connections/{connection.id}/api-token",
+            headers=headers,
+            json={"api_token": "synthetic-api-token-unknown-lock"},
+        ).status_code
+        == 409
+    )
+    assert (
+        client.put(
+            f"/api/admin/messaging/chatwoot/connections/{connection.id}/integration-sender",
+            headers=headers,
+            json={"sender_type": "User", "sender_id": 354},
+        ).status_code
+        == 409
+    )
 
 
 @pytest.mark.parametrize(

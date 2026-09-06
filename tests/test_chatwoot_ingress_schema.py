@@ -15,6 +15,7 @@ from app.db.database import Base
 from app.models.provider import Provider
 from app.models.sms_chatwoot import (
     ChatwootConnection,
+    ChatwootOutboundIntent,
     ChatwootWebhookReceipt,
     SmsChatwootBinding,
 )
@@ -25,6 +26,8 @@ from app.schemas.sms_chatwoot import (
     ChatwootConnectionCreate,
     ChatwootConnectionResponse,
     ChatwootConnectionUpdate,
+    ChatwootApiTokenRotate,
+    ChatwootIntegrationSenderConfigure,
     ChatwootInboxBindingCreate,
     ChatwootInboxBindingResponse,
     ChatwootInboxBindingUpdate,
@@ -506,7 +509,11 @@ def test_connection_schemas_are_disabled_first_canonical_and_secret_safe():
         instance_origin="https://chatwoot.example.test",
         chatwoot_account_id=700,
         enabled=False,
+        outbound_enabled=False,
         has_signing_secret=True,
+        has_api_token=False,
+        has_expected_integration_sender=False,
+        outbound_ready=False,
         webhook_path="/api/messaging/chatwoot/webhooks/12345678-1234-4234-9234-123456789abc",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -517,7 +524,7 @@ def test_connection_schemas_are_disabled_first_canonical_and_secret_safe():
         forbidden not in key
         for key in dumped
         for forbidden in ("cipher", "token", "secret")
-        if key != "has_signing_secret"
+        if key not in {"has_signing_secret", "has_api_token"}
     )
 
 
@@ -537,14 +544,14 @@ def test_inbox_schemas_keep_identity_immutable_and_web_widget_only():
             chatwoot_inbox_id=3,
             channel="sms",
         )
-    assert set(ChatwootInboxBindingUpdate.model_fields) == {"ingress_enabled"}
+    assert set(ChatwootInboxBindingUpdate.model_fields) == {"ingress_enabled", "outbound_enabled"}
     assert {
         "connection_id",
         "provider_id",
         "chatwoot_inbox_id",
         "channel",
     }.isdisjoint(ChatwootConnectionUpdate.model_fields)
-    assert set(ChatwootConnectionUpdate.model_fields) == {"enabled"}
+    assert set(ChatwootConnectionUpdate.model_fields) == {"enabled", "outbound_enabled"}
     with pytest.raises(ValidationError):
         ChatwootConnectionUpdate(
             enabled=False,
@@ -557,6 +564,13 @@ def test_inbox_schemas_keep_identity_immutable_and_web_widget_only():
         )
     assert "webhook_secret" not in ChatwootInboxBindingResponse.model_fields
     assert "chatwoot_api_token" not in ChatwootInboxBindingResponse.model_fields
+    token = ChatwootApiTokenRotate(api_token="synthetic-api-token")
+    assert "synthetic-api-token" not in repr(token)
+    assert ChatwootApiTokenRotate.model_json_schema()["properties"]["api_token"]["writeOnly"] is True
+    sender = ChatwootIntegrationSenderConfigure(sender_type="User", sender_id=7)
+    assert sender.sender_id == 7
+    with pytest.raises(ValidationError):
+        ChatwootIntegrationSenderConfigure(sender_type="AgentBot", sender_id=7)
 
 
 def test_schema_export_surface_has_no_plaintext_legacy_credentials():
@@ -572,6 +586,8 @@ def test_schema_export_surface_has_no_plaintext_legacy_credentials():
         "ChatwootConnectionCreate",
         "ChatwootConnectionUpdate",
         "ChatwootSigningSecretRotate",
+        "ChatwootApiTokenRotate",
+        "ChatwootIntegrationSenderConfigure",
         "ChatwootConnectionResponse",
         "ChatwootInboxBindingCreate",
         "ChatwootInboxBindingUpdate",
@@ -589,7 +605,8 @@ def test_schema_export_surface_has_no_plaintext_legacy_credentials():
 
 def test_schema_tables_exist_in_sqlite_create_all(db_session):
     table_names = set(inspect(db_session.bind).get_table_names())
-    assert {"chatwoot_connections", "chatwoot_webhook_receipts"} <= table_names
+    assert {"chatwoot_connections", "chatwoot_webhook_receipts", "chatwoot_outbound_intents"} <= table_names
+    assert ChatwootOutboundIntent.__tablename__ in table_names
 
     receipt_fks = inspect(db_session.bind).get_foreign_keys(
         "chatwoot_webhook_receipts"

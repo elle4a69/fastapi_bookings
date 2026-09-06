@@ -14,6 +14,7 @@ from app.models.client import Client
 from app.models.provider import Provider
 from app.models.sms_chatwoot import (
     ChatwootConnection,
+    ChatwootOutboundIntent,
     ChatwootWebhookReceipt,
     SmsChatwootBinding,
 )
@@ -185,6 +186,172 @@ def test_signed_created_message_projects_without_automation_or_identity_matching
         "reason_code": "automation_disabled",
         "identity_code": "untrusted_client_identity",
     }
+
+
+def test_verified_fastapi_echo_reconciles_existing_intent_without_projection_or_takeover(
+    client, db_session
+):
+    tenant, provider, connection, binding = _boundary(
+        db_session, suffix="verified-echo"
+    )
+    connection.expected_integration_sender_type = "User"
+    connection.expected_integration_sender_id = 999001
+    conversation = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        customer_address="synthetic-existing-conversation",
+        state="auto-reply",
+        chatwoot_binding_id=binding.id,
+        chatwoot_conversation_id=7003,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        conversation_id=conversation.id,
+        body="Synthetic local outbound body",
+        direction="outbound",
+        author_type="ai",
+        status="sending",
+        chatwoot_binding_id=binding.id,
+    )
+    db_session.add(message)
+    db_session.flush()
+    intent = ChatwootOutboundIntent(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        connection_id=connection.id,
+        binding_id=binding.id,
+        conversation_id=conversation.id,
+        message_id=message.id,
+        status="SENDING",
+    )
+    db_session.add(intent)
+    db_session.commit()
+
+    payload = _payload(
+        conversation_id=conversation.chatwoot_conversation_id,
+        message_id=7010,
+        message_type="outgoing",
+        sender_type="User",
+        content="Synthetic echo body",
+    )
+    payload["content_attributes"] = {
+        "fastapi_bookings": {"outbound_correlation_id": str(intent.outbound_correlation_id)}
+    }
+    assert _post(client, connection, payload).status_code == 202
+    # A separate signed delivery for the same remote message is an echo race,
+    # not authority to create another local/customer-facing projection.
+    assert _post(client, connection, payload).status_code == 202
+    db_session.refresh(intent)
+    db_session.refresh(message)
+    db_session.refresh(conversation)
+    assert intent.status == "SUCCEEDED"
+    assert intent.remote_chatwoot_message_id == 7010
+    assert message.chatwoot_message_id == 7010
+    assert message.status == "sent"
+    assert conversation.state == "auto-reply"
+    assert db_session.query(SmsMessage).count() == 1
+    assert db_session.query(ChatwootWebhookReceipt).count() == 2
+    event = db_session.query(SmsConversationEvent).one()
+    assert event.type == "chatwoot_projection_reconciled"
+
+
+@pytest.mark.parametrize(
+    (
+        "configured_sender_type",
+        "sender_type",
+        "private",
+        "sender_id",
+        "expected_state",
+        "event_type",
+    ),
+    [
+        ("User", "User", False, 999002, "taken-over", "chatwoot_takeover"),
+        ("User", "User", True, 999001, "paused", "chatwoot_operator_review"),
+        ("User", "AgentBot", False, 999001, "paused", "chatwoot_operator_review"),
+        ("AgentBot", "AgentBot", False, 999001, "paused", "chatwoot_operator_review"),
+    ],
+)
+def test_copied_outbound_marker_from_non_integration_sender_never_reconciles_echo(
+    client,
+    db_session,
+    configured_sender_type,
+    sender_type,
+    private,
+    sender_id,
+    expected_state,
+    event_type,
+):
+    """A marker is inert unless every sender and public-message check matches."""
+    tenant, provider, connection, binding = _boundary(
+        db_session,
+        suffix=f"copied-marker-{sender_type}-{private}-{sender_id}",
+    )
+    connection.expected_integration_sender_type = configured_sender_type
+    connection.expected_integration_sender_id = 999001
+    conversation = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        customer_address="synthetic-copied-marker-conversation",
+        state="auto-reply",
+        chatwoot_binding_id=binding.id,
+        chatwoot_conversation_id=7003,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    local_message = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        conversation_id=conversation.id,
+        body="Synthetic local outbound body",
+        direction="outbound",
+        author_type="ai",
+        status="sending",
+        chatwoot_binding_id=binding.id,
+    )
+    db_session.add(local_message)
+    db_session.flush()
+    intent = ChatwootOutboundIntent(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        connection_id=connection.id,
+        binding_id=binding.id,
+        conversation_id=conversation.id,
+        message_id=local_message.id,
+        status="SENDING",
+    )
+    db_session.add(intent)
+    db_session.commit()
+
+    payload = _payload(
+        conversation_id=conversation.chatwoot_conversation_id,
+        message_id=7020,
+        message_type="outgoing",
+        sender_type=sender_type,
+        private=private,
+        content="Synthetic copied marker body",
+    )
+    payload["sender"]["id"] = sender_id
+    payload["content_attributes"] = {
+        "fastapi_bookings": {
+            "outbound_correlation_id": str(intent.outbound_correlation_id)
+        }
+    }
+    assert _post(client, connection, payload).status_code == 202
+
+    db_session.refresh(intent)
+    db_session.refresh(local_message)
+    db_session.refresh(conversation)
+    assert intent.status == "SENDING"
+    assert intent.remote_chatwoot_message_id is None
+    assert local_message.chatwoot_message_id is None
+    assert conversation.state == expected_state
+    assert db_session.query(SmsMessage).count() == 2
+    assert db_session.query(SmsConversationEvent).one().type == event_type
 
 
 @pytest.mark.parametrize(

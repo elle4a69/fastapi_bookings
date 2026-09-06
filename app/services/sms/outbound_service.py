@@ -7,8 +7,48 @@ from ...models.sms_account import SmsAccount
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsOutboundJob
+from ...models.sms_chatwoot import ChatwootConnection, ChatwootOutboundIntent, SmsChatwootBinding
 
 logger = logging.getLogger(__name__)
+
+
+class ChatwootOutboundHandoffUnavailable(RuntimeError):
+    """Fixed, non-sensitive failure for a non-dispatchable Chatwoot target."""
+
+
+def _trusted_chatwoot_target(
+    db: Session, conversation: SmsConversation
+) -> tuple[SmsChatwootBinding, ChatwootConnection] | None:
+    """Resolve only the connection-bound Package D target; never legacy data."""
+    has_binding = conversation.chatwoot_binding_id is not None
+    has_conversation = conversation.chatwoot_conversation_id is not None
+    if not has_binding and not has_conversation:
+        return None
+    if not has_binding or not has_conversation:
+        raise ChatwootOutboundHandoffUnavailable("Chatwoot outbound handoff is unavailable.")
+    binding = (
+        db.query(SmsChatwootBinding)
+        .filter(
+            SmsChatwootBinding.id == conversation.chatwoot_binding_id,
+            SmsChatwootBinding.tenant_id == conversation.tenant_id,
+            SmsChatwootBinding.provider_id == conversation.provider_id,
+            SmsChatwootBinding.connection_id.is_not(None),
+        )
+        .first()
+    )
+    if binding is None:
+        raise ChatwootOutboundHandoffUnavailable("Chatwoot outbound handoff is unavailable.")
+    connection = (
+        db.query(ChatwootConnection)
+        .filter(
+            ChatwootConnection.id == binding.connection_id,
+            ChatwootConnection.tenant_id == conversation.tenant_id,
+        )
+        .first()
+    )
+    if connection is None or not binding.effective_outbound_enabled:
+        raise ChatwootOutboundHandoffUnavailable("Chatwoot outbound handoff is unavailable.")
+    return binding, connection
 
 def enqueue_outbound_message_transactional(
     db: Session,
@@ -90,6 +130,10 @@ def enqueue_outbound_message_transactional(
         logger.warning(f"Outbound SMS safety blocklist triggered for conversation={conversation.id}")
         return message
 
+    # Chatwoot conversations are an explicit Package D handoff only. They do
+    # not receive an SmsOutboundJob and can never fall through to a provider.
+    chatwoot_target = _trusted_chatwoot_target(db, conversation)
+
     # 4. Create SmsMessage record
     message = SmsMessage(
         tenant_id=account.tenant_id if account else conversation.tenant_id,
@@ -111,8 +155,22 @@ def enqueue_outbound_message_transactional(
     db.add(message)
     db.flush()  # populate message.id
 
-    # 4. If queued, create SmsOutboundJob record
-    if status == "queued":
+    if chatwoot_target is not None and status == "queued":
+        binding, connection = chatwoot_target
+        message.chatwoot_binding_id = binding.id
+        db.add(
+            ChatwootOutboundIntent(
+                tenant_id=conversation.tenant_id,
+                provider_id=conversation.provider_id,
+                connection_id=connection.id,
+                binding_id=binding.id,
+                conversation_id=conversation.id,
+                message_id=message.id,
+                status="PENDING",
+            )
+        )
+    # 4. Non-Chatwoot queued messages retain their existing generic job flow.
+    elif status == "queued":
         job = SmsOutboundJob(
             message_id=message.id,
             sms_account_id=account.id if account else None,

@@ -10,20 +10,28 @@ from sqlalchemy.orm import Session
 
 from ..deps import DatabaseId, get_current_admin, get_current_tenant, get_db
 from ...models.provider import Provider
-from ...models.sms_chatwoot import ChatwootConnection, SmsChatwootBinding
+from ...models.sms_chatwoot import (
+    ChatwootConnection,
+    ChatwootOutboundIntent,
+    SmsChatwootBinding,
+)
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...schemas.sms_chatwoot import (
     ChatwootConnectionCreate,
     ChatwootConnectionResponse,
     ChatwootConnectionUpdate,
+    ChatwootApiTokenRotate,
+    ChatwootIntegrationSenderConfigure,
     ChatwootInboxBindingCreate,
     ChatwootInboxBindingResponse,
     ChatwootInboxBindingUpdate,
     ChatwootSigningSecretRotate,
 )
 from ...services.messaging.chatwoot_security import (
+    ApiTokenUnavailable,
     SigningSecretUnavailable,
+    encrypt_api_token,
     encrypt_signing_secret,
 )
 
@@ -75,6 +83,35 @@ def _commit_or_conflict(db: Session) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Chatwoot configuration conflicts with an existing record.",
         ) from exc
+
+
+def _outbound_work_is_active(db: Session, connection: ChatwootConnection) -> bool:
+    """Check only dispatch state; never select a message body or credential."""
+    return bool(
+        db.query(ChatwootOutboundIntent.id)
+        .filter(
+            ChatwootOutboundIntent.connection_id == connection.id,
+            ChatwootOutboundIntent.status.in_(
+                ("PENDING", "SENDING", "OUTCOME_UNKNOWN")
+            ),
+        )
+        .first()
+    )
+
+
+def _outbound_configuration_is_mutable(
+    db: Session, connection: ChatwootConnection
+) -> bool:
+    return not (
+        connection.outbound_enabled
+        or _outbound_work_is_active(db, connection)
+        or db.query(SmsChatwootBinding.id)
+        .filter(
+            SmsChatwootBinding.connection_id == connection.id,
+            SmsChatwootBinding.outbound_enabled.is_(True),
+        )
+        .first()
+    )
 
 
 @router.post(
@@ -138,6 +175,11 @@ def update_connection(
 ):
     connection = _connection(db, tenant.id, connection_id)
     if payload.enabled is not None:
+        if not payload.enabled and connection.outbound_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Disable outbound before disabling the connection.",
+            )
         if payload.enabled and not connection.has_signing_secret:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -145,6 +187,81 @@ def update_connection(
             )
         connection.enabled = payload.enabled
         connection.updated_at = datetime.now(timezone.utc)
+    if payload.outbound_enabled is not None:
+        if payload.outbound_enabled and not (
+            connection.enabled
+            and connection.has_signing_secret
+            and connection.has_api_token
+            and connection.has_expected_integration_sender
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Safe outbound configuration is required before enabling outbound.",
+            )
+        if not payload.outbound_enabled and _outbound_work_is_active(db, connection):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Outbound work is active.",
+            )
+        connection.outbound_enabled = payload.outbound_enabled
+        connection.updated_at = datetime.now(timezone.utc)
+    _commit_or_conflict(db)
+    db.refresh(connection)
+    return connection
+
+
+@router.put(
+    "/connections/{connection_id}/api-token",
+    response_model=ChatwootConnectionResponse,
+)
+def set_api_token(
+    connection_id: DatabaseId,
+    payload: ChatwootApiTokenRotate,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    connection = _connection(db, tenant.id, connection_id)
+    if not _outbound_configuration_is_mutable(db, connection):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Disable outbound before changing its configuration.",
+        )
+    try:
+        connection._api_token_ciphertext = encrypt_api_token(
+            payload.api_token.get_secret_value()
+        )
+    except ApiTokenUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API token storage is unavailable.",
+        ) from exc
+    connection.updated_at = datetime.now(timezone.utc)
+    _commit_or_conflict(db)
+    db.refresh(connection)
+    return connection
+
+
+@router.put(
+    "/connections/{connection_id}/integration-sender",
+    response_model=ChatwootConnectionResponse,
+)
+def set_integration_sender(
+    connection_id: DatabaseId,
+    payload: ChatwootIntegrationSenderConfigure,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    connection = _connection(db, tenant.id, connection_id)
+    if not _outbound_configuration_is_mutable(db, connection):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Disable outbound before changing its configuration.",
+        )
+    connection.expected_integration_sender_type = payload.sender_type
+    connection.expected_integration_sender_id = payload.sender_id
+    connection.updated_at = datetime.now(timezone.utc)
     _commit_or_conflict(db)
     db.refresh(connection)
     return connection
@@ -207,14 +324,10 @@ def create_inbox_binding(
         tenant_id=tenant.id,
         provider_id=provider.id,
         connection_id=connection.id,
-        chatwoot_account_id=None,
         chatwoot_inbox_id=payload.chatwoot_inbox_id,
-        chatwoot_base_url=None,
-        _chatwoot_api_token=None,
-        _webhook_secret=None,
-        is_enabled=False,
         channel=payload.channel,
         ingress_enabled=False,
+        outbound_enabled=False,
         channel_metadata=None,
     )
     db.add(binding)
@@ -266,6 +379,24 @@ def update_inbox_binding(
                     detail="The connection must be enabled before enabling ingress.",
                 )
         binding.ingress_enabled = payload.ingress_enabled
+        binding.updated_at = datetime.now(timezone.utc)
+    if payload.outbound_enabled is not None:
+        connection = _connection(db, tenant.id, binding.connection_id)
+        if payload.outbound_enabled and (
+            binding.channel != "web_widget"
+            or not binding.effective_ingress_enabled
+            or not connection.outbound_ready
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The connection must be outbound-ready before enabling outbound.",
+            )
+        if not payload.outbound_enabled and _outbound_work_is_active(db, connection):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Outbound work is active.",
+            )
+        binding.outbound_enabled = payload.outbound_enabled
         binding.updated_at = datetime.now(timezone.utc)
     _commit_or_conflict(db)
     db.refresh(binding)

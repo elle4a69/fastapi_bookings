@@ -77,6 +77,7 @@ from .sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
 from .sms_arrival import SmsArrivalSession
 from .sms_chatwoot import (
     ChatwootConnection,
+    ChatwootOutboundIntent,
     ChatwootWebhookReceipt,
     SmsChatwootBinding,
 )
@@ -136,5 +137,6 @@ __all__ = [
     "SmsArrivalSession",
     "SmsChatwootBinding",
     "ChatwootConnection",
+    "ChatwootOutboundIntent",
     "ChatwootWebhookReceipt",
 ]

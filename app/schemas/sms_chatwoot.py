@@ -12,6 +12,8 @@ __all__ = [
     "ChatwootConnectionCreate",
     "ChatwootConnectionUpdate",
     "ChatwootSigningSecretRotate",
+    "ChatwootApiTokenRotate",
+    "ChatwootIntegrationSenderConfigure",
     "ChatwootConnectionResponse",
     "ChatwootInboxBindingCreate",
     "ChatwootInboxBindingUpdate",
@@ -60,6 +62,7 @@ class ChatwootConnectionCreate(BaseModel):
 
 class ChatwootConnectionUpdate(BaseModel):
     enabled: Optional[bool] = None
+    outbound_enabled: Optional[bool] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,6 +83,28 @@ class ChatwootSigningSecretRotate(BaseModel):
         return value
 
 
+class ChatwootApiTokenRotate(BaseModel):
+    api_token: SecretStr = Field(min_length=1, max_length=2048)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("api_token")
+    @classmethod
+    def reject_whitespace_token(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value()
+        if raw != raw.strip() or not raw:
+            raise ValueError("api_token must not be blank or padded")
+        return value
+
+
+class ChatwootIntegrationSenderConfigure(BaseModel):
+    # The verified 4.15.1 API handoff returns the configured Chatwoot API
+    # user. AgentBot must never be selectable as a FastAPI echo sender.
+    sender_type: Literal["User"]
+    sender_id: int = Field(gt=0)
+
+    model_config = ConfigDict(extra="forbid")
+
 class ChatwootConnectionResponse(BaseModel):
     id: int
     public_id: UUID
@@ -87,8 +112,12 @@ class ChatwootConnectionResponse(BaseModel):
     instance_origin: str
     chatwoot_account_id: int
     enabled: bool
+    outbound_enabled: bool
     webhook_path: str
     has_signing_secret: bool
+    has_api_token: bool
+    has_expected_integration_sender: bool
+    outbound_ready: bool
     created_at: datetime
     updated_at: datetime
 
@@ -107,6 +136,7 @@ class ChatwootInboxBindingCreate(BaseModel):
 
 class ChatwootInboxBindingUpdate(BaseModel):
     ingress_enabled: Optional[bool] = None
+    outbound_enabled: Optional[bool] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -120,6 +150,8 @@ class ChatwootInboxBindingResponse(BaseModel):
     channel: Literal["web_widget"]
     ingress_enabled: bool
     effective_ingress_enabled: bool
+    outbound_enabled: bool
+    effective_outbound_enabled: bool
     created_at: datetime
     updated_at: datetime
 

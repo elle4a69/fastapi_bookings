@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import UUID
 
 
 SUPPORTED_EVENTS = frozenset({"message_created", "message_updated"})
@@ -38,6 +39,23 @@ class ParsedChatwootEvent:
     attachments: list[dict[str, object]]
     occurred_at: datetime
     channel_observation: str | None
+    outbound_correlation_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class ParsedChatwootOutboundMessage:
+    """Minimal verified shape required for Package D reconciliation."""
+
+    account_id: int
+    inbox_id: int
+    conversation_id: int
+    message_id: int
+    message_type: str
+    content_type: str
+    private: bool
+    sender_type: str
+    sender_id: int
+    outbound_correlation_id: UUID | None
 
 
 @dataclass(frozen=True)
@@ -122,6 +140,27 @@ def _occurred_at(value: Any, fallback: datetime) -> datetime:
         except ValueError:
             return fallback
     return fallback
+
+
+def parse_outbound_correlation_id(value: Any) -> UUID | None:
+    """Read exactly the namespaced opaque UUID and nothing else.
+
+    This intentionally ignores ``source_id``, all generic content attributes,
+    and any marker with extra data. A malformed marker is never trusted.
+    """
+    if not isinstance(value, dict):
+        return None
+    namespace = value.get("fastapi_bookings")
+    if not isinstance(namespace, dict) or set(namespace) != {"outbound_correlation_id"}:
+        return None
+    marker = namespace.get("outbound_correlation_id")
+    if not isinstance(marker, str) or len(marker) != 36:
+        return None
+    try:
+        parsed = UUID(marker)
+    except (ValueError, AttributeError):
+        return None
+    return parsed if str(parsed) == marker.lower() else None
 
 
 def parse_chatwoot_payload(
@@ -212,7 +251,61 @@ def parse_chatwoot_payload(
         attachments=_safe_attachments(root.get("attachments")),
         occurred_at=_occurred_at(root.get("created_at"), webhook_timestamp),
         channel_observation=channel_observation,
+        outbound_correlation_id=parse_outbound_correlation_id(
+            root.get("content_attributes")
+        ),
     )
+
+
+def parse_chatwoot_outbound_message(value: Any) -> ParsedChatwootOutboundMessage:
+    """Validate the exact structural response/GET message shape for Package D.
+
+    No content is retained by this contract. The content field is checked only
+    for the required text-message shape.
+    """
+    root = _mapping(value, "message")
+    account = _mapping(root.get("account"), "account")
+    inbox = _mapping(root.get("inbox"), "inbox")
+    conversation = _mapping(root.get("conversation"), "conversation")
+    sender = _mapping(root.get("sender"), "sender")
+    content = root.get("content")
+    if not isinstance(content, str):
+        raise InvalidChatwootPayload("content is invalid")
+    message_type = _bounded_text(root.get("message_type"), 32)
+    content_type = _bounded_text(root.get("content_type"), 64)
+    sender_type = _bounded_text(sender.get("type"), 64)
+    private = root.get("private")
+    if not isinstance(private, bool):
+        raise InvalidChatwootPayload("private is invalid")
+    if message_type is None or content_type is None or sender_type is None:
+        raise InvalidChatwootPayload("message fields are invalid")
+    return ParsedChatwootOutboundMessage(
+        account_id=_positive_int(account.get("id"), "account.id"),
+        inbox_id=_positive_int(inbox.get("id"), "inbox.id"),
+        conversation_id=_positive_int(conversation.get("id"), "conversation.id"),
+        message_id=_positive_int(root.get("id"), "id"),
+        message_type=message_type,
+        content_type=content_type,
+        private=private,
+        sender_type=sender_type,
+        sender_id=_positive_int(sender.get("id"), "sender.id"),
+        outbound_correlation_id=parse_outbound_correlation_id(
+            root.get("content_attributes")
+        ),
+    )
+
+
+def extract_chatwoot_outbound_messages(value: Any) -> list[dict[str, Any]]:
+    """Select only documented list containers for bounded GET reconciliation."""
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if not isinstance(value, dict):
+        return []
+    for key in ("payload", "messages"):
+        candidate = value.get(key)
+        if isinstance(candidate, list):
+            return [item for item in candidate if isinstance(item, dict)]
+    return []
 
 
 def normalize_message(event: ParsedChatwootEvent) -> NormalizedMessage:

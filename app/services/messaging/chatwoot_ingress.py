@@ -24,6 +24,7 @@ from .contracts import (
 )
 from .policy import ProcessingProvenance
 from .processor import process_projected_message
+from .chatwoot_reconciliation import reconcile_verified_echo
 
 
 @dataclass(frozen=True)
@@ -212,6 +213,16 @@ def _event_outcome(
         and event.channel_observation not in SUPPORTED_CHANNEL_OBSERVATIONS
     ):
         return "unsupported_channel"
+    echo_outcome = reconcile_verified_echo(
+        db,
+        connection=connection,
+        binding=binding,
+        event=event,
+    )
+    if echo_outcome is not None:
+        # A verified echo already has a locally owned message. It must never
+        # enter normal projection, takeover, or automation policy handling.
+        return f"fastapi_echo_{echo_outcome}"
     if event.message_type == "activity":
         return "activity_ignored"
     if event.event_type == "message_updated":

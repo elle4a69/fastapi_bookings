@@ -41,7 +41,7 @@ def test_migration_descends_from_current_head_and_leaves_one_head():
 
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["f6a7b8c9d0e1"]
+    assert script.get_heads() == ["d1e2f3a4b5c6"]
 
 
 def _disposable_postgres_url() -> str:

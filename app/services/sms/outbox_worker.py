@@ -7,6 +7,11 @@ from ...models.sms_outbox import SmsOutboundJob
 from ...models.sms_account import SmsAccount
 from ...models.sms_message import SmsMessage
 from ...models.sms_conversation import SmsConversation
+from ...models.sms_chatwoot import ChatwootOutboundIntent
+from ..messaging.chatwoot_gateway import (
+    claim_outbound_intent_for_dispatch,
+    dispatch_outbound_intent,
+)
 from .transports import (
     DIRECT_TRANSPORT_TERMINAL_REASON,
     get_transport_adapter,
@@ -15,6 +20,27 @@ from .transports import (
 from .transports.base import OutboundSmsCommand
 
 logger = logging.getLogger(__name__)
+
+CHATWOOT_GENERIC_JOB_TERMINAL_REASON = "Chatwoot outbound requires a dedicated intent."
+
+
+async def process_pending_chatwoot_outbound_intents(db: Session) -> None:
+    """Claim and dispatch Package D intents without generic retry semantics."""
+    intent_ids = [
+        row[0]
+        for row in (
+            db.query(ChatwootOutboundIntent.id)
+            .filter(ChatwootOutboundIntent.status == "PENDING")
+            .order_by(ChatwootOutboundIntent.id)
+            .limit(10)
+            .all()
+        )
+    ]
+    for intent_id in intent_ids:
+        if claim_outbound_intent_for_dispatch(db, intent_id=intent_id):
+            # Any uncertain result becomes terminal OUTCOME_UNKNOWN inside the
+            # gateway. This worker never converts it back to PENDING.
+            await dispatch_outbound_intent(db, intent_id=intent_id)
 
 async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
     """Fetch and process enqueued SMS outbound jobs with lease locking."""
@@ -25,6 +51,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
 
     try:
         now = datetime.now(timezone.utc)
+
+        await process_pending_chatwoot_outbound_intents(db)
         
         # 1. Fetch eligible jobs: PENDING (with no lease or expired lease) or stale PROCESSING (expired lease)
         jobs = db.query(SmsOutboundJob).filter(
@@ -36,8 +64,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             )
         ).limit(10).all()
 
-        if not jobs:
-            return
+        # No generic jobs is normal. AI/arrival processing and Package D
+        # intent dispatch must not be skipped merely because this list is empty.
 
         # 2. Acquire leases for processing (lock database rows atomically)
         leased_jobs = []
@@ -101,46 +129,20 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 logger.warning("Disabled direct-provider outbound job quarantined.")
                 continue
 
-            # Route Chatwoot-bound outbound messages directly
-            if conversation.chatwoot_conversation_id is not None:
-                try:
-                    from .chatwoot_service import send_chatwoot_message
-                    # Persist a deterministic source ID before the network
-                    # call. Chatwoot echoes it in its webhook, which closes
-                    # the race where the echo can arrive before this worker
-                    # receives Chatwoot's response message ID.
-                    if not message.client_request_id:
-                        message.client_request_id = f"fastapi-chatwoot-message-{message.id}"
-                    message.status = "sending"
-                    db.commit()
-
-                    mock_msg_id = await send_chatwoot_message(
-                        db,
-                        conversation,
-                        message.body,
-                        source_id=message.client_request_id,
-                    )
-
-                    job.status = "SUCCESS"
-                    job.processed_at = datetime.now(timezone.utc)
-                    message.status = "sent"
-                    message.chatwoot_message_id = mock_msg_id
-                    db.commit()
-                    logger.info(f"Successfully sent outbound Chatwoot message (id={message.id}) via send_chatwoot_message")
-                    continue
-                except Exception as ex:
-                    db.rollback()
-                    job.retry_count += 1
-                    job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
-                    if job.retry_count >= 5:
-                        job.status = "FAILED"
-                        message.status = "failed"
-                    else:
-                        job.status = "PENDING"
-                        job.lease_expires_at = None
-                        message.status = "queued"
-                    db.commit()
-                    continue
+            # A generic SMS job is never delivery authority for a Chatwoot
+            # conversation. Do not invoke the legacy Chatwoot sender and do
+            # not fall through to a direct provider adapter.
+            if (
+                conversation.chatwoot_binding_id is not None
+                or conversation.chatwoot_conversation_id is not None
+            ):
+                job.status = "FAILED"
+                job.error_log = CHATWOOT_GENERIC_JOB_TERMINAL_REASON
+                job.lease_expires_at = None
+                job.processed_at = datetime.now(timezone.utc)
+                message.status = "failed"
+                db.commit()
+                continue
 
             # SMS specific flow requires account
             if account is None:

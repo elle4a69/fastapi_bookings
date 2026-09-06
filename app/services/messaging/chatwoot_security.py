@@ -15,7 +15,8 @@ from ...core.config import settings
 
 SIGNATURE_PATTERN = re.compile(r"\Asha256=([0-9a-f]{64})\Z")
 REPLAY_WINDOW_SECONDS = 300
-_KEY_CONTEXT = b"fastapi-bookings:chatwoot-signing-secret:v1\x00"
+_SIGNING_SECRET_KEY_CONTEXT = b"fastapi-bookings:chatwoot-signing-secret:v1\x00"
+_API_TOKEN_KEY_CONTEXT = b"fastapi-bookings:chatwoot-api-token:v1\x00"
 _DEFAULT_KEYS = frozenset(
     {"changeme", "change-me", "secret", "default", "development-secret"}
 )
@@ -25,7 +26,11 @@ class SigningSecretUnavailable(RuntimeError):
     """Raised without propagating sensitive cryptographic details."""
 
 
-def _fernet() -> Fernet:
+class ApiTokenUnavailable(RuntimeError):
+    """Raised without propagating sensitive cryptographic details."""
+
+
+def _fernet(context: bytes) -> Fernet:
     secret = settings.SECRET_KEY
     if not isinstance(secret, str) or not secret:
         raise SigningSecretUnavailable("signing secret storage unavailable")
@@ -33,13 +38,13 @@ def _fernet() -> Fernet:
         len(secret) < 32 or secret.lower() in _DEFAULT_KEYS
     ):
         raise SigningSecretUnavailable("signing secret storage unavailable")
-    digest = hashlib.sha256(_KEY_CONTEXT + secret.encode("utf-8")).digest()
+    digest = hashlib.sha256(context + secret.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(digest))
 
 
 def encrypt_signing_secret(secret: str) -> str:
     try:
-        return _fernet().encrypt(secret.encode("utf-8")).decode("ascii")
+        return _fernet(_SIGNING_SECRET_KEY_CONTEXT).encrypt(secret.encode("utf-8")).decode("ascii")
     except SigningSecretUnavailable:
         raise
     except Exception as exc:
@@ -50,9 +55,30 @@ def decrypt_signing_secret(ciphertext: str | None) -> str:
     if not ciphertext:
         raise SigningSecretUnavailable("signing secret storage unavailable")
     try:
-        return _fernet().decrypt(ciphertext.encode("ascii")).decode("utf-8")
+        return _fernet(_SIGNING_SECRET_KEY_CONTEXT).decrypt(ciphertext.encode("ascii")).decode("utf-8")
     except (InvalidToken, UnicodeError, ValueError, TypeError) as exc:
         raise SigningSecretUnavailable("signing secret storage unavailable") from exc
+
+
+def encrypt_api_token(token: str) -> str:
+    """Encrypt the write-only outbound API credential in its own domain."""
+    try:
+        return _fernet(_API_TOKEN_KEY_CONTEXT).encrypt(token.encode("utf-8")).decode("ascii")
+    except SigningSecretUnavailable as exc:
+        raise ApiTokenUnavailable("API token storage unavailable") from exc
+    except Exception as exc:
+        raise ApiTokenUnavailable("API token storage unavailable") from exc
+
+
+def decrypt_api_token(ciphertext: str | None) -> str:
+    if not ciphertext:
+        raise ApiTokenUnavailable("API token storage unavailable")
+    try:
+        return _fernet(_API_TOKEN_KEY_CONTEXT).decrypt(ciphertext.encode("ascii")).decode("utf-8")
+    except SigningSecretUnavailable as exc:
+        raise ApiTokenUnavailable("API token storage unavailable") from exc
+    except (InvalidToken, UnicodeError, ValueError, TypeError) as exc:
+        raise ApiTokenUnavailable("API token storage unavailable") from exc
 
 
 def parse_timestamp(timestamp_header: str | None) -> tuple[int, datetime]:
