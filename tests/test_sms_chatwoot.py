@@ -636,8 +636,13 @@ def test_dispatch_requires_effective_ingress_and_consistent_local_tuple(
     assert intent.status == "FAILED"
 
 
+@pytest.mark.parametrize(
+    "unsafe_origin",
+    ["https://ｌｏｃａｌｈｏｓｔ", "https://0x7f.0.0.1"],
+    ids=["idna_normalized_loopback", "numeric_ipv4"],
+)
 def test_unsafe_stored_origin_blocks_dispatch_before_token_or_content_reaches_client(
-    db_session, outbound_boundary
+    db_session, outbound_boundary, unsafe_origin
 ):
     """Historical unsafe records cannot decrypt a credential or build a POST."""
     *_prefix, connection, _binding, conversation = outbound_boundary
@@ -652,7 +657,7 @@ def test_unsafe_stored_origin_blocks_dispatch_before_token_or_content_reaches_cl
     db_session.commit()
     intent = db_session.query(ChatwootOutboundIntent).filter_by(message_id=message.id).one()
     assert claim_outbound_intent_for_dispatch(db_session, intent_id=intent.id) is True
-    connection.instance_origin = "https://127.0.0.1"
+    connection.instance_origin = unsafe_origin
     db_session.commit()
 
     with patch(
@@ -672,8 +677,13 @@ def test_unsafe_stored_origin_blocks_dispatch_before_token_or_content_reaches_cl
     assert message.status == "failed"
 
 
+@pytest.mark.parametrize(
+    "unsafe_origin",
+    ["https://localhost\u3002", "https://0177.0.0.1"],
+    ids=["unicode_dot_loopback", "numeric_ipv4"],
+)
 def test_unsafe_stored_origin_blocks_reconciliation_before_token_or_client(
-    db_session, outbound_boundary
+    db_session, outbound_boundary, unsafe_origin
 ):
     """An unsafe historical record cannot leak a token during its one-shot GET."""
     *_prefix, connection, _binding, conversation = outbound_boundary
@@ -688,7 +698,7 @@ def test_unsafe_stored_origin_blocks_reconciliation_before_token_or_client(
     db_session.commit()
     intent = db_session.query(ChatwootOutboundIntent).filter_by(message_id=message.id).one()
     intent.status = "OUTCOME_UNKNOWN"
-    connection.instance_origin = "https://169.254.169.254"
+    connection.instance_origin = unsafe_origin
     db_session.commit()
 
     with patch(

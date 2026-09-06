@@ -417,6 +417,15 @@ def test_validation_error_never_reflects_credential_bearing_origin(
         "https://localhost",
         "https://127.0.0.1",
         "https://169.254.169.254",
+        "https://ｌｏｃａｌｈｏｓｔ",
+        "https://localhost\u3002",
+        "https://localhost.localdomain",
+        "https://127\uff0e0\uff0e0\uff0e1",
+        "https://2130706433",
+        "https://0177.0.0.1",
+        "https://0x7f.0.0.1",
+        "https://internal",
+        "https://chatwoot.internal",
         "https://attacker.example.test",
     ],
 )
@@ -430,7 +439,11 @@ def test_admin_connection_rejects_non_trusted_or_non_public_origins(
 
 @pytest.mark.parametrize(
     "configured_origins",
-    ["", "https://chatwoot.example.test,not-an-origin"],
+    [
+        "",
+        "https://chatwoot.example.test,not-an-origin",
+        "https://localhost\u3002,https://chatwoot.example.test",
+    ],
 )
 def test_admin_connection_fails_closed_when_the_trusted_origin_setting_is_empty_or_invalid(
     monkeypatch, configured_origins

@@ -11,6 +11,21 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from ..core.config import settings
 
 
+_UNICODE_DOT_TRANSLATION = str.maketrans(
+    {
+        "\u3002": ".",
+        "\uff0e": ".",
+        "\uff61": ".",
+    }
+)
+_INTERNAL_HOSTNAME_SUFFIXES = (
+    ".localhost",
+    ".local",
+    ".localdomain",
+    ".internal",
+)
+
+
 __all__ = [
     "ChatwootConnectionCreate",
     "ChatwootConnectionUpdate",
@@ -39,11 +54,16 @@ def _canonical_https_instance_origin(value: str) -> str:
     except ValueError as exc:
         raise ValueError("instance_origin contains an invalid port") from exc
 
-    hostname = parsed.hostname.rstrip(".").lower()
+    hostname = parsed.hostname.translate(_UNICODE_DOT_TRANSLATION)
+    try:
+        hostname = hostname.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise ValueError("instance_origin contains an invalid hostname") from exc
+    hostname = hostname.rstrip(".").lower()
     if (
         not hostname
         or hostname == "localhost"
-        or hostname.endswith(".localhost")
+        or hostname.endswith(_INTERNAL_HOSTNAME_SUFFIXES)
     ):
         raise ValueError("instance_origin must use a public DNS hostname")
     try:
@@ -52,14 +72,28 @@ def _canonical_https_instance_origin(value: str) -> str:
         pass
     else:
         raise ValueError("instance_origin must use a public DNS hostname")
-    try:
-        hostname = hostname.encode("idna").decode("ascii")
-    except UnicodeError as exc:
-        raise ValueError("instance_origin contains an invalid hostname") from exc
+    if "." not in hostname or _looks_like_numeric_ipv4(hostname):
+        raise ValueError("instance_origin must use a public DNS hostname")
 
     default_port = port == 443
     netloc = hostname if port is None or default_port else f"{hostname}:{port}"
     return urlunsplit(("https", netloc, "", "", ""))
+
+
+def _looks_like_numeric_ipv4(hostname: str) -> bool:
+    """Reject alternate numeric IPv4 spellings before HTTP parses them."""
+    labels = hostname.split(".")
+    return bool(labels) and all(_is_numeric_ipv4_label(label) for label in labels)
+
+
+def _is_numeric_ipv4_label(label: str) -> bool:
+    if not label:
+        return False
+    if label.startswith("0x"):
+        return len(label) > 2 and all(
+            character in "0123456789abcdef" for character in label[2:]
+        )
+    return label.isdecimal()
 
 
 def _configured_trusted_chatwoot_origins() -> frozenset[str]:
