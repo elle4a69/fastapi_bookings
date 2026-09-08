@@ -220,6 +220,8 @@ class ChatwootInboxBindingCreate(BaseModel):
 class ChatwootInboxBindingUpdate(BaseModel):
     ingress_enabled: Optional[bool] = None
     outbound_enabled: Optional[bool] = None
+    automation_enabled: Optional[bool] = None
+    assistant_ui_policy_scope: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -235,6 +237,9 @@ class ChatwootInboxBindingResponse(BaseModel):
     effective_ingress_enabled: bool
     outbound_enabled: bool
     effective_outbound_enabled: bool
+    automation_enabled: bool
+    effective_automation_enabled: bool
+    assistant_ui_policy_scope: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -123,15 +123,20 @@ def decide_projected_message(
         )
 
     if message.author_type == "customer" and message.direction == "inbound":
-        # Package C has no safe outbound handoff, draft mechanism, or trusted
-        # cross-channel identity contract. Both activation states therefore
-        # pause for human review and create neither AI nor outbound work.
+        if binding.effective_automation_enabled:
+            return PolicyDecision(
+                event_type="assistant_ui_decision_queued",
+                reason_code="automation_queued",
+                state="auto-reply",
+                cancel_pending_ai=False,
+                identity_code="untrusted_client_identity",
+            )
         return PolicyDecision(
             event_type="chatwoot_operator_review",
             reason_code=(
                 "automation_disabled"
                 if not binding.automation_enabled
-                else "outbound_handoff_unavailable"
+                else "automation_configuration_unavailable"
             ),
             state="paused",
             cancel_pending_ai=False,

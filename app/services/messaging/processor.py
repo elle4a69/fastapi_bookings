@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
-from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
+from ...models.sms_outbox import AssistantUiBridgeJob, SmsAiJob, SmsConversationEvent
 from .policy import ProcessingProvenance, decide_projected_message
 
 
@@ -52,9 +52,28 @@ def process_projected_message(
             )
             .update({"status": "CANCELLED"}, synchronize_session=False)
         )
+        (
+            db.query(AssistantUiBridgeJob)
+            .filter(
+                AssistantUiBridgeJob.conversation_id == conversation.id,
+                AssistantUiBridgeJob.status == "PENDING",
+            )
+            .update({"status": "CANCELLED"}, synchronize_session=False)
+        )
 
     if decision.state is not None:
         conversation.state = decision.state
+
+    if decision.reason_code == "automation_queued":
+        db.add(
+            AssistantUiBridgeJob(
+                tenant_id=binding.tenant_id,
+                binding_id=binding.id,
+                conversation_id=conversation.id,
+                source_message_id=message.id,
+                policy_scope=binding.assistant_ui_policy_scope or "",
+            )
+        )
 
     metadata: dict[str, str] = {"reason_code": decision.reason_code}
     if decision.identity_code is not None:

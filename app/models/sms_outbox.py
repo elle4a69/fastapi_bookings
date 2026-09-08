@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, ForeignKey, Text, String, JSON
+from sqlalchemy import Column, DateTime, Integer, ForeignKey, Text, String, JSON, UniqueConstraint, Uuid
+from uuid import uuid4
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
@@ -41,6 +42,31 @@ class SmsAiJob(Base):
 
     def __repr__(self) -> str:
         return f"<SmsAiJob id={self.id} conversation_id={self.conversation_id} status={self.status}>"
+
+
+class AssistantUiBridgeJob(Base):
+    """One durable, binding-scoped Assistant UI decision request.
+
+    This is deliberately separate from legacy SMS AI jobs: it has no phone
+    account, customer identity, booking authority, or retry-to-customer path.
+    """
+
+    __tablename__ = "assistant_ui_bridge_jobs"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False, index=True)
+    binding_id = Column(Integer, ForeignKey("sms_chatwoot_bindings.id", ondelete="RESTRICT"), nullable=False, index=True)
+    conversation_id = Column(Integer, ForeignKey("sms_conversations.id", ondelete="RESTRICT"), nullable=False, index=True)
+    source_message_id = Column(Integer, ForeignKey("sms_messages.id", ondelete="RESTRICT"), nullable=False)
+    request_id = Column(Uuid(as_uuid=True), default=uuid4, nullable=False, unique=True)
+    policy_scope = Column(String(128), nullable=False)
+    status = Column(String(32), default="PENDING", nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("source_message_id", name="uq_assistant_ui_bridge_jobs_source_message"),
+    )
 
 
 class SmsConversationEvent(Base):

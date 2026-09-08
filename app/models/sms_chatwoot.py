@@ -215,6 +215,7 @@ class SmsChatwootBinding(Base):
     automation_enabled = Column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
+    assistant_ui_policy_scope = Column(String(128), nullable=True)
     outbound_enabled = Column(
         Boolean, default=False, server_default=text("false"), nullable=False
     )
@@ -306,6 +307,14 @@ class SmsChatwootBinding(Base):
             and self.effective_ingress_enabled
             and self.connection is not None
             and self.connection.outbound_ready
+        )
+
+    @property
+    def effective_automation_enabled(self) -> bool:
+        return bool(
+            self.automation_enabled
+            and self.effective_outbound_enabled
+            and self.assistant_ui_policy_scope
         )
 
     def __repr__(self) -> str:

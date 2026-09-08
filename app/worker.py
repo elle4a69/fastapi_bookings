@@ -46,8 +46,8 @@ async def _supervise_worker(
 
 
 async def run(role: str) -> None:
-    if role not in {"generic", "sms"}:
-        raise ValueError("worker role must be generic or sms")
+    if role not in {"generic", "sms", "assistant-ui-bridge"}:
+        raise ValueError("worker role must be generic, sms, or assistant-ui-bridge")
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
@@ -60,7 +60,20 @@ async def run(role: str) -> None:
         except (NotImplementedError, RuntimeError):
             signal.signal(signal_name, lambda *_args: loop.call_soon_threadsafe(request_stop))
 
-    worker = start_outbox_worker if role == "generic" else start_sms_outbox_worker
+    if role == "generic":
+        worker = start_outbox_worker
+    elif role == "sms":
+        worker = start_sms_outbox_worker
+    else:
+        from .services.messaging.assistant_ui_bridge import process_pending_assistant_ui_bridge_jobs
+
+        async def worker(stop_event: asyncio.Event) -> None:
+            while not stop_event.is_set():
+                await process_pending_assistant_ui_bridge_jobs()
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=settings.OUTBOX_POLL_INTERVAL)
+                except asyncio.TimeoutError:
+                    pass
     await _supervise_worker(
         worker,
         stop_event,
@@ -69,8 +82,8 @@ async def run(role: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"generic", "sms"}:
-        raise SystemExit("usage: python -m app.worker {generic|sms}")
+    if len(sys.argv) != 2 or sys.argv[1] not in {"generic", "sms", "assistant-ui-bridge"}:
+        raise SystemExit("usage: python -m app.worker {generic|sms|assistant-ui-bridge}")
     try:
         asyncio.run(run(sys.argv[1]))
     except KeyboardInterrupt:

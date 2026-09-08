@@ -66,6 +66,13 @@ class Settings(BaseSettings):
             "credentialed outbound requests; empty disables Chatwoot origin setup"
         ),
     )
+    ASSISTANT_UI_DECISION_URL: str = Field(
+        "",
+        description="Dedicated Assistant UI reply-or-handoff endpoint; empty disables bridge automation",
+    )
+    ASSISTANT_UI_DECISION_CREDENTIAL: str = Field(
+        "", description="Service credential for the dedicated Assistant UI decision endpoint"
+    )
 
     # ClickSend SMS/MMS Settings
     CLICKSEND_API_USERNAME: str = Field("", description="ClickSend API username")

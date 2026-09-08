@@ -123,7 +123,7 @@ def _message(
             ProcessingProvenance.UNVERIFIED,
             True,
             "paused",
-            "outbound_handoff_unavailable",
+            "automation_configuration_unavailable",
             "chatwoot_operator_review",
             "PENDING",
         ),

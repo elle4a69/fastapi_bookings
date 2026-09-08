@@ -15,6 +15,7 @@ from ...models.sms_chatwoot import (
     ChatwootOutboundIntent,
     SmsChatwootBinding,
 )
+from ...models.sms_outbox import AssistantUiBridgeJob
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...schemas.sms_chatwoot import (
@@ -34,6 +35,7 @@ from ...services.messaging.chatwoot_security import (
     encrypt_api_token,
     encrypt_signing_secret,
 )
+from ...services.messaging.assistant_ui_client import decision_service_is_configured
 
 
 router = APIRouter(
@@ -367,6 +369,11 @@ def update_inbox_binding(
 ):
     binding = _binding(db, tenant.id, binding_id)
     if payload.ingress_enabled is not None:
+        if not payload.ingress_enabled and binding.automation_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Disable automation before disabling ingress.",
+            )
         if payload.ingress_enabled:
             connection = _connection(db, tenant.id, binding.connection_id)
             if (
@@ -396,7 +403,37 @@ def update_inbox_binding(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Outbound work is active.",
             )
+        if not payload.outbound_enabled and binding.automation_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Disable automation before disabling outbound.",
+            )
         binding.outbound_enabled = payload.outbound_enabled
+        binding.updated_at = datetime.now(timezone.utc)
+    if payload.assistant_ui_policy_scope is not None:
+        if binding.automation_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Disable automation before changing its policy scope.",
+            )
+        binding.assistant_ui_policy_scope = payload.assistant_ui_policy_scope
+        binding.updated_at = datetime.now(timezone.utc)
+    if payload.automation_enabled is not None:
+        if payload.automation_enabled and not (
+            binding.effective_outbound_enabled
+            and binding.assistant_ui_policy_scope
+            and decision_service_is_configured()
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Trusted outbound and Assistant UI decision configuration are required before enabling automation.",
+            )
+        if not payload.automation_enabled:
+            db.query(AssistantUiBridgeJob).filter(
+                AssistantUiBridgeJob.binding_id == binding.id,
+                AssistantUiBridgeJob.status == "PENDING",
+            ).update({"status": "CANCELLED"}, synchronize_session=False)
+        binding.automation_enabled = payload.automation_enabled
         binding.updated_at = datetime.now(timezone.utc)
     _commit_or_conflict(db)
     db.refresh(binding)
