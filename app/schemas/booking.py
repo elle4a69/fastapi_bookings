@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..core.state_machine import BookingStatus
 
@@ -26,6 +26,13 @@ class BookingBase(BaseModel):
         max_length=128,
         description="Tenant-scoped idempotency key for preventing duplicate submissions",
     )
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def validate_idempotency_key(cls, value: str | None) -> str | None:
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("Idempotency key must not be blank or padded.")
+        return value
 
 
 class BookingCreate(BookingBase):
@@ -58,6 +65,13 @@ class PublicBookingCreate(BaseModel):
         max_length=128,
         description="Tenant-scoped idempotency key for preventing duplicate submissions",
     )
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def validate_idempotency_key(cls, value: str | None) -> str | None:
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("Idempotency key must not be blank or padded.")
+        return value
     # Unknown keys are retained only long enough for the public route to reject
     # them with a non-reflecting error. The published contract remains closed.
     model_config = ConfigDict(

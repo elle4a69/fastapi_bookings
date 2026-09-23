@@ -1,6 +1,7 @@
 """Synthetic regression tests for the authoritative booking command."""
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
@@ -1123,6 +1124,73 @@ def test_public_api_contract_returns_real_pending_status(client, booking_command
         "status",
         "created_at",
     }
+
+
+@pytest.mark.parametrize(
+    "invalid_key",
+    [
+        pytest.param(" ", id="blank"),
+        pytest.param(" padded-synthetic-key", id="leading-whitespace"),
+        pytest.param("padded-synthetic-key ", id="trailing-whitespace"),
+    ],
+)
+def test_public_route_rejects_padded_idempotency_keys_without_reflection_or_mutation(
+    client,
+    db_session,
+    booking_command_setup,
+    caplog,
+    invalid_key,
+):
+    data = booking_command_setup
+    caplog.set_level(logging.INFO)
+    payload = _command(data).model_dump(mode="json", exclude={"client_id"})
+    payload["idempotency_key"] = invalid_key
+    before = (
+        db_session.query(Client).count(),
+        db_session.query(Booking).count(),
+        db_session.query(BookingCommandReceipt).count(),
+        db_session.query(BookingSlotAllocation).count(),
+        db_session.query(OutboxEvent).count(),
+        db_session.query(AuditLog).count(),
+    )
+
+    response = client.post(
+        "/api/public/bookings",
+        json=payload,
+        headers={"X-Tenant": data["tenant"].subdomain},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "Validation failed for the request."
+    assert "idempotency_key" not in response.text
+    marker = invalid_key.strip()
+    if marker:
+        assert marker not in response.text
+        assert marker not in caplog.text
+    assert before == (
+        db_session.query(Client).count(),
+        db_session.query(Booking).count(),
+        db_session.query(BookingCommandReceipt).count(),
+        db_session.query(BookingSlotAllocation).count(),
+        db_session.query(OutboxEvent).count(),
+        db_session.query(AuditLog).count(),
+    )
+
+
+def test_idempotency_key_preserves_valid_opaque_content(booking_command_setup):
+    data = booking_command_setup
+    opaque_key = "synthetic opaque/key:value"
+
+    command = BookingCreate(
+        **_command(data).model_dump(exclude={"idempotency_key"}),
+        idempotency_key=opaque_key,
+    )
+    public_command = PublicBookingCreate(
+        **command.model_dump(exclude={"client_id"}),
+    )
+
+    assert command.idempotency_key == opaque_key
+    assert public_command.idempotency_key == opaque_key
 
 
 def test_public_route_rejects_client_id_and_openapi_response_is_redacted(

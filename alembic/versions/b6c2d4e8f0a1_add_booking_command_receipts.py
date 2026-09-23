@@ -21,6 +21,33 @@ down_revision = "d7e8f9a0b1c2"
 branch_labels = None
 depends_on = None
 
+_DOWNGRADE_PREFLIGHT_ERROR = (
+    "Booking command receipt downgrade requires online uniqueness reconciliation."
+)
+
+
+def _assert_downgrade_key_compatibility() -> None:
+    """Abort before DDL unless historical global uniqueness can be restored."""
+
+    context = op.get_context()
+    if context.as_sql:
+        raise RuntimeError(_DOWNGRADE_PREFLIGHT_ERROR)
+
+    booking_table = sa.table(
+        "bookings",
+        sa.column("idempotency_key", sa.String()),
+    )
+    duplicate_key = op.get_bind().execute(
+        sa.select(sa.literal(1))
+        .select_from(booking_table)
+        .where(booking_table.c.idempotency_key.is_not(None))
+        .group_by(booking_table.c.idempotency_key)
+        .having(sa.func.count() > 1)
+        .limit(1)
+    ).first()
+    if duplicate_key is not None:
+        raise RuntimeError(_DOWNGRADE_PREFLIGHT_ERROR)
+
 
 def upgrade() -> None:
     with op.batch_alter_table("bookings") as batch_op:
@@ -83,6 +110,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # This read-only preflight must remain the first operation. SQLite cannot
+    # reliably roll back every batch-DDL step after a later uniqueness error.
+    _assert_downgrade_key_compatibility()
+
     op.drop_index(
         "ix_booking_command_receipts_tenant_id",
         table_name="booking_command_receipts",
@@ -93,9 +124,8 @@ def downgrade() -> None:
     )
     op.drop_table("booking_command_receipts")
 
-    # Restoring the historical global unique index will fail safely if two
-    # tenants have used the same non-null key after this migration. Operators
-    # must reconcile those rows before requesting a downgrade.
+    # The preflight above established that historical global uniqueness can be
+    # restored without exposing any conflicting key.
     with op.batch_alter_table("bookings") as batch_op:
         batch_op.drop_constraint(
             "uq_bookings_tenant_idempotency_key",

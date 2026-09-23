@@ -29,8 +29,9 @@ historical global booking-key index with nullable unique
 than one `NULL` under these constraints; only non-null keys are deduplicated.
 
 The receipt HMAC is produced by the booking service from the existing
-server-side `SECRET_KEY`. The model never reads configuration or computes the
-HMAC itself.
+server-side `SECRET_KEY`. Blank, short, surrounding-whitespace, and known
+repository placeholder values are rejected by the service. The model never
+reads configuration or computes the HMAC itself.
 
 ## Core Workflows & Contracts
 
@@ -57,10 +58,13 @@ another tenant. No router or response schema exposes receipt rows.
 
 - No receipt is backfilled from historical audit rows. Legacy keyed bookings
   fail closed until an approved reconciliation policy exists.
-- `SECRET_KEY` rotation requires a versioned receipt/key migration before the
-  old key is removed.
-- A downgrade cannot restore historical global key uniqueness after different
-  tenants have used the same non-null key without first reconciling those rows.
+- Receipts do not store an HMAC key ID or historical key ring. `SECRET_KEY`
+  rotation therefore requires a versioned receipt/key migration before the old
+  key is removed.
+- An online downgrade checks for cross-tenant duplicate non-null keys before
+  any DDL and aborts without changing schema or receipt data when historical
+  global uniqueness cannot be restored. Offline downgrade generation fails
+  closed before emitting destructive SQL because no data preflight is possible.
 - Revision `b6c2d4e8f0a1` intentionally excludes the untracked unsafe `e8`
   migration in the dirty main worktree. That lineage is a deployment blocker
   until explicitly resolved.

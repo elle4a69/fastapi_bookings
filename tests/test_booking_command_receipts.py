@@ -2,6 +2,7 @@
 
 import hashlib
 import importlib.util
+import io
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,6 +36,7 @@ from app.schemas.booking import BookingCreate
 from app.services import booking_creation_service
 from app.services.booking_creation_service import (
     BookingCommandError,
+    _booking_hmac_key,
     _canonical_command_bytes,
     create_authoritative_booking,
 )
@@ -190,16 +192,48 @@ def test_receipt_hmac_is_not_plain_digest_and_audit_is_not_replay_authority(db_s
     assert _row_counts(db_session) == before
 
 
-@pytest.mark.parametrize("unavailable_secret", ["", "changeme", "short-secret"])
+@pytest.mark.parametrize(
+    "secret_case",
+    [
+        "blank",
+        "non_string",
+        "short",
+        "default",
+        "padded_default",
+        "local_example_placeholder",
+        "compose_placeholder",
+        "normalized_compose_placeholder",
+        "fallback_placeholder",
+        "public_placeholder",
+        "test_placeholder",
+        "edge_whitespace",
+    ],
+)
 def test_unavailable_hmac_secret_fails_before_mutation(
     db_session,
     monkeypatch,
-    unavailable_secret,
+    secret_case,
 ):
+    unavailable_secrets = {
+        "blank": "",
+        "non_string": None,
+        "short": "short-secret",
+        "default": "changeme",
+        "padded_default": "changeme".ljust(32),
+        "local_example_placeholder": "changeme_locally".ljust(32),
+        "compose_placeholder": "production-secret-key-must-be-configured",
+        "normalized_compose_placeholder": (
+            "PRODUCTION-SECRET-KEY-MUST-BE-CONFIGURED"
+        ),
+        "fallback_placeholder": "fallback-default-secret-key-change-me",
+        "public_placeholder": "local-public-key-change-me".ljust(32),
+        "test_placeholder": "test-secret-key".ljust(32),
+        "edge_whitespace": " synthetic-strong-secret-material-2026 ",
+    }
     data = _domain(db_session, uuid4().hex[:8])
     command = _command(data, key=f"secret-required-{uuid4()}")
     before = _row_counts(db_session)
-    monkeypatch.setattr(settings, "SECRET_KEY", unavailable_secret)
+    monkeypatch.setattr(settings, "SECRET_KEY", unavailable_secrets[secret_case])
 
     with pytest.raises(BookingCommandError) as error:
         create_authoritative_booking(
@@ -209,6 +243,63 @@ def test_unavailable_hmac_secret_fails_before_mutation(
         )
 
     assert error.value.status_code == 503
+    assert _row_counts(db_session) == before
+
+
+def test_strong_synthetic_hmac_secret_is_accepted(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "synthetic-strong-booking-replay-secret-2026",
+    )
+
+    assert len(_booking_hmac_key()) == 32
+
+
+def test_secret_rotation_fails_closed_until_original_key_is_restored(
+    db_session,
+    monkeypatch,
+):
+    data = _domain(db_session, uuid4().hex[:8])
+    command = _command(data, key=f"rotation-{uuid4()}")
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "synthetic-original-booking-secret-2026",
+    )
+    booking = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    db_session.commit()
+    before = _row_counts(db_session)
+
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "synthetic-rotated-booking-secret-2026",
+    )
+    with pytest.raises(BookingCommandError) as rotated:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command,
+        )
+    assert rotated.value.status_code == 409
+    assert _row_counts(db_session) == before
+
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "synthetic-original-booking-secret-2026",
+    )
+    replay = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    assert replay.id == booking.id
     assert _row_counts(db_session) == before
 
 
@@ -475,3 +566,148 @@ def test_receipt_migration_upgrade_and_downgrade_in_disposable_sqlite():
             }
         ]
     engine.dispose()
+
+
+def test_rejected_downgrade_preserves_receipt_schema_and_data():
+    migration_path = (
+        Path(__file__).parents[1]
+        / "alembic"
+        / "versions"
+        / "b6c2d4e8f0a1_add_booking_command_receipts.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "synthetic_booking_receipt_downgrade_guard",
+        migration_path,
+    )
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = create_engine("sqlite:///:memory:")
+    metadata = MetaData()
+    bookings = Table(
+        "bookings",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("tenant_id", Integer, nullable=False),
+        Column("idempotency_key", String, nullable=True),
+    )
+    Index(
+        "ix_bookings_idempotency_key",
+        bookings.c.idempotency_key,
+        unique=True,
+    )
+    metadata.create_all(engine)
+
+    def snapshot(connection) -> dict:
+        inspector = inspect(connection)
+        receipt_foreign_keys = inspector.get_foreign_keys(
+            "booking_command_receipts"
+        )
+        return {
+            "tables": frozenset(inspector.get_table_names()),
+            "booking_uniques": frozenset(
+                item["name"]
+                for item in inspector.get_unique_constraints("bookings")
+            ),
+            "booking_indexes": frozenset(
+                item["name"] for item in inspector.get_indexes("bookings")
+            ),
+            "receipt_uniques": frozenset(
+                item["name"]
+                for item in inspector.get_unique_constraints(
+                    "booking_command_receipts"
+                )
+            ),
+            "receipt_indexes": frozenset(
+                item["name"]
+                for item in inspector.get_indexes("booking_command_receipts")
+            ),
+            "receipt_foreign_key": (
+                tuple(receipt_foreign_keys[0]["constrained_columns"]),
+                tuple(receipt_foreign_keys[0]["referred_columns"]),
+            ),
+            "booking_count": connection.execute(
+                text("SELECT count(*) FROM bookings")
+            ).scalar_one(),
+            "receipt_count": connection.execute(
+                text("SELECT count(*) FROM booking_command_receipts")
+            ).scalar_one(),
+            "receipt_hmac_lengths": tuple(
+                connection.execute(
+                    text(
+                        "SELECT length(request_hmac) "
+                        "FROM booking_command_receipts ORDER BY id"
+                    )
+                ).scalars()
+            ),
+        }
+
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys=ON"))
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        connection.execute(
+            text(
+                "INSERT INTO bookings (id, tenant_id, idempotency_key) VALUES "
+                "(1, 1, 'shared'), (2, 2, 'shared'), (3, 1, NULL), (4, 1, NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO booking_command_receipts "
+                "(id, tenant_id, booking_id, idempotency_key, "
+                "fingerprint_version, request_hmac, created_at) "
+                "VALUES (1, 1, 1, 'shared', 1, :request_hmac, CURRENT_TIMESTAMP)"
+            ),
+            {"request_hmac": "a" * 64},
+        )
+        before = snapshot(connection)
+
+        with pytest.raises(RuntimeError) as rejected:
+            migration.downgrade()
+
+        assert str(rejected.value) == migration._DOWNGRADE_PREFLIGHT_ERROR
+        assert snapshot(connection) == before
+
+    engine.dispose()
+
+
+def test_postgresql_offline_upgrade_and_downgrade_are_fail_closed():
+    migration_path = (
+        Path(__file__).parents[1]
+        / "alembic"
+        / "versions"
+        / "b6c2d4e8f0a1_add_booking_command_receipts.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "synthetic_booking_receipt_offline_sql",
+        migration_path,
+    )
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    upgrade_buffer = io.StringIO()
+    upgrade_context = MigrationContext.configure(
+        dialect_name="postgresql",
+        opts={"as_sql": True, "output_buffer": upgrade_buffer},
+    )
+    migration.op = Operations(upgrade_context)
+    migration.upgrade()
+    upgrade_sql = upgrade_buffer.getvalue()
+    assert "CREATE TABLE booking_command_receipts" in upgrade_sql
+    assert "FOREIGN KEY(tenant_id, booking_id)" in upgrade_sql
+    assert "UNIQUE (tenant_id, idempotency_key)" in upgrade_sql
+
+    downgrade_buffer = io.StringIO()
+    downgrade_context = MigrationContext.configure(
+        dialect_name="postgresql",
+        opts={"as_sql": True, "output_buffer": downgrade_buffer},
+    )
+    migration.op = Operations(downgrade_context)
+    with pytest.raises(RuntimeError) as rejected:
+        migration.downgrade()
+
+    assert str(rejected.value) == migration._DOWNGRADE_PREFLIGHT_ERROR
+    assert downgrade_buffer.getvalue() == ""

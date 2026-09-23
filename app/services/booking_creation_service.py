@@ -43,6 +43,20 @@ logger = logging.getLogger(__name__)
 REQUEST_FINGERPRINT_VERSION = 1
 _BOOKING_HMAC_CONTEXT = b"fastapi-bookings:booking-command-receipt:v1"
 _REPLAY_CONFLICT = "Idempotency key was already used for a different booking request."
+_UNSAFE_BOOKING_HMAC_SECRET_MARKERS = frozenset(
+    {
+        "changeme",
+        "changeme_locally",
+        "default",
+        "default-secret",
+        "fallback-default-secret-key-change-me",
+        "local-public-key-change-me",
+        "production-secret-key-must-be-configured",
+        "test",
+        "test-secret",
+        "test-secret-key",
+    }
+)
 
 
 class BookingCommandError(Exception):
@@ -114,11 +128,13 @@ def _booking_hmac_key() -> bytes:
     """Derive a context-specific key without exposing the configured secret."""
 
     secret = settings.SECRET_KEY
+    normalized_secret = secret.strip().casefold() if isinstance(secret, str) else ""
     if (
         not isinstance(secret, str)
-        or not secret.strip()
-        or secret == "changeme"
+        or not normalized_secret
+        or secret != secret.strip()
         or len(secret) < 32
+        or normalized_secret in _UNSAFE_BOOKING_HMAC_SECRET_MARKERS
     ):
         raise BookingCommandError(503, "Booking replay protection is unavailable.")
     return hmac.new(

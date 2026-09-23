@@ -36,8 +36,11 @@ and rollback. Other callers must likewise own their outer transaction.
 
 No new environment variables or external services are required. Keyed booking
 commands require the existing server-side `SECRET_KEY` to be non-default and
-at least 32 characters. The command uses the configured SQLAlchemy session and
-these tables:
+at least 32 characters. Blank, short, surrounding-whitespace, and known
+repository placeholder values fail closed before replay lookup or mutation.
+Validation compares a trimmed, case-folded value only to identify unsafe
+configuration; an accepted secret is never normalized before HMAC derivation.
+The command uses the configured SQLAlchemy session and these tables:
 
 - `tenants`, `clients`, `services`, `providers`, `locations` and relationship
   tables;
@@ -116,6 +119,11 @@ non-empty selection is rejected with the same generic, non-reflecting HTTP 422
 used for unsupported public fields before command construction. The command
 does not partially apply commercial selections.
 
+Idempotency keys are opaque values of 1-128 characters. Internal whitespace
+and punctuation are preserved exactly, while blank or edge-whitespace values
+receive the generic, non-reflecting HTTP 422 contract before command
+construction.
+
 The returned status is the actual stored `pending` status. This command never
 claims a booking is confirmed.
 
@@ -144,15 +152,18 @@ claims a booking is confirmed.
 - The migration intentionally does not derive receipts from legacy `AuditLog`
   rows. Existing keyed bookings without an internal receipt fail closed with
   HTTP 409 and require an explicit, separately approved reconciliation policy.
-- Receipt HMACs use the existing `SECRET_KEY`. Rotating that key invalidates
-  replay authentication for existing receipts unless a versioned key-rotation
-  migration is performed first.
+- Receipt HMACs use the existing `SECRET_KEY`. Receipts store a fingerprint
+  version but no HMAC key ID or historical key ring. Rotating that key therefore
+  invalidates replay authentication for existing receipts unless a versioned
+  key-rotation migration is performed first.
 - Migration `b6c2d4e8f0a1` is based only on committed parent `d7e8f9a0b1c2`.
   The untracked unsafe `e8` migration in the dirty main worktree was not read,
   modified, deleted, or used. Its lineage must be resolved before integration
-  or deployment. Downgrade also requires reconciliation if different tenants
-  have begun using the same non-null key because the historical schema restores
-  global uniqueness.
+  or deployment. An online downgrade performs a read-only duplicate-key
+  preflight before any DDL and aborts generically if different tenants have
+  used the same non-null key, preserving receipt authority and the upgraded
+  constraints. Offline downgrade generation is deliberately rejected before
+  emitting destructive SQL because it cannot execute that data preflight.
 - The admin booking and configurable booking-form routes have not yet been
   migrated to this command. They must be consolidated in a separate parity-
   tested task.
@@ -192,8 +203,6 @@ $env:PYTHONDONTWRITEBYTECODE='1'
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_constraints.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_edge_cases.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_intervals.py'
-& 'F:\Projects\fastapi_bookings\.venv\Scripts\python.exe' -m pytest -q -p no:cacheprovider `
-  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_validation_error_privacy.py'
 ```
 
 The focused suite uses labelled synthetic tenants, clients, providers,
@@ -201,3 +210,5 @@ services, schedules, locations, resources, and booking commands. It must never
 send SMS, call external booking providers, or create production data.
 The tests named `sequential` exercise deterministic replay/contention behavior;
 they do not claim to be concurrent database race tests.
+Validation-boundary integration is verified on its separately reviewed branch
+and is not part of this booking-module command.
