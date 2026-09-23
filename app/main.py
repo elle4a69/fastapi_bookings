@@ -11,7 +11,6 @@ import os
 import traceback
 
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -240,19 +239,87 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
+    """Return bounded structural validation errors without reflecting input."""
+
     current_span = trace.get_current_span()
     trace_id = ""
     if current_span and current_span.get_span_context().is_valid:
         trace_id = f"{current_span.get_span_context().trace_id:032x}"
-        
+
+    safe_sources = frozenset({"body", "query", "path", "header", "cookie"})
+    safe_type_categories = {
+        "missing": "missing",
+        "json_invalid": "invalid_json",
+        "int_parsing": "type_error",
+        "int_type": "type_error",
+        "float_parsing": "type_error",
+        "float_type": "type_error",
+        "bool_parsing": "type_error",
+        "bool_type": "type_error",
+        "string_type": "type_error",
+        "list_type": "type_error",
+        "dict_type": "type_error",
+        "model_attributes_type": "type_error",
+        "datetime_parsing": "type_error",
+        "datetime_from_date_parsing": "type_error",
+        "date_parsing": "type_error",
+        "date_from_datetime_parsing": "type_error",
+        "time_parsing": "type_error",
+        "uuid_parsing": "type_error",
+        "decimal_parsing": "type_error",
+        "url_parsing": "type_error",
+        "enum": "choice_error",
+        "literal_error": "choice_error",
+        "greater_than": "constraint_error",
+        "greater_than_equal": "constraint_error",
+        "less_than": "constraint_error",
+        "less_than_equal": "constraint_error",
+        "string_too_short": "constraint_error",
+        "string_too_long": "constraint_error",
+        "too_short": "constraint_error",
+        "too_long": "constraint_error",
+        "extra_forbidden": "extra_field",
+    }
+    structural_errors: set[tuple[str, str]] = set()
+    for error in exc.errors():
+        location = error.get("loc") if isinstance(error, dict) else None
+        location_source = (
+            location[0]
+            if isinstance(location, (list, tuple)) and location
+            else None
+        )
+        source = (
+            location_source
+            if isinstance(location_source, str) and location_source in safe_sources
+            else "request"
+        )
+        raw_type = error.get("type") if isinstance(error, dict) else None
+        error_type = (
+            safe_type_categories.get(raw_type, "invalid")
+            if isinstance(raw_type, str)
+            else "invalid"
+        )
+        structural_errors.add((source, error_type))
+
+    if not structural_errors:
+        structural_errors.add(("request", "invalid"))
+    details = [
+        {
+            "loc": [source],
+            "type": error_type,
+            "message": "Invalid request value.",
+        }
+        for source, error_type in sorted(structural_errors)[:20]
+    ]
+
     response = JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "ok": False,
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Validation failed for the request.",
-                "details": jsonable_encoder(exc.errors()),
+                "details": details,
                 "request_id": trace_id
             }
         }
