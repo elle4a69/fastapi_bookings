@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from ..deps import DatabaseId, get_current_admin, get_current_tenant, get_db
@@ -27,6 +29,7 @@ from ...services.sms.arrival_service import (
 )
 
 router = APIRouter(prefix="/sms/arrivals", tags=["sms-arrivals"])
+arrival_capability_limiter = Limiter(key_func=get_remote_address)
 
 _INVALID_CAPABILITY_DETAIL = "Arrival session is invalid or expired."
 _ARRIVAL_BODY_MAX_BYTES = 1024
@@ -90,6 +93,7 @@ async def _read_arrival_capability(request: Request) -> str:
         }
     },
 )
+@arrival_capability_limiter.limit("10/minute")
 async def client_arrive(
     request: Request,
     db: Session = Depends(get_db),

@@ -95,7 +95,7 @@ def test_postgresql_claim_uses_skip_locked_and_database_clock():
 
 
 def test_live_lease_is_single_owner_and_stale_token_is_fenced(db_session):
-    event = create_outbox_event(db_session, "unsupported.event", {})
+    event = create_outbox_event(db_session, "booking.created", {})
     db_session.commit()
 
     claimed = outbox_worker.claim_next_outbox_event(
@@ -126,7 +126,7 @@ def test_live_lease_is_single_owner_and_stale_token_is_fenced(db_session):
 
 
 def test_expired_lease_is_recovered_and_attempts_are_bounded(db_session):
-    event = create_outbox_event(db_session, "unsupported.event", {})
+    event = create_outbox_event(db_session, "booking.created", {})
     db_session.flush()
     event.status = "PROCESSING"
     event.lease_owner = "worker:dead"
@@ -155,17 +155,31 @@ def test_expired_lease_is_recovered_and_attempts_are_bounded(db_session):
     assert recovered_row.error_code == "ATTEMPTS_EXHAUSTED"
 
 
-def test_unknown_and_legacy_provider_types_are_quarantined(db_session):
+def test_generic_worker_leaves_non_webhook_event_types_unclaimed(db_session):
+    tenant = Tenant(name="SYNTHETIC Generic Outbox", subdomain="synthetic-generic-outbox")
+    db_session.add(tenant)
+    db_session.flush()
     events = [
         create_outbox_event(db_session, event_type, {"sensitive": "not-logged"})
         for event_type in ("unknown.event", "SEND_SMS", "SEND_MMS", "CHATWOOT_REPLY", "PUSH_NOTIFICATION", "arrival.alert")
     ]
+    supported = create_outbox_event(
+        db_session,
+        "booking.created",
+        {"fixture": "synthetic"},
+        tenant_id=tenant.id,
+    )
+    supported.webhook_snapshot_at = NOW
     db_session.commit()
     asyncio.run(outbox_worker.process_pending_outbox_events(db_session, clock=lambda: NOW))
     for event in events:
         db_session.refresh(event)
-        assert event.status == "QUARANTINED"
-        assert event.error_code == "EVENT_TYPE_UNSUPPORTED"
+        assert event.status == "PENDING"
+        assert event.processed is False
+        assert event.attempt_count == 0
+        assert event.error_code is None
+    db_session.refresh(supported)
+    assert supported.status == "SUCCEEDED"
 
 
 def test_poison_event_does_not_block_next_event_and_errors_are_structural(

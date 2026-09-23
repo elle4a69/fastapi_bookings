@@ -204,11 +204,11 @@ The implementation uses `SmsArrivalSession`, `SmsConversation`, `SmsConversation
 
 ### Core Workflows & Contracts
 
-1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, client, service, booking location, and booking all match transitively. It persists only a SHA-256 token digest, records a structural `arrival_invitation_issued` event, and returns the raw capability once to the caller. A database uniqueness race is translated to a stable domain conflict.
-2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. The route reads at most 1 KiB and accepts only one string `token` field. Tokens are never accepted in a URL path. Missing, null, wrong-type, nested, oversized, malformed, unknown, and expired capabilities receive the same non-disclosing `404` contract.
+1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, client, service, booking location, and booking all match transitively. It persists only a SHA-256 token digest, records a structural `arrival_invitation_issued` event, and returns the raw capability once to the caller. A recognized booking uniqueness race becomes a stable domain conflict, token collisions are retried three times, and all other integrity failures become a body-free structural persistence error.
+2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. The route reads at most 1 KiB and accepts only one string `token` field. Tokens are never accepted in a URL path. Missing, null, wrong-type, nested, oversized, malformed, unknown, and expired capabilities receive the same non-disclosing `404` contract while attempts above the process-local ten-per-minute capability limit receive `429` without reflecting the body.
 3. Resolution queries the digest first. A legacy plaintext lookup occurs only after a digest miss, and a successful legacy match is immediately rewritten to its digest. The first valid check-in uses a locked row plus a conditional update to record `arrived_at` and exactly one structural `customer_arrived` event. A retry returns the existing state without creating a duplicate event.
 4. Staff list arrivals with `GET /api/admin/sms/arrivals` and acknowledge one with `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge`. Both operations are authenticated and tenant scoped. Acknowledgement uses the same locked/conditional winner pattern and records one structural closure event. If a client already arrived and the booking is later cancelled or otherwise leaves `confirmed`, the list reports `ineligible`; staff may still acknowledge it to close the operational record.
-5. `process_repeated_arrival_alerts` locks and processes a deterministic batch of at most 100 eligible unacknowledged arrivals. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication across retries and concurrent workers. Acknowledgement and subsequent alert passes terminally quarantine still-unleased `PENDING`/`RETRY` alerts for acknowledged, expired, cancelled, or otherwise ineligible sessions.
+5. `process_repeated_arrival_alerts` locks and processes a deterministic batch of at most 100 eligible unacknowledged arrivals. Candidates that already have the current sequence key are excluded before `LIMIT`, so bounded subsequent passes advance beyond the first 100 and across tenants. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication across retries and concurrent workers. Acknowledgement and subsequent alert passes terminally quarantine still-unleased `PENDING`/`RETRY` alerts for acknowledged, expired, cancelled, or otherwise ineligible sessions.
 
 ### Data Safety & Isolation
 
@@ -216,7 +216,7 @@ The implementation uses `SmsArrivalSession`, `SmsConversation`, `SmsConversation
 - Scope is checked through the full booking/conversation/account/client/provider/service/location relationship before a capability is created or exercised. A missing or inconsistent relationship fails closed.
 - Expiry is computed from the earlier of the maximum session lifetime and the booking-end grace window. Expired capabilities cannot check in.
 - Arrival event metadata and alert payloads are structural and use identifiers and sequence numbers only.
-- PostgreSQL row locks serialize arrive, acknowledge, alert eligibility, and cancellation cleanup. Conditional updates ensure only the lifecycle winner writes its timestamp/event. SQLite ignores `FOR UPDATE`; the synthetic suite verifies conditional winner semantics but is not a substitute for a PostgreSQL concurrency test.
+- PostgreSQL row locks are intended to serialize arrive, acknowledge, alert eligibility, and cancellation cleanup. Conditional updates ensure only the lifecycle winner writes its timestamp/event. SQLite ignores `FOR UPDATE`; the synthetic suite verifies sequential retry and conditional-update semantics only, not real concurrent PostgreSQL behavior.
 - Pending/retry alert suppression and the lifecycle transition share the application transaction. An alert already leased as `PROCESSING` cannot be recalled by this service; the future delivery consumer must re-check arrival eligibility immediately before customer/staff-visible delivery.
 
 ### Known Issues, Edge Cases & Outstanding Work
@@ -226,17 +226,20 @@ The implementation uses `SmsArrivalSession`, `SmsConversation`, `SmsConversation
 - Legacy raw-token lookup remains only for bounded migration compatibility. Successful use rehashes one row, but a deliberate migration/removal plan is still required after legacy rows have expired and all direct session creators use `create_arrival_session`.
 - Expiry and ownership are currently derived from existing booking and conversation relationships because no arrival-specific schema migration was approved for this slice. Database-enforced event immutability/uniqueness and first-class arrival ownership/expiry columns remain follow-up work.
 - There is deliberately no early-arrival business window. A confirmed, unexpired invitation can currently check in at any time before its computed expiry; product owners must define an approved window before this behavior changes.
-- The admin list is privacy-minimized but fixed at 50 newest records and has no pagination contract. Alert processing is bounded to 100 deterministic candidates per pass.
-- Capability attempts have bounded request bodies but no dedicated distributed rate limit. Alert delivery leases and final pre-delivery eligibility checks remain consumer responsibilities.
-- Browser push/audio delivery, reminder scheduling, and the customer-facing arrival page are outside this slice. The durable outbox records are only the safe server-side alert boundary.
+- The admin list is privacy-minimized but fixed at 50 newest records and has no pagination contract. Alert processing is bounded to 100 deterministic candidates per pass and requires repeated scheduler passes to drain a larger eligible set.
+- Capability attempts have bounded request bodies and a dedicated in-memory ten-per-minute route limit. That limit is process-local, not a distributed production quota; a shared backend is still required for horizontally scaled deployment.
+- `arrival.alert` is a durable, structural pending record only. The generic webhook outbox worker deliberately does not claim it, and no production alert delivery consumer or final pre-delivery eligibility gate exists yet. Browser push/audio delivery, reminder scheduling, and the customer-facing arrival page remain outside this slice.
+- On the current base, repeated-arrival housekeeping is invoked by the SMS operations worker only after it finds an unrelated outbound SMS job. This slice must be stacked with the operations scheduler fix that moves housekeeping ahead of that empty-queue return (and its regression test); this module does not modify the SMS worker.
 - Existing frontend arrival mocks/types may still expose legacy token or PII fields and require a separate approved frontend cleanup.
 
 ### Verification & Testing Commands
 
 ```powershell
 $env:OTEL_SDK_DISABLED='true'
-.\.venv\Scripts\python.exe -m py_compile app/services/sms/arrival_service.py app/api/routers/sms_arrivals.py app/schemas/sms_arrival.py tests/test_sms_arrivals.py
-.\.venv\Scripts\python.exe -m pytest tests/test_sms_arrivals.py tests/test_notification_configs.py -q
+.\.venv\Scripts\python.exe -m py_compile app/services/sms/arrival_service.py app/services/outbox_worker.py app/api/routers/sms_arrivals.py app/schemas/sms_arrival.py tests/test_sms_arrivals.py tests/test_generic_outbox_safety.py
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_arrivals.py tests/test_notification_configs.py tests/test_sms_foundation.py tests/test_sms_integration.py tests/test_sms_openai.py tests/test_sms_prompt_hierarchy.py tests/test_sms_chatwoot.py tests/test_sms_rate_limiting.py -q
+.\.venv\Scripts\python.exe -m pytest tests/test_generic_outbox_safety.py -q
+ruff check app/services/sms/arrival_service.py app/services/outbox_worker.py app/api/routers/sms_arrivals.py tests/test_sms_arrivals.py tests/test_generic_outbox_safety.py
 ```
 
 For an API contract smoke test, inspect the generated OpenAPI document and verify that the body-token `POST /api/admin/sms/arrivals/public/arrive`, authenticated list `GET /api/admin/sms/arrivals`, and acknowledgement `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge` methods exist, while the legacy URL-token route does not.

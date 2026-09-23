@@ -188,7 +188,7 @@ def _claim_statement(now: datetime):
     )
     return (
         select(OutboxEvent)
-        .where(eligible)
+        .where(OutboxEvent.type.in_(WEBHOOK_EVENT_TYPES), eligible)
         .order_by(
             OutboxEvent.next_attempt_at.asc().nullsfirst(),
             OutboxEvent.created_at.asc(),
@@ -229,7 +229,9 @@ def claim_next_outbox_event(
             OutboxEvent.attempt_count >= OutboxEvent.max_attempts,
         ),
     )
-    db.query(OutboxEvent).filter(exhausted).update(
+    db.query(OutboxEvent).filter(
+        OutboxEvent.type.in_(WEBHOOK_EVENT_TYPES), exhausted
+    ).update(
         {
             OutboxEvent.status: OUTBOX_STATUS_DEAD_LETTER,
             OutboxEvent.processed: True,

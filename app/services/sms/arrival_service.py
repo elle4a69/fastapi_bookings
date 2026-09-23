@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import String, cast, exists, literal, or_
+from sqlalchemy import Integer, String, cast, exists, func, literal, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,7 @@ ARRIVAL_TOKEN_MAX_AGE = timedelta(days=7)
 ARRIVAL_POST_BOOKING_GRACE = timedelta(hours=4)
 ARRIVAL_ALERT_INTERVAL_SECONDS = 60
 ARRIVAL_ALERT_BATCH_LIMIT = 100
+ARRIVAL_TOKEN_COLLISION_RETRIES = 3
 _PENDING_OUTBOX_STATUSES = ("PENDING", "RETRY")
 
 
@@ -45,6 +46,10 @@ class ArrivalExpiredError(LookupError):
 
 class ArrivalStateError(ValueError):
     """The lifecycle transition is not permitted."""
+
+
+class ArrivalPersistenceError(RuntimeError):
+    """Arrival persistence failed without exposing database error details."""
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,25 @@ def arrival_expires_at(arrival: SmsArrivalSession, booking: Booking) -> datetime
 def _booking_status(booking: Booking) -> str:
     value = getattr(booking.status, "value", booking.status)
     return str(value or "").lower()
+
+
+def _arrival_integrity_kind(exc: IntegrityError) -> Optional[str]:
+    """Classify only known arrival uniqueness failures without exposing details."""
+
+    constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    if constraint == "ix_sms_arrival_sessions_booking_id":
+        return "booking"
+    if constraint == "ix_sms_arrival_sessions_token":
+        return "token"
+
+    # SQLite does not expose a constraint name. Inspect only the exact column
+    # marker internally; callers and logs receive a structural error instead.
+    detail = str(exc.orig).lower()
+    if "unique constraint failed: sms_arrival_sessions.booking_id" in detail:
+        return "booking"
+    if "unique constraint failed: sms_arrival_sessions.token" in detail:
+        return "token"
+    return None
 
 
 def arrival_booking_is_eligible(booking: Booking) -> bool:
@@ -282,31 +306,47 @@ def create_arrival_session(
     ):
         raise ArrivalStateError("arrival session already exists for this booking")
 
-    raw_token = secrets.token_urlsafe(32)
-    arrival = SmsArrivalSession(
-        conversation_id=conversation_id,
-        booking_id=booking_id,
-        token=hash_arrival_token(raw_token),
-        created_at=current_time,
-    )
-    try:
-        with db.begin_nested():
-            db.add(arrival)
-            db.flush()
-            db.add(
-                SmsConversationEvent(
-                    conversation_id=conversation.id,
-                    type="arrival_invitation_issued",
-                    meta={
-                        "arrival_session_id": arrival.id,
-                        "booking_id": booking.id,
-                        "expires_at": arrival_expires_at(arrival, booking).isoformat(),
-                    },
+    arrival = None
+    raw_token = ""
+    for attempt in range(ARRIVAL_TOKEN_COLLISION_RETRIES):
+        raw_token = secrets.token_urlsafe(32)
+        candidate = SmsArrivalSession(
+            conversation_id=conversation_id,
+            booking_id=booking_id,
+            token=hash_arrival_token(raw_token),
+            created_at=current_time,
+        )
+        try:
+            with db.begin_nested():
+                db.add(candidate)
+                db.flush()
+                db.add(
+                    SmsConversationEvent(
+                        conversation_id=conversation.id,
+                        type="arrival_invitation_issued",
+                        meta={
+                            "arrival_session_id": candidate.id,
+                            "booking_id": booking.id,
+                            "expires_at": arrival_expires_at(
+                                candidate, booking
+                            ).isoformat(),
+                        },
+                    )
                 )
-            )
-            db.flush()
-    except IntegrityError:
-        raise ArrivalStateError("arrival session already exists for this booking") from None
+                db.flush()
+            arrival = candidate
+            break
+        except IntegrityError as exc:
+            kind = _arrival_integrity_kind(exc)
+            if kind == "booking":
+                raise ArrivalStateError(
+                    "arrival session already exists for this booking"
+                ) from None
+            if kind == "token" and attempt + 1 < ARRIVAL_TOKEN_COLLISION_RETRIES:
+                continue
+            raise ArrivalPersistenceError("arrival session could not be created") from None
+    if arrival is None:  # Defensive: the bounded loop either succeeds or raises.
+        raise ArrivalPersistenceError("arrival session could not be created")
     expires_at = arrival_expires_at(arrival, booking)
     logger.info("arrival_session_created")
     return ArrivalInvitation(session=arrival, token=raw_token, expires_at=expires_at)
@@ -571,6 +611,34 @@ def _alert_sequence(arrived_at: datetime, now: datetime) -> int:
     return elapsed // ARRIVAL_ALERT_INTERVAL_SECONDS
 
 
+def _current_alert_key_expression(db: Session, current_time: datetime):
+    """Build the current interval key so deduped rows are excluded pre-LIMIT."""
+
+    if db.get_bind().dialect.name == "sqlite":
+        def sqlite_epoch_millis(value):
+            whole_seconds = cast(func.strftime("%s", value), Integer) * 1000
+            milliseconds = cast(func.substr(func.strftime("%f", value), 4), Integer)
+            return whole_seconds + milliseconds
+
+        elapsed_seconds = (
+            sqlite_epoch_millis(current_time)
+            - sqlite_epoch_millis(SmsArrivalSession.arrived_at)
+        ) / 1000
+    else:
+        elapsed_seconds = func.extract(
+            "epoch", literal(current_time) - SmsArrivalSession.arrived_at
+        )
+    sequence = cast(
+        func.floor(elapsed_seconds / ARRIVAL_ALERT_INTERVAL_SECONDS), Integer
+    )
+    return (
+        literal("arrival-alert:")
+        + cast(SmsArrivalSession.id, String)
+        + literal(":")
+        + cast(sequence, String)
+    )
+
+
 def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
     """Bound cleanup of pending alerts whose session can no longer alert.
 
@@ -643,12 +711,18 @@ def process_repeated_arrival_alerts(
 
     current_time = _as_utc(now or datetime.now(timezone.utc))
     suppressed = _suppress_ineligible_alerts(db, current_time=current_time)
+    current_key = _current_alert_key_expression(db, current_time)
     rows = (
         _scoped_query(db)
         .filter(
             SmsArrivalSession.arrived_at.isnot(None),
+            SmsArrivalSession.arrived_at
+            <= current_time - timedelta(seconds=ARRIVAL_ALERT_INTERVAL_SECONDS),
             SmsArrivalSession.acknowledged_at.is_(None),
             Booking.status == BookingStatus.CONFIRMED,
+            ~exists()
+            .where(OutboxEvent.idempotency_key == current_key)
+            .correlate(SmsArrivalSession),
         )
         .order_by(
             SmsArrivalSession.arrived_at.desc(),

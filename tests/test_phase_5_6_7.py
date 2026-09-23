@@ -1,5 +1,4 @@
 import asyncio
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -39,14 +38,9 @@ def test_device_registration(client: TestClient, db_session: Session):
     assert db_token.platform == "android"
 
 
-def test_generic_outbox_quarantines_legacy_send_sms(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
-):
-    """The obsolete generic provider path cannot produce a duplicate SMS."""
-    payload = {
-        "to": "+61411111111",
-        "body": "Test message content"
-    }
+def test_generic_outbox_leaves_legacy_send_sms_unclaimed(db_session: Session):
+    """The webhook-only worker never claims an obsolete provider action."""
+    payload = {"fixture": "synthetic-no-send"}
     event = create_outbox_event(db_session, "SEND_SMS", payload)
     db_session.commit()
     
@@ -55,9 +49,10 @@ def test_generic_outbox_quarantines_legacy_send_sms(
     asyncio.run(process_pending_outbox_events(db_session))
 
     db_session.refresh(event)
-    assert event.status == "QUARANTINED"
-    assert event.processed is True
-    assert event.error_code == "EVENT_TYPE_UNSUPPORTED"
+    assert event.status == "PENDING"
+    assert event.processed is False
+    assert event.attempt_count == 0
+    assert event.error_code is None
 
 
 def test_stripe_webhook_is_disabled_without_changing_booking_or_outbox(

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event
+from sqlalchemy.exc import IntegrityError
 
 from app.core.security import create_access_token
 from app.core.state_machine import BookingStatus
@@ -21,8 +22,11 @@ from app.models.sms_conversation import SmsConversation
 from app.models.sms_outbox import SmsConversationEvent
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.main import limiter as public_route_limiter
+from app.api.routers.sms_arrivals import arrival_capability_limiter
 from app.services.sms.arrival_service import (
     ArrivalNotFoundError,
+    ArrivalPersistenceError,
     ArrivalStateError,
     acknowledge_arrival,
     create_arrival_session,
@@ -30,6 +34,17 @@ from app.services.sms.arrival_service import (
     mark_customer_arrived,
     process_repeated_arrival_alerts,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_arrival_rate_limiter():
+    """Keep shared in-memory SlowAPI state from leaking between API tests."""
+
+    public_route_limiter.reset()
+    arrival_capability_limiter.reset()
+    yield
+    public_route_limiter.reset()
+    arrival_capability_limiter.reset()
 
 
 def _staff_headers(tenant: Tenant, user: User) -> dict[str, str]:
@@ -293,6 +308,17 @@ def test_invalid_body_token_is_not_reflected(client):
         ),
         (b'{"token": "CAPABILITY_CANARY_DO_NOT_REFLECT"}', "text/plain"),
     ],
+    ids=(
+        "empty",
+        "null",
+        "array",
+        "numeric-token",
+        "nested-token",
+        "extra-field",
+        "truncated-json",
+        "oversized",
+        "wrong-content-type",
+    ),
 )
 def test_malformed_capability_bodies_share_non_reflecting_contract(
     client, caplog, body, content_type
@@ -312,6 +338,25 @@ def test_malformed_capability_bodies_share_non_reflecting_contract(
     assert response.json()["error"]["details"] == {}
     assert marker not in response.text
     assert marker not in caplog.text
+
+
+def test_public_arrival_rate_limit_is_explicit_and_non_reflecting(
+    client, synthetic_arrival_data
+):
+    capability = synthetic_arrival_data["invitation_a"].token
+    for _ in range(10):
+        response = client.post(
+            "/api/admin/sms/arrivals/public/arrive",
+            json={"token": capability},
+        )
+        assert response.status_code == 200
+
+    limited = client.post(
+        "/api/admin/sms/arrivals/public/arrive",
+        json={"token": capability},
+    )
+    assert limited.status_code == 429
+    assert capability not in limited.text
 
 
 def test_digest_lookup_does_not_bind_raw_capability(
@@ -493,20 +538,58 @@ def test_creation_rejects_duplicate_booking_capability(
         )
 
 
-def test_creation_integrity_race_maps_to_stable_conflict(
+def test_creation_retries_token_digest_collision_without_losing_outer_state(
     db_session, synthetic_arrival_data, monkeypatch
 ):
     from app.services.sms import arrival_service
 
     raw_collision = "synthetic-arrival-token-collision-0001"
+    raw_success = "synthetic-arrival-token-success-0000002"
     synthetic_arrival_data["invitation_b"].session.token = hash_arrival_token(
         raw_collision
     )
     db_session.delete(synthetic_arrival_data["invitation_a"].session)
     db_session.flush()
-    monkeypatch.setattr(arrival_service.secrets, "token_urlsafe", lambda _size: raw_collision)
+    sentinel = Tenant(
+        name="SYNTHETIC Outer Transaction Sentinel",
+        subdomain="synthetic-arrival-sentinel",
+    )
+    db_session.add(sentinel)
+    generated = iter((raw_collision, raw_success))
+    monkeypatch.setattr(
+        arrival_service.secrets, "token_urlsafe", lambda _size: next(generated)
+    )
 
-    with pytest.raises(ArrivalStateError, match="already exists"):
+    invitation = create_arrival_session(
+        db_session,
+        tenant_id=synthetic_arrival_data["tenant_a"].id,
+        conversation_id=synthetic_arrival_data["conversation_a"].id,
+        booking_id=synthetic_arrival_data["booking_a"].id,
+    )
+
+    assert invitation.token == raw_success
+    assert invitation.session.token == hash_arrival_token(raw_success)
+    assert db_session.query(Tenant).filter(Tenant.id == sentinel.id).one() is sentinel
+
+
+def test_creation_fails_structurally_after_bounded_token_collisions(
+    db_session, synthetic_arrival_data, monkeypatch
+):
+    from app.services.sms import arrival_service
+
+    raw_collision = "synthetic-arrival-token-collision-bounded"
+    synthetic_arrival_data["invitation_b"].session.token = hash_arrival_token(
+        raw_collision
+    )
+    db_session.delete(synthetic_arrival_data["invitation_a"].session)
+    db_session.flush()
+    monkeypatch.setattr(
+        arrival_service.secrets, "token_urlsafe", lambda _size: raw_collision
+    )
+
+    with pytest.raises(
+        ArrivalPersistenceError, match="arrival session could not be created"
+    ) as captured:
         create_arrival_session(
             db_session,
             tenant_id=synthetic_arrival_data["tenant_a"].id,
@@ -514,12 +597,78 @@ def test_creation_integrity_race_maps_to_stable_conflict(
             booking_id=synthetic_arrival_data["booking_a"].id,
         )
 
+    assert captured.value.__cause__ is None
     assert (
-        db_session.query(Tenant)
-        .filter(Tenant.id == synthetic_arrival_data["tenant_a"].id)
-        .one()
-        .id
-        == synthetic_arrival_data["tenant_a"].id
+        db_session.query(SmsArrivalSession)
+        .filter(SmsArrivalSession.booking_id == synthetic_arrival_data["booking_a"].id)
+        .count()
+        == 0
+    )
+
+
+def test_creation_maps_only_booking_unique_integrity_to_domain_conflict(
+    db_session, synthetic_arrival_data
+):
+    db_session.delete(synthetic_arrival_data["invitation_a"].session)
+    db_session.flush()
+
+    def fail_with_booking_unique(_mapper, _connection, _target):
+        raise IntegrityError(
+            "synthetic", {}, Exception(
+                "UNIQUE constraint failed: sms_arrival_sessions.booking_id"
+            )
+        )
+
+    event.listen(SmsArrivalSession, "before_insert", fail_with_booking_unique)
+    try:
+        with pytest.raises(ArrivalStateError, match="already exists"):
+            create_arrival_session(
+                db_session,
+                tenant_id=synthetic_arrival_data["tenant_a"].id,
+                conversation_id=synthetic_arrival_data["conversation_a"].id,
+                booking_id=synthetic_arrival_data["booking_a"].id,
+            )
+    finally:
+        event.remove(SmsArrivalSession, "before_insert", fail_with_booking_unique)
+
+
+def test_creation_translates_unrelated_integrity_without_losing_outer_state(
+    db_session, synthetic_arrival_data
+):
+    db_session.delete(synthetic_arrival_data["invitation_a"].session)
+    db_session.flush()
+    sentinel = Tenant(
+        name="SYNTHETIC Persistence Sentinel",
+        subdomain="synthetic-persistence-sentinel",
+    )
+    db_session.add(sentinel)
+
+    def fail_structurally(_mapper, _connection, _target):
+        raise IntegrityError(
+            "synthetic", {}, Exception("synthetic unrelated constraint")
+        )
+
+    event.listen(SmsConversationEvent, "before_insert", fail_structurally)
+    try:
+        with pytest.raises(
+            ArrivalPersistenceError, match="arrival session could not be created"
+        ) as captured:
+            create_arrival_session(
+                db_session,
+                tenant_id=synthetic_arrival_data["tenant_a"].id,
+                conversation_id=synthetic_arrival_data["conversation_a"].id,
+                booking_id=synthetic_arrival_data["booking_a"].id,
+            )
+    finally:
+        event.remove(SmsConversationEvent, "before_insert", fail_structurally)
+
+    assert captured.value.__cause__ is None
+    assert db_session.query(Tenant).filter(Tenant.id == sentinel.id).one() is sentinel
+    assert (
+        db_session.query(SmsArrivalSession)
+        .filter(SmsArrivalSession.booking_id == synthetic_arrival_data["booking_a"].id)
+        .count()
+        == 0
     )
 
 
@@ -836,3 +985,60 @@ def test_alert_batch_is_bounded_and_deterministic(
         synthetic_arrival_data["invitation_b"].session.id,
     )
     assert outbox.data()["arrival_session_id"] == expected_id
+    assert process_repeated_arrival_alerts(
+        db_session, now=synthetic_arrival_data["now"] + timedelta(minutes=2)
+    ) == 1
+    assert (
+        db_session.query(OutboxEvent)
+        .filter(OutboxEvent.type == "arrival.alert")
+        .count()
+        == 2
+    )
+
+
+def test_alert_batch_progresses_beyond_one_hundred_and_across_tenants(
+    db_session, synthetic_arrival_data
+):
+    now = synthetic_arrival_data["now"]
+    invitation_a = synthetic_arrival_data["invitation_a"]
+    invitation_b = synthetic_arrival_data["invitation_b"]
+    invitation_a.session.arrived_at = now
+    invitation_b.session.arrived_at = now - timedelta(seconds=1)
+
+    for index in range(100):
+        booking = Booking(
+            tenant_id=synthetic_arrival_data["tenant_a"].id,
+            client_id=synthetic_arrival_data["client_a"].id,
+            provider_id=synthetic_arrival_data["provider_a"].id,
+            service_id=synthetic_arrival_data["booking_a"].service_id,
+            start_time=now + timedelta(hours=3, minutes=index),
+            end_time=now + timedelta(hours=3, minutes=index + 30),
+            status=BookingStatus.CONFIRMED,
+            idempotency_key=f"synthetic-arrival-bulk-{index}",
+        )
+        db_session.add(booking)
+        db_session.flush()
+        db_session.add(
+            SmsArrivalSession(
+                booking_id=booking.id,
+                conversation_id=synthetic_arrival_data["conversation_a"].id,
+                token=hash_arrival_token(
+                    f"synthetic-arrival-bulk-token-{index:04d}-long-enough"
+                ),
+                arrived_at=now,
+                created_at=now,
+            )
+        )
+    db_session.commit()
+
+    alert_time = now + timedelta(minutes=2)
+    assert process_repeated_arrival_alerts(db_session, now=alert_time) == 100
+    assert process_repeated_arrival_alerts(db_session, now=alert_time) == 2
+    alerts = db_session.query(OutboxEvent).filter(OutboxEvent.type == "arrival.alert")
+    assert alerts.count() == 102
+    assert (
+        alerts.filter(
+            OutboxEvent.tenant_id == synthetic_arrival_data["tenant_b"].id
+        ).count()
+        == 1
+    )
