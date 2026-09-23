@@ -27,7 +27,6 @@ frontend/src/pages/admin/sms/
 ├── inbox.tsx                # Dual-pane SMS thread viewer, chat stream & manual composer
 ├── operations-state.ts      # Pure inbox filter and ordering rules
 ├── operations-state.test.ts # Regression tests for operations list state
-├── quick-tools-sheet.tsx    # Drawer for quick booking injection & fact extraction
 ├── settings.tsx             # Knowledge base RAG configuration & baseline AI settings
 ├── simulator.tsx            # Synthetic conversation runner & multi-turn scenario tests
 └── triage-tab.tsx           # AI draft approval, rejection & modification interface
@@ -35,10 +34,10 @@ frontend/src/pages/admin/sms/
 
 ### Core Components & Sub-Tabs
 - **SMS Assistant Master Shell ([`../sms-assistant.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms-assistant.tsx))**: Houses the primary tab navigator (`Inbox`, `Arrivals`, `Draft Triage`, `Bootcamp`, `Console`, `SMS Lines`, `Chatwoot`, `RAG & Prompts`, `Simulator`, `Diagnostics`). Supports event-driven cross-tab switching via the `sms-navigate-tab` custom event.
-- **Live Inbox ([`inbox.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/inbox.tsx))**: Responsive dual-pane conversation navigation with polling, search, operational filters, unread/pin/block/AI state, optional priority/SLA/booking/arrival indicators, mixed message/event presentation, linked client/booking/arrival navigation, manual replies, and inline draft moderation. Unsupported operational actions remain disabled with an explanatory tooltip until their audited backend contracts exist.
+- **Live Inbox ([`inbox.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/inbox.tsx))**: Responsive dual-pane conversation navigation with polling, search, lifecycle filters, unread/pin/block/AI state, mixed message/note/event timeline, linked client/booking/arrival navigation, manual replies, inline draft moderation, internal notes, escalation, resolution, review-state clearing, and correction evidence. CSV export remains visibly unavailable until its backend contract is approved.
 - **Arrivals Board ([`arrivals-tab.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/arrivals-tab.tsx))**: Displays arrived clients with elapsed waiting timers. Emits audio alerts when new arrivals register and provides one-click "Acknowledge" actions.
 - **Triage Queue ([`triage-tab.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/triage-tab.tsx))**: Human-in-the-loop draft queue displaying incoming snippet, proposed AI draft, and action buttons (`Approve & Send`, `Edit Draft`, `Discard`).
-- **Scenario Simulator ([`simulator.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/simulator.tsx))**: Interactive test bench that fires synthetic webhook payloads against `/api/admin/sms/simulator/seed` and `/api/admin/sms/simulator/step`, enabling comprehensive regression tests without live carrier messaging.
+- **Scenario Simulator ([`simulator.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/simulator.tsx))**: Dedicated test bench for synthetic webhook turns and scenario fixtures. Scenario creation is deliberately absent from the live inbox.
 
 ---
 
@@ -46,17 +45,24 @@ frontend/src/pages/admin/sms/
 
 ### External Integrations
 - **SMS Gateways**: Twilio / Telnyx numbers registered under `/admin/sms-assistant` (`SMS Lines` tab).
-- **Chatwoot Messaging**: Configured via `chatwoot.tsx` with base URL, API access tokens, and webhook secrets.
+- **Chatwoot Messaging**: `chatwoot.tsx` manages staff-visible configuration and status. Credentials remain server-side; raw tokens and webhook secrets must never be returned to the frontend.
 
 ### Backend Endpoints
 - `GET /api/admin/sms/conversations`: Lists active SMS threads.
-- `GET /api/admin/sms/conversations/{id}/messages`: Returns conversation history.
+- `GET /api/admin/sms/conversations/{id}/timeline`: Returns chronological messages, internal notes, and structural audit events.
 - `POST /api/admin/sms/conversations/{id}/messages`: Dispatches manual staff SMS.
 - `POST /api/admin/sms/conversations/{id}/takeover`: Suspends automated AI responses.
+- `POST /api/admin/sms/conversations/{id}/release`: Returns an eligible conversation to automated handling.
+- `POST /api/admin/sms/conversations/{id}/escalate`: Escalates with a required reason.
+- `POST /api/admin/sms/conversations/{id}/resolve`: Resolves with a required note.
+- `POST /api/admin/sms/conversations/{id}/notes`: Adds an internal staff note.
+- `POST /api/admin/sms/conversations/{id}/corrections`: Records correction evidence without changing live knowledge.
+- `POST /api/admin/sms/conversations/{id}/review-state/clear`: Clears review-only state without deleting drafts.
+- `PATCH /api/admin/sms/conversations/{id}/controls`: Persists pin, block, and per-conversation AI settings.
+- `GET /api/admin/sms/conversations/drafts/queue`: Lists drafts pending staff sign-off.
+- `POST /api/admin/sms/conversations/drafts/{id}/review`: Edits, approves, or discards one draft.
 - `GET /api/admin/sms/arrivals`: Polls active arrivals lobby sessions.
 - `POST /api/admin/sms/arrivals/{id}/acknowledge`: Clears arrival alert.
-- `GET /api/admin/sms/triage/drafts`: Lists drafts pending staff sign-off.
-- `POST /api/admin/sms/simulator/seed`: Populates synthetic test fixtures.
 
 ---
 
@@ -67,6 +73,7 @@ frontend/src/pages/admin/sms/
 2. Staff clicks **Take Over** in `inbox.tsx`.
 3. Frontend posts to `/api/admin/sms/conversations/{id}/takeover`.
 4. Conversation transitions to `state: 'taken-over'`. The AI engine halts automated responses, leaving the channel entirely in staff control until explicitly released.
+5. Release is disabled in the UI while a contact is blocked or a conversation is in review, escalated, or resolved state. The server performs the final line/account safety check.
 
 ### 2. Conversation Controls and Draft Review
 
@@ -91,20 +98,21 @@ Client sends SMS ("I'm here in bay 4")
                  │
                  ▼
   Staff clicks "Acknowledge"
-  - Notifies practitioner
-  - Sends confirmation SMS to client
+  - Records acknowledgement
+  - Clears the active arrival alert
 ```
 
 ---
 
 ## Data Safety, Multi-Tenancy & PII Isolation
 
-- **Carrier Safety Guarantee (Rule 3 & 4)**: The Scenario Simulator strictly utilizes synthetic fixtures (`client_phone: '0411000001'`) and mocks carrier delivery. It never contacts live phone numbers.
 - **Provider & Tenant Isolation**: SMS accounts and conversations are strictly segmented by `tenant_id` and `provider_id`. Staff members only view messaging streams permitted by their organizational role.
-- **Phone Number Masking**: Client contact numbers are masked or restricted to authenticated administrative staff to prevent unauthorized PII leakage.
+- **Customer Address Visibility**: Customer SMS addresses are visible only inside the authenticated administrative workspace; they are not written to browser logs or telemetry by the inbox.
 - **Server-Owned Controls**: Pin, block, and automated-response settings come from the tenant-scoped API. They are not stored in `localStorage`, preventing stale or cross-session policy state.
-- **No Silent Learning**: The inbox does not convert staff corrections or dynamic customer facts directly into durable AI knowledge. Correction and curator workflows require explicit audited backend contracts.
+- **No Silent Learning**: The correction endpoint records audit and learning evidence only. It never changes live AI knowledge; any later curator promotion is a separate, explicitly reviewed workflow.
 - **Booking Authority**: Messaging UI navigates to FastAPI Bookings booking management. It does not issue a direct booking write from incomplete conversation context.
+- **Stale-response Protection**: Timeline responses carry a local request sequence and are applied only if the same conversation remains selected, preventing A-to-B selection races from displaying or addressing the wrong customer.
+- **Idempotent Manual Send**: One stable `client_request_id` is retained for a failed/retried manual-send attempt, and the composer is locked while a send is in flight.
 
 ---
 
@@ -112,8 +120,11 @@ Client sends SMS ("I'm here in bay 4")
 
 - **Polling vs WebSockets**: The inbox and arrivals tabs currently use interval polling (4s to 10s intervals). Migration to a unified WebSocket stream for lower latency updates is planned.
 - **Audio Autoplay Restrictions**: Certain modern browsers block the arrival chime until the user interacts with the page (clicks anywhere on the document). An explicit audio toggle is provided in the header.
-- **Backend-dependent operations**: Escalation with reason, resolution notes, internal notes, correction evidence, conversation-level CSV/audit export, durable priority/SLA fields, and enriched booking/arrival indicators need dedicated tenant-scoped backend contracts. The inbox exposes these as disabled, labelled controls rather than issuing invented requests.
-- **Review filter enrichment**: The `Needs review` filter consumes `needs_review` when provided by the conversation list contract and also recognises `info-needed`. A backend aggregate is still required for a complete cross-conversation draft count.
+- **CSV export**: Conversation/audit CSV export remains unavailable pending an approved tenant-scoped backend contract and reporting authorization model.
+- **List enrichment**: Durable priority/SLA, last-message preview, and booking/arrival indicator fields are optional UI capabilities but are not yet present in the base conversation response.
+- **Review filter enrichment**: The `Needs review` filter recognises the authoritative `needs-review` lifecycle state and consumes `needs_review` if a future list aggregate supplies it.
+- **Simulator isolation**: The Simulator tab must be configured with labelled synthetic accounts and data. Its webhook/account isolation requires separate combined runtime verification before it can be described as incapable of live carrier delivery.
+- **Backend integration dependency**: Timeline and audited staff action UI depends on the corresponding FastAPI routes landing in the backend commit. Verify the combined tree before release.
 
 ---
 
