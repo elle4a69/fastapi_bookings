@@ -19,6 +19,12 @@ from app.services.sms.ai_orchestrator import (
     CREDENTIAL_SCAN_MAX_DEPTH,
     CREDENTIAL_SCAN_MAX_ITEMS,
     HISTORY_CONTEXT_LIMIT,
+    KNOWLEDGE_CONTEXT_CHARACTER_LIMIT,
+    KNOWLEDGE_ENTRY_CHARACTER_LIMIT,
+    KNOWLEDGE_ENTRY_LIMIT,
+    MODEL_CONTEXT_CHARACTER_LIMIT,
+    PROMPT_PROFILE_CHARACTER_LIMIT,
+    _STATIC_AUTOPILOT_REPLY,
     SmsAiConfidentialOutputError,
     SmsAiSafetyError,
     _claim_ai_job,
@@ -302,17 +308,19 @@ def test_conflicting_legacy_dynamic_knowledge_is_review_only(db_session, safety_
     with patch("app.services.gateway.responses_client.generate_response", new=gateway):
         asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
 
-    prompt_contents = [item["content"] for item in gateway.call_args.kwargs["messages"]]
-    assert "Context Knowledge: Synthetic old price is 10 units." in prompt_contents
-    assert (
-        "Context Knowledge: Synthetic conflicting price is 20 units." in prompt_contents
-    )
+    gateway.assert_not_awaited()
     draft = db_session.query(SmsMessage).filter(SmsMessage.author_type == "ai").one()
     assert draft.status == "draft"
     assert (
         draft.body == "[AI response withheld by safety policy. Staff review required.]"
     )
     assert db_session.query(SmsOutboundJob).count() == 0
+    event_row = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_reply_generated")
+        .one()
+    )
+    assert event_row.meta["reason_code"] == "context_safety"
 
 
 @pytest.mark.parametrize(
@@ -835,6 +843,8 @@ def test_one_to_seven_character_sensitive_output_fails_closed_end_to_end(
         "requires_review": True,
         "output_withheld": True,
         "reason_code": "confidential_output",
+        "suppressed_job_count": 0,
+        "delivery_conflict": False,
     }
 
 
@@ -857,9 +867,9 @@ def test_short_prompt_matching_uses_token_boundaries_not_arbitrary_substrings(
 
     assert outcome == "generated"
     message = db_session.query(SmsMessage).filter(SmsMessage.author_type == "ai").one()
-    assert message.status == "queued"
+    assert message.status == "draft"
     assert message.body == "Education matters."
-    assert db_session.query(SmsOutboundJob).count() == 1
+    assert db_session.query(SmsOutboundJob).count() == 0
 
 
 def test_iterative_credential_scan_handles_deep_cycles_and_unusual_containers():
@@ -1083,7 +1093,6 @@ def test_downstream_rejection_is_sanitized_and_forces_review(db_session, safety_
         .all()
     )
     assert [(message.status, message.body) for message in messages] == [
-        ("failed", "[blocked by outbound safety policy]"),
         ("draft", "[AI response withheld by safety policy. Staff review required.]"),
     ]
     assert db_session.query(SmsOutboundJob).count() == 0
@@ -1097,3 +1106,571 @@ def test_downstream_rejection_is_sanitized_and_forces_review(db_session, safety_
     )
     assert review_event.meta["requires_review"] is True
     assert review_event.meta["output_withheld"] is True
+
+
+@pytest.mark.parametrize(
+    "invented_claim",
+    [
+        "We offer complimentary massages.",
+        "Walk-ins are welcome.",
+        "We close for lunch.",
+    ],
+)
+def test_static_greeting_never_auto_sends_arbitrary_model_claim(
+    db_session, safety_data, invented_claim
+):
+    _, _, account, conversation = safety_data
+    turn_ref = "synthetic-static-invented-claim"
+    _add_inbound(db_session, conversation, account, body="Hello", turn_ref=turn_ref)
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(return_value=invented_claim),
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    assert outcome == "generated"
+    draft = db_session.query(SmsMessage).filter(SmsMessage.author_type == "ai").one()
+    assert (draft.status, draft.direction, draft.body) == (
+        "draft",
+        "draft",
+        invented_claim,
+    )
+    assert db_session.query(SmsOutboundJob).count() == 0
+    event_row = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_reply_generated")
+        .one()
+    )
+    assert event_row.meta["reason_code"] == "static_output_not_allowlisted"
+    assert event_row.meta["output_withheld"] is False
+
+
+def test_static_greeting_queues_only_exact_allowlisted_template(
+    db_session, safety_data
+):
+    _, _, account, conversation = safety_data
+    turn_ref = "synthetic-static-exact-template"
+    _add_inbound(db_session, conversation, account, body="Hello", turn_ref=turn_ref)
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(return_value=_STATIC_AUTOPILOT_REPLY),
+    ):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    message = db_session.query(SmsMessage).filter(SmsMessage.author_type == "ai").one()
+    assert (message.status, message.direction, message.body) == (
+        "queued",
+        "outbound",
+        _STATIC_AUTOPILOT_REPLY,
+    )
+    assert db_session.query(SmsOutboundJob).filter_by(status="PENDING").count() == 1
+
+
+@pytest.mark.parametrize("existing_status", ["draft", "failed", "queued"])
+def test_confidential_failure_reconciles_existing_same_turn_ai_rows(
+    db_session, safety_data, existing_status
+):
+    _, _, account, conversation = safety_data
+    turn_ref = f"synthetic-existing-{existing_status}"
+    inbound = _add_inbound(
+        db_session, conversation, account, body="Hello", turn_ref=turn_ref
+    )
+    existing = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=account.id,
+        conversation_id=conversation.id,
+        body="Synthetic pre-existing AI reply",
+        normalized_body="synthetic pre-existing ai reply",
+        direction="draft" if existing_status == "draft" else "outbound",
+        author_type="ai",
+        status=existing_status,
+        parent_message_id=inbound.id,
+        customer_turn_ref=turn_ref,
+        occurred_at=datetime.now(timezone.utc),
+        received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(existing)
+    db_session.flush()
+    if existing_status == "queued":
+        db_session.add(
+            SmsOutboundJob(
+                message_id=existing.id,
+                sms_account_id=account.id,
+                status="PENDING",
+            )
+        )
+    db_session.commit()
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic")),
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    assert outcome == "generated"
+    messages = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+        )
+        .all()
+    )
+    assert [(message.status, message.direction, message.body) for message in messages] == [
+        (
+            "draft",
+            "draft",
+            "[AI response withheld by safety policy. Staff review required.]",
+        )
+    ]
+    assert all(message.author_type == "ai" for message in messages)
+    assert (
+        db_session.query(SmsOutboundJob)
+        .filter(SmsOutboundJob.status.in_(("PENDING", "PROCESSING", "RETRY")))
+        .count()
+        == 0
+    )
+    event_row = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_reply_generated")
+        .one()
+    )
+    assert event_row.meta["message_id"] == messages[0].id
+    assert event_row.meta["reason_code"] == "confidential_output"
+    assert event_row.meta["suppressed_job_count"] == (
+        1 if existing_status == "queued" else 0
+    )
+    assert event_row.meta["delivery_conflict"] is False
+
+
+def test_confidential_failure_serialized_retry_keeps_one_generic_draft(
+    db_session, safety_data
+):
+    _, _, account, conversation = safety_data
+    turn_ref = "synthetic-confidential-serialized-retry"
+    _add_inbound(db_session, conversation, account, body="Hello", turn_ref=turn_ref)
+    completion = AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic"))
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=completion,
+    ):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+        conversation.state = "auto-reply"
+        conversation.ai_enabled = True
+        db_session.commit()
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+            SmsMessage.status == "draft",
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    assert db_session.query(SmsOutboundJob).count() == 0
+
+
+def test_confidential_failure_reconciles_all_mutable_same_turn_rows_and_jobs(
+    db_session, safety_data
+):
+    _, _, account, conversation = safety_data
+    turn_ref = "synthetic-confidential-multi-row"
+    inbound = _add_inbound(
+        db_session, conversation, account, body="Hello", turn_ref=turn_ref
+    )
+    rows = []
+    for index, status in enumerate(("draft", "failed", "queued")):
+        row = SmsMessage(
+            tenant_id=conversation.tenant_id,
+            provider_id=conversation.provider_id,
+            sms_account_id=account.id,
+            conversation_id=conversation.id,
+            body=f"Synthetic prior AI row {index}",
+            normalized_body=f"synthetic prior ai row {index}",
+            direction="draft" if status == "draft" else "outbound",
+            author_type="ai",
+            status=status,
+            parent_message_id=inbound.id,
+            customer_turn_ref=turn_ref,
+            occurred_at=datetime.now(timezone.utc),
+            received_at=datetime.now(timezone.utc),
+        )
+        db_session.add(row)
+        db_session.flush()
+        rows.append(row)
+    db_session.add(
+        SmsOutboundJob(
+            message_id=rows[-1].id,
+            sms_account_id=account.id,
+            status="PENDING",
+        )
+    )
+    db_session.commit()
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic")),
+    ):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    messages = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+        )
+        .order_by(SmsMessage.id.asc())
+        .all()
+    )
+    assert [message.status for message in messages].count("draft") == 1
+    assert [message.status for message in messages].count("failed") == 2
+    draft = next(message for message in messages if message.status == "draft")
+    assert draft.body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    assert all(
+        message.body == "[blocked by outbound safety policy]"
+        for message in messages
+        if message.status == "failed"
+    )
+    assert db_session.query(SmsOutboundJob).one().status == "FAILED"
+
+
+@pytest.mark.parametrize("delivered_status", ["sent", "delivered"])
+def test_confidential_failure_records_structural_delivered_conflict(
+    db_session, safety_data, delivered_status
+):
+    _, _, account, conversation = safety_data
+    turn_ref = f"synthetic-{delivered_status}-conflict"
+    inbound = _add_inbound(
+        db_session, conversation, account, body="Hello", turn_ref=turn_ref
+    )
+    db_session.add(
+        SmsMessage(
+            tenant_id=conversation.tenant_id,
+            provider_id=conversation.provider_id,
+            sms_account_id=account.id,
+            conversation_id=conversation.id,
+            body="Synthetic immutable delivered reply",
+            normalized_body="synthetic immutable delivered reply",
+            direction="outbound",
+            author_type="ai",
+            status=delivered_status,
+            parent_message_id=inbound.id,
+            customer_turn_ref=turn_ref,
+            occurred_at=datetime.now(timezone.utc),
+            received_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic")),
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    assert outcome == "failed"
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+            SmsMessage.status == "draft",
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    conflict = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_output_safety_conflict")
+        .one()
+    )
+    assert conflict.meta == {
+        "message_id": drafts[0].id,
+        "job_id": None,
+        "reason_code": "confidential_output",
+    }
+
+
+def _assert_context_failure_created_review_draft(
+    db_session, conversation, *, turn_ref: str
+):
+    draft = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+        )
+        .one()
+    )
+    assert (draft.status, draft.direction, draft.body) == (
+        "draft",
+        "draft",
+        "[AI response withheld by safety policy. Staff review required.]",
+    )
+    assert db_session.query(SmsOutboundJob).count() == 0
+    event_row = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_reply_generated")
+        .one()
+    )
+    assert event_row.meta["reason_code"] == "context_safety"
+    assert event_row.meta["output_withheld"] is True
+
+
+def test_knowledge_row_limit_overflow_fails_closed_before_gateway(
+    db_session, safety_data
+):
+    tenant, provider, account, conversation = safety_data
+    for index in range(KNOWLEDGE_ENTRY_LIMIT + 1):
+        db_session.add(
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                sms_account_id=account.id,
+                category=f"synthetic-row-{index}",
+                text=f"Synthetic bounded knowledge {index}",
+                status="approved",
+            )
+        )
+    db_session.commit()
+    turn_ref = "synthetic-knowledge-row-overflow"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+def test_conflicting_prompt_profiles_fail_closed_before_gateway(
+    db_session, safety_data
+):
+    tenant, _, account, conversation = safety_data
+    db_session.add_all(
+        [
+            SmsPromptProfile(
+                tenant_id=tenant.id,
+                name="Synthetic global prompt one",
+                system_prompt="Synthetic prompt one",
+                is_active=True,
+            ),
+            SmsPromptProfile(
+                tenant_id=tenant.id,
+                name="Synthetic global prompt two",
+                system_prompt="Synthetic prompt two",
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+    turn_ref = "synthetic-conflicting-prompt-profiles"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+def test_oversized_line_prompt_fails_closed_before_gateway(db_session, safety_data):
+    _, _, account, conversation = safety_data
+    account.line_prompt = "P" * (PROMPT_PROFILE_CHARACTER_LIMIT + 1)
+    db_session.commit()
+    turn_ref = "synthetic-oversized-line-prompt"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+def test_oversized_knowledge_entry_fails_closed_before_gateway(
+    db_session, safety_data
+):
+    tenant, provider, account, conversation = safety_data
+    db_session.add(
+        SmsKnowledgeEntry(
+            tenant_id=tenant.id,
+            provider_id=provider.id,
+            sms_account_id=account.id,
+            category="synthetic-oversized",
+            text="K" * (KNOWLEDGE_ENTRY_CHARACTER_LIMIT + 1),
+            status="approved",
+        )
+    )
+    db_session.commit()
+    turn_ref = "synthetic-knowledge-entry-overflow"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+def test_cumulative_knowledge_budget_fails_closed_before_gateway(
+    db_session, safety_data
+):
+    tenant, provider, account, conversation = safety_data
+    entry_size = min(
+        KNOWLEDGE_ENTRY_CHARACTER_LIMIT,
+        (KNOWLEDGE_CONTEXT_CHARACTER_LIMIT // 8) + 1,
+    )
+    for index in range(9):
+        db_session.add(
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                sms_account_id=account.id,
+                category=f"synthetic-cumulative-{index}",
+                text=(f"K{index}" + ("x" * entry_size))[:entry_size],
+                status="approved",
+            )
+        )
+    db_session.commit()
+    turn_ref = "synthetic-knowledge-cumulative-overflow"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+def test_knowledge_queries_and_model_payload_are_bounded(
+    db_session, safety_data
+):
+    tenant, provider, account, conversation = safety_data
+    db_session.add_all(
+        [
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                category="synthetic-shared",
+                text="Synthetic shared knowledge",
+                status="approved",
+            ),
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                sms_account_id=account.id,
+                category="synthetic-account",
+                text="Synthetic account knowledge",
+                status="approved",
+            ),
+        ]
+    )
+    db_session.commit()
+    knowledge_statements: list[str] = []
+    prompt_statements: list[str] = []
+
+    def capture_statement(_conn, _cursor, statement, _parameters, _context, _many):
+        if "sms_knowledge_entries" in statement.casefold():
+            knowledge_statements.append(statement)
+        if "sms_prompt_profiles" in statement.casefold():
+            prompt_statements.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", capture_statement)
+    gateway = AsyncMock(
+        return_value={"choices": [{"message": {"content": "Synthetic response"}}]}
+    )
+    try:
+        with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+            asyncio.run(
+                call_openai_chat_completions(
+                    db_session,
+                    account,
+                    conversation,
+                    "Tell me something useful",
+                    "synthetic-bounded-query-turn",
+                )
+            )
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", capture_statement)
+
+    assert 1 <= len(knowledge_statements) <= 3
+    assert 1 <= len(prompt_statements) <= 4
+    assert all(
+        " limit " in statement.casefold()
+        for statement in knowledge_statements + prompt_statements
+    )
+    payload = gateway.await_args.kwargs["messages"]
+    assert sum(len(message["content"]) for message in payload) <= (
+        MODEL_CONTEXT_CHARACTER_LIMIT
+    )

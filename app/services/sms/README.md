@@ -116,12 +116,13 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 
 ### 4.2 Responder prompt and send safety
 
-1. Prompt assembly begins with immutable safety rules, then selects at most one tenant-global prompt and one provider persona. The bound account's `line_prompt` is the provider-persona fallback, not an additional cross-line layer.
-2. Approved shared knowledge must be tenant-wide and account-neutral. Provider knowledge may be provider-wide or bound to the current SMS account; entries for another account are excluded.
+1. Prompt assembly begins with immutable safety rules, then selects exactly zero or one tenant-global prompt and zero or one provider persona. More than one active profile at either authority level is a conflict and fails closed. The bound account's `line_prompt` is the provider-persona fallback, not an additional cross-line layer.
+2. Approved legacy knowledge is loaded deterministically from tenant-shared, provider-wide, then exact-account scope. Entries for another account are excluded. Differing approved texts in the same category are treated as an unresolved authority conflict and fail closed rather than being passed to the model.
 3. AI jobs use `PENDING -> PROCESSING -> PROCESSED | FAILED | CANCELLED`. Claiming is conditional, and successful completion commits the generated message, outbox decision, structural event, and job completion together.
-4. Static, fact-free model replies may use autopilot only when line and conversation controls permit it. Uncertain or dynamic replies, and replies that rely on legacy knowledge, are review-only. Static autopilot prompts omit legacy knowledge and conversation history; other history is exact-scope, limited to received inbound and sent/delivered outbound messages, latest 40.
-5. Unsafe model output is replaced by a generic withheld draft, creates no delivery job, and moves the conversation to `needs-review`. The local fallback never performs booking actions.
-6. A hard worker crash can leave a `PROCESSING` job without durable retry metadata because the current model has no AI lease/attempt columns. Durable AI retry must not be assumed until that schema work is approved.
+4. Autopilot accepts only the exact fact-free template `Thanks for your message. How can we help?` for the narrow greeting/thanks intent set. Any other model prose, including invented services, walk-in policy or opening-hours claims, becomes an AI-authored review draft with no delivery job. Uncertain or dynamic replies and replies using legacy knowledge are always review-only.
+5. Confidential, unsafe, conflicting or over-budget output/context is replaced by the generic withheld draft, creates no deliverable outbox job, disables conversation automation and moves the conversation to `needs-review`. Same-turn AI rows are locked and reconciled to exactly one review draft; pending/retry/processing delivery jobs are terminally suppressed. A prior sent/delivered row is immutable and produces a structural conflict event.
+6. Bounded context limits are: 50 AI jobs per worker batch; 20 current-turn messages/4,000 characters; 40 historical messages, 1,000 characters each and 8,000 total; 4,000 characters per prompt profile and 8,000 prompt characters total; 24 legacy knowledge rows, 1,000 characters each and 8,000 total; and 30,000 characters for the final model payload. Credential inspection is iterative and cycle-safe with limits of depth 32, 512 inspected items and 16,384 UTF-8 bytes. Limit or conflict failures enter review without calling the model or creating an outbound job.
+7. A hard worker crash can leave a `PROCESSING` job without durable retry metadata because the current model has no AI lease/attempt columns. Durable AI retry must not be assumed until that schema work is approved.
 
 ### 4.3 Lobby Arrival Chime & Recurring Alerts
 The authoritative arrival contract is documented in Section 8. It accepts a bounded JSON body at `POST /api/admin/sms/arrivals/public/arrive`; capabilities are never accepted in paths or query strings. The service creates structural alert outbox records but does not itself deliver browser push or audio.
@@ -158,7 +159,7 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
-- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `af613f143357c8f6764d164032f8a4f6d7e1f28c`; the strengthened arrival behavior documented in Section 8 requires arrival commit `43542034f3308b1bd3790f88f580a40d5d56b84c`. They are not contained in this operations branch and must be deliberately stacked and jointly verified.
+- **Stack dependency**: this branch contains the responder safety behavior documented in Section 4.2. The strengthened arrival behavior documented in Section 8 still requires arrival commit `43542034f3308b1bd3790f88f580a40d5d56b84c`; it must be deliberately stacked and jointly verified.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before that migration lands.
 - **Concurrency hardening pending migration**: PostgreSQL conversation-first row locks serialize reviewed lifecycle, controls, manual-send, draft-winner, webhook-mutation and final-dispatch decisions. Holding a database lock during provider I/O is the deliberate no-migration safety trade-off and can reduce throughput during a slow provider call. Database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; synthetic state/race tests and PostgreSQL SQL compilation are not a live PostgreSQL concurrency proof.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
@@ -176,7 +177,9 @@ Run the SMS test suite:
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_openai.py -v
 
 # 2a. Test AI job lifecycle, prompt/history isolation, and unsafe-output handling
-.\.venv\Scripts\python.exe -m pytest tests/test_sms_ai_safety.py -v
+$env:OTEL_SDK_DISABLED='true'
+$env:PYTHONDONTWRITEBYTECODE='1'
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_sms_ai_safety.py -q
 
 # 3. Test prompt hierarchy and persona overrides
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_prompt_hierarchy.py -v
@@ -198,6 +201,9 @@ Run the SMS test suite:
 
 # 9. Test bounded, non-reflecting API validation failures
 .\.venv\Scripts\python.exe -m pytest tests/test_validation_error_privacy.py -v
+
+# 10. Combined operations and AI safety regression gate
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_sms_ai_safety.py tests/test_sms_operations_safety.py tests/test_sms_foundation.py tests/test_sms_integration.py tests/test_sms_openai.py tests/test_sms_prompt_hierarchy.py tests/test_sms_chatwoot.py tests/test_sms_rate_limiting.py tests/test_validation_error_privacy.py -q
 ```
 
 ---
