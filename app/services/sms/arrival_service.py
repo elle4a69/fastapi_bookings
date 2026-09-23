@@ -6,16 +6,18 @@ import hashlib
 import json
 import logging
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import String, cast, exists, literal, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ...core.state_machine import BookingStatus
 from ...models.booking import Booking
 from ...models.client import Client
+from ...models.location import Location
 from ...models.outbox import OutboxEvent
 from ...models.provider import Provider
 from ...models.service import Service
@@ -29,6 +31,8 @@ logger = logging.getLogger(__name__)
 ARRIVAL_TOKEN_MAX_AGE = timedelta(days=7)
 ARRIVAL_POST_BOOKING_GRACE = timedelta(hours=4)
 ARRIVAL_ALERT_INTERVAL_SECONDS = 60
+ARRIVAL_ALERT_BATCH_LIMIT = 100
+_PENDING_OUTBOX_STATUSES = ("PENDING", "RETRY")
 
 
 class ArrivalNotFoundError(LookupError):
@@ -52,7 +56,7 @@ class ArrivalInvitation:
     """
 
     session: SmsArrivalSession
-    token: str
+    token: str = field(repr=False)
     expires_at: datetime
 
 
@@ -101,6 +105,12 @@ def _booking_status(booking: Booking) -> str:
     return str(value or "").lower()
 
 
+def arrival_booking_is_eligible(booking: Booking) -> bool:
+    """Return whether the booking may still participate in arrival handling."""
+
+    return _booking_status(booking) == "confirmed"
+
+
 def _validate_scope(
     *,
     tenant_id: int,
@@ -110,6 +120,7 @@ def _validate_scope(
     client_tenant_id: int,
     provider_tenant_id: int,
     service_tenant_id: int,
+    location_tenant_id: Optional[int],
 ) -> None:
     """Enforce the transitive tenant/provider/account/client boundary."""
 
@@ -122,6 +133,8 @@ def _validate_scope(
     if client_tenant_id != tenant_id or provider_tenant_id != tenant_id:
         raise ArrivalNotFoundError("arrival session is unavailable")
     if service_tenant_id != tenant_id:
+        raise ArrivalNotFoundError("arrival session is unavailable")
+    if booking.location_id is not None and location_tenant_id != tenant_id:
         raise ArrivalNotFoundError("arrival session is unavailable")
     if booking.provider_id != conversation.provider_id:
         raise ArrivalNotFoundError("arrival session is unavailable")
@@ -141,6 +154,7 @@ def _scoped_query(db: Session):
             Client.tenant_id.label("client_tenant_id"),
             Provider.tenant_id.label("provider_tenant_id"),
             Service.tenant_id.label("service_tenant_id"),
+            Location.tenant_id.label("location_tenant_id"),
         )
         .join(Booking, Booking.id == SmsArrivalSession.booking_id)
         .join(SmsConversation, SmsConversation.id == SmsArrivalSession.conversation_id)
@@ -148,6 +162,7 @@ def _scoped_query(db: Session):
         .join(Client, Client.id == Booking.client_id)
         .join(Provider, Provider.id == Booking.provider_id)
         .join(Service, Service.id == Booking.service_id)
+        .outerjoin(Location, Location.id == Booking.location_id)
     )
 
 
@@ -160,6 +175,7 @@ def _to_scoped(row) -> ScopedArrival:
         client_tenant_id,
         provider_tenant_id,
         service_tenant_id,
+        location_tenant_id,
     ) = row
     _validate_scope(
         tenant_id=booking.tenant_id,
@@ -169,6 +185,7 @@ def _to_scoped(row) -> ScopedArrival:
         client_tenant_id=client_tenant_id,
         provider_tenant_id=provider_tenant_id,
         service_tenant_id=service_tenant_id,
+        location_tenant_id=location_tenant_id,
     )
     return ScopedArrival(arrival, booking, conversation, account)
 
@@ -229,7 +246,19 @@ def create_arrival_session(
         .filter(Service.id == booking.service_id, Service.tenant_id == tenant_id)
         .first()
     )
-    if client_scope is None or provider_scope is None or service_scope is None:
+    location_scope = None
+    if booking.location_id is not None:
+        location_scope = (
+            db.query(Location.id)
+            .filter(Location.id == booking.location_id, Location.tenant_id == tenant_id)
+            .first()
+        )
+    if (
+        client_scope is None
+        or provider_scope is None
+        or service_scope is None
+        or (booking.location_id is not None and location_scope is None)
+    ):
         raise ArrivalNotFoundError("arrival session is unavailable")
     _validate_scope(
         tenant_id=tenant_id,
@@ -239,8 +268,9 @@ def create_arrival_session(
         client_tenant_id=tenant_id,
         provider_tenant_id=tenant_id,
         service_tenant_id=tenant_id,
+        location_tenant_id=tenant_id if location_scope is not None else None,
     )
-    if _booking_status(booking) != "confirmed":
+    if not arrival_booking_is_eligible(booking):
         raise ArrivalStateError("arrival invitations require a confirmed booking")
     if _as_utc(booking.end_time) + ARRIVAL_POST_BOOKING_GRACE <= current_time:
         raise ArrivalExpiredError("arrival session is unavailable")
@@ -259,8 +289,24 @@ def create_arrival_session(
         token=hash_arrival_token(raw_token),
         created_at=current_time,
     )
-    db.add(arrival)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(arrival)
+            db.flush()
+            db.add(
+                SmsConversationEvent(
+                    conversation_id=conversation.id,
+                    type="arrival_invitation_issued",
+                    meta={
+                        "arrival_session_id": arrival.id,
+                        "booking_id": booking.id,
+                        "expires_at": arrival_expires_at(arrival, booking).isoformat(),
+                    },
+                )
+            )
+            db.flush()
+    except IntegrityError:
+        raise ArrivalStateError("arrival session already exists for this booking") from None
     expires_at = arrival_expires_at(arrival, booking)
     logger.info("arrival_session_created")
     return ArrivalInvitation(session=arrival, token=raw_token, expires_at=expires_at)
@@ -283,17 +329,39 @@ def resolve_arrival_token(
     digest = hash_arrival_token(raw_token)
     row = (
         _scoped_query(db)
-        .filter(or_(SmsArrivalSession.token == digest, SmsArrivalSession.token == raw_token))
+        .filter(SmsArrivalSession.token == digest)
+        .with_for_update(of=(SmsArrivalSession, Booking))
         .first()
     )
+    legacy_match = False
+    if row is None:
+        row = (
+            _scoped_query(db)
+            .filter(SmsArrivalSession.token == raw_token)
+            .with_for_update(of=(SmsArrivalSession, Booking))
+            .first()
+        )
+        legacy_match = row is not None
+    if row is None:
+        # A concurrent resolver may have upgraded the legacy row while this
+        # transaction waited for its lock. Recheck only the digest form.
+        row = (
+            _scoped_query(db)
+            .filter(SmsArrivalSession.token == digest)
+            .with_for_update(of=(SmsArrivalSession, Booking))
+            .first()
+        )
     if row is None:
         raise ArrivalNotFoundError("arrival session is unavailable")
     scoped = _to_scoped(row)
     current_time = _as_utc(now or datetime.now(timezone.utc))
     if arrival_expires_at(scoped.session, scoped.booking) <= current_time:
         raise ArrivalExpiredError("arrival session is unavailable")
-    if _booking_status(scoped.booking) != "confirmed":
+    if not arrival_booking_is_eligible(scoped.booking):
         raise ArrivalStateError("booking is not eligible for arrival")
+    if legacy_match:
+        scoped.session.token = digest
+        db.flush()
     return scoped
 
 
@@ -307,9 +375,19 @@ def mark_customer_arrived(
 
     current_time = _as_utc(now or datetime.now(timezone.utc))
     scoped = resolve_arrival_token(db, token, now=current_time)
-    changed = scoped.session.arrived_at is None
+    changed = (
+        db.query(SmsArrivalSession)
+        .filter(
+            SmsArrivalSession.id == scoped.session.id,
+            SmsArrivalSession.arrived_at.is_(None),
+        )
+        .update(
+            {SmsArrivalSession.arrived_at: current_time},
+            synchronize_session=False,
+        )
+        == 1
+    )
     if changed:
-        scoped.session.arrived_at = current_time
         db.add(
             SmsConversationEvent(
                 conversation_id=scoped.conversation.id,
@@ -322,8 +400,58 @@ def mark_customer_arrived(
             )
         )
         db.flush()
+        db.refresh(scoped.session)
         logger.info("customer_arrival_recorded")
     return ArrivalMutation(scoped=scoped, changed=changed)
+
+
+def _suppress_pending_session_alerts(
+    db: Session,
+    *,
+    scoped: ScopedArrival,
+    current_time: datetime,
+    error_code: str,
+) -> int:
+    """Quarantine pending/retry alerts that have not already been leased."""
+
+    prefix = f"arrival-alert:{scoped.session.id}:%"
+    suppressed = (
+        db.query(OutboxEvent)
+        .filter(
+            OutboxEvent.tenant_id == scoped.booking.tenant_id,
+            OutboxEvent.type == "arrival.alert",
+            OutboxEvent.status.in_(_PENDING_OUTBOX_STATUSES),
+            OutboxEvent.idempotency_key.like(prefix),
+        )
+        .update(
+            {
+                OutboxEvent.status: "QUARANTINED",
+                OutboxEvent.processed: True,
+                OutboxEvent.processed_at: current_time,
+                OutboxEvent.terminal_at: current_time,
+                OutboxEvent.error_code: error_code,
+                OutboxEvent.next_attempt_at: None,
+                OutboxEvent.lease_owner: None,
+                OutboxEvent.lease_token: None,
+                OutboxEvent.lease_expires_at: None,
+            },
+            synchronize_session=False,
+        )
+    )
+    if suppressed:
+        db.add(
+            SmsConversationEvent(
+                conversation_id=scoped.conversation.id,
+                type="arrival_alerts_suppressed",
+                meta={
+                    "arrival_session_id": scoped.session.id,
+                    "booking_id": scoped.booking.id,
+                    "reason": error_code,
+                    "suppressed_count": suppressed,
+                },
+            )
+        )
+    return suppressed
 
 
 def acknowledge_arrival(
@@ -344,6 +472,7 @@ def acknowledge_arrival(
             SmsConversation.tenant_id == tenant_id,
             SmsAccount.tenant_id == tenant_id,
         )
+        .with_for_update(of=(SmsArrivalSession, Booking))
         .first()
     )
     if row is None:
@@ -351,9 +480,26 @@ def acknowledge_arrival(
     scoped = _to_scoped(row)
     if scoped.session.arrived_at is None:
         raise ArrivalStateError("arrival must be recorded before acknowledgement")
-    changed = scoped.session.acknowledged_at is None
+    current_time = _as_utc(now or datetime.now(timezone.utc))
+    changed = (
+        db.query(SmsArrivalSession)
+        .filter(
+            SmsArrivalSession.id == scoped.session.id,
+            SmsArrivalSession.acknowledged_at.is_(None),
+        )
+        .update(
+            {SmsArrivalSession.acknowledged_at: current_time},
+            synchronize_session=False,
+        )
+        == 1
+    )
+    suppressed = _suppress_pending_session_alerts(
+        db,
+        scoped=scoped,
+        current_time=current_time,
+        error_code="ARRIVAL_ACKNOWLEDGED",
+    )
     if changed:
-        scoped.session.acknowledged_at = _as_utc(now or datetime.now(timezone.utc))
         db.add(
             SmsConversationEvent(
                 conversation_id=scoped.conversation.id,
@@ -363,11 +509,15 @@ def acknowledge_arrival(
                     "booking_id": scoped.booking.id,
                     "actor_user_id": actor_user_id,
                     "closure": True,
+                    "suppressed_alert_count": suppressed,
                 },
             )
         )
         db.flush()
+        db.refresh(scoped.session)
         logger.info("arrival_acknowledged")
+    elif suppressed:
+        db.flush()
     return ArrivalMutation(scoped=scoped, changed=changed)
 
 
@@ -411,6 +561,7 @@ def get_active_arrival_sessions(db: Session, tenant_id: int) -> list[SmsArrivalS
         for item in list_tenant_arrivals(db, tenant_id=tenant_id, limit=100)
         if item.session.arrived_at is not None
         and item.session.acknowledged_at is None
+        and arrival_booking_is_eligible(item.booking)
         and arrival_expires_at(item.session, item.booking) > now
     ]
 
@@ -418,6 +569,65 @@ def get_active_arrival_sessions(db: Session, tenant_id: int) -> list[SmsArrivalS
 def _alert_sequence(arrived_at: datetime, now: datetime) -> int:
     elapsed = int((_as_utc(now) - _as_utc(arrived_at)).total_seconds())
     return elapsed // ARRIVAL_ALERT_INTERVAL_SECONDS
+
+
+def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
+    """Bound cleanup of pending alerts whose session can no longer alert.
+
+    Only PENDING/RETRY rows are eligible. A worker that already leased a row is
+    outside this service-level guarantee and must perform its own final guard.
+    """
+
+    rows = (
+        _scoped_query(db)
+        .filter(
+            SmsArrivalSession.arrived_at.isnot(None),
+            or_(
+                SmsArrivalSession.acknowledged_at.isnot(None),
+                Booking.status != BookingStatus.CONFIRMED,
+                SmsArrivalSession.created_at
+                <= current_time - ARRIVAL_TOKEN_MAX_AGE,
+                Booking.end_time <= current_time - ARRIVAL_POST_BOOKING_GRACE,
+            ),
+            exists().where(
+                OutboxEvent.tenant_id == Booking.tenant_id,
+                OutboxEvent.type == "arrival.alert",
+                OutboxEvent.status.in_(_PENDING_OUTBOX_STATUSES),
+                OutboxEvent.idempotency_key.like(
+                    literal("arrival-alert:")
+                    + cast(SmsArrivalSession.id, String)
+                    + literal(":%")
+                ),
+            ),
+        )
+        .order_by(SmsArrivalSession.id.asc())
+        .limit(ARRIVAL_ALERT_BATCH_LIMIT)
+        .with_for_update(of=(SmsArrivalSession, Booking), skip_locked=True)
+        .all()
+    )
+    suppressed = 0
+    for row in rows:
+        try:
+            scoped = _to_scoped(row)
+        except ArrivalNotFoundError:
+            logger.warning("arrival_scope_mismatch_skipped")
+            continue
+
+        reason: Optional[str] = None
+        if scoped.session.acknowledged_at is not None:
+            reason = "ARRIVAL_ACKNOWLEDGED"
+        elif not arrival_booking_is_eligible(scoped.booking):
+            reason = "ARRIVAL_BOOKING_INELIGIBLE"
+        elif arrival_expires_at(scoped.session, scoped.booking) <= current_time:
+            reason = "ARRIVAL_EXPIRED"
+        if reason is not None:
+            suppressed += _suppress_pending_session_alerts(
+                db,
+                scoped=scoped,
+                current_time=current_time,
+                error_code=reason,
+            )
+    return suppressed
 
 
 def process_repeated_arrival_alerts(
@@ -432,12 +642,20 @@ def process_repeated_arrival_alerts(
     """
 
     current_time = _as_utc(now or datetime.now(timezone.utc))
+    suppressed = _suppress_ineligible_alerts(db, current_time=current_time)
     rows = (
         _scoped_query(db)
         .filter(
             SmsArrivalSession.arrived_at.isnot(None),
             SmsArrivalSession.acknowledged_at.is_(None),
+            Booking.status == BookingStatus.CONFIRMED,
         )
+        .order_by(
+            SmsArrivalSession.arrived_at.desc(),
+            SmsArrivalSession.id.asc(),
+        )
+        .limit(ARRIVAL_ALERT_BATCH_LIMIT)
+        .with_for_update(of=(SmsArrivalSession, Booking), skip_locked=True)
         .all()
     )
     created = 0
@@ -447,7 +665,7 @@ def process_repeated_arrival_alerts(
         except ArrivalNotFoundError:
             logger.warning("arrival_scope_mismatch_skipped")
             continue
-        if _booking_status(scoped.booking) != "confirmed":
+        if not arrival_booking_is_eligible(scoped.booking):
             continue
         if arrival_expires_at(scoped.session, scoped.booking) <= current_time:
             continue
@@ -501,7 +719,8 @@ def process_repeated_arrival_alerts(
         except IntegrityError:
             # Another worker won the same unique outbox key.
             continue
-    if created:
+    if created or suppressed:
         db.commit()
+    if created:
         logger.info("arrival_alerts_enqueued count=%s", created)
     return created

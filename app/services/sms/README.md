@@ -124,10 +124,7 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 5. Autopilot is allowed only for non-dynamic replies when the tenant line and conversation controls permit it. Blocked, escalated, resolved, review, paused, or taken-over conversations cannot produce automatic sends.
 
 ### 4.3 Lobby Arrival Chime & Recurring Alerts
-1. When a client receives an appointment reminder SMS, it includes a short link containing an arrival token (`arrival_service.create_arrival_session`).
-2. Upon arrival at the clinic, clicking the link triggers `/api/sms/arrivals/checkin/{token}`.
-3. The session records `arrived_at = now()`. An `arrival_alert_triggered` event is published to the outbox.
-4. `process_repeated_arrival_alerts` runs periodically. If an arrived client remains unacknowledged after 60 seconds, it sounds repeated chime events to staff dashboards.
+The authoritative arrival contract is documented in Section 8. It uses a bounded JSON body at `POST /api/admin/sms/arrivals/public/arrive`; capabilities are never accepted in paths or query strings. This module creates structural alert outbox records but does not itself deliver browser push or audio.
 
 ### 4.4 Native staff operations workspace
 
@@ -207,26 +204,30 @@ The implementation uses `SmsArrivalSession`, `SmsConversation`, `SmsConversation
 
 ### Core Workflows & Contracts
 
-1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, and client all match transitively. It persists only a SHA-256 token digest and returns the raw capability once to the caller.
-2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. Tokens are never accepted in a URL path. Invalid, malformed, unknown, or expired capabilities receive the same non-disclosing `404` response.
-3. The first valid check-in records `arrived_at` and one structural `customer_arrived` event. A retry returns the existing state without creating a duplicate event.
-4. Staff list arrivals with `GET /api/admin/sms/arrivals` and acknowledge one with `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge`. Both operations are authenticated and tenant scoped. Acknowledgement is idempotent and records one structural closure event.
-5. `process_repeated_arrival_alerts` emits structural `OutboxEvent` rows for eligible unacknowledged arrivals. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication across retries and concurrent workers. Acknowledged, expired, cancelled, or otherwise ineligible arrivals fail closed.
+1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, client, service, booking location, and booking all match transitively. It persists only a SHA-256 token digest, records a structural `arrival_invitation_issued` event, and returns the raw capability once to the caller. A database uniqueness race is translated to a stable domain conflict.
+2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. The route reads at most 1 KiB and accepts only one string `token` field. Tokens are never accepted in a URL path. Missing, null, wrong-type, nested, oversized, malformed, unknown, and expired capabilities receive the same non-disclosing `404` contract.
+3. Resolution queries the digest first. A legacy plaintext lookup occurs only after a digest miss, and a successful legacy match is immediately rewritten to its digest. The first valid check-in uses a locked row plus a conditional update to record `arrived_at` and exactly one structural `customer_arrived` event. A retry returns the existing state without creating a duplicate event.
+4. Staff list arrivals with `GET /api/admin/sms/arrivals` and acknowledge one with `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge`. Both operations are authenticated and tenant scoped. Acknowledgement uses the same locked/conditional winner pattern and records one structural closure event. If a client already arrived and the booking is later cancelled or otherwise leaves `confirmed`, the list reports `ineligible`; staff may still acknowledge it to close the operational record.
+5. `process_repeated_arrival_alerts` locks and processes a deterministic batch of at most 100 eligible unacknowledged arrivals. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication across retries and concurrent workers. Acknowledgement and subsequent alert passes terminally quarantine still-unleased `PENDING`/`RETRY` alerts for acknowledged, expired, cancelled, or otherwise ineligible sessions.
 
 ### Data Safety & Isolation
 
-- New sessions store only token digests; responses, logs, events, and alert payloads never contain raw tokens, phone numbers, customer identities, message bodies, or booking notes.
-- Scope is checked through the full booking/conversation/account/client/provider/service relationship before a capability is created or exercised. A missing or inconsistent relationship fails closed.
+- New sessions store only token digests; the one-time token is excluded from object representations, and responses, logs, events, and alert payloads never contain raw tokens, phone numbers, customer identities, message bodies, or booking notes.
+- Scope is checked through the full booking/conversation/account/client/provider/service/location relationship before a capability is created or exercised. A missing or inconsistent relationship fails closed.
 - Expiry is computed from the earlier of the maximum session lifetime and the booking-end grace window. Expired capabilities cannot check in.
 - Arrival event metadata and alert payloads are structural and use identifiers and sequence numbers only.
-- The temporary legacy lookup can read an existing raw-token row without returning or logging that value. All newly created sessions use digest storage.
+- PostgreSQL row locks serialize arrive, acknowledge, alert eligibility, and cancellation cleanup. Conditional updates ensure only the lifecycle winner writes its timestamp/event. SQLite ignores `FOR UPDATE`; the synthetic suite verifies conditional winner semantics but is not a substitute for a PostgreSQL concurrency test.
+- Pending/retry alert suppression and the lifecycle transition share the application transaction. An alert already leased as `PROCESSING` cannot be recalled by this service; the future delivery consumer must re-check arrival eligibility immediately before customer/staff-visible delivery.
 
 ### Known Issues, Edge Cases & Outstanding Work
 
 - No production reminder or invitation-link producer currently consumes the one-time token returned by `create_arrival_session`. A future producer must commit the session with its reminder state atomically and use a customer page that submits the token in the request body, not a server URL or query string.
-- The customer endpoint is currently under the shared `/api/admin` router mount even though it authenticates by scoped capability rather than a staff session. Moving it requires an approved shared-router contract change.
-- Legacy raw-token lookup remains only for migration compatibility. Remove it after legacy rows have expired and all direct session creators, including synthetic seeders, use `create_arrival_session`.
-- Expiry and ownership are currently derived from existing booking and conversation relationships because no arrival-specific schema migration was approved for this slice. Database-enforced immutable event history and first-class arrival ownership/expiry columns remain follow-up work.
+- The customer endpoint is currently under the shared `/api/admin` router mount even though it authenticates by scoped capability rather than a staff session. Its OpenAPI security inheritance and eventual public remount require an approved shared-router contract change.
+- Legacy raw-token lookup remains only for bounded migration compatibility. Successful use rehashes one row, but a deliberate migration/removal plan is still required after legacy rows have expired and all direct session creators use `create_arrival_session`.
+- Expiry and ownership are currently derived from existing booking and conversation relationships because no arrival-specific schema migration was approved for this slice. Database-enforced event immutability/uniqueness and first-class arrival ownership/expiry columns remain follow-up work.
+- There is deliberately no early-arrival business window. A confirmed, unexpired invitation can currently check in at any time before its computed expiry; product owners must define an approved window before this behavior changes.
+- The admin list is privacy-minimized but fixed at 50 newest records and has no pagination contract. Alert processing is bounded to 100 deterministic candidates per pass.
+- Capability attempts have bounded request bodies but no dedicated distributed rate limit. Alert delivery leases and final pre-delivery eligibility checks remain consumer responsibilities.
 - Browser push/audio delivery, reminder scheduling, and the customer-facing arrival page are outside this slice. The durable outbox records are only the safe server-side alert boundary.
 - Existing frontend arrival mocks/types may still expose legacy token or PII fields and require a separate approved frontend cleanup.
 

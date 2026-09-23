@@ -1,8 +1,9 @@
 """Public arrival capability and tenant-scoped staff arrival operations."""
 
+import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..deps import DatabaseId, get_current_admin, get_current_tenant, get_db
@@ -19,6 +20,7 @@ from ...services.sms.arrival_service import (
     ArrivalNotFoundError,
     ArrivalStateError,
     acknowledge_arrival as acknowledge_arrival_service,
+    arrival_booking_is_eligible,
     arrival_expires_at,
     list_tenant_arrivals,
     mark_customer_arrived,
@@ -27,15 +29,69 @@ from ...services.sms.arrival_service import (
 router = APIRouter(prefix="/sms/arrivals", tags=["sms-arrivals"])
 
 _INVALID_CAPABILITY_DETAIL = "Arrival session is invalid or expired."
+_ARRIVAL_BODY_MAX_BYTES = 1024
+_ARRIVAL_TOKEN_MIN_CHARS = 24
+_ARRIVAL_TOKEN_MAX_CHARS = 512
+
+
+class _InvalidArrivalCapability(ValueError):
+    """Internal sentinel whose message never includes submitted input."""
+
+
+async def _read_arrival_capability(request: Request) -> str:
+    """Read one bounded JSON bearer without framework validation reflection."""
+
+    content_type = (
+        request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    )
+    if content_type != "application/json":
+        raise _InvalidArrivalCapability
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _ARRIVAL_BODY_MAX_BYTES:
+                raise _InvalidArrivalCapability
+        except ValueError:
+            raise _InvalidArrivalCapability from None
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _ARRIVAL_BODY_MAX_BYTES:
+            raise _InvalidArrivalCapability
+        body.extend(chunk)
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise _InvalidArrivalCapability from None
+    if not isinstance(payload, dict) or set(payload) != {"token"}:
+        raise _InvalidArrivalCapability
+    token = payload.get("token")
+    if not isinstance(token, str):
+        raise _InvalidArrivalCapability
+    if not _ARRIVAL_TOKEN_MIN_CHARS <= len(token) <= _ARRIVAL_TOKEN_MAX_CHARS:
+        raise _InvalidArrivalCapability
+    if not token.strip():
+        raise _InvalidArrivalCapability
+    return token
 
 
 @router.post(
     "/public/arrive",
     response_model=ArrivalCheckInResponse,
     status_code=status.HTTP_200_OK,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": ArrivalCheckInRequest.model_json_schema()}
+            },
+        }
+    },
 )
 async def client_arrive(
-    payload: ArrivalCheckInRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> ArrivalCheckInResponse:
     """Consume an arrival capability supplied in the request body.
@@ -45,7 +101,13 @@ async def client_arrive(
     """
 
     try:
-        mutation = mark_customer_arrived(db, payload.token.get_secret_value())
+        token = await _read_arrival_capability(request)
+        mutation = mark_customer_arrived(db, token)
+    except _InvalidArrivalCapability:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_INVALID_CAPABILITY_DETAIL,
+        ) from None
     except (ArrivalNotFoundError, ArrivalExpiredError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -114,6 +176,8 @@ async def list_arrivals(
         expires_at = arrival_expires_at(scoped.session, scoped.booking)
         if scoped.session.acknowledged_at is not None:
             lifecycle_state = "acknowledged"
+        elif not arrival_booking_is_eligible(scoped.booking):
+            lifecycle_state = "ineligible"
         elif expires_at <= now:
             lifecycle_state = "expired"
         elif scoped.session.arrived_at is not None:

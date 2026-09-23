@@ -7,9 +7,11 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
 class ArrivalCheckInRequest(BaseModel):
-    # Length validation happens inside the service so framework validation
-    # errors cannot reflect the submitted bearer value back to the caller.
-    token: SecretStr = Field(repr=False)
+    """OpenAPI contract; the public route parses this bearer body manually."""
+
+    token: SecretStr = Field(min_length=24, max_length=512)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ArrivalCheckInResponse(BaseModel):
@@ -32,7 +34,7 @@ class ArrivalListItem(BaseModel):
     sms_account_id: int
     service_id: int
     location_id: Optional[int]
-    state: Literal["invited", "arrived", "acknowledged", "expired"]
+    state: Literal["invited", "arrived", "acknowledged", "expired", "ineligible"]
     arrived_at: Optional[datetime]
     acknowledged_at: Optional[datetime]
     created_at: datetime
