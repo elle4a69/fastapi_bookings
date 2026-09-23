@@ -20,10 +20,17 @@ from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent, SmsNote
+from ...models.user import User
 
 
 class SmsOperationConflict(ValueError):
     """Raised when an operation is valid syntactically but unsafe in state."""
+
+
+HUMAN_APPROVED_AI_DELIVERY_STATES = frozenset(
+    {"auto-reply", "taken-over", "needs-review", "escalated"}
+)
+APPROVAL_EVENT_SCAN_LIMIT = 20
 
 
 TRANSITION_MATRIX: dict[str, dict[str, str]] = {
@@ -206,12 +213,7 @@ def ensure_message_delivery_allowed(
         conversation=conversation,
         message=message,
     ):
-        if conversation.state not in {
-            "auto-reply",
-            "taken-over",
-            "needs-review",
-            "escalated",
-        }:
+        if conversation.state not in HUMAN_APPROVED_AI_DELIVERY_STATES:
             raise SmsOperationConflict(
                 "The approved draft cannot be delivered in this conversation state."
             )
@@ -244,17 +246,27 @@ def has_exact_draft_approval(
     enough to authorize delivery.
     """
 
-    if message.author_type != "ai" or message.conversation_id != conversation.id:
+    if (
+        message.author_type != "ai"
+        or message.direction != "outbound"
+        or message.conversation_id != conversation.id
+        or message.tenant_id != conversation.tenant_id
+        or message.provider_id != conversation.provider_id
+        or message.sms_account_id != conversation.sms_account_id
+    ):
         return False
     events = (
         db.query(SmsConversationEvent)
         .filter(
             SmsConversationEvent.conversation_id == conversation.id,
             SmsConversationEvent.type == "draft_approved",
+            SmsConversationEvent.meta["message_id"].as_integer() == message.id,
         )
         .order_by(SmsConversationEvent.id.desc())
+        .limit(APPROVAL_EVENT_SCAN_LIMIT)
         .all()
     )
+    actor_ids: set[int] = set()
     for event in events:
         metadata = event.meta if isinstance(event.meta, dict) else {}
         actor_id = metadata.get("actor_id")
@@ -267,8 +279,19 @@ def has_exact_draft_approval(
             and not isinstance(message_id, bool)
             and message_id == message.id
         ):
-            return True
-    return False
+            actor_ids.add(actor_id)
+    if not actor_ids:
+        return False
+    authorized_actor = (
+        db.query(User.id)
+        .filter(
+            User.id.in_(actor_ids),
+            User.tenant_id == conversation.tenant_id,
+            User.role.in_(("owner", "admin")),
+        )
+        .first()
+    )
+    return authorized_actor is not None
 
 
 def get_scoped_account(

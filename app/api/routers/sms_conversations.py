@@ -35,6 +35,7 @@ from ...services.sms.outbound_service import (
     is_outbound_body_safe,
 )
 from ...services.sms.operations_service import (
+    HUMAN_APPROVED_AI_DELIVERY_STATES,
     SmsOperationConflict,
     cancel_pending_ai_jobs,
     ensure_customer_send_allowed,
@@ -441,6 +442,11 @@ def _approve_locked_draft(
         ensure_customer_send_allowed(conversation)
     except SmsOperationConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if conversation.state not in HUMAN_APPROVED_AI_DELIVERY_STATES:
+        raise HTTPException(
+            status_code=409,
+            detail="The draft cannot be approved in this conversation state.",
+        )
     if not is_outbound_body_safe(message.body):
         record_event(
             db,

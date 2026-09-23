@@ -1,7 +1,9 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from sqlalchemy.dialects import postgresql
 from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi import HTTPException
 
@@ -12,7 +14,10 @@ from app.models.sms_conversation import SmsConversation
 from app.models.sms_message import SmsMessage
 from app.models.sms_outbox import SmsAiJob, SmsOutboundJob, SmsConversationEvent
 from app.services.sms.outbound_service import enqueue_outbound_message_transactional
-from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
+from app.services.sms.outbox_worker import (
+    _delivery_lock_statements,
+    process_pending_sms_outbound_jobs,
+)
 from app.services.sms.chatwoot_service import (
     process_chatwoot_webhook,
     send_chatwoot_message,
@@ -1161,3 +1166,279 @@ def test_chatwoot_worker_honors_echo_that_wins_before_timeout(
     assert job.retry_count == 0
     assert message.status == "sent"
     assert message.chatwoot_message_id == 9333
+
+
+def test_outgoing_source_echo_supports_exact_unicode_body(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_unicode",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9341,
+        chatwoot_contact_id=9342,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    outbound = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Café booking confirmed ☕",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+    )
+    db_session.add(outbound)
+    db_session.commit()
+
+    result = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9343,
+            "message_type": "outgoing",
+            "content": "Café booking confirmed ☕",
+            "source_id": f"fastapi-chatwoot-message-{outbound.id}",
+            "account": {"id": binding.chatwoot_account_id},
+            "inbox": {"id": binding.chatwoot_inbox_id},
+            "conversation": {
+                "id": conversation.chatwoot_conversation_id,
+                "contact": {"id": conversation.chatwoot_contact_id},
+            },
+        },
+        token="my-webhook-secret",
+    )
+
+    db_session.refresh(outbound)
+    assert result["reason"] == "internal_outbound_echo"
+    assert outbound.status == "sent"
+    assert outbound.chatwoot_message_id == 9343
+
+
+def test_chatwoot_timeout_recovery_wins_then_later_echo_prevents_retry_send(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_late_echo",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9351,
+        chatwoot_contact_id=9352,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic late echo response",
+        direction="outbound",
+        author_type="staff",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(message_id=message.id, sms_account_id=None, status="PENDING")
+    db_session.add(job)
+    db_session.commit()
+    timed_out_send = AsyncMock(side_effect=httpx.TimeoutException("synthetic timeout"))
+
+    with (
+        patch(
+            "app.services.sms.chatwoot_service.send_chatwoot_message",
+            new=timed_out_send,
+        ),
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "PENDING"
+    assert job.retry_count == 1
+    assert job.lease_expires_at is not None
+    assert message.status == "queued"
+
+    result = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9353,
+            "message_type": "outgoing",
+            "content": message.body,
+            "source_id": f"fastapi-chatwoot-message-{message.id}",
+            "account": {"id": binding.chatwoot_account_id},
+            "inbox": {"id": binding.chatwoot_inbox_id},
+            "conversation": {
+                "id": conversation.chatwoot_conversation_id,
+                "contact": {"id": conversation.chatwoot_contact_id},
+            },
+        },
+        token="my-webhook-secret",
+    )
+    assert result["reason"] == "internal_outbound_echo"
+    job.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+    second_send = AsyncMock()
+
+    with (
+        patch(
+            "app.services.sms.chatwoot_service.send_chatwoot_message",
+            new=second_send,
+        ),
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "SUCCESS"
+    assert message.status == "sent"
+    assert message.chatwoot_message_id == 9353
+    second_send.assert_not_awaited()
+
+
+def test_legacy_sending_row_with_chatwoot_id_is_accepted_without_resend(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_legacy",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9361,
+        chatwoot_contact_id=9362,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic legacy accepted response",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+        chatwoot_message_id=9363,
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(message_id=message.id, sms_account_id=None, status="PENDING")
+    db_session.add(job)
+    db_session.commit()
+    send = AsyncMock()
+
+    with (
+        patch("app.services.sms.chatwoot_service.send_chatwoot_message", new=send),
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "SUCCESS"
+    assert message.status == "sent"
+    send.assert_not_awaited()
+
+
+def test_disabled_chatwoot_binding_prevents_subsequent_external_dispatch(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_disabled",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9371,
+        chatwoot_contact_id=9372,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic queued before Chatwoot disable",
+        direction="outbound",
+        author_type="staff",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(message_id=message.id, sms_account_id=None, status="PENDING")
+    db_session.add(job)
+    binding.is_enabled = False
+    db_session.commit()
+
+    with (
+        patch("httpx.AsyncClient") as client_class,
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "PENDING"
+    assert job.retry_count == 1
+    assert message.status == "queued"
+    client_class.assert_not_called()
+
+
+def test_postgresql_delivery_lock_sql_is_conversation_message_job_order():
+    statements = _delivery_lock_statements(
+        conversation_id=11,
+        message_id=12,
+        job_id=13,
+    )
+    sql = [
+        str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).upper()
+        for statement in statements
+    ]
+
+    assert len(sql) == 3
+    assert "FROM SMS_CONVERSATIONS" in sql[0]
+    assert "FROM SMS_MESSAGES" in sql[1]
+    assert "FROM SMS_OUTBOUND_JOBS" in sql[2]
+    assert all("FOR UPDATE" in statement for statement in sql)

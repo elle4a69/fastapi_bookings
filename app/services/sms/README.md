@@ -134,10 +134,10 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 - Takeover, release, escalation, resolution, blocking, responder controls, internal notes, corrections, draft edits/approval/discard and explicit bulk draft discard append structural `SmsConversationEvent` records.
 - Corrections remain audit evidence only and never write reusable knowledge. Dynamic-fact corrections are explicitly labelled.
 - Manual sends require a client idempotency key. Blocked contacts and disabled/mismatched lines fail closed.
-- Failed outbound jobs may be retried only when their outbound message shape, lifecycle, channel and current conversation controls still permit delivery. Autonomous AI and fixed-responder jobs require `auto-reply`, conversation AI enablement, and the corresponding enabled line mode. An AI draft reviewed by a human remains authored by AI but is deliverable from `needs-review`, `taken-over`, or `escalated` only when an exact `draft_approved` event names both its message and a positive staff actor. Raw provider error text is not returned by the operations API.
+- Failed outbound jobs may be retried only when their outbound message shape, lifecycle, channel and current conversation controls still permit delivery. Autonomous AI and fixed-responder jobs require `auto-reply`, conversation AI enablement, and the corresponding enabled line mode. An AI draft reviewed by a human remains authored by AI but is deliverable from `auto-reply`, `needs-review`, `taken-over`, or `escalated` only when a bounded database lookup finds an exact `draft_approved` event for that message and its actor still resolves to a same-tenant `owner` or `admin`. Paused, resolved and blocked conversations reject approval, retry and dispatch without creating a new delivery attempt. The current `User` model has no disabled/active state, so dispatch can verify present tenant membership and role but not a separate user-activity flag. Raw provider error text is not returned by the operations API.
 - The worker locks the conversation before its message/job, revalidates direction/status and automation controls, and holds that conversation lock through provider acceptance. Lifecycle changes use the same conversation-first lock order, so a protected transition cannot return while a stale automated send is still in flight. Invalid jobs are terminally quarantined with structural audit evidence; discarded drafts cannot be sent by a stale job.
-- Chatwoot webhook identifiers are positive integers, message bodies/source identifiers are bounded, and supplied account/contact identifiers must match the persisted binding. Source echoes reconcile only outgoing messages with the exact inbox, conversation, source ID and body. An inbound message can never consume an outbound source ID. Phone fallback adopts only one wholly unbound local conversation.
-- Chatwoot delivery uses a deterministic source ID. If acceptance is observed by the echo path before an HTTP timeout is handled, the worker finalizes the existing job instead of retrying; otherwise the retry is delayed for 30 seconds so a later echo can win before another attempt.
+- Chatwoot webhook identifiers are positive integers, message bodies/source identifiers are bounded, and supplied account/contact identifiers must match the persisted binding. Source echoes reconcile only outgoing messages with the exact inbox, conversation, source ID and Unicode-safe exact body equality. An inbound message can never consume an outbound source ID. Phone fallback adopts only one wholly unbound local conversation.
+- Chatwoot delivery uses a deterministic source ID. After an HTTP timeout or provider error, the worker rolls back and reacquires the exact conversation, message and job locks in that order before deciding the outcome. A correctly scoped non-null Chatwoot message identifier is treated as provider acceptance even on a legacy `queued`/`sending` message; otherwise the retry is delayed for 30 seconds so a later echo can win before another attempt. Disabling an account or binding prevents the next dispatch/retry, but an external request that already passed final validation is intentionally drain-after-current and is not cancelled in flight.
 - The staff timeline merges messages, notes and allowlisted audit metadata. It does not return duplicate message bodies stored inside legacy event metadata.
 - Dynamic booking, price, date, time, availability, link and payment enquiries never fall back to direct local booking actions. They enter `needs-review` unless a verified authoritative path supplies the answer.
 - `POST /answer-info-request` is intentionally rejected with HTTP 409. Corrections are retained as evidence and reusable knowledge enters only through the governed curator proposal/review workflow.
@@ -158,9 +158,9 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
-- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `af613f143357c8f6764d164032f8a4f6d7e1f28c`; the strengthened arrival behavior documented in Section 8 requires arrival commit `43542034f3308b1bd3790f88f580a40d5d56b84c`. They are not contained in this operations branch and must be deliberately stacked and jointly verified.
-- **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before that migration lands.
-- **Concurrency hardening pending migration**: PostgreSQL conversation-first row locks serialize reviewed lifecycle, controls, manual-send, draft-winner, webhook-mutation and final-dispatch decisions. Holding a database lock during provider I/O is the deliberate no-migration safety trade-off and can reduce throughput during a slow provider call. Database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; synthetic state/race tests and PostgreSQL SQL compilation are not a live PostgreSQL concurrency proof.
+- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `af613f143357c8f6764d164032f8a4f6d7e1f28c`; the strengthened arrival behavior documented in Section 8 requires arrival commit `95bf119`. They are not contained in this operations branch and must be deliberately stacked and jointly verified. This branch includes commit `363fcad`, an equivalent cherry-pick of the validation-privacy successor `922c6b17404fcbec30e00b7e47f06d43cadc7404`.
+- **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. Immutable, body-versioned approval evidence and a separate user active/disabled state also require approved schema work; the current event record is structurally checked but remains mutable application data. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before the required migrations land.
+- **Concurrency hardening pending migration**: PostgreSQL conversation-first row locks serialize reviewed lifecycle, controls, manual-send, draft-winner, webhook-mutation and final-dispatch decisions. Timeout/error recovery reacquires conversation, message and job locks in the same order before writing retry or accepted state. Holding a database lock during provider I/O is the deliberate no-migration safety trade-off and can reduce throughput during a slow provider call. Database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; synthetic before/after ordering tests and PostgreSQL SQL compilation verify the intended lock shape but are not a live PostgreSQL concurrency proof.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
 
 ---
@@ -175,16 +175,16 @@ Run the SMS test suite:
 # 2. Test AI response integration and safety behavior
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_openai.py -v
 
-# 2a. Test AI job lifecycle, prompt/history isolation, and unsafe-output handling
+# 2a. After stacking the AI branch, test AI job lifecycle, prompt/history isolation, and unsafe-output handling
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_ai_safety.py -v
 
 # 3. Test prompt hierarchy and persona overrides
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_prompt_hierarchy.py -v
 
-# 4. Test Chatwoot synchronization and agentbot binding
-.\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py -v
+# 4. Test Chatwoot synchronization and delivery recovery
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py -v
 
-# 5. Test Lobby Arrival chime and repeated alerts
+# 5. After stacking the arrival branch, test Lobby Arrival chime and repeated alerts
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_arrivals.py -v
 
 # 6. Test SMS rate limiting
@@ -198,6 +198,9 @@ Run the SMS test suite:
 
 # 9. Test bounded, non-reflecting API validation failures
 .\.venv\Scripts\python.exe -m pytest tests/test_validation_error_privacy.py -v
+
+# 10. Test the complete operations-v4 slice currently present on this branch
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_foundation.py tests/test_sms_integration.py tests/test_sms_openai.py tests/test_sms_prompt_hierarchy.py tests/test_sms_chatwoot.py tests/test_sms_rate_limiting.py tests/test_sms_operations_safety.py tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py -q
 ```
 
 ---

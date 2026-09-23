@@ -21,6 +21,7 @@ from app.services.sms.chatwoot_service import process_chatwoot_webhook
 from app.services.sms.inbound_service import find_duplicate_inbound_winner
 from app.services.sms.operations_service import (
     SmsOperationConflict,
+    has_exact_draft_approval,
     transition_conversation,
 )
 
@@ -831,7 +832,9 @@ def test_draft_approval_then_bulk_discard_has_one_winner(
     ).count() == 1
 
 
-@pytest.mark.parametrize("state", ["needs-review", "taken-over", "escalated"])
+@pytest.mark.parametrize(
+    "state", ["auto-reply", "needs-review", "taken-over", "escalated"]
+)
 def test_worker_dispatches_exact_human_approved_ai_draft(
     db_session, operations_data, state
 ):
@@ -968,7 +971,8 @@ def test_retry_accepts_only_exact_human_approved_ai_draft(
 
 
 @pytest.mark.parametrize(
-    ("state", "is_blocked"), [("resolved", False), ("taken-over", True)]
+    ("state", "is_blocked"),
+    [("paused", False), ("resolved", False), ("taken-over", True)],
 )
 def test_worker_never_dispatches_approved_draft_from_terminal_protection(
     db_session, operations_data, state, is_blocked
@@ -1083,3 +1087,254 @@ def test_manual_enqueue_race_revalidates_different_body_and_has_no_side_effects(
         SmsConversationEvent.conversation_id == conversation.id,
         SmsConversationEvent.type == "staff_replied",
     ).count() == 0
+
+
+def test_paused_draft_approval_rejects_without_mutation(
+    client, db_session, operations_data
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state="paused",
+        suffix="316",
+        ai_enabled=False,
+    )
+    draft = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic paused draft",
+        direction="draft",
+        author_type="ai",
+        status="draft",
+    )
+    db_session.add(draft)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/admin/sms/conversations/messages/{draft.id}/approve",
+        headers=operations_data["headers"],
+    )
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    db_session.refresh(draft)
+    assert draft.direction == "draft"
+    assert draft.status == "draft"
+    assert db_session.query(SmsOutboundJob).filter(
+        SmsOutboundJob.message_id == draft.id
+    ).count() == 0
+    assert db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id == conversation.id,
+        SmsConversationEvent.type == "draft_approved",
+    ).count() == 0
+
+
+@pytest.mark.parametrize(
+    ("state", "is_blocked", "expected_status"),
+    [
+        ("auto-reply", False, status.HTTP_200_OK),
+        ("taken-over", False, status.HTTP_200_OK),
+        ("needs-review", False, status.HTTP_200_OK),
+        ("escalated", False, status.HTTP_200_OK),
+        ("paused", False, status.HTTP_409_CONFLICT),
+        ("resolved", False, status.HTTP_409_CONFLICT),
+        ("taken-over", True, status.HTTP_409_CONFLICT),
+    ],
+)
+def test_approved_draft_retry_state_matrix(
+    client,
+    db_session,
+    operations_data,
+    state,
+    is_blocked,
+    expected_status,
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state=state,
+        suffix="317",
+        ai_enabled=state == "auto-reply",
+        is_blocked=is_blocked,
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic approved retry matrix",
+        direction="outbound",
+        author_type="ai",
+        status="failed",
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={
+                "message_id": message.id,
+                "actor_id": operations_data["admin"].id,
+            },
+        )
+    )
+    job = SmsOutboundJob(
+        message_id=message.id,
+        sms_account_id=conversation.sms_account_id,
+        status="FAILED",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/admin/sms/conversations/jobs/{job.id}/retry",
+        headers=operations_data["headers"],
+    )
+
+    assert response.status_code == expected_status
+    db_session.refresh(job)
+    db_session.refresh(message)
+    if expected_status == status.HTTP_200_OK:
+        assert job.status == "PENDING"
+        assert message.status == "queued"
+    else:
+        assert job.status == "FAILED"
+        assert message.status == "failed"
+
+
+def test_draft_approval_requires_real_same_tenant_authorized_actor(
+    client, db_session, operations_data
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state="needs-review",
+        suffix="318",
+        ai_enabled=False,
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic approval evidence",
+        direction="outbound",
+        author_type="ai",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    forged = SmsConversationEvent(
+        conversation_id=conversation.id,
+        type="draft_approved",
+        meta={"message_id": message.id, "actor_id": 999999},
+    )
+    db_session.add(forged)
+    db_session.commit()
+
+    assert not has_exact_draft_approval(
+        db_session,
+        conversation=conversation,
+        message=message,
+    )
+
+    staff = User(
+        tenant_id=conversation.tenant_id,
+        login="synthetic-non-approver@example.invalid",
+        password_hash="synthetic-hash",
+        role="staff",
+    )
+    db_session.add(staff)
+    db_session.flush()
+    staff_headers = {
+        "X-Tenant": operations_data["tenant"].subdomain,
+        "X-Token": create_access_token({"sub": str(staff.id)}),
+    }
+    response = client.post(
+        f"/api/admin/sms/conversations/messages/{message.id}/approve",
+        headers=staff_headers,
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={"message_id": message.id, "actor_id": staff.id},
+        )
+    )
+    db_session.commit()
+    assert not has_exact_draft_approval(
+        db_session,
+        conversation=conversation,
+        message=message,
+    )
+
+    valid = SmsConversationEvent(
+        conversation_id=conversation.id,
+        type="draft_approved",
+        meta={
+            "message_id": message.id,
+            "actor_id": operations_data["admin"].id,
+        },
+    )
+    db_session.add(valid)
+    db_session.commit()
+    assert has_exact_draft_approval(
+        db_session,
+        conversation=conversation,
+        message=message,
+    )
+
+
+def test_disabled_account_prevents_subsequent_worker_dispatch(
+    db_session, operations_data
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state="taken-over",
+        suffix="319",
+        ai_enabled=False,
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic queued before disable",
+        direction="outbound",
+        author_type="staff",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(
+        message_id=message.id,
+        sms_account_id=conversation.sms_account_id,
+        status="PENDING",
+    )
+    db_session.add(job)
+    operations_data["account"].is_enabled = False
+    db_session.commit()
+
+    with (
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+        patch("app.services.sms.outbox_worker.get_transport_adapter") as transport,
+    ):
+        from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
+
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "FAILED"
+    assert job.error_log == "ACCOUNT_DISABLED"
+    assert message.status == "failed"
+    transport.assert_not_called()

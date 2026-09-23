@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ...db.database import SessionLocal
 from ...models.sms_outbox import SmsConversationEvent, SmsOutboundJob
@@ -12,6 +13,27 @@ from .outbound_service import is_outbound_body_safe
 from .operations_service import SmsOperationConflict, ensure_message_delivery_allowed
 
 logger = logging.getLogger(__name__)
+
+
+def _delivery_lock_statements(
+    *, conversation_id: int, message_id: int, job_id: int
+):
+    """Build the canonical conversation -> message -> job lock sequence."""
+
+    return (
+        select(SmsConversation)
+        .where(SmsConversation.id == conversation_id)
+        .execution_options(populate_existing=True)
+        .with_for_update(),
+        select(SmsMessage)
+        .where(SmsMessage.id == message_id)
+        .execution_options(populate_existing=True)
+        .with_for_update(),
+        select(SmsOutboundJob)
+        .where(SmsOutboundJob.id == job_id)
+        .execution_options(populate_existing=True)
+        .with_for_update(),
+    )
 
 
 def _load_locked_delivery_context(
@@ -27,69 +49,89 @@ def _load_locked_delivery_context(
     )
     if message_probe is None:
         return None
-    conversation = (
-        db.query(SmsConversation)
-        .filter(SmsConversation.id == message_probe.conversation_id)
-        .with_for_update()
-        .first()
+    conversation_stmt, message_stmt, job_stmt = _delivery_lock_statements(
+        conversation_id=message_probe.conversation_id,
+        message_id=message_probe.id,
+        job_id=job_id,
     )
+    conversation = db.execute(conversation_stmt).scalar_one_or_none()
     if conversation is None:
         return None
-    message = (
-        db.query(SmsMessage)
-        .filter(SmsMessage.id == message_probe.id)
-        .with_for_update()
-        .first()
-    )
-    job = (
-        db.query(SmsOutboundJob)
-        .filter(SmsOutboundJob.id == job_id)
-        .with_for_update()
-        .first()
-    )
-    if job is None or job.status != "PROCESSING" or job.message_id != message.id:
+    message = db.execute(message_stmt).scalar_one_or_none()
+    job = db.execute(job_stmt).scalar_one_or_none()
+    if (
+        message is None
+        or job is None
+        or job.status != "PROCESSING"
+        or job.message_id != message.id
+    ):
         return None
     return job, message, conversation
 
 
-def _chatwoot_echo_won(
+def _recover_chatwoot_delivery_after_error(
     db: Session,
     *,
     job_id: int,
     message_id: int,
 ) -> bool:
-    """Finalize a job already reconciled by its exact Chatwoot source echo."""
+    """Re-lock after rollback, then reconcile acceptance or schedule retry.
 
-    db.expire_all()
-    message = db.query(SmsMessage).filter(SmsMessage.id == message_id).first()
-    job = db.query(SmsOutboundJob).filter(SmsOutboundJob.id == job_id).first()
-    if (
-        message is None
-        or job is None
-        or job.message_id != message.id
-        or job.sms_account_id != message.sms_account_id
-        or message.chatwoot_message_id is None
-        or message.status not in {"sent", "delivered"}
-    ):
+    The webhook uses the same conversation lock. Whichever path acquires it
+    first establishes the next durable state without a stale last-writer
+    update from the worker.
+    """
+
+    locked_context = _load_locked_delivery_context(db, job_id)
+    if locked_context is None:
         return False
-    conversation = (
-        db.query(SmsConversation)
-        .filter(SmsConversation.id == message.conversation_id)
-        .first()
-    )
+    job, message, conversation = locked_context
     if (
-        conversation is None
+        message.id != message_id
         or message.tenant_id != conversation.tenant_id
         or message.provider_id != conversation.provider_id
         or message.sms_account_id != conversation.sms_account_id
+        or message.conversation_id != conversation.id
+        or job.message_id != message.id
+        or job.sms_account_id != message.sms_account_id
         or conversation.chatwoot_conversation_id is None
         or conversation.chatwoot_inbox_id is None
     ):
-        return False
-    job.status = "SUCCESS"
-    job.error_log = None
-    job.lease_expires_at = None
-    job.processed_at = datetime.now(timezone.utc)
+        _quarantine_delivery_job(
+            db,
+            job=job,
+            message=message,
+            conversation=conversation,
+            reason="DELIVERY_SCOPE_MISMATCH",
+        )
+        return True
+
+    if message.chatwoot_message_id is not None and message.status in {
+        "queued",
+        "sending",
+        "sent",
+        "delivered",
+    }:
+        if message.status != "delivered":
+            message.status = "sent"
+        job.status = "SUCCESS"
+        job.error_log = None
+        job.lease_expires_at = None
+        job.processed_at = datetime.now(timezone.utc)
+    else:
+        job.retry_count += 1
+        job.error_log = "CHATWOOT_DELIVERY_FAILED"
+        if job.retry_count >= 5:
+            job.status = "FAILED"
+            job.lease_expires_at = None
+            job.processed_at = datetime.now(timezone.utc)
+            if message.status in {"queued", "sending"}:
+                message.status = "failed"
+        else:
+            job.status = "PENDING"
+            job.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=30)
+            if message.status in {"queued", "sending"}:
+                message.status = "queued"
     db.commit()
     return True
 
@@ -234,8 +276,10 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             if (
                 is_chatwoot_thread
                 and message.chatwoot_message_id is not None
-                and message.status in {"sent", "delivered"}
+                and message.status in {"queued", "sending", "sent", "delivered"}
             ):
+                if message.status != "delivered":
+                    message.status = "sent"
                 job.status = "SUCCESS"
                 job.error_log = None
                 job.lease_expires_at = None
@@ -299,32 +343,12 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     continue
                 except Exception:
                     db.rollback()
-                    if _chatwoot_echo_won(
+                    if _recover_chatwoot_delivery_after_error(
                         db,
                         job_id=job_id,
                         message_id=current_message_id,
                     ):
                         continue
-                    job = db.query(SmsOutboundJob).filter(
-                        SmsOutboundJob.id == job_id
-                    ).first()
-                    message = db.query(SmsMessage).filter(
-                        SmsMessage.id == current_message_id
-                    ).first()
-                    if job is None or message is None:
-                        continue
-                    job.retry_count += 1
-                    job.error_log = "CHATWOOT_DELIVERY_FAILED"
-                    if job.retry_count >= 5:
-                        job.status = "FAILED"
-                        message.status = "failed"
-                    else:
-                        job.status = "PENDING"
-                        job.lease_expires_at = datetime.now(timezone.utc) + timedelta(
-                            seconds=30
-                        )
-                        message.status = "queued"
-                    db.commit()
                     continue
 
             if (

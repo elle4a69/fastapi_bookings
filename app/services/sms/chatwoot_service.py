@@ -427,7 +427,9 @@ def process_chatwoot_webhook(
             source_query = source_query.filter(SmsMessage.client_request_id == source_id)
         internal_outbound = source_query.first()
         if internal_outbound:
-            if not secrets.compare_digest(internal_outbound.body, content):
+            # Message content is not a secret. Ordinary equality is exact and
+            # supports the full Unicode SMS/Chatwoot character set.
+            if internal_outbound.body != content:
                 raise HTTPException(status_code=409, detail="Chatwoot source conflict.")
             if internal_outbound.chatwoot_message_id is None:
                 internal_outbound.chatwoot_message_id = message_id
