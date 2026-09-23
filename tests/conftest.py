@@ -118,6 +118,11 @@ def clean_test_environment(monkeypatch):
 
     fastapi_app.dependency_overrides.clear()
     settings.OTEL_SDK_DISABLED = True
+    monkeypatch.setattr(
+        settings,
+        "SECRET_KEY",
+        "synthetic-test-booking-hmac-secret-2026-only",
+    )
     shutdown_telemetry()
 
     yield

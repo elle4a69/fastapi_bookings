@@ -38,7 +38,7 @@ def create_public_booking(
     The command revalidates the exact live slot and persists the booking,
     allocations, audit record, and outbox event in one transaction.
     """
-    if booking_in.model_extra:
+    if booking_in.model_extra or booking_in.addon_ids or booking_in.product_ids:
         raise HTTPException(
             status_code=422,
             detail="Public booking request contains unsupported fields.",

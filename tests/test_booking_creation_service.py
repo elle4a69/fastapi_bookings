@@ -14,6 +14,7 @@ from app.core.state_machine import BookingStatus
 from app.models import (
     AuditLog,
     Booking,
+    BookingCommandReceipt,
     BookingSlotAllocation,
     BookingResourceAllocation,
     Client,
@@ -148,16 +149,15 @@ def test_command_creates_pending_booking_allocations_event_and_audit(
     ).one()
     assert audit.user_id is None
     audit_details = json.loads(audit.details)
-    assert set(audit_details) == {
-        "status",
-        "source",
-        "request_fingerprint_version",
-        "request_fingerprint",
-    }
+    assert set(audit_details) == {"status", "source"}
     assert audit_details["status"] == "pending"
     assert audit_details["source"] == "public_booking"
-    assert audit_details["request_fingerprint_version"] == 1
-    assert len(audit_details["request_fingerprint"]) == 64
+    receipt = db_session.query(BookingCommandReceipt).filter_by(
+        tenant_id=data["tenant"].id,
+        booking_id=booking.id,
+    ).one()
+    assert receipt.fingerprint_version == 1
+    assert len(receipt.request_hmac) == 64
     event = (
         db_session.query(OutboxEvent)
         .filter_by(tenant_id=data["tenant"].id, type="booking.created")
@@ -316,7 +316,7 @@ def test_idempotent_replay_uses_immutable_fingerprint_after_domain_changes(
     assert malformed_change.value.status_code == 409
 
 
-def test_replay_without_one_valid_versioned_fingerprint_fails_closed(
+def test_audit_mutation_is_irrelevant_and_malformed_receipts_fail_closed(
     db_session, booking_command_setup
 ):
     data = booking_command_setup
@@ -332,38 +332,67 @@ def test_replay_without_one_valid_versioned_fingerprint_fails_closed(
         target_type="booking",
         target_id=booking.id,
     ).one()
-    duplicate = AuditLog(
+    forged = AuditLog(
         tenant_id=data["tenant"].id,
         action="booking.created",
         target_type="booking",
         target_id=booking.id,
-        details=audit.details,
+        details=json.dumps(
+            {
+                "source": "public_booking",
+                "request_fingerprint_version": 999,
+                "request_fingerprint": "0" * 64,
+            }
+        ),
     )
-    db_session.add(duplicate)
+    db_session.add(forged)
+    db_session.delete(audit)
     db_session.flush()
-    with pytest.raises(BookingCommandError) as duplicate_error:
+    replay = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    assert replay.id == booking.id
+
+    receipt = db_session.query(BookingCommandReceipt).filter_by(
+        tenant_id=data["tenant"].id,
+        booking_id=booking.id,
+    ).one()
+    valid_hmac = receipt.request_hmac
+    receipt.request_hmac = "z" * 64
+    db_session.flush()
+    with pytest.raises(BookingCommandError) as malformed:
         create_authoritative_booking(
             db_session,
             tenant_id=data["tenant"].id,
             command=command,
         )
-    assert duplicate_error.value.status_code == 409
-    db_session.delete(duplicate)
-    db_session.flush()
+    assert malformed.value.status_code == 409
 
-    audit.details = json.dumps({"status": "pending", "source": "public_booking"})
+    receipt.request_hmac = valid_hmac
+    receipt.fingerprint_version = 999
     db_session.flush()
-
-    with pytest.raises(BookingCommandError) as missing:
+    with pytest.raises(BookingCommandError) as unsupported_version:
         create_authoritative_booking(
             db_session,
             tenant_id=data["tenant"].id,
             command=command,
         )
-    assert missing.value.status_code == 409
+    assert unsupported_version.value.status_code == 409
+
+    db_session.delete(receipt)
+    db_session.flush()
+    with pytest.raises(BookingCommandError) as legacy:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command,
+        )
+    assert legacy.value.status_code == 409
 
 
-def test_cross_tenant_ids_and_global_key_collision_fail_without_partial_rows(
+def test_cross_tenant_ids_fail_without_partial_rows(
     db_session, booking_command_setup
 ):
     data = booking_command_setup
@@ -387,7 +416,7 @@ def test_cross_tenant_ids_and_global_key_collision_fail_without_partial_rows(
         )
     assert cross_id.value.status_code == 404
 
-    with pytest.raises(BookingCommandError) as collision:
+    with pytest.raises(BookingCommandError) as foreign_domain:
         create_authoritative_booking(
             db_session,
             tenant_id=other.id,
@@ -399,7 +428,7 @@ def test_cross_tenant_ids_and_global_key_collision_fail_without_partial_rows(
                 idempotency_key=key,
             ),
         )
-    assert collision.value.status_code == 409
+    assert foreign_domain.value.status_code == 404
     assert before == (db_session.query(Client).count(), db_session.query(Booking).count())
 
 

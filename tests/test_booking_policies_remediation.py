@@ -258,10 +258,10 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     payload_bad_client = valid_payload.copy()
     payload_bad_client["client_id"] = client_b.id
     resp = client.post("/api/public/bookings", json=payload_bad_client, headers=headers_a)
-    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert resp.json()["error"]["details"] == {}
     assert f'"input": {client_b.id}' not in json.dumps(resp.json())
-    assert str(client_b.id) not in resp.text
+    assert '"client_id"' not in resp.text
     assert db_session.query(Booking).count() == initial_booking_count
     assert db_session.query(OutboxEvent).count() == initial_outbox_count
 

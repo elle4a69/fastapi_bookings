@@ -7,19 +7,21 @@ by booking entry points.  It deliberately performs no external network work.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import re
-import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, MultipleResultsFound
 from sqlalchemy.orm import Query, Session
 
+from ..core.config import settings
 from ..core.state_machine import BookingStatus
 from ..models import (
+    BookingCommandReceipt,
     BookingResourceAllocation,
     BookingSlotAllocation,
     Client,
@@ -39,6 +41,8 @@ from .outbox_service import create_outbox_event
 
 logger = logging.getLogger(__name__)
 REQUEST_FINGERPRINT_VERSION = 1
+_BOOKING_HMAC_CONTEXT = b"fastapi-bookings:booking-command-receipt:v1"
+_REPLAY_CONFLICT = "Idempotency key was already used for a different booking request."
 
 
 class BookingCommandError(Exception):
@@ -84,24 +88,6 @@ def _stored_canonical_phone(value: str | None) -> str | None:
         return None
 
 
-def _existing_idempotent_booking(
-    db: Session,
-    *,
-    tenant_id: int,
-    idempotency_key: str | None,
-) -> Booking | None:
-    if not idempotency_key:
-        return None
-    return (
-        db.query(Booking)
-        .filter(
-            Booking.tenant_id == tenant_id,
-            Booking.idempotency_key == idempotency_key,
-        )
-        .first()
-    )
-
-
 def _normalized_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -115,7 +101,7 @@ def _normalized_email(value: str | None) -> str | None:
 
 
 def _fingerprint_phone(value: str | None) -> str | None:
-    """Canonicalize valid phones and deterministically hash invalid replay input."""
+    """Canonicalize valid phones and retain deterministic invalid input shape."""
 
     try:
         return _canonical_phone(value)
@@ -124,8 +110,26 @@ def _fingerprint_phone(value: str | None) -> str | None:
         return f"invalid:{normalized}" if normalized else None
 
 
-def _request_fingerprint(*, tenant_id: int, command: BookingCreate) -> str:
-    """Hash a canonical command without retaining its customer-supplied values."""
+def _booking_hmac_key() -> bytes:
+    """Derive a context-specific key without exposing the configured secret."""
+
+    secret = settings.SECRET_KEY
+    if (
+        not isinstance(secret, str)
+        or not secret.strip()
+        or secret == "changeme"
+        or len(secret) < 32
+    ):
+        raise BookingCommandError(503, "Booking replay protection is unavailable.")
+    return hmac.new(
+        secret.encode("utf-8"),
+        _BOOKING_HMAC_CONTEXT,
+        hashlib.sha256,
+    ).digest()
+
+
+def _canonical_command_bytes(*, tenant_id: int, command: BookingCreate) -> bytes:
+    """Return deterministic in-memory bytes for the exact command."""
 
     canonical = {
         "version": REQUEST_FINGERPRINT_VERSION,
@@ -142,95 +146,122 @@ def _request_fingerprint(*, tenant_id: int, command: BookingCreate) -> str:
         "end_time": _utc(command.end_time).isoformat(),
         "notes": _normalized_text(command.notes),
     }
-    encoded = json.dumps(
+    return json.dumps(
         canonical,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
     ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
-def _stored_request_fingerprint(
+def _request_hmac(*, tenant_id: int, command: BookingCreate) -> str:
+    """Authenticate canonical command bytes with the server-side secret."""
+
+    return hmac.new(
+        _booking_hmac_key(),
+        _canonical_command_bytes(tenant_id=tenant_id, command=command),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _receipt_for_key(
     db: Session,
     *,
     tenant_id: int,
-    booking_id: int,
-) -> str | None:
-    """Return the one valid public-booking fingerprint for this booking."""
+    idempotency_key: str,
+) -> BookingCommandReceipt | None:
+    """Return one exact tenant/key receipt, failing closed on ambiguity."""
 
-    records = (
-        db.query(AuditLog)
-        .filter(
-            AuditLog.tenant_id == tenant_id,
-            AuditLog.action == "booking.created",
-            AuditLog.target_type == "booking",
-            AuditLog.target_id == booking_id,
+    try:
+        return (
+            db.query(BookingCommandReceipt)
+            .filter(
+                BookingCommandReceipt.tenant_id == tenant_id,
+                BookingCommandReceipt.idempotency_key == idempotency_key,
+            )
+            .one_or_none()
         )
-        .order_by(AuditLog.id)
-        .all()
-    )
-    public_records: list[dict] = []
-    for record in records:
-        try:
-            details = json.loads(record.details or "")
-        except (TypeError, ValueError):
-            continue
-        if isinstance(details, dict) and details.get("source") == "public_booking":
-            public_records.append(details)
-    if len(public_records) != 1:
-        return None
-    details = public_records[0]
-    fingerprint = details.get("request_fingerprint")
-    if details.get("request_fingerprint_version") != REQUEST_FINGERPRINT_VERSION:
-        return None
-    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
-        return None
-    return fingerprint
+    except MultipleResultsFound as exc:
+        raise BookingCommandError(409, _REPLAY_CONFLICT) from exc
 
 
-def _assert_replay_matches(
+def _validated_receipt_booking(
     db: Session,
     *,
-    existing: Booking,
+    receipt: BookingCommandReceipt,
     tenant_id: int,
     command: BookingCreate,
-) -> None:
-    """Reject reuse of a key for a different canonical command."""
+) -> Booking:
+    """Authenticate a receipt and return only its exact tenant booking."""
 
-    stored = _stored_request_fingerprint(
-        db,
-        tenant_id=tenant_id,
-        booking_id=existing.id,
-    )
-    requested = _request_fingerprint(tenant_id=tenant_id, command=command)
-    if stored is None or not secrets.compare_digest(stored, requested):
-        raise BookingCommandError(
-            409,
-            "Idempotency key was already used for a different booking request.",
+    stored_hmac = receipt.request_hmac
+    if (
+        receipt.fingerprint_version != REQUEST_FINGERPRINT_VERSION
+        or not isinstance(stored_hmac, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", stored_hmac)
+        or receipt.idempotency_key != command.idempotency_key
+    ):
+        raise BookingCommandError(409, _REPLAY_CONFLICT)
+
+    requested_hmac = _request_hmac(tenant_id=tenant_id, command=command)
+    if not hmac.compare_digest(stored_hmac, requested_hmac):
+        raise BookingCommandError(409, _REPLAY_CONFLICT)
+
+    try:
+        booking = (
+            db.query(Booking)
+            .filter(
+                Booking.id == receipt.booking_id,
+                Booking.tenant_id == tenant_id,
+                Booking.idempotency_key == receipt.idempotency_key,
+            )
+            .one_or_none()
         )
+    except MultipleResultsFound as exc:
+        raise BookingCommandError(409, _REPLAY_CONFLICT) from exc
+    if booking is None:
+        raise BookingCommandError(409, _REPLAY_CONFLICT)
+    return booking
 
 
-def _reject_cross_tenant_key_collision(
+def _resolve_idempotent_replay(
     db: Session,
     *,
     tenant_id: int,
-    idempotency_key: str | None,
-) -> None:
-    """Fail before mutation while the database key remains globally unique."""
+    command: BookingCreate,
+) -> Booking | None:
+    """Resolve only an authenticated receipt; legacy booking keys fail closed."""
 
+    idempotency_key = command.idempotency_key
     if not idempotency_key:
-        return
-    collision = (
+        return None
+
+    # Validate the secret before consulting or mutating replay state.
+    _booking_hmac_key()
+    receipt = _receipt_for_key(
+        db,
+        tenant_id=tenant_id,
+        idempotency_key=idempotency_key,
+    )
+    if receipt is not None:
+        return _validated_receipt_booking(
+            db,
+            receipt=receipt,
+            tenant_id=tenant_id,
+            command=command,
+        )
+
+    legacy_booking = (
         db.query(Booking.id)
         .filter(
-            Booking.tenant_id != tenant_id,
+            Booking.tenant_id == tenant_id,
             Booking.idempotency_key == idempotency_key,
         )
         .first()
     )
-    if collision:
-        raise BookingCommandError(409, "Idempotency key is already in use.")
+    if legacy_booking is not None:
+        raise BookingCommandError(409, _REPLAY_CONFLICT)
+    return None
 
 
 def _resolve_client(
@@ -278,7 +309,7 @@ def _resolve_client(
             db.query(Client)
             .filter(
                 Client.tenant_id == tenant_id,
-                func.lower(Client.email) == normalized_email,
+                func.lower(func.trim(Client.email)) == normalized_email,
                 Client.deleted_at.is_(None),
             )
             .order_by(Client.id)
@@ -603,25 +634,14 @@ def create_authoritative_booking(
     """Validate and atomically create one pending FastAPI Bookings booking."""
 
     try:
-        existing = _existing_idempotent_booking(
+        existing = _resolve_idempotent_replay(
             db,
             tenant_id=tenant_id,
-            idempotency_key=command.idempotency_key,
+            command=command,
         )
         if existing:
-            _assert_replay_matches(
-                db,
-                existing=existing,
-                tenant_id=tenant_id,
-                command=command,
-            )
             return existing
 
-        _reject_cross_tenant_key_collision(
-            db,
-            tenant_id=tenant_id,
-            idempotency_key=command.idempotency_key,
-        )
         with db.begin_nested():
             service, provider, location = _resolve_booking_entities(
                 db,
@@ -674,6 +694,23 @@ def create_authoritative_booking(
             db.add(booking)
             db.flush()
 
+            if command.idempotency_key:
+                db.add(
+                    BookingCommandReceipt(
+                        tenant_id=tenant_id,
+                        booking_id=booking.id,
+                        idempotency_key=command.idempotency_key,
+                        fingerprint_version=REQUEST_FINGERPRINT_VERSION,
+                        request_hmac=_request_hmac(
+                            tenant_id=tenant_id,
+                            command=command,
+                        ),
+                    )
+                )
+                # The booking row's tenant/key constraint serialized first use;
+                # persist the receipt authority before any downstream rows.
+                db.flush()
+
             slot_allocation_service.create_allocations_for_booking(
                 db,
                 booking=booking,
@@ -706,11 +743,6 @@ def create_authoritative_booking(
                         {
                             "status": booking.status.value,
                             "source": "public_booking",
-                            "request_fingerprint_version": REQUEST_FINGERPRINT_VERSION,
-                            "request_fingerprint": _request_fingerprint(
-                                tenant_id=tenant_id,
-                                command=command,
-                            ),
                         }
                     ),
                 )
@@ -723,35 +755,18 @@ def create_authoritative_booking(
         raise BookingCommandError(exc.status_code, str(exc.detail)) from exc
     except IntegrityError as exc:
         try:
-            existing = _existing_idempotent_booking(
+            existing = _resolve_idempotent_replay(
                 db,
                 tenant_id=tenant_id,
-                idempotency_key=command.idempotency_key,
+                command=command,
             )
             if existing:
-                _assert_replay_matches(
-                    db,
-                    existing=existing,
-                    tenant_id=tenant_id,
-                    command=command,
-                )
                 return existing
             if slot_allocation_service.is_slot_allocation_conflict(exc):
                 raise BookingCommandError(
                     409,
                     "The requested time slot or buffer has just been booked. Please select another available time.",
                 ) from exc
-            if command.idempotency_key:
-                collision = (
-                    db.query(Booking.id)
-                    .filter(Booking.idempotency_key == command.idempotency_key)
-                    .first()
-                )
-                if collision:
-                    raise BookingCommandError(
-                        409,
-                        "Idempotency key is already in use.",
-                    ) from exc
         except BookingCommandError:
             raise
         except Exception as recovery_error:

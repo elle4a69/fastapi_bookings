@@ -7,7 +7,18 @@ finite state machine defined in :mod:`..core.state_machine`.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, Index, text
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    Index,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -18,6 +29,12 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_bookings_tenant_id_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "idempotency_key",
+            name="uq_bookings_tenant_idempotency_key",
+        ),
         Index(
             "uq_active_bookings",
             "provider_id",
@@ -39,7 +56,7 @@ class Booking(Base):
     end_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(Enum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     notes = Column(Text, nullable=True)
-    idempotency_key = Column(String, unique=True, nullable=True, index=True)
+    idempotency_key = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -65,6 +82,13 @@ class Booking(Base):
         back_populates="booking",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+
+    command_receipt = relationship(
+        "BookingCommandReceipt",
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
     def __repr__(self) -> str:

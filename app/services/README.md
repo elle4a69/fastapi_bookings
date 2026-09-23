@@ -34,43 +34,55 @@ and rollback. Other callers must likewise own their outer transaction.
 
 ## Setup, Configuration & Dependencies
 
-No new environment variables or external services are required. The command
-uses the configured SQLAlchemy session and these existing tables:
+No new environment variables or external services are required. Keyed booking
+commands require the existing server-side `SECRET_KEY` to be non-default and
+at least 32 characters. The command uses the configured SQLAlchemy session and
+these tables:
 
 - `tenants`, `clients`, `services`, `providers`, `locations` and relationship
   tables;
 - provider workdays/special days, blocked time, and reserved time;
-- `bookings`, `booking_slot_allocations`, and resource allocation tables;
+- `bookings`, `booking_command_receipts`, `booking_slot_allocations`, and
+  resource allocation tables;
 - `audit_logs` and `outbox_events`.
 
-Schema migrations must already include the existing slot-allocation and outbox
-safety revisions. This delivery intentionally adds no migration.
+Migration `b6c2d4e8f0a1` must be applied after the committed
+`d7e8f9a0b1c2` head. It creates the internal receipt table, enforces its
+composite tenant/booking foreign key, and replaces global booking-key
+uniqueness with nullable tenant-scoped uniqueness. SQL unique constraints
+permit multiple `NULL` keys while rejecting duplicate non-null keys in one
+tenant.
 
 ## Core Workflows & Contracts
 
 `create_authoritative_booking(db, tenant_id=..., command=BookingCreate(...))`
 performs the following ordered workflow:
 
-1. Return an existing booking for a same-tenant idempotency replay only after
-   a versioned SHA-256 fingerprint of the canonical request matches the digest
-   stored in that booking's tenant/action/target/source-scoped audit snapshot.
-   Replay does not re-run mutable provider, service, location, or client policy.
-2. Fail closed before mutation if the globally unique database key is already
-   owned by another tenant.
-3. Resolve an active service and provider inside the explicit tenant, lock the
+1. For a keyed command, require the configured server secret and query only the
+   exact `(tenant_id, idempotency_key)` internal receipt. Authenticate the
+   versioned canonical command with a context-derived HMAC-SHA256 and return
+   only the receipt's exact tenant-linked booking. Replay does not re-run
+   mutable provider, service, location, or client policy. Missing, malformed,
+   ambiguous, legacy, mismatched, or unlinked receipts fail closed.
+2. Resolve an active service and provider inside the explicit tenant, lock the
    provider row where supported, and enforce service/provider/location pairs.
-4. Normalize the start to UTC, derive the end from the stored service duration,
+3. Normalize the start to UTC, derive the end from the stored service duration,
    and reject a caller-supplied interval that does not match.
-5. Resolve an active tenant client. Every supplied ID, canonical phone, and
-   lowercased email must identify the same single tenant client. Conflicting or
-   duplicate contact matches fail closed before any command row is created,
-   including ambiguity between active and inactive records. Restricted clients
-   retain the existing 403 contract.
-6. Recompute a full authoritative availability window and require an exact
+4. Resolve an active tenant client. Every supplied ID, canonical phone, and
+   trimmed/lowercased email must identify the same single tenant client.
+   Conflicting or duplicate contact matches fail closed before any command row
+   is created, including ambiguity between active and inactive records.
+   Restricted clients retain the existing 403 contract.
+5. Recompute a full authoritative availability window and require an exact
    provider/start/end match. This includes schedules, special days, active
    bookings, blocks, reservations, buffers, relationships, and resources.
-7. Apply the command's effective minimum 15-minute buffers consistently during
+6. Apply the command's effective minimum 15-minute buffers consistently during
    final overlap validation and persisted slot allocation.
+7. Create the pending booking and, for a keyed command, insert and flush its
+   internal receipt before allocations or events. Tenant/key uniqueness on the
+   booking serializes concurrent first use; the separately unique receipt is
+   the replay authority. A losing savepoint is fully rolled back before the
+   exact winner receipt is authenticated.
 8. Lock eligible shared resource rows in deterministic order where the database
    supports row locks, recompute overlapping capacity under those locks, and
    allocate only tenant/type/location-scoped candidates. A booking without a
@@ -79,8 +91,9 @@ performs the following ordered workflow:
    outbox event, and structural audit record inside one nested savepoint. The
    outbox allowlist is `id`, `provider_id`, `service_id`, `start_time`,
    `end_time`, and `status`; it contains no client identifier or contact data.
-   The audit details contain only status, source, fingerprint version, and the
-   digest. The caller commits all rows with its surrounding unit of work.
+   The audit details contain only status and source. Audit records never carry
+   or control the replay HMAC. The caller commits all rows with its surrounding
+   unit of work.
 
 The public method, path, tenant dependency, and error envelope remain stable.
 The unauthenticated route uses `PublicBookingCreate`, whose closed OpenAPI
@@ -98,10 +111,10 @@ validation/conflict semantics:
   HTTP 409.
 
 The public request schema retains the booking page's established `addon_ids`
-and `product_ids` list fields so empty selections remain compatible. This
-command intentionally preserves the prior behavior of not applying those
-selections; authoritative non-empty add-on/product pricing, duration, and
-persistence require the separate booking-form parity task below.
+and `product_ids` list fields so empty selections remain compatible. Any
+non-empty selection is rejected with the same generic, non-reflecting HTTP 422
+used for unsupported public fields before command construction. The command
+does not partially apply commercial selections.
 
 The returned status is the actual stored `pending` status. This command never
 claims a booking is confirmed.
@@ -111,44 +124,46 @@ claims a booking is confirmed.
 - Every client, service, provider, and location lookup includes the explicit
   tenant boundary.
 - Compatibility checks use tenant-scoped relationship rows.
-- Idempotent replay is resolved by `(tenant_id, idempotency_key)` at the
-  application layer and the stored versioned request digest is compared before
-  replay. The canonical request itself is never stored or logged.
+- Idempotent replay is protected by database uniqueness on
+  `(tenant_id, idempotency_key)` in both bookings and command receipts. The
+  receipt has a database-enforced composite foreign key to the booking's exact
+  tenant and ID. The canonical request, HMAC key, HMAC input, and HMAC output
+  are never logged, returned, placed in audit data, or exposed by an API.
 - Command failures roll back only command-created work to a savepoint. They do
   not commit or roll back unrelated work already owned by the caller.
 - The public route commits only after the command returns and rolls back its
   outer transaction on every mapped or unexpected failure.
 - Audit and outbox payloads use the explicit structural allowlists above. Logs
-  contain no customer identity, contact data, notes, request body, fingerprint,
+  contain no customer identity, contact data, notes, request body, HMAC,
   idempotency key, or rejected unknown-field value. Public unknown-field errors
   do not echo the submitted field name or value.
 - Availability checks and tests perform no external network calls.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
-- `bookings.idempotency_key` is still globally unique in the database. Until an
-  approved migration replaces it with a nullable unique constraint on
-  `(tenant_id, idempotency_key)`, different tenants cannot use the same key.
-  The service detects that condition before mutation and returns HTTP 409.
+- The migration intentionally does not derive receipts from legacy `AuditLog`
+  rows. Existing keyed bookings without an internal receipt fail closed with
+  HTTP 409 and require an explicit, separately approved reconciliation policy.
+- Receipt HMACs use the existing `SECRET_KEY`. Rotating that key invalidates
+  replay authentication for existing receipts unless a versioned key-rotation
+  migration is performed first.
+- Migration `b6c2d4e8f0a1` is based only on committed parent `d7e8f9a0b1c2`.
+  The untracked unsafe `e8` migration in the dirty main worktree was not read,
+  modified, deleted, or used. Its lineage must be resolved before integration
+  or deployment. Downgrade also requires reconciliation if different tenants
+  have begun using the same non-null key because the historical schema restores
+  global uniqueness.
 - The admin booking and configurable booking-form routes have not yet been
   migrated to this command. They must be consolidated in a separate parity-
   tested task.
-- Non-empty public add-on and product selections are not yet persisted by this
-  command. Their authoritative service compatibility, price, duration,
-  inventory, and booking linkage must be implemented together in that booking-
-  form parity task; this slice does not partially apply them or include them in
-  the authoritative booking request fingerprint.
+- Non-empty public add-on and product selections are rejected until their
+  authoritative compatibility, price, duration, inventory, and booking linkage
+  can be implemented together in the booking-form parity task.
 - Client phone canonicalization has no database column or tenant-scoped unique
   constraint. Existing formatted values are compared in application code;
   concurrent first-time client creation can still produce duplicate clients.
 - Availability currently follows the scheduling engine's UTC discipline.
   Customer-facing timezone display policy remains a separate product decision.
-- Canonical replay comparison is application-level. Idempotency keys do not yet
-  have a tenant-scoped database uniqueness guarantee. The audit snapshot now
-  persists a versioned immutable request fingerprint, but older bookings without
-  exactly one valid public-booking fingerprint fail closed with HTTP 409 rather
-  than re-running mutable domain policy. A deliberate backfill/migration policy
-  is required if legacy keys must be replayable.
 - Availability discovery and the final command do not yet share one effective-
   buffer helper. A service configured with zero buffers can advertise an
   adjacent slot that the command correctly rejects under its minimum 15-minute
@@ -156,9 +171,10 @@ claims a booking is confirmed.
   changing the shared discovery contract requires a separate scheduling task.
 - Shared-resource row locking is compiled and unit-tested for PostgreSQL, and
   sequential two-provider/capacity-one behavior is covered. SQLite ignores
-  `FOR UPDATE`; a genuine multi-session PostgreSQL race test is still required
-  in an integration environment. A future database constraint or reservation
-  mechanism would provide defence in depth for writers that bypass this command.
+  `FOR UPDATE`. Receipt and booking tenant/key uniqueness, composite receipt
+  linkage, synthetic loser rollback, and PostgreSQL DDL are tested, but a
+  genuine multi-session PostgreSQL booking race still requires an integration
+  environment. Writers that bypass this command remain unsupported.
 
 ## Verification & Testing Commands
 
@@ -169,12 +185,15 @@ cache side effects:
 $env:PYTHONPATH='F:\Projects\fastapi_bookings-authoritative-booking'
 $env:PYTHONDONTWRITEBYTECODE='1'
 & 'F:\Projects\fastapi_bookings\.venv\Scripts\python.exe' -m pytest -q -p no:cacheprovider `
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_booking_command_receipts.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_booking_creation_service.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_booking_policies_remediation.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_concurrency.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_constraints.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_edge_cases.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_intervals.py'
+& 'F:\Projects\fastapi_bookings\.venv\Scripts\python.exe' -m pytest -q -p no:cacheprovider `
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_validation_error_privacy.py'
 ```
 
 The focused suite uses labelled synthetic tenants, clients, providers,

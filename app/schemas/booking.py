@@ -20,7 +20,12 @@ class BookingBase(BaseModel):
     start_time: datetime = Field(..., description="Start time of the appointment")
     end_time: datetime = Field(..., description="End time of the appointment")
     notes: Optional[str] = Field(None, description="Notes attached to the booking")
-    idempotency_key: Optional[str] = Field(None, description="Unique idempotency key for preventing duplicate submissions")
+    idempotency_key: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=128,
+        description="Tenant-scoped idempotency key for preventing duplicate submissions",
+    )
 
 
 class BookingCreate(BookingBase):
@@ -49,7 +54,9 @@ class PublicBookingCreate(BaseModel):
     )
     idempotency_key: Optional[str] = Field(
         None,
-        description="Unique idempotency key for preventing duplicate submissions",
+        min_length=1,
+        max_length=128,
+        description="Tenant-scoped idempotency key for preventing duplicate submissions",
     )
     # Unknown keys are retained only long enough for the public route to reject
     # them with a non-reflecting error. The published contract remains closed.
