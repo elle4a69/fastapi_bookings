@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
@@ -75,6 +76,29 @@ def _safe_route_template(value) -> str:
     if not all(character.isalnum() or character in "/_-.:{}" for character in value):
         return "<unmatched>"
     return value
+
+
+def _matched_route_template(request) -> str:
+    """Recover the full code-owned template from FastAPI's lazy router match."""
+
+    matched_route = request.scope.get("route")
+    matched_path = getattr(matched_route, "path", None)
+    for candidate in app.router.routes:
+        try:
+            match, _ = candidate.matches(request.scope)
+        except Exception:
+            continue
+        if match != Match.FULL:
+            continue
+        include_context = getattr(candidate, "include_context", None)
+        prefix = getattr(include_context, "prefix", "")
+        if isinstance(prefix, str) and prefix and isinstance(matched_path, str):
+            return _safe_route_template(f"{prefix}{matched_path}")
+        candidate_path = getattr(candidate, "path", None)
+        if isinstance(candidate_path, str):
+            return _safe_route_template(candidate_path)
+        break
+    return _safe_route_template(matched_path)
 
 
 def _duration_bucket(seconds: float) -> str:
@@ -362,7 +386,7 @@ async def add_correlation_id_header(request, call_next):
         _set_correlation_headers(response, request_id)
         return response
     finally:
-        route = getattr(request.scope.get("route"), "path", None)
+        route = _matched_route_template(request)
         logging.getLogger("app.access").info(
             "http_request_completed",
             request.method,

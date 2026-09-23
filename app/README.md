@@ -61,6 +61,13 @@ method/status with an `<unmatched>` route sentinel, and client records use an
 arbitrary transport messages are not retained. This boundary is installed
 even when OpenTelemetry is disabled.
 
+The current FastAPI runtime keeps included routers lazy: the matched route
+stored in the request scope can contain only the router-local path. The
+application access event therefore combines the matched `_IncludedRouter`'s
+code-owned prefix with that local route template. It never uses the raw
+request path, so dynamic path values remain absent from logs while the
+template retains its full API prefix.
+
 ## Known Issues, Edge Cases & Outstanding Work
 
 - The structural validation response intentionally omits field-level paths;
