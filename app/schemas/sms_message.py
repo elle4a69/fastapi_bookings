@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import Optional, Any
-from pydantic import ConfigDict, BaseModel
+from pydantic import ConfigDict, BaseModel, Field
 
 class SmsMessageCreate(BaseModel):
-    body: str
-    client_request_id: Optional[str] = None
+    body: str = Field(..., min_length=1, max_length=1600)
+    client_request_id: Optional[str] = Field(None, min_length=8, max_length=128)
 
 class SmsMessageResponse(BaseModel):
     id: int

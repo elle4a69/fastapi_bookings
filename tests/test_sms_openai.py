@@ -220,8 +220,65 @@ def test_openai_integration_success(db_session, setup_openai_test_data):
     ).first()
     assert ai_msg is not None
     assert ai_msg.body == "Mocked response from OpenAI!"
-    assert ai_msg.direction == "outbound"
-    assert ai_msg.status == "queued"
+    assert ai_msg.direction == "draft"
+    assert ai_msg.status == "draft"
+    db_session.refresh(conv)
+    assert conv.state == "needs-review"
+
+
+def test_line_prompt_is_same_account_fallback_when_provider_profile_is_inactive(
+    db_session, setup_openai_test_data
+):
+    data = setup_openai_test_data
+    account = data["account"]
+    conversation = data["conversation"]
+    account.credentials = {"api_key": "sk-synthetic-test-key"}
+    data["prompt_profile"].is_active = False
+    other_account = SmsAccount(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        transport_type="simulator",
+        display_name="Synthetic other line",
+        sender_address="61499999998",
+        is_enabled=True,
+        ai_enabled=True,
+        ai_mode="draft",
+        line_prompt="Synthetic prompt belonging to another line.",
+    )
+    db_session.add(other_account)
+    db_session.commit()
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Synthetic response"}}]
+    }
+    mock_resp.raise_for_status = MagicMock()
+
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client_class.return_value = mock_client
+        mock_client.post.return_value = mock_resp
+
+        import asyncio
+
+        asyncio.run(
+            call_openai_chat_completions(
+                db_session,
+                account,
+                conversation,
+                "Synthetic static question",
+                "synthetic-turn",
+            )
+        )
+
+    contents = [
+        message["content"]
+        for message in mock_client.post.call_args.kwargs["json"]["messages"]
+    ]
+    assert account.line_prompt in contents
+    assert other_account.line_prompt not in contents
 
 def test_openai_fallback_missing_key(db_session, setup_openai_test_data):
     data = setup_openai_test_data
@@ -253,15 +310,17 @@ def test_openai_fallback_missing_key(db_session, setup_openai_test_data):
         import asyncio
         asyncio.run(run_ai_orchestration(db_session, account, conv, "turn-current-fallback-key"))
 
-        # Verify AI reply is enqueued, but it comes from the local rules engine
+        # Dynamic data cannot be verified without the model/tool path, so the
+        # conversation fails closed to staff review without a customer message.
         ai_msg = db_session.query(SmsMessage).filter(
             SmsMessage.conversation_id == conv.id,
             SmsMessage.author_type == "ai",
             SmsMessage.customer_turn_ref == "turn-current-fallback-key"
         ).first()
         
-        assert ai_msg is not None
-        assert "We have the following openings" in ai_msg.body or "No open slots" in ai_msg.body
+        assert ai_msg is None
+        db_session.refresh(conv)
+        assert conv.state == "needs-review"
 
 def test_openai_fallback_http_error(db_session, setup_openai_test_data):
     data = setup_openai_test_data
@@ -299,15 +358,16 @@ def test_openai_fallback_http_error(db_session, setup_openai_test_data):
         import asyncio
         asyncio.run(run_ai_orchestration(db_session, account, conv, "turn-current-fallback-http"))
 
-        # Verify AI reply is enqueued, and it comes from the local rules engine
+        # Provider errors fail closed; local rules do not book or send dynamic facts.
         ai_msg = db_session.query(SmsMessage).filter(
             SmsMessage.conversation_id == conv.id,
             SmsMessage.author_type == "ai",
             SmsMessage.customer_turn_ref == "turn-current-fallback-http"
         ).first()
         
-        assert ai_msg is not None
-        assert "We have the following openings" in ai_msg.body or "No open slots" in ai_msg.body
+        assert ai_msg is None
+        db_session.refresh(conv)
+        assert conv.state == "needs-review"
 
 def test_openai_fallback_timeout(db_session, setup_openai_test_data):
     data = setup_openai_test_data
@@ -345,12 +405,13 @@ def test_openai_fallback_timeout(db_session, setup_openai_test_data):
         import asyncio
         asyncio.run(run_ai_orchestration(db_session, account, conv, "turn-current-fallback-timeout"))
 
-        # Verify AI reply is enqueued, and it comes from the local rules engine
+        # Provider timeouts fail closed; local rules do not book or send dynamic facts.
         ai_msg = db_session.query(SmsMessage).filter(
             SmsMessage.conversation_id == conv.id,
             SmsMessage.author_type == "ai",
             SmsMessage.customer_turn_ref == "turn-current-fallback-timeout"
         ).first()
         
-        assert ai_msg is not None
-        assert "We have the following openings" in ai_msg.body or "No open slots" in ai_msg.body
+        assert ai_msg is None
+        db_session.refresh(conv)
+        assert conv.state == "needs-review"
