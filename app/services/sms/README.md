@@ -1,13 +1,13 @@
 # SMS Assistant & Autonomous Dialogue Engine (`app/services/sms`)
 
-This module houses the SMS/MMS conversational dialogue engine, transactional outbox dispatcher, OpenAI function calling orchestrator, Chatwoot sync bridge, and Lobby Arrival chime system for **FastAPI Bookings**.
+This module houses the SMS/MMS conversational dialogue engine, transactional outbox dispatcher, AI response orchestrator, Chatwoot sync bridge, and Lobby Arrival chime system for **FastAPI Bookings**.
 
 ---
 
 ## 1. Purpose & Scope
 
 The SMS Assistant module owns:
-- Inbound carrier webhook intake with cryptographic signature verification and idempotent receipt logging.
+- Inbound carrier webhook intake with adapter-specific authentication and idempotent receipt logging.
 - Customer burst turn consolidation and debounce scheduling.
 - Review-first and safety-gated AI reply generation with tenant, provider, and SMS-account prompt/context isolation.
 - A fail-closed local fallback that can use approved static knowledge but cannot create, cancel, or reschedule bookings.
@@ -75,9 +75,8 @@ flowchart TD
 ### Environment Variables
 Configured in [app/core/config.py](file:///F:/Projects/fastapi_bookings/app/core/config.py):
 ```dotenv
-# ClickSend / SMS Gateway
-CLICKSEND_API_USERNAME=user@example.com
-CLICKSEND_API_KEY=key_abcdef123456
+# MobileMessage gateway credentials are encrypted per SMS account rather than
+# exposed through frontend configuration or documented here as plaintext.
 
 # OpenAI Assistant (loaded by server-side settings; an account-scoped
 # encrypted `api_key` may override it for an independently configured line)
@@ -111,7 +110,7 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 ### 4.1 Inbound Intake & 5-Second Debounce
 1. Customer sends an SMS. The carrier posts to `/api/sms/webhooks/{transport}/{public_id}`.
 2. `inbound_service.process_inbound_webhook` resolves the active `SmsAccount` and validates the signature.
-3. The carrier `event_key` is checked against `sms_inbound_receipts`. If already processed, HTTP 200 is returned immediately.
+3. A digest of the account identifier and carrier `event_key` is checked against `sms_inbound_receipts`. If already processed, HTTP 200 is returned immediately. A uniqueness collision during receipt insertion is treated as a duplicate only when the winning row matches the exact account and digest.
 4. The message is inserted with a `customer_turn_ref`. If the previous message arrived < 10 seconds ago, it inherits the existing turn reference.
 5. Any pending `SmsAiJob` for the conversation is cancelled, and a new job is scheduled with `run_at = now() + 5s`. This guarantees multi-message bursts are processed as a single semantic turn.
 
@@ -119,9 +118,10 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 
 1. Prompt assembly begins with immutable safety rules, then selects at most one tenant-global prompt and one provider persona. The bound account's `line_prompt` is the provider-persona fallback, not an additional cross-line layer.
 2. Approved shared knowledge must be tenant-wide and account-neutral. Provider knowledge may be provider-wide or bound to the current SMS account; entries for another account are excluded.
-3. Only sent inbound/outbound history from the same tenant, provider, account, and conversation is supplied as factual context. Drafts, discarded messages, failed messages, notes, and tool output are excluded.
-4. Dynamic requests (including availability, booking, cancellation, current prices/dates/times, links, and payments) become drafts or enter `needs-review`; the local fallback never performs booking actions.
-5. Autopilot is allowed only for non-dynamic replies when the tenant line and conversation controls permit it. Blocked, escalated, resolved, review, paused, or taken-over conversations cannot produce automatic sends.
+3. AI jobs use `PENDING -> PROCESSING -> PROCESSED | FAILED | CANCELLED`. Claiming is conditional, and successful completion commits the generated message, outbox decision, structural event, and job completion together.
+4. Static, fact-free model replies may use autopilot only when line and conversation controls permit it. Uncertain or dynamic replies, and replies that rely on legacy knowledge, are review-only. Static autopilot prompts omit legacy knowledge and conversation history; other history is exact-scope, limited to received inbound and sent/delivered outbound messages, latest 40.
+5. Unsafe model output is replaced by a generic withheld draft, creates no delivery job, and moves the conversation to `needs-review`. The local fallback never performs booking actions.
+6. A hard worker crash can leave a `PROCESSING` job without durable retry metadata because the current model has no AI lease/attempt columns. Durable AI retry must not be assumed until that schema work is approved.
 
 ### 4.3 Lobby Arrival Chime & Recurring Alerts
 1. When a client receives an appointment reminder SMS, it includes a short link containing an arrival token (`arrival_service.create_arrival_session`).
@@ -132,6 +132,8 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 ### 4.4 Native staff operations workspace
 
 - Conversation actions are tenant scoped and validate that the bound SMS account belongs to the same tenant and provider.
+- Null-account conversations are operable only when their tenant/provider/inbox resolve to one enabled Chatwoot binding with usable server-side credentials. They enqueue a channel-neutral outbox job with no carrier account, and the worker revalidates Chatwoot scope before delivery.
+- Lifecycle changes follow an explicit transition matrix. `needs-review` must be cleared, `resolved` must be reopened with a reason, and only `taken-over` can be released to automation. Manual staff replies do not erase review or escalation state.
 - Takeover, release, escalation, resolution, blocking, responder controls, internal notes, corrections, draft edits/approval/discard and explicit bulk draft discard append structural `SmsConversationEvent` records.
 - Corrections remain audit evidence only and never write reusable knowledge. Dynamic-fact corrections are explicitly labelled.
 - Manual sends require a client idempotency key. Blocked contacts and disabled/mismatched lines fail closed.
@@ -146,16 +148,16 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 ## 5. Data Safety, Multi-Tenancy & PII Isolation
 
 - **Tenant Boundary Enforcement**: `SmsAccount`, `SmsConversation`, `SmsMessage`, and `SmsOutboundJob` all strictly enforce `tenant_id` foreign keys. An SMS account can never access conversation context from another tenant.
-- **Transactional Consistency**: AI-generated responses and customer status updates are committed in the same database transaction as the outbox queue entry, preventing ghost replies or lost messages.
-- **Account-scoped idempotency**: inbound provider identifiers are hashed with their SMS account before receipt storage; outbound UI request identifiers are resolved within tenant, provider, account and conversation scope.
+- **Transactional Consistency**: message state, structural events, and an applicable channel-neutral outbox job are committed together by the reviewed operations paths.
+- **Account-scoped idempotency**: inbound provider identifiers are hashed with their SMS account before receipt storage; outbound UI request identifiers are resolved within tenant, provider, account and conversation scope. Application recovery verifies the exact winning scope after an integrity collision, but concurrent uniqueness still depends on the pending migration.
 - **Offline Carrier Guard**: In automated tests, raw socket calls are blocked; all SMS operations use [fake.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/fake.py) with synthetic phone numbers (`0411000001` - `0411000005`). Real external SMS messages are never sent during testing.
 
 ---
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
-- **Carrier Inbound Retries**: Some carriers retry webhooks if processing exceeds 3000ms. Because signature check and DB insert are sub-50ms and AI generation is asynchronous, timeouts are prevented.
-- **Chatwoot Outage Resiliency**: If Chatwoot API experiences downtime, inbound SMS processing continues unhindered; Chatwoot sync jobs back off exponentially.
+- **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
+- **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before that migration lands.
 - **Concurrency hardening pending migration**: application-level manual-send and draft-approval checks are idempotent for repeated requests, but database uniqueness for scoped `client_request_id` and one outbound job per message must be added by the migration owner to close concurrent races.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
@@ -169,8 +171,11 @@ Run the SMS test suite:
 # 1. Test SMS foundation and outbox queuing
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_foundation.py -v
 
-# 2. Test OpenAI function calling and tool execution
+# 2. Test AI response integration and safety behavior
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_openai.py -v
+
+# 2a. Test AI job lifecycle, prompt/history isolation, and unsafe-output handling
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_ai_safety.py -v
 
 # 3. Test prompt hierarchy and persona overrides
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_prompt_hierarchy.py -v
@@ -186,6 +191,9 @@ Run the SMS test suite:
 
 # 7. Test native staff lifecycle, account isolation, idempotency and fail-closed AI
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_foundation.py tests/test_sms_integration.py tests/test_sms_openai.py tests/test_sms_prompt_hierarchy.py tests/test_sms_chatwoot.py tests/test_sms_rate_limiting.py -v
+
+# 8. Test operations lifecycle, Chatwoot-only scope, safety and API contracts
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_operations_safety.py -v
 ```
 
 ---

@@ -467,14 +467,10 @@ def test_list_conversation_messages_with_null_sms_account_id(client, db_session,
     db_session.add(msg)
     db_session.commit()
 
-    # 3. Query conversation messages
+    # 3. An unbound null-account conversation is not a valid delivery channel.
     resp = client.get(f"/api/admin/sms/conversations/{conv.id}/messages", headers=headers)
-    assert resp.status_code == status.HTTP_200_OK, resp.text
-    data = resp.json()
-    assert len(data) == 1
-    assert data[0]["id"] == msg.id
-    assert data[0]["sms_account_id"] is None
-    assert data[0]["body"] == "Hello from system without direct account link"
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert msg.body not in resp.text
 
 
 def test_list_outbound_jobs_route_precedence(client, db_session, setup_sms_test_data):

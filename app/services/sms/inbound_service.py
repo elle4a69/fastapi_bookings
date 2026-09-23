@@ -3,6 +3,7 @@ import logging
 import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import Request, HTTPException
 
@@ -16,6 +17,28 @@ from ...models.client import Client
 from .outbound_service import enqueue_outbound_message_transactional
 
 logger = logging.getLogger(__name__)
+
+
+def find_duplicate_inbound_winner(
+    db: Session,
+    *,
+    account: SmsAccount,
+    receipt_key: str,
+    customer_address: str,
+) -> tuple[SmsInboundReceipt, SmsConversation | None] | None:
+    receipt = db.query(SmsInboundReceipt).filter(
+        SmsInboundReceipt.sms_account_id == account.id,
+        SmsInboundReceipt.event_key == receipt_key,
+    ).first()
+    if receipt is None:
+        return None
+    conversation = db.query(SmsConversation).filter(
+        SmsConversation.tenant_id == account.tenant_id,
+        SmsConversation.provider_id == account.provider_id,
+        SmsConversation.sms_account_id == account.id,
+        SmsConversation.customer_address == customer_address,
+    ).first()
+    return receipt, conversation
 
 async def process_inbound_webhook(
     db: Session,
@@ -60,6 +83,8 @@ async def process_inbound_webhook(
         logger.info("Duplicate inbound event was deduplicated.")
         # Resolve conversation to return correct status
         conversation = db.query(SmsConversation).filter(
+            SmsConversation.tenant_id == account.tenant_id,
+            SmsConversation.provider_id == account.provider_id,
             SmsConversation.sms_account_id == account.id,
             SmsConversation.customer_address == norm_msg.sender
         ).first()
@@ -69,16 +94,44 @@ async def process_inbound_webhook(
             "conversation_id": conversation.id if conversation else None
         }
 
-    # 5. Resolve or create conversation
     customer_address = norm_msg.sender
+    receipt = SmsInboundReceipt(
+        sms_account_id=account.id,
+        event_key=receipt_key,
+        raw_payload=None,
+    )
+    db.add(receipt)
+    try:
+        # Claim the provider delivery before creating customer-visible state.
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = find_duplicate_inbound_winner(
+            db,
+            account=account,
+            receipt_key=receipt_key,
+            customer_address=customer_address,
+        )
+        if winner is None:
+            raise
+        _receipt, existing_conversation = winner
+        return {
+            "status": "success",
+            "duplicate": True,
+            "conversation_id": (
+                existing_conversation.id if existing_conversation else None
+            ),
+        }
+
+    # 5. Resolve or create conversation only after this delivery is claimed.
     conversation = db.query(SmsConversation).filter(
+        SmsConversation.tenant_id == account.tenant_id,
+        SmsConversation.provider_id == account.provider_id,
         SmsConversation.sms_account_id == account.id,
         SmsConversation.customer_address == customer_address
     ).first()
 
-    is_new_conversation = False
     if not conversation:
-        is_new_conversation = True
         # Try to find matching Client in the tenant
         matching_client = None
         clients = db.query(Client).filter(Client.tenant_id == account.tenant_id).all()
@@ -103,14 +156,7 @@ async def process_inbound_webhook(
         db.add(conversation)
         db.flush()  # populate conversation.id
 
-    # 6. Save receipt, message, and update conversation
-    receipt = SmsInboundReceipt(
-        sms_account_id=account.id,
-        event_key=receipt_key,
-        raw_payload=None,
-    )
-    db.add(receipt)
-
+    # 6. Save the message and update the conversation.
     # Determine unique turn identifier for grouping bursts
     # If the last message was inbound and within 5 seconds, reuse its turn ref, otherwise new turn ref
     turn_ref = f"turn_{norm_msg.event_key}"

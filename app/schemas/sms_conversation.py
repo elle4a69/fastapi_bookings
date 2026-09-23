@@ -52,3 +52,46 @@ class SmsCorrectionCreate(BaseModel):
 class SmsBulkDraftDiscardRequest(BaseModel):
     message_ids: list[int] = Field(..., min_length=1, max_length=250)
     reason: str = Field(..., min_length=1, max_length=1000)
+
+
+class SmsOperationResponse(BaseModel):
+    status: str
+    detail: str
+
+
+class SmsOutboundJobResponse(BaseModel):
+    id: int
+    message_id: int
+    sms_account_id: Optional[int] = None
+    status: str
+    retry_count: int
+    has_error: bool
+    created_at: datetime
+
+
+class SmsDraftQueueItem(BaseModel):
+    id: int
+    message_id: int
+    conversation_id: int
+    customer_address: str
+    client_name: Optional[str] = None
+    body: str
+    direction: str
+    author_type: str
+    status: str
+    occurred_at: datetime
+    received_at: datetime
+
+
+class SmsBulkDraftDiscardResponse(BaseModel):
+    discarded_count: int
+
+
+class SmsInternalNoteResponse(BaseModel):
+    id: int
+    created_at: datetime
+
+
+class SmsCorrectionResponse(BaseModel):
+    status: Literal["recorded"]
+    knowledge_changed: Literal[False]

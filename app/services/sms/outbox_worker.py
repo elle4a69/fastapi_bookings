@@ -1,5 +1,4 @@
 import logging
-import traceback
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from ...db.database import SessionLocal
@@ -9,6 +8,7 @@ from ...models.sms_message import SmsMessage
 from ...models.sms_conversation import SmsConversation
 from .transports import get_transport_adapter
 from .transports.base import OutboundSmsCommand
+from .outbound_service import is_outbound_body_safe
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,34 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 db.commit()
                 continue
 
+            scope_is_valid = (
+                message.tenant_id == conversation.tenant_id
+                and message.provider_id == conversation.provider_id
+                and message.sms_account_id == conversation.sms_account_id
+                and job.sms_account_id == message.sms_account_id
+            )
+            if not scope_is_valid:
+                job.status = "FAILED"
+                job.error_log = "DELIVERY_SCOPE_MISMATCH"
+                message.status = "failed"
+                db.commit()
+                continue
+            if (
+                conversation.is_blocked
+                or conversation.state == "resolved"
+                or not is_outbound_body_safe(message.body)
+            ):
+                job.status = "FAILED"
+                job.error_log = "DELIVERY_SAFETY_BLOCKED"
+                message.status = "failed"
+                db.commit()
+                continue
+
             # Route Chatwoot-bound outbound messages directly
-            if conversation.chatwoot_conversation_id is not None:
+            if (
+                conversation.chatwoot_conversation_id is not None
+                and conversation.chatwoot_inbox_id is not None
+            ):
                 try:
                     from .chatwoot_service import send_chatwoot_message
                     # Persist a deterministic source ID before the network
@@ -108,10 +134,10 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     db.commit()
                     logger.info(f"Successfully sent outbound Chatwoot message (id={message.id}) via send_chatwoot_message")
                     continue
-                except Exception as ex:
+                except Exception:
                     db.rollback()
                     job.retry_count += 1
-                    job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                    job.error_log = "CHATWOOT_DELIVERY_FAILED"
                     if job.retry_count >= 5:
                         job.status = "FAILED"
                         message.status = "failed"
@@ -122,8 +148,24 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     db.commit()
                     continue
 
+            if (
+                conversation.chatwoot_conversation_id is not None
+                or conversation.chatwoot_inbox_id is not None
+                or conversation.sms_account_id is None
+            ):
+                job.status = "FAILED"
+                job.error_log = "DELIVERY_CHANNEL_UNAVAILABLE"
+                message.status = "failed"
+                db.commit()
+                continue
+
             # SMS specific flow requires account
-            account = db.query(SmsAccount).filter(SmsAccount.id == job.sms_account_id).first()
+            account = db.query(SmsAccount).filter(
+                SmsAccount.id == job.sms_account_id,
+                SmsAccount.tenant_id == conversation.tenant_id,
+                SmsAccount.provider_id == conversation.provider_id,
+                SmsAccount.id == conversation.sms_account_id,
+            ).first()
             if not account:
                 logger.error(f"SmsOutboundJob {job.id} refers to non-existent account.")
                 job.status = "FAILED"
@@ -180,21 +222,27 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 else:
                     raise RuntimeError(f"Transport send failure: {result.error_message} ({result.error_code})")
 
-            except Exception as ex:
+            except Exception:
                 db.rollback()
                 job.retry_count += 1
-                job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                job.error_log = "CARRIER_DELIVERY_FAILED"
                 
                 if job.retry_count >= 5:
                     job.status = "FAILED"
                     message.status = "failed"
-                    logger.error(f"Permanent failure for SmsOutboundJob {job.id} (retries exhausted): {ex}")
+                    logger.error(
+                        "Permanent outbound delivery failure (job_id=%s).", job.id
+                    )
                 else:
                     # Return to PENDING for retry
                     job.status = "PENDING"
                     job.lease_expires_at = None
                     message.status = "queued"
-                    logger.warning(f"Temporary failure for SmsOutboundJob {job.id} (attempt {job.retry_count}): {ex}")
+                    logger.warning(
+                        "Temporary outbound delivery failure (job_id=%s, attempt=%s).",
+                        job.id,
+                        job.retry_count,
+                    )
 
             db.commit()
 

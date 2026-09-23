@@ -3,14 +3,18 @@ import logging
 import random
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from ...models.sms_chatwoot import SmsChatwootBinding
+from ...models.sms_account import SmsAccount
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
 from ...models.client import Client
+from ...models.provider import Provider
+from .outbound_service import is_outbound_body_safe
 from .transports.base import normalize_sms_destination
 
 logger = logging.getLogger(__name__)
@@ -28,13 +32,27 @@ async def send_chatwoot_message(
     source_id: Optional[str] = None,
 ) -> int:
     """Send message to Chatwoot using live HTTP API client, returning Chatwoot message ID."""
-    binding = db.query(SmsChatwootBinding).filter(
-        SmsChatwootBinding.tenant_id == conversation.tenant_id,
-        SmsChatwootBinding.provider_id == conversation.provider_id,
-        SmsChatwootBinding.is_enabled == True
-    ).first()
+    if not is_outbound_body_safe(body):
+        raise ValueError("Chatwoot message failed outbound safety validation.")
+    binding = (
+        db.query(SmsChatwootBinding)
+        .join(Provider, Provider.id == SmsChatwootBinding.provider_id)
+        .filter(
+            SmsChatwootBinding.tenant_id == conversation.tenant_id,
+            SmsChatwootBinding.provider_id == conversation.provider_id,
+            SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+            SmsChatwootBinding.is_enabled == True,
+            Provider.tenant_id == conversation.tenant_id,
+        )
+        .first()
+    )
 
-    if not binding:
+    if (
+        not binding
+        or conversation.chatwoot_conversation_id is None
+        or conversation.chatwoot_inbox_id is None
+        or not binding.chatwoot_api_token
+    ):
         raise ValueError("No enabled Chatwoot binding found for conversation.")
 
     decrypted_token = binding.chatwoot_api_token
@@ -61,8 +79,8 @@ async def send_chatwoot_message(
             response.raise_for_status()
             data = response.json()
             return int(data["id"])
-    except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.RequestError) as e:
-        logger.error(f"Failed to send Chatwoot message: {e}")
+    except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.RequestError):
+        logger.error("Chatwoot outbound request failed.")
         raise
 
 def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -> dict:
@@ -82,28 +100,51 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         raise HTTPException(status_code=400, detail="Missing message ID in payload.")
 
     # 2. Resolve enabled binding
-    binding = db.query(SmsChatwootBinding).filter(
-        SmsChatwootBinding.chatwoot_inbox_id == chatwoot_inbox_id,
-        SmsChatwootBinding.is_enabled == True
-    ).first()
+    bindings = (
+        db.query(SmsChatwootBinding)
+        .join(Provider, Provider.id == SmsChatwootBinding.provider_id)
+        .filter(
+            SmsChatwootBinding.chatwoot_inbox_id == chatwoot_inbox_id,
+            SmsChatwootBinding.is_enabled == True,
+            Provider.tenant_id == SmsChatwootBinding.tenant_id,
+        )
+        .all()
+    )
 
-    if not binding:
+    if not bindings:
         logger.warning(f"Chatwoot webhook rejected: binding not found or disabled for chatwoot_inbox_id={chatwoot_inbox_id}")
         record_webhook_event("rejected")
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
 
     # 3. Validate authenticity
     import secrets
-    binding_secret = binding.webhook_secret
-    if not token or not binding_secret or not secrets.compare_digest(token, binding_secret):
-        logger.warning(f"Chatwoot webhook authentication failed for binding {binding.id}")
+    matching_bindings = [
+        candidate
+        for candidate in bindings
+        if token
+        and candidate.webhook_secret
+        and secrets.compare_digest(token, candidate.webhook_secret)
+    ]
+    if len(matching_bindings) != 1:
+        logger.warning("Chatwoot webhook authentication failed.")
         record_webhook_event("rejected")
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
+    binding = matching_bindings[0]
 
     # 4. Enforce Idempotency using external Chatwoot message ID
-    existing_message = db.query(SmsMessage).filter(
-        SmsMessage.chatwoot_message_id == chatwoot_msg_id
-    ).first()
+    existing_message = (
+        db.query(SmsMessage)
+        .join(SmsConversation, SmsConversation.id == SmsMessage.conversation_id)
+        .filter(
+            SmsMessage.chatwoot_message_id == chatwoot_msg_id,
+            SmsMessage.tenant_id == binding.tenant_id,
+            SmsMessage.provider_id == binding.provider_id,
+            SmsConversation.tenant_id == binding.tenant_id,
+            SmsConversation.provider_id == binding.provider_id,
+            SmsConversation.chatwoot_inbox_id == chatwoot_inbox_id,
+        )
+        .first()
+    )
 
     if existing_message:
         logger.info(f"Duplicate Chatwoot message detected and deduplicated: {chatwoot_msg_id}")
@@ -121,11 +162,21 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
     # staff message and never triggers human takeover.
     chatwoot_source_id = payload.get("source_id") or payload.get("message", {}).get("source_id")
     if chatwoot_source_id:
-        internal_outbound = db.query(SmsMessage).filter(
-            SmsMessage.client_request_id == chatwoot_source_id,
-            SmsMessage.direction == "outbound",
-            SmsMessage.author_type.in_(["ai", "fixed_autoresponder", "system"]),
-        ).first()
+        internal_outbound = (
+            db.query(SmsMessage)
+            .join(SmsConversation, SmsConversation.id == SmsMessage.conversation_id)
+            .filter(
+                SmsMessage.client_request_id == chatwoot_source_id,
+                SmsMessage.tenant_id == binding.tenant_id,
+                SmsMessage.provider_id == binding.provider_id,
+                SmsConversation.tenant_id == binding.tenant_id,
+                SmsConversation.provider_id == binding.provider_id,
+                SmsConversation.chatwoot_inbox_id == chatwoot_inbox_id,
+                SmsMessage.direction == "outbound",
+                SmsMessage.author_type.in_(["ai", "fixed_autoresponder", "system"]),
+            )
+            .first()
+        )
         if internal_outbound:
             if internal_outbound.chatwoot_message_id is None:
                 internal_outbound.chatwoot_message_id = chatwoot_msg_id
@@ -164,7 +215,10 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
     chatwoot_contact_id = payload.get("conversation", {}).get("contact", {}).get("id") or payload.get("contact", {}).get("id")
 
     conversation = db.query(SmsConversation).filter(
-        SmsConversation.chatwoot_conversation_id == chatwoot_conv_id
+        SmsConversation.tenant_id == binding.tenant_id,
+        SmsConversation.provider_id == binding.provider_id,
+        SmsConversation.chatwoot_inbox_id == chatwoot_inbox_id,
+        SmsConversation.chatwoot_conversation_id == chatwoot_conv_id,
     ).first()
 
     # Fallback to phone mapping if conversation not found by ID
@@ -179,7 +233,11 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         conversation = db.query(SmsConversation).filter(
             SmsConversation.tenant_id == binding.tenant_id,
             SmsConversation.provider_id == binding.provider_id,
-            SmsConversation.customer_address == normalized_phone
+            SmsConversation.customer_address == normalized_phone,
+            or_(
+                SmsConversation.chatwoot_inbox_id.is_(None),
+                SmsConversation.chatwoot_inbox_id == chatwoot_inbox_id,
+            ),
         ).first()
         if conversation:
             # Sync existing conversation to Chatwoot columns
@@ -204,8 +262,9 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
             sms_account_id=None,
             customer_address=normalized_phone or f"chatwoot_contact_{chatwoot_contact_id}",
             client_id=matching_client.id if matching_client else None,
-            state="auto-reply",
+            state="paused",
             unread_count=0,
+            ai_enabled=False,
             chatwoot_conversation_id=chatwoot_conv_id,
             chatwoot_contact_id=chatwoot_contact_id,
             chatwoot_inbox_id=chatwoot_inbox_id
@@ -239,8 +298,25 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         conversation.last_activity_at = datetime.now(timezone.utc)
         db.flush()
 
-        # Trigger AI Job (burst debounce)
-        if conversation.state == "auto-reply":
+        account = None
+        if conversation.sms_account_id is not None:
+            account = db.query(SmsAccount).filter(
+                SmsAccount.id == conversation.sms_account_id,
+                SmsAccount.tenant_id == binding.tenant_id,
+                SmsAccount.provider_id == binding.provider_id,
+                SmsAccount.is_enabled.is_(True),
+                SmsAccount.ai_enabled.is_(True),
+                SmsAccount.ai_mode.in_(("draft", "autopilot")),
+            ).first()
+
+        # Chatwoot-only threads have no line-scoped AI configuration and fail
+        # closed. A carrier-backed thread may enqueue only with its exact line.
+        if (
+            conversation.state == "auto-reply"
+            and conversation.ai_enabled
+            and not conversation.is_blocked
+            and account is not None
+        ):
             db.query(SmsAiJob).filter(
                 SmsAiJob.conversation_id == conversation.id,
                 SmsAiJob.status == "PENDING"
@@ -270,13 +346,18 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
 
     # 7. For outgoing messages by staff/user
     elif message_type == "outgoing":
+        stored_content = (
+            content
+            if is_outbound_body_safe(content)
+            else "[withheld by outbound safety policy]"
+        )
         outbound_message = SmsMessage(
             tenant_id=binding.tenant_id,
             provider_id=binding.provider_id,
-            sms_account_id=None,
+            sms_account_id=conversation.sms_account_id,
             conversation_id=conversation.id,
-            body=content,
-            normalized_body=content.strip().lower(),
+            body=stored_content,
+            normalized_body=stored_content.strip().lower(),
             direction="outbound",
             author_type="staff",
             status="sent",
@@ -287,8 +368,12 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         )
         db.add(outbound_message)
 
-        # Trigger takeover state
-        conversation.state = "taken-over"
+        # Staff messages stop automation but do not erase stronger operational
+        # states such as needs-review, escalated, resolved, or blocked/paused.
+        previous_state = conversation.state
+        if not conversation.is_blocked and conversation.state == "auto-reply":
+            conversation.state = "taken-over"
+        conversation.ai_enabled = False
         conversation.unread_count = 0
         conversation.last_activity_at = datetime.now(timezone.utc)
         db.flush()
@@ -302,8 +387,19 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         # Record takeover event
         takeover_event = SmsConversationEvent(
             conversation_id=conversation.id,
-            type="takeover",
-            meta={"by": "chatwoot_webhook", "chatwoot_message_id": chatwoot_msg_id}
+            type=(
+                "takeover"
+                if previous_state == "auto-reply" and conversation.state == "taken-over"
+                else "chatwoot_staff_message_received"
+            ),
+            meta={
+                "trigger": "chatwoot_webhook",
+                "message_id": outbound_message.id,
+                "chatwoot_message_id": chatwoot_msg_id,
+                "from_state": previous_state,
+                "to_state": conversation.state,
+                "safety_withheld": stored_content != content,
+            }
         )
         db.add(takeover_event)
         

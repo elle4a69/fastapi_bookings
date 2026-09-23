@@ -1,9 +1,11 @@
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 
 from ...models.sms_account import SmsAccount
+from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsOutboundJob, SmsConversationEvent
@@ -21,12 +23,32 @@ OUTBOUND_SAFETY_BLOCKLIST = (
     "hidden notes",
     "prompt profile",
     "platform rules",
+    "developer message",
+    "hidden instructions",
+    "chain of thought",
+    "prompt canary",
+    "system canary",
+    "<|system|>",
+    "begin system prompt",
+)
+
+_SECRET_PATTERNS = (
+    re.compile(r"\b(?:api[_ -]?key|password|secret|access[_ -]?token)\s*[:=]\s*\S+", re.I),
+    re.compile(r"\bauthorization\s*:\s*bearer\s+\S+", re.I),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{12,}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"\bAKIA[A-Z0-9]{16}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"),
 )
 
 
 def is_outbound_body_safe(body: str) -> bool:
     normalized = body.strip().lower()
-    return bool(normalized) and not any(term in normalized for term in OUTBOUND_SAFETY_BLOCKLIST)
+    return (
+        bool(normalized)
+        and not any(term in normalized for term in OUTBOUND_SAFETY_BLOCKLIST)
+        and not any(pattern.search(body) for pattern in _SECRET_PATTERNS)
+    )
 
 def enqueue_outbound_message_transactional(
     db: Session,
@@ -47,9 +69,24 @@ def enqueue_outbound_message_transactional(
         or account.provider_id != conversation.provider_id
     ):
         raise ValueError("SMS account and conversation scope do not match.")
-    has_chatwoot_delivery = bool(
-        conversation.chatwoot_conversation_id and conversation.chatwoot_inbox_id
+    has_chatwoot_delivery = (
+        conversation.chatwoot_conversation_id is not None
+        and conversation.chatwoot_inbox_id is not None
     )
+    has_partial_chatwoot_binding = (
+        conversation.chatwoot_conversation_id is None
+    ) != (conversation.chatwoot_inbox_id is None)
+    if has_partial_chatwoot_binding:
+        raise ValueError("Conversation has an incomplete Chatwoot binding.")
+    if has_chatwoot_delivery:
+        binding = db.query(SmsChatwootBinding.id).filter(
+            SmsChatwootBinding.tenant_id == conversation.tenant_id,
+            SmsChatwootBinding.provider_id == conversation.provider_id,
+            SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+            SmsChatwootBinding.is_enabled.is_(True),
+        ).first()
+        if binding is None:
+            raise ValueError("No enabled Chatwoot binding exists for this conversation.")
     delivery_unavailable = (
         (account is None and not has_chatwoot_delivery)
         or (account is not None and not account.is_enabled)
@@ -92,8 +129,8 @@ def enqueue_outbound_message_transactional(
             provider_id=account.provider_id if account else conversation.provider_id,
             sms_account_id=account.id if account else None,
             conversation_id=conversation.id,
-            body=body,
-            normalized_body=body.strip().lower(),
+            body="[blocked by outbound safety policy]",
+            normalized_body="[blocked by outbound safety policy]",
             direction="outbound",
             author_type=author_type,
             author_id=author_id,

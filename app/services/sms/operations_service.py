@@ -10,9 +10,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from ...models.client import Client
+from ...models.provider import Provider
 from ...models.sms_account import SmsAccount
+from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent, SmsNote
@@ -20,6 +24,43 @@ from ...models.sms_outbox import SmsAiJob, SmsConversationEvent, SmsNote
 
 class SmsOperationConflict(ValueError):
     """Raised when an operation is valid syntactically but unsafe in state."""
+
+
+TRANSITION_MATRIX: dict[str, dict[str, str]] = {
+    "takeover": {
+        "auto-reply": "taken-over",
+        "paused": "taken-over",
+        "taken-over": "taken-over",
+    },
+    "escalate": {
+        "auto-reply": "escalated",
+        "paused": "escalated",
+        "taken-over": "escalated",
+        "needs-review": "escalated",
+    },
+    "resolve": {
+        "auto-reply": "resolved",
+        "paused": "resolved",
+        "taken-over": "resolved",
+        "needs-review": "resolved",
+        "escalated": "resolved",
+    },
+    "clear_review": {"needs-review": "taken-over"},
+    "reopen": {"resolved": "taken-over"},
+    "release": {"taken-over": "auto-reply"},
+}
+
+
+def null_safe_message_account_scope():
+    """Match message/conversation line identity, including Chatwoot-only NULLs."""
+
+    return or_(
+        SmsMessage.sms_account_id == SmsConversation.sms_account_id,
+        and_(
+            SmsMessage.sms_account_id.is_(None),
+            SmsConversation.sms_account_id.is_(None),
+        ),
+    )
 
 
 def get_scoped_conversation(
@@ -43,7 +84,28 @@ def get_scoped_conversation(
         )
         .first()
     )
-    if conversation is None or conversation.sms_account_id is None:
+    if conversation is None:
+        return None
+
+    provider_exists = db.query(Provider.id).filter(
+        Provider.id == conversation.provider_id,
+        Provider.tenant_id == tenant_id,
+    ).first()
+    if provider_exists is None:
+        return None
+
+    if conversation.client_id is not None:
+        client_exists = db.query(Client.id).filter(
+            Client.id == conversation.client_id,
+            Client.tenant_id == tenant_id,
+        ).first()
+        if client_exists is None:
+            return None
+
+    if conversation.sms_account_id is None:
+        binding = get_scoped_chatwoot_binding(db, conversation=conversation)
+        if binding is None:
+            return None
         return conversation
 
     account = (
@@ -56,6 +118,49 @@ def get_scoped_conversation(
         .first()
     )
     return conversation if account is not None else None
+
+
+def get_scoped_chatwoot_binding(
+    db: Session,
+    *,
+    conversation: SmsConversation,
+    require_enabled: bool = True,
+) -> SmsChatwootBinding | None:
+    """Resolve the exact Chatwoot inbox bound to a channel-only conversation."""
+
+    if (
+        conversation.chatwoot_conversation_id is None
+        or conversation.chatwoot_inbox_id is None
+    ):
+        return None
+    query = db.query(SmsChatwootBinding).filter(
+        SmsChatwootBinding.tenant_id == conversation.tenant_id,
+        SmsChatwootBinding.provider_id == conversation.provider_id,
+        SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+    )
+    if require_enabled:
+        query = query.filter(SmsChatwootBinding.is_enabled.is_(True))
+    binding = query.first()
+    if binding is None or not binding.chatwoot_api_token:
+        return None
+    return binding
+
+
+def has_enabled_delivery_target(db: Session, conversation: SmsConversation) -> bool:
+    if conversation.sms_account_id is not None:
+        return get_scoped_account(
+            db, conversation=conversation, require_enabled=True
+        ) is not None
+    return get_scoped_chatwoot_binding(db, conversation=conversation) is not None
+
+
+def ensure_customer_send_allowed(conversation: SmsConversation) -> None:
+    if conversation.is_blocked:
+        raise SmsOperationConflict("Unblock this contact before sending.")
+    if conversation.state == "resolved":
+        raise SmsOperationConflict(
+            "Resolved conversations must be reopened before sending."
+        )
 
 
 def get_scoped_account(
@@ -122,39 +227,39 @@ def transition_conversation(
     if reason:
         metadata["reason"] = reason.strip()
 
-    if action == "takeover":
-        conversation.state = "taken-over"
-        conversation.ai_enabled = False
-        cancel_pending_ai_jobs(db, conversation.id)
-    elif action == "escalate":
+    if action not in TRANSITION_MATRIX:
+        raise SmsOperationConflict("Unsupported conversation transition.")
+    target_state = TRANSITION_MATRIX[action].get(previous_state)
+    if target_state is None:
+        raise SmsOperationConflict(
+            f"Conversation state '{previous_state}' cannot perform '{action}'."
+        )
+
+    if conversation.is_blocked and action in {"takeover", "clear_review", "reopen", "release"}:
+        raise SmsOperationConflict(
+            "Blocked conversations must be unblocked before this transition."
+        )
+
+    if action == "escalate":
         if not reason or not reason.strip():
             raise SmsOperationConflict("An escalation reason is required.")
-        conversation.state = "escalated"
-        conversation.ai_enabled = False
-        cancel_pending_ai_jobs(db, conversation.id)
     elif action == "resolve":
         if not reason or not reason.strip():
             raise SmsOperationConflict("A resolution note is required.")
-        conversation.state = "resolved"
-        conversation.ai_enabled = False
-        cancel_pending_ai_jobs(db, conversation.id)
+    elif action == "reopen":
+        if not reason or not reason.strip():
+            raise SmsOperationConflict("A reopen reason is required.")
     elif action == "release":
-        if conversation.is_blocked:
-            raise SmsOperationConflict("Blocked conversations cannot be released to automation.")
-        if conversation.state not in {"taken-over", "paused"}:
-            raise SmsOperationConflict(
-                "Only paused or taken-over conversations can be released to automation."
-            )
         account = get_scoped_account(db, conversation=conversation, require_enabled=True)
         if account is None or not account.ai_enabled or account.ai_mode not in {"draft", "autopilot"}:
-            raise SmsOperationConflict("The bound SMS line is not enabled for AI handling.")
-        conversation.state = "auto-reply"
-        conversation.ai_enabled = True
-    elif action == "clear_review":
-        if conversation.state == "needs-review":
-            conversation.state = "paused"
-    else:
-        raise SmsOperationConflict("Unsupported conversation transition.")
+            raise SmsOperationConflict(
+                "The bound SMS line is not enabled for AI handling."
+            )
+
+    conversation.state = target_state
+    conversation.ai_enabled = action == "release"
+    if action != "release":
+        cancel_pending_ai_jobs(db, conversation.id)
 
     metadata["to_state"] = conversation.state
     record_event(
@@ -184,7 +289,7 @@ def scoped_drafts(
             SmsMessage.tenant_id == tenant_id,
             SmsConversation.tenant_id == tenant_id,
             SmsMessage.provider_id == SmsConversation.provider_id,
-            SmsMessage.sms_account_id == SmsConversation.sms_account_id,
+            null_safe_message_account_scope(),
             SmsMessage.status == "draft",
         )
         .all()
