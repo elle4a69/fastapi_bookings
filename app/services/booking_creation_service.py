@@ -12,13 +12,23 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from ..core.state_machine import BookingStatus
-from ..models import Client, Location, Provider, Service
+from ..models import (
+    BookingResourceAllocation,
+    BookingSlotAllocation,
+    Client,
+    Location,
+    Provider,
+    Resource,
+    Service,
+)
 from ..models.audit import AuditLog
 from ..models.booking import Booking
+from ..models.location import LocationProvider, LocationService
 from ..schemas.booking import BookingCreate
 from . import scheduling_service, slot_allocation_service
 from .booking_relationship_resolver import pair_allowed
@@ -89,6 +99,82 @@ def _existing_idempotent_booking(
     )
 
 
+def _normalized_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _assert_replay_matches(
+    db: Session,
+    *,
+    existing: Booking,
+    tenant_id: int,
+    command: BookingCreate,
+) -> None:
+    """Reject reuse of a key for a different canonical command."""
+
+    service, provider, location = _resolve_booking_entities(
+        db,
+        tenant_id=tenant_id,
+        command=command,
+    )
+    requested_start = _utc(command.start_time)
+    requested_end = requested_start + timedelta(minutes=service.duration)
+    supplied_end = _utc(command.end_time)
+    canonical_fields_match = (
+        existing.tenant_id == tenant_id
+        and existing.provider_id == provider.id
+        and existing.service_id == service.id
+        and existing.location_id == (location.id if location else None)
+        and _utc(existing.start_time) == requested_start
+        and _utc(existing.end_time) == requested_end
+        and supplied_end == requested_end
+        and _normalized_text(existing.notes) == _normalized_text(command.notes)
+    )
+
+    client = (
+        db.query(Client)
+        .filter(
+            Client.id == existing.client_id,
+            Client.tenant_id == tenant_id,
+            Client.deleted_at.is_(None),
+        )
+        .first()
+    )
+    client_matches = client is not None and client.active
+    if command.client_id is not None:
+        client_matches = client_matches and command.client_id == existing.client_id
+    else:
+        requested_phone = _canonical_phone(command.client_phone)
+        requested_email = (
+            command.client_email.strip().lower() if command.client_email else None
+        )
+        requested_name = _normalized_text(command.client_name)
+        client_matches = client_matches and bool(
+            requested_phone or requested_email or requested_name
+        )
+        if requested_phone:
+            client_matches = client_matches and (
+                _stored_canonical_phone(client.phone) == requested_phone
+            )
+        if requested_email:
+            client_matches = client_matches and (
+                (client.email or "").strip().lower() == requested_email
+            )
+        if requested_name and not (requested_phone or requested_email):
+            client_matches = client_matches and (
+                _normalized_text(client.name) == requested_name
+            )
+
+    if not canonical_fields_match or not client_matches:
+        raise BookingCommandError(
+            409,
+            "Idempotency key was already used for a different booking request.",
+        )
+
+
 def _reject_cross_tenant_key_collision(
     db: Session,
     *,
@@ -157,7 +243,7 @@ def _resolve_client(
                 db.query(Client)
                 .filter(
                     Client.tenant_id == tenant_id,
-                    Client.email == normalized_email,
+                    func.lower(Client.email) == normalized_email,
                     Client.deleted_at.is_(None),
                 )
                 .first()
@@ -181,6 +267,8 @@ def _resolve_client(
             db.add(client)
             db.flush()
 
+    if not client.active:
+        raise BookingCommandError(403, "Client is not active.")
     if client.management_approval_required:
         raise BookingCommandError(
             403,
@@ -243,8 +331,145 @@ def _resolve_booking_entities(
             raise BookingCommandError(400, "Provider is not eligible for this location")
         if not pair_allowed(db, tenant_id, "location", location.id, "service", service.id):
             raise BookingCommandError(400, "Service is not available at this location")
+    else:
+        provider_location_ids = {
+            row[0]
+            for row in db.query(LocationProvider.location_id)
+            .filter(
+                LocationProvider.tenant_id == tenant_id,
+                LocationProvider.provider_id == provider.id,
+            )
+            .all()
+        }
+        service_location_ids = {
+            row[0]
+            for row in db.query(LocationService.location_id)
+            .filter(
+                LocationService.tenant_id == tenant_id,
+                LocationService.service_id == service.id,
+            )
+            .all()
+        }
+        restricted_location_ids: set[int] | None = None
+        if provider_location_ids and service_location_ids:
+            restricted_location_ids = provider_location_ids & service_location_ids
+        elif provider_location_ids:
+            restricted_location_ids = provider_location_ids
+        elif service_location_ids:
+            restricted_location_ids = service_location_ids
+
+        if restricted_location_ids is not None:
+            locations = (
+                db.query(Location)
+                .filter(
+                    Location.tenant_id == tenant_id,
+                    Location.id.in_(restricted_location_ids),
+                    Location.active.is_(True),
+                )
+                .order_by(Location.id)
+                .all()
+            )
+            if not locations:
+                raise BookingCommandError(
+                    400,
+                    "No active location is compatible with this service and provider.",
+                )
+            if len(locations) != 1:
+                raise BookingCommandError(
+                    400,
+                    "A location is required for this service and provider.",
+                )
+            location = locations[0]
 
     return service, provider, location
+
+
+def _effective_buffer(value: int | None) -> int:
+    return max(15, value or 0)
+
+
+def _resource_candidates_query(
+    db: Session,
+    *,
+    tenant_id: int,
+    resource_type: str,
+    location_id: int | None,
+) -> Query:
+    """Build the deterministic candidate-row lock used by final allocation."""
+
+    query = db.query(Resource).filter(
+        Resource.tenant_id == tenant_id,
+        Resource.type == resource_type,
+        Resource.active.is_(True),
+    )
+    if location_id is None:
+        query = query.filter(Resource.location_id.is_(None))
+    else:
+        query = query.filter(
+            (Resource.location_id.is_(None)) | (Resource.location_id == location_id)
+        )
+    return query.order_by(Resource.id).with_for_update()
+
+
+def _allocate_locked_resources(
+    db: Session,
+    *,
+    booking: Booking,
+    service: Service,
+    location: Location | None,
+) -> None:
+    """Lock scoped resource rows, recompute capacity, and allocate deterministically."""
+
+    requirements = sorted(
+        service.resource_requirements,
+        key=lambda requirement: (requirement.resource_type, requirement.id),
+    )
+    for requirement in requirements:
+        candidates = _resource_candidates_query(
+            db,
+            tenant_id=booking.tenant_id,
+            resource_type=requirement.resource_type,
+            location_id=location.id if location else None,
+        ).all()
+        remaining = requirement.quantity or 1
+        selected: list[tuple[Resource, int]] = []
+        for resource in candidates:
+            used = (
+                db.query(func.coalesce(func.sum(BookingResourceAllocation.quantity), 0))
+                .join(
+                    Booking,
+                    Booking.id == BookingResourceAllocation.booking_id,
+                )
+                .filter(
+                    BookingResourceAllocation.resource_id == resource.id,
+                    Booking.tenant_id == booking.tenant_id,
+                    Booking.status != BookingStatus.CANCELLED,
+                    Booking.start_time < booking.end_time,
+                    Booking.end_time > booking.start_time,
+                )
+                .scalar()
+            )
+            free_capacity = resource.capacity - int(used or 0)
+            take = min(max(free_capacity, 0), remaining)
+            if take:
+                selected.append((resource, take))
+                remaining -= take
+            if remaining == 0:
+                break
+        if remaining:
+            raise BookingCommandError(
+                409,
+                "No available resources for this service at the requested time.",
+            )
+        for resource, quantity in selected:
+            db.add(
+                BookingResourceAllocation(
+                    booking_id=booking.id,
+                    resource_id=resource.id,
+                    quantity=quantity,
+                )
+            )
+        db.flush()
 
 
 def _revalidate_exact_slot(
@@ -255,6 +480,8 @@ def _revalidate_exact_slot(
     location: Location | None,
     start_time: datetime,
     end_time: datetime,
+    buffer_before: int,
+    buffer_after: int,
 ) -> None:
     search_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     search_end = max(search_start + timedelta(days=1), end_time)
@@ -278,6 +505,42 @@ def _revalidate_exact_slot(
             "The requested time slot is no longer available. Please choose another time.",
         )
 
+    padded_start = start_time - timedelta(minutes=buffer_before)
+    padded_end = end_time + timedelta(minutes=buffer_after)
+    active_overlap = (
+        db.query(Booking.id)
+        .filter(
+            Booking.tenant_id == service.tenant_id,
+            Booking.provider_id == provider.id,
+            Booking.status != BookingStatus.CANCELLED,
+            Booking.start_time < padded_end,
+            Booking.end_time > padded_start,
+        )
+        .first()
+    )
+    slot_times = slot_allocation_service.generate_slot_timestamps(
+        start_time,
+        end_time,
+        buffer_before,
+        buffer_after,
+    )
+    allocated_overlap = (
+        db.query(BookingSlotAllocation.id)
+        .join(Booking, Booking.id == BookingSlotAllocation.booking_id)
+        .filter(
+            Booking.tenant_id == service.tenant_id,
+            Booking.status != BookingStatus.CANCELLED,
+            BookingSlotAllocation.provider_id == provider.id,
+            BookingSlotAllocation.slot_start.in_(slot_times),
+        )
+        .first()
+    )
+    if active_overlap or allocated_overlap:
+        raise BookingCommandError(
+            409,
+            "The requested time slot or buffer is no longer available.",
+        )
+
 
 def create_authoritative_booking(
     db: Session,
@@ -294,123 +557,157 @@ def create_authoritative_booking(
             idempotency_key=command.idempotency_key,
         )
         if existing:
+            _assert_replay_matches(
+                db,
+                existing=existing,
+                tenant_id=tenant_id,
+                command=command,
+            )
             return existing
+
         _reject_cross_tenant_key_collision(
             db,
             tenant_id=tenant_id,
             idempotency_key=command.idempotency_key,
         )
-
-        service, provider, location = _resolve_booking_entities(
-            db,
-            tenant_id=tenant_id,
-            command=command,
-        )
-
-        start_time = _utc(command.start_time)
-        supplied_end = _utc(command.end_time)
-        end_time = start_time + timedelta(minutes=service.duration)
-        if start_time >= supplied_end:
-            raise BookingCommandError(400, "Booking start time must be before end time.")
-        if supplied_end != end_time:
-            raise BookingCommandError(
-                400,
-                "Booking end time must match the authoritative service duration.",
-            )
-        if start_time < datetime.now(timezone.utc) + timedelta(minutes=30):
-            raise BookingCommandError(400, "Bookings must be made at least 30 minutes in advance.")
-
-        # Resolve ownership/restriction errors before reporting slot state. Any
-        # newly constructed client remains inside this transaction and is
-        # rolled back if subsequent availability validation fails.
-        client = _resolve_client(db, tenant_id=tenant_id, command=command)
-        _revalidate_exact_slot(
-            db,
-            service=service,
-            provider=provider,
-            location=location,
-            start_time=start_time,
-            end_time=end_time,
-        )
-
-        booking = Booking(
-            tenant_id=tenant_id,
-            client_id=client.id,
-            provider_id=provider.id,
-            service_id=service.id,
-            location_id=location.id if location else None,
-            start_time=start_time,
-            end_time=end_time,
-            notes=command.notes,
-            idempotency_key=command.idempotency_key,
-            status=BookingStatus.PENDING,
-        )
-        db.add(booking)
-        db.flush()
-
-        buffer_before = max(15, service.buffer_before or 0)
-        buffer_after = max(15, service.buffer_after or 0)
-        slot_allocation_service.create_allocations_for_booking(
-            db,
-            booking=booking,
-            buffer_before=buffer_before,
-            buffer_after=buffer_after,
-        )
-        scheduling_service.allocate_resources(db, booking=booking, commit=False)
-
-        payload = {
-            "id": booking.id,
-            "client_id": booking.client_id,
-            "provider_id": booking.provider_id,
-            "service_id": booking.service_id,
-            "start_time": booking.start_time.isoformat(),
-            "end_time": booking.end_time.isoformat(),
-            "status": booking.status.value,
-        }
-        create_outbox_event(db, "booking.created", payload, tenant_id=tenant_id)
-        db.add(
-            AuditLog(
+        with db.begin_nested():
+            service, provider, location = _resolve_booking_entities(
+                db,
                 tenant_id=tenant_id,
-                action="booking.created",
-                target_type="booking",
-                target_id=booking.id,
-                details=json.dumps({"status": booking.status.value, "source": "public_booking"}),
+                command=command,
             )
-        )
-        db.commit()
-        db.refresh(booking)
+
+            start_time = _utc(command.start_time)
+            supplied_end = _utc(command.end_time)
+            end_time = start_time + timedelta(minutes=service.duration)
+            if start_time >= supplied_end:
+                raise BookingCommandError(400, "Booking start time must be before end time.")
+            if supplied_end != end_time:
+                raise BookingCommandError(
+                    400,
+                    "Booking end time must match the authoritative service duration.",
+                )
+            if start_time < datetime.now(timezone.utc) + timedelta(minutes=30):
+                raise BookingCommandError(
+                    400,
+                    "Bookings must be made at least 30 minutes in advance.",
+                )
+
+            client = _resolve_client(db, tenant_id=tenant_id, command=command)
+            buffer_before = _effective_buffer(service.buffer_before)
+            buffer_after = _effective_buffer(service.buffer_after)
+            _revalidate_exact_slot(
+                db,
+                service=service,
+                provider=provider,
+                location=location,
+                start_time=start_time,
+                end_time=end_time,
+                buffer_before=buffer_before,
+                buffer_after=buffer_after,
+            )
+
+            booking = Booking(
+                tenant_id=tenant_id,
+                client_id=client.id,
+                provider_id=provider.id,
+                service_id=service.id,
+                location_id=location.id if location else None,
+                start_time=start_time,
+                end_time=end_time,
+                notes=command.notes,
+                idempotency_key=command.idempotency_key,
+                status=BookingStatus.PENDING,
+            )
+            db.add(booking)
+            db.flush()
+
+            slot_allocation_service.create_allocations_for_booking(
+                db,
+                booking=booking,
+                buffer_before=buffer_before,
+                buffer_after=buffer_after,
+            )
+            _allocate_locked_resources(
+                db,
+                booking=booking,
+                service=service,
+                location=location,
+            )
+
+            payload = {
+                "id": booking.id,
+                "client_id": booking.client_id,
+                "provider_id": booking.provider_id,
+                "service_id": booking.service_id,
+                "start_time": booking.start_time.isoformat(),
+                "end_time": booking.end_time.isoformat(),
+                "status": booking.status.value,
+            }
+            create_outbox_event(db, "booking.created", payload, tenant_id=tenant_id)
+            db.add(
+                AuditLog(
+                    tenant_id=tenant_id,
+                    action="booking.created",
+                    target_type="booking",
+                    target_id=booking.id,
+                    details=json.dumps(
+                        {"status": booking.status.value, "source": "public_booking"}
+                    ),
+                )
+            )
+            db.flush()
         return booking
     except BookingCommandError:
-        db.rollback()
         raise
     except HTTPException as exc:
-        db.rollback()
         raise BookingCommandError(exc.status_code, str(exc.detail)) from exc
     except IntegrityError as exc:
-        db.rollback()
-        existing = _existing_idempotent_booking(
-            db,
-            tenant_id=tenant_id,
-            idempotency_key=command.idempotency_key,
-        )
-        if existing:
-            return existing
-        if slot_allocation_service.is_slot_allocation_conflict(exc):
-            raise BookingCommandError(
-                409,
-                "The requested time slot or buffer has just been booked. Please select another available time.",
-            ) from exc
-        if command.idempotency_key:
-            collision = (
-                db.query(Booking.id)
-                .filter(Booking.idempotency_key == command.idempotency_key)
-                .first()
+        try:
+            existing = _existing_idempotent_booking(
+                db,
+                tenant_id=tenant_id,
+                idempotency_key=command.idempotency_key,
             )
-            if collision:
-                raise BookingCommandError(409, "Idempotency key is already in use.") from exc
+            if existing:
+                _assert_replay_matches(
+                    db,
+                    existing=existing,
+                    tenant_id=tenant_id,
+                    command=command,
+                )
+                return existing
+            if slot_allocation_service.is_slot_allocation_conflict(exc):
+                raise BookingCommandError(
+                    409,
+                    "The requested time slot or buffer has just been booked. Please select another available time.",
+                ) from exc
+            if command.idempotency_key:
+                collision = (
+                    db.query(Booking.id)
+                    .filter(Booking.idempotency_key == command.idempotency_key)
+                    .first()
+                )
+                if collision:
+                    raise BookingCommandError(
+                        409,
+                        "Idempotency key is already in use.",
+                    ) from exc
+        except BookingCommandError:
+            raise
+        except Exception as recovery_error:
+            logger.error(
+                "booking_creation_integrity_recovery_failed tenant_id=%s error_type=%s",
+                tenant_id,
+                type(recovery_error).__name__,
+            )
+            raise BookingCommandError(500, "Unable to create booking.") from None
         logger.error("booking_creation_integrity_error tenant_id=%s", tenant_id)
-        raise
-    except Exception:
-        db.rollback()
-        logger.error("booking_creation_failed tenant_id=%s", tenant_id)
-        raise
+        raise BookingCommandError(500, "Unable to create booking.") from None
+    except Exception as exc:
+        logger.error(
+            "booking_creation_failed tenant_id=%s error_type=%s",
+            tenant_id,
+            type(exc).__name__,
+        )
+        raise BookingCommandError(500, "Unable to create booking.") from None

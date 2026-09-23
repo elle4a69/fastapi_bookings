@@ -28,8 +28,9 @@ and availability authority.
 
 The public `POST /api/public/bookings` route delegates to
 `create_authoritative_booking`. The router owns HTTP dependency resolution and
-maps `BookingCommandError` to the existing error envelope; the service owns the
-database transaction.
+maps `BookingCommandError` to the existing error envelope. The command owns a
+nested savepoint and flushes its rows; the public route owns the outer commit
+and rollback. Other callers must likewise own their outer transaction.
 
 ## Setup, Configuration & Dependencies
 
@@ -40,7 +41,7 @@ uses the configured SQLAlchemy session and these existing tables:
   tables;
 - provider workdays/special days, blocked time, and reserved time;
 - `bookings`, `booking_slot_allocations`, and resource allocation tables;
-- `audit_logs`, `outbox_events`, and configured webhook-delivery snapshots.
+- `audit_logs` and `outbox_events`.
 
 Schema migrations must already include the existing slot-allocation and outbox
 safety revisions. This delivery intentionally adds no migration.
@@ -50,25 +51,35 @@ safety revisions. This delivery intentionally adds no migration.
 `create_authoritative_booking(db, tenant_id=..., command=BookingCreate(...))`
 performs the following ordered workflow:
 
-1. Return an existing booking for a same-tenant idempotency replay without
-   creating another client, allocation, event, or audit row.
+1. Return an existing booking for a same-tenant idempotency replay only after
+   its canonical client identity, service, provider, resolved location,
+   interval, and notes match the original stored booking.
 2. Fail closed before mutation if the globally unique database key is already
    owned by another tenant.
 3. Resolve an active service and provider inside the explicit tenant, lock the
    provider row where supported, and enforce service/provider/location pairs.
 4. Normalize the start to UTC, derive the end from the stored service duration,
    and reject a caller-supplied interval that does not match.
-5. Resolve the tenant client. Supplied phone numbers are canonicalized to an
+5. Resolve an active tenant client. Supplied phone numbers are canonicalized to an
    E.164-style digit string; existing formatted numbers are compared by their
    canonical value. Restricted clients fail with the existing 403 contract.
 6. Recompute a full authoritative availability window and require an exact
    provider/start/end match. This includes schedules, special days, active
    bookings, blocks, reservations, buffers, relationships, and resources.
-7. Create a `pending` booking, durable slot allocations, resource allocations,
-   `booking.created` outbox event, and structural audit record in one commit.
+7. Apply the command's effective minimum 15-minute buffers consistently during
+   final overlap validation and persisted slot allocation.
+8. Lock eligible shared resource rows in deterministic order where the database
+   supports row locks, recompute overlapping capacity under those locks, and
+   allocate only tenant/type/location-scoped candidates. A booking without a
+   location can use global resources only.
+9. Create a `pending` booking, slot/resource allocations, `booking.created`
+   outbox event, and structural audit record inside one nested savepoint. The
+   caller commits them together with its surrounding unit of work.
 
-The public request and response schemas, method, path, tenant dependency, and
-error envelope are unchanged. Two intentional corrections use existing
+The public method, path, tenant dependency, and error envelope remain stable.
+The unauthenticated route now rejects `client_id`, requires contact-based
+intake, and returns a deliberately reduced receipt that omits client/contact
+data, notes, and idempotency keys. Other intentional corrections use existing
 validation/conflict semantics:
 
 - an interval that differs from the authoritative service duration returns
@@ -85,9 +96,11 @@ claims a booking is confirmed.
   tenant boundary.
 - Compatibility checks use tenant-scoped relationship rows.
 - Idempotent replay is resolved by `(tenant_id, idempotency_key)` at the
-  application layer.
-- Failures roll back new clients, bookings, slot/resource allocations, audits,
-  outbox events, and webhook snapshots together.
+  application layer and canonical request fields are compared before replay.
+- Command failures roll back only command-created work to a savepoint. They do
+  not commit or roll back unrelated work already owned by the caller.
+- The public route commits only after the command returns and rolls back its
+  outer transaction on every mapped or unexpected failure.
 - Audit and outbox payloads are structural. Logs contain no customer identity,
   contact data, notes, request body, or idempotency key.
 - Availability checks and tests perform no external network calls.
@@ -106,8 +119,14 @@ claims a booking is confirmed.
   concurrent first-time client creation can still produce duplicate clients.
 - Availability currently follows the scheduling engine's UTC discipline.
   Customer-facing timezone display policy remains a separate product decision.
-- Idempotency keys do not yet persist a request fingerprint, so callers must
-  treat a key as belonging to one immutable booking command.
+- Canonical replay comparison is application-level. Idempotency keys do not yet
+  persist an immutable request fingerprint, so a tenant-scoped fingerprint and
+  uniqueness migration is still required for a database-enforced guarantee.
+- Shared-resource row locking is compiled and unit-tested for PostgreSQL, and
+  sequential two-provider/capacity-one behavior is covered. SQLite ignores
+  `FOR UPDATE`; a genuine multi-session PostgreSQL race test is still required
+  in an integration environment. A future database constraint or reservation
+  mechanism would provide defence in depth for writers that bypass this command.
 
 ## Verification & Testing Commands
 
@@ -120,9 +139,14 @@ $env:PYTHONDONTWRITEBYTECODE='1'
 & 'F:\Projects\fastapi_bookings\.venv\Scripts\python.exe' -m pytest -q -p no:cacheprovider `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_booking_creation_service.py' `
   'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_booking_policies_remediation.py' `
-  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_concurrency.py'
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_concurrency.py' `
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_constraints.py' `
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_edge_cases.py' `
+  'F:\Projects\fastapi_bookings-authoritative-booking\tests\test_scheduling_intervals.py'
 ```
 
 The focused suite uses labelled synthetic tenants, clients, providers,
 services, schedules, locations, resources, and booking commands. It must never
 send SMS, call external booking providers, or create production data.
+The tests named `sequential` exercise deterministic replay/contention behavior;
+they do not claim to be concurrent database race tests.

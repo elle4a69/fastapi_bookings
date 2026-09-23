@@ -13,9 +13,11 @@ from app.models.outbox import OutboxEvent
 from app.models.management_review_request import ManagementReviewRequest
 from app.models.schedule import ProviderWorkDay
 from app.core.security import create_access_token
+from app.main import limiter
 
 @pytest.fixture(autouse=True)
 def mock_stripe():
+    limiter.reset()
     with patch.object(stripe.checkout.Session, "retrieve") as mock_retrieve:
         mock_session = MagicMock()
         mock_session.payment_status = "paid"
@@ -71,7 +73,8 @@ def test_client_restriction_ordinary_booking(client, setup_data):
     # Wait, ordinary booking creation endpoint is POST /api/public/bookings
     # Let's post a booking for restricted client
     payload = {
-        "client_id": setup_data["client_restricted"].id,
+        "client_name": setup_data["client_restricted"].name,
+        "client_email": setup_data["client_restricted"].email,
         "provider_id": setup_data["provider"].id,
         "service_id": setup_data["service"].id,
         "start_time": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
@@ -184,6 +187,7 @@ def test_checkout_commit_atomic(client, setup_data, db_session):
     assert res_data["ok"] is True
     booking_id = res_data["data"]["booking_id"]
     invoice_id = res_data["data"]["invoice_id"]
+    assert invoice_id is not None
 
     # 2. Idempotency check: sending the same request again returns same data
     response_dup = client.post("/api/public/checkout/commit", json=payload, headers=headers)
@@ -218,7 +222,8 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
         hour=10, minute=0, second=0, microsecond=0
     )
     valid_payload = {
-        "client_id": setup_data["client_ok"].id,
+        "client_name": setup_data["client_ok"].name,
+        "client_email": setup_data["client_ok"].email,
         "provider_id": setup_data["provider"].id,
         "service_id": setup_data["service"].id,
         "start_time": base_time.isoformat(),
@@ -247,18 +252,21 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert db_session.query(Booking).count() == initial_booking_count
     assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
-    # 3. Cross-tenant Client: Tenant A attempts to book for Tenant B's client -> 404
+    # 3. The unauthenticated route rejects every internal client identifier
+    # before resolving it, so a foreign identifier cannot act as an oracle.
     payload_bad_client = valid_payload.copy()
     payload_bad_client["client_id"] = client_b.id
     resp = client.post("/api/public/bookings", json=payload_bad_client, headers=headers_a)
-    assert resp.status_code == status.HTTP_404_NOT_FOUND
-    assert "Client not found" in resp.json()["error"]["message"]
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    assert "contact details" in resp.json()["error"]["message"]
+    assert str(client_b.id) not in resp.text
     assert db_session.query(Booking).count() == initial_booking_count
     assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
     # 4. Management Approval Required: restricted client -> 403
     payload_restricted = valid_payload.copy()
-    payload_restricted["client_id"] = setup_data["client_restricted"].id
+    payload_restricted["client_name"] = setup_data["client_restricted"].name
+    payload_restricted["client_email"] = setup_data["client_restricted"].email
     resp = client.post("/api/public/bookings", json=payload_restricted, headers=headers_a)
     assert resp.status_code == status.HTTP_403_FORBIDDEN
     assert "management approval" in resp.json()["error"]["message"]

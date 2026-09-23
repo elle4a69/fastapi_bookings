@@ -1,6 +1,7 @@
 """Pydantic models for bookings."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -33,9 +34,6 @@ class BookingUpdate(BaseModel):
     end_time: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     notes: Optional[str] = None
-
-
-from decimal import Decimal
 
 class BookingClientInfo(BaseModel):
     id: int
@@ -87,6 +85,25 @@ class BookingListResponse(BaseModel):
 class BookingResponse(BaseModel):
     ok: bool
     data: Booking
+
+
+class PublicBookingData(BaseModel):
+    """Non-PII booking receipt returned by the unauthenticated public route."""
+
+    id: int
+    provider_id: int
+    service_id: int
+    location_id: Optional[int] = None
+    start_time: datetime
+    end_time: datetime
+    status: BookingStatus
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PublicBookingResponse(BaseModel):
+    ok: bool
+    data: PublicBookingData
 
 
 class ErrorResponse(BaseModel):
