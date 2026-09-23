@@ -68,6 +68,7 @@ def get_scoped_conversation(
     *,
     tenant_id: int,
     conversation_id: int,
+    for_update: bool = False,
 ) -> SmsConversation | None:
     """Return a tenant-owned conversation with a consistent line binding.
 
@@ -76,14 +77,13 @@ def get_scoped_conversation(
     actions are allowed.
     """
 
-    conversation = (
-        db.query(SmsConversation)
-        .filter(
-            SmsConversation.id == conversation_id,
-            SmsConversation.tenant_id == tenant_id,
-        )
-        .first()
+    query = db.query(SmsConversation).filter(
+        SmsConversation.id == conversation_id,
+        SmsConversation.tenant_id == tenant_id,
     )
+    if for_update:
+        query = query.with_for_update()
+    conversation = query.first()
     if conversation is None:
         return None
 
@@ -103,7 +103,15 @@ def get_scoped_conversation(
             return None
 
     if conversation.sms_account_id is None:
-        binding = get_scoped_chatwoot_binding(db, conversation=conversation)
+        # Reading historical channel-only conversations requires structural
+        # ownership, not a currently enabled delivery credential. Sends call
+        # has_enabled_delivery_target() separately and still fail closed.
+        binding = get_scoped_chatwoot_binding(
+            db,
+            conversation=conversation,
+            require_enabled=False,
+            require_credentials=False,
+        )
         if binding is None:
             return None
         return conversation
@@ -125,6 +133,7 @@ def get_scoped_chatwoot_binding(
     *,
     conversation: SmsConversation,
     require_enabled: bool = True,
+    require_credentials: bool = True,
 ) -> SmsChatwootBinding | None:
     """Resolve the exact Chatwoot inbox bound to a channel-only conversation."""
 
@@ -140,8 +149,11 @@ def get_scoped_chatwoot_binding(
     )
     if require_enabled:
         query = query.filter(SmsChatwootBinding.is_enabled.is_(True))
-    binding = query.first()
-    if binding is None or not binding.chatwoot_api_token:
+    bindings = query.limit(2).all()
+    if len(bindings) != 1:
+        return None
+    binding = bindings[0]
+    if require_credentials and not binding.chatwoot_api_token:
         return None
     return binding
 
@@ -161,6 +173,45 @@ def ensure_customer_send_allowed(conversation: SmsConversation) -> None:
         raise SmsOperationConflict(
             "Resolved conversations must be reopened before sending."
         )
+
+
+def ensure_message_delivery_allowed(
+    db: Session,
+    *,
+    conversation: SmsConversation,
+    message: SmsMessage,
+    allowed_statuses: frozenset[str] = frozenset({"queued", "sending"}),
+) -> None:
+    """Apply the final fail-closed gate immediately before delivery/retry."""
+
+    if (
+        message.tenant_id != conversation.tenant_id
+        or message.provider_id != conversation.provider_id
+        or message.sms_account_id != conversation.sms_account_id
+        or message.conversation_id != conversation.id
+    ):
+        raise SmsOperationConflict("Message delivery scope is inconsistent.")
+    if message.direction != "outbound" or message.status not in allowed_statuses:
+        raise SmsOperationConflict("Message is not in a deliverable lifecycle state.")
+
+    ensure_customer_send_allowed(conversation)
+
+    if message.author_type not in {"staff", "system", "ai", "fixed_autoresponder"}:
+        raise SmsOperationConflict("Message author is not permitted for delivery.")
+    if message.author_type not in {"ai", "fixed_autoresponder"}:
+        return
+
+    if conversation.state != "auto-reply" or not conversation.ai_enabled:
+        raise SmsOperationConflict("Automated delivery is disabled for this conversation.")
+    account = get_scoped_account(db, conversation=conversation, require_enabled=True)
+    if account is None:
+        raise SmsOperationConflict("Automated delivery requires an enabled SMS line.")
+    if message.author_type == "ai" and (
+        not account.ai_enabled or account.ai_mode not in {"draft", "autopilot"}
+    ):
+        raise SmsOperationConflict("AI delivery is disabled for this SMS line.")
+    if message.author_type == "fixed_autoresponder" and not account.autoresponder_enabled:
+        raise SmsOperationConflict("The fixed responder is disabled for this SMS line.")
 
 
 def get_scoped_account(
@@ -277,11 +328,12 @@ def scoped_drafts(
     *,
     tenant_id: int,
     message_ids: Iterable[int],
+    for_update: bool = False,
 ) -> list[SmsMessage]:
     ids = list(dict.fromkeys(message_ids))
     if not ids:
         return []
-    return (
+    query = (
         db.query(SmsMessage)
         .join(SmsConversation, SmsConversation.id == SmsMessage.conversation_id)
         .filter(
@@ -291,9 +343,13 @@ def scoped_drafts(
             SmsMessage.provider_id == SmsConversation.provider_id,
             null_safe_message_account_scope(),
             SmsMessage.status == "draft",
+            SmsMessage.direction == "draft",
+            SmsMessage.author_type == "ai",
         )
-        .all()
     )
+    if for_update:
+        query = query.with_for_update()
+    return query.order_by(SmsMessage.conversation_id, SmsMessage.id).all()
 
 
 def timeline_items(db: Session, conversation: SmsConversation) -> list[dict[str, Any]]:

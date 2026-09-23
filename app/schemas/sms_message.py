@@ -1,10 +1,27 @@
 from datetime import datetime
-from typing import Optional, Any
-from pydantic import ConfigDict, BaseModel, Field
+from typing import Optional
+
+from pydantic import ConfigDict, BaseModel, Field, field_validator
 
 class SmsMessageCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=1600)
     client_request_id: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("body")
+    @classmethod
+    def strip_non_empty_body(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("client_request_id")
+    @classmethod
+    def strip_valid_request_id(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 8:
+            raise ValueError("must contain at least 8 non-whitespace characters")
+        return value
 
 class SmsMessageResponse(BaseModel):
     id: int

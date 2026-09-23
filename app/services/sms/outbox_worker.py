@@ -2,15 +2,47 @@ import logging
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from ...db.database import SessionLocal
-from ...models.sms_outbox import SmsOutboundJob
+from ...models.sms_outbox import SmsConversationEvent, SmsOutboundJob
 from ...models.sms_account import SmsAccount
 from ...models.sms_message import SmsMessage
 from ...models.sms_conversation import SmsConversation
 from .transports import get_transport_adapter
 from .transports.base import OutboundSmsCommand
 from .outbound_service import is_outbound_body_safe
+from .operations_service import SmsOperationConflict, ensure_message_delivery_allowed
 
 logger = logging.getLogger(__name__)
+
+
+def _quarantine_delivery_job(
+    db: Session,
+    *,
+    job: SmsOutboundJob,
+    message: SmsMessage | None,
+    conversation: SmsConversation | None,
+    reason: str,
+) -> None:
+    """Terminally reject an unsafe job and retain structural audit evidence."""
+
+    job.status = "FAILED"
+    job.error_log = reason
+    job.lease_expires_at = None
+    job.processed_at = datetime.now(timezone.utc)
+    if message is not None and message.status in {"queued", "sending"}:
+        message.status = "failed"
+    if conversation is not None and message is not None:
+        db.add(
+            SmsConversationEvent(
+                conversation_id=conversation.id,
+                type="outbound_delivery_quarantined",
+                meta={
+                    "message_id": message.id,
+                    "job_id": job.id,
+                    "reason": reason,
+                },
+            )
+        )
+    db.commit()
 
 async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
     """Fetch and process enqueued SMS outbound jobs with lease locking."""
@@ -32,9 +64,6 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             )
         ).limit(10).all()
 
-        if not jobs:
-            return
-
         # 2. Acquire leases for processing (lock database rows atomically)
         leased_jobs = []
         for job in jobs:
@@ -54,9 +83,9 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 db.commit()
                 if rows_updated > 0:
                     leased_jobs.append(job.id)
-            except Exception as e:
+            except Exception:
                 db.rollback()
-                logger.error(f"Failed to acquire lease on SmsOutboundJob {job.id}: {e}")
+                logger.error("Outbound job lease acquisition failed (job_id=%s).", job.id)
 
         # 3. Process each leased job in its own transaction
         for job_id in leased_jobs:
@@ -67,18 +96,26 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
 
             message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
             if not message:
-                logger.error(f"SmsOutboundJob {job.id} refers to non-existent message.")
-                job.status = "FAILED"
-                job.error_log = "Message record missing."
-                db.commit()
+                logger.error("Outbound job has no message (job_id=%s).", job.id)
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=None,
+                    conversation=None,
+                    reason="MESSAGE_MISSING",
+                )
                 continue
 
             conversation = db.query(SmsConversation).filter(SmsConversation.id == message.conversation_id).first()
             if not conversation:
-                logger.error(f"SmsOutboundJob {job.id} message refers to non-existent conversation.")
-                job.status = "FAILED"
-                job.error_log = "Conversation record missing."
-                db.commit()
+                logger.error("Outbound job has no conversation (job_id=%s).", job.id)
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=None,
+                    reason="CONVERSATION_MISSING",
+                )
                 continue
 
             scope_is_valid = (
@@ -88,20 +125,37 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 and job.sms_account_id == message.sms_account_id
             )
             if not scope_is_valid:
-                job.status = "FAILED"
-                job.error_log = "DELIVERY_SCOPE_MISMATCH"
-                message.status = "failed"
-                db.commit()
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="DELIVERY_SCOPE_MISMATCH",
+                )
                 continue
-            if (
-                conversation.is_blocked
-                or conversation.state == "resolved"
-                or not is_outbound_body_safe(message.body)
-            ):
-                job.status = "FAILED"
-                job.error_log = "DELIVERY_SAFETY_BLOCKED"
-                message.status = "failed"
-                db.commit()
+            try:
+                ensure_message_delivery_allowed(
+                    db,
+                    conversation=conversation,
+                    message=message,
+                )
+            except SmsOperationConflict:
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="DELIVERY_STATE_BLOCKED",
+                )
+                continue
+            if not is_outbound_body_safe(message.body):
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="DELIVERY_SAFETY_BLOCKED",
+                )
                 continue
 
             # Route Chatwoot-bound outbound messages directly
@@ -115,8 +169,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     # call. Chatwoot echoes it in its webhook, which closes
                     # the race where the echo can arrive before this worker
                     # receives Chatwoot's response message ID.
-                    if not message.client_request_id:
-                        message.client_request_id = f"fastapi-chatwoot-message-{message.id}"
+                    source_id = f"fastapi-chatwoot-message-{message.id}"
                     message.status = "sending"
                     db.commit()
 
@@ -124,7 +177,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                         db,
                         conversation,
                         message.body,
-                        source_id=message.client_request_id,
+                        source_id=source_id,
                     )
 
                     job.status = "SUCCESS"
@@ -132,7 +185,10 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     message.status = "sent"
                     message.chatwoot_message_id = mock_msg_id
                     db.commit()
-                    logger.info(f"Successfully sent outbound Chatwoot message (id={message.id}) via send_chatwoot_message")
+                    logger.info(
+                        "Outbound Chatwoot delivery succeeded (message_id=%s).",
+                        message.id,
+                    )
                     continue
                 except Exception:
                     db.rollback()
@@ -153,10 +209,13 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 or conversation.chatwoot_inbox_id is not None
                 or conversation.sms_account_id is None
             ):
-                job.status = "FAILED"
-                job.error_log = "DELIVERY_CHANNEL_UNAVAILABLE"
-                message.status = "failed"
-                db.commit()
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="DELIVERY_CHANNEL_UNAVAILABLE",
+                )
                 continue
 
             # SMS specific flow requires account
@@ -167,19 +226,26 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 SmsAccount.id == conversation.sms_account_id,
             ).first()
             if not account:
-                logger.error(f"SmsOutboundJob {job.id} refers to non-existent account.")
-                job.status = "FAILED"
-                job.error_log = "Account record missing."
-                db.commit()
+                logger.error("Outbound job has no scoped SMS account (job_id=%s).", job.id)
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="ACCOUNT_MISSING",
+                )
                 continue
 
             # Check if account is enabled
             if not account.is_enabled:
-                logger.warning(f"SMS Account {account.id} is disabled. Skipping outbound job {job.id}.")
-                job.status = "FAILED"
-                job.error_log = "SMS Account is disabled."
-                message.status = "failed"
-                db.commit()
+                logger.warning("Outbound job account is disabled (job_id=%s).", job.id)
+                _quarantine_delivery_job(
+                    db,
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                    reason="ACCOUNT_DISABLED",
+                )
                 continue
 
             # Check rate limits & quiet hours
@@ -218,7 +284,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     job.processed_at = datetime.now(timezone.utc)
                     message.status = "sent"
                     message.provider_message_id = result.provider_message_id
-                    logger.info(f"Successfully sent outbound SMS (id={message.id}) via {account.transport_type}")
+                    logger.info("Outbound SMS delivery succeeded (message_id=%s).", message.id)
                 else:
                     raise RuntimeError(f"Transport send failure: {result.error_message} ({result.error_code})")
 
@@ -250,15 +316,17 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
         try:
             from .ai_orchestrator import process_pending_sms_ai_jobs
             await process_pending_sms_ai_jobs(db)
-        except Exception as ai_ex:
-            logger.error(f"Error in background AI job execution: {ai_ex}")
+        except Exception:
+            db.rollback()
+            logger.error("Background AI job execution failed.")
 
         # Run repeated arrival alerts processing
         try:
             from .arrival_service import process_repeated_arrival_alerts
             process_repeated_arrival_alerts(db)
-        except Exception as arrival_ex:
-            logger.error(f"Error in repeated arrival alerts execution: {arrival_ex}")
+        except Exception:
+            db.rollback()
+            logger.error("Repeated arrival alert execution failed.")
 
     finally:
         if should_close:

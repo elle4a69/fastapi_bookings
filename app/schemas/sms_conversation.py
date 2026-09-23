@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import ConfigDict, BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_validator
 
 class SmsConversationResponse(BaseModel):
     id: int
@@ -32,6 +32,16 @@ class SmsDraftReviewRequest(BaseModel):
     action: Literal["approve", "discard", "edit"]
     text: Optional[str] = Field(None, min_length=1, max_length=1600)
     body: Optional[str] = Field(None, min_length=1, max_length=1600)
+
+    @field_validator("text", "body")
+    @classmethod
+    def strip_optional_text(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
 
 
 class SmsConversationActionRequest(BaseModel):

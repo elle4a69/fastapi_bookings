@@ -8,10 +8,9 @@ from sqlalchemy.orm import Session
 from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
-from ...models.sms_account import SmsAccount
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
-from ...models.sms_outbox import SmsOutboundJob, SmsAiJob, SmsNote
+from ...models.sms_outbox import SmsOutboundJob, SmsNote
 from ...models.client import Client
 from ...schemas.sms_conversation import (
     SmsConversationResponse,
@@ -37,6 +36,7 @@ from ...services.sms.operations_service import (
     SmsOperationConflict,
     cancel_pending_ai_jobs,
     ensure_customer_send_allowed,
+    ensure_message_delivery_allowed,
     get_scoped_account,
     get_scoped_conversation,
     has_enabled_delivery_target,
@@ -199,6 +199,7 @@ async def retry_outbound_job(
             SmsMessage.provider_id == SmsConversation.provider_id,
             null_safe_message_account_scope(),
         )
+        .with_for_update()
         .first()
     )
 
@@ -210,11 +211,17 @@ async def retry_outbound_job(
         db,
         tenant_id=tenant.id,
         conversation_id=job.message.conversation_id,
+        for_update=True,
     )
     if conversation is None or not has_enabled_delivery_target(db, conversation):
         raise HTTPException(status_code=409, detail="The delivery channel is unavailable.")
     try:
-        ensure_customer_send_allowed(conversation)
+        ensure_message_delivery_allowed(
+            db,
+            conversation=conversation,
+            message=job.message,
+            allowed_statuses=frozenset({"failed", "queued", "sending"}),
+        )
     except SmsOperationConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not is_outbound_body_safe(job.message.body):
@@ -259,6 +266,8 @@ async def list_drafts_queue(
             SmsMessage.tenant_id == tenant.id,
             SmsMessage.provider_id == SmsConversation.provider_id,
             null_safe_message_account_scope(),
+            SmsMessage.direction == "draft",
+            SmsMessage.author_type == "ai",
         )
         .order_by(SmsMessage.occurred_at.desc())
         .all()
@@ -310,7 +319,12 @@ def _verified_approved_draft_winner(
     message = _scoped_message_query(
         db, tenant_id=tenant_id, message_id=message_id
     ).first()
-    if message is None or message.status not in {"queued", "sending", "sent", "delivered"}:
+    if (
+        message is None
+        or message.direction != "outbound"
+        or message.author_type != "ai"
+        or message.status not in {"queued", "sending", "sent", "delivered"}
+    ):
         return None
     job = db.query(SmsOutboundJob).filter(
         SmsOutboundJob.message_id == message.id,
@@ -362,11 +376,19 @@ def _approve_locked_draft(
         if winner is not None:
             return winner
         raise HTTPException(status_code=409, detail="Draft approval state is inconsistent.")
-    if message.status != "draft":
+    if (
+        message.status != "draft"
+        or message.direction != "draft"
+        or message.author_type != "ai"
+        or not message.body.strip()
+    ):
         raise HTTPException(status_code=409, detail="Only pending drafts can be approved.")
 
     conversation = get_scoped_conversation(
-        db, tenant_id=tenant_id, conversation_id=message.conversation_id
+        db,
+        tenant_id=tenant_id,
+        conversation_id=message.conversation_id,
+        for_update=True,
     )
     if conversation is None or not has_enabled_delivery_target(db, conversation):
         raise HTTPException(status_code=409, detail="The delivery channel is unavailable.")
@@ -446,12 +468,20 @@ async def review_draft_message(
 
     if not message:
         raise HTTPException(status_code=404, detail="Draft message not found.")
+    if (
+        message.status != "draft"
+        or message.direction != "draft"
+        or message.author_type != "ai"
+        or not message.body.strip()
+    ):
+        raise HTTPException(
+            status_code=409, detail="Only pending AI drafts can be reviewed."
+        )
     if get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=message.conversation_id
-    ) is None:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-    if get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=message.conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=message.conversation_id,
+        for_update=True,
     ) is None:
         raise HTTPException(status_code=404, detail="Draft message not found.")
 
@@ -460,7 +490,7 @@ async def review_draft_message(
     if payload.action == "edit":
         if message.status != "draft":
             raise HTTPException(status_code=409, detail="Only pending drafts can be edited.")
-        if not new_text:
+        if not new_text or not new_text.strip():
             raise HTTPException(status_code=422, detail="Edited draft text is required.")
         message.body = new_text.strip()
         message.normalized_body = message.body.lower()
@@ -512,12 +542,20 @@ async def bulk_discard_drafts(
 ):
     """Explicitly discard selected drafts and audit each affected conversation."""
 
-    drafts = scoped_drafts(db, tenant_id=tenant.id, message_ids=payload.message_ids)
+    drafts = scoped_drafts(
+        db,
+        tenant_id=tenant.id,
+        message_ids=payload.message_ids,
+        for_update=True,
+    )
     drafts = [
         draft
         for draft in drafts
         if get_scoped_conversation(
-            db, tenant_id=tenant.id, conversation_id=draft.conversation_id
+            db,
+            tenant_id=tenant.id,
+            conversation_id=draft.conversation_id,
+            for_update=True,
         )
         is not None
     ]
@@ -591,8 +629,20 @@ async def discard_draft_message(
 
     if not message:
         raise HTTPException(status_code=404, detail="Draft message not found.")
+    if get_scoped_conversation(
+        db,
+        tenant_id=tenant.id,
+        conversation_id=message.conversation_id,
+        for_update=True,
+    ) is None:
+        raise HTTPException(status_code=404, detail="Draft message not found.")
 
-    if message.status != "draft":
+    if (
+        message.status != "draft"
+        or message.direction != "draft"
+        or message.author_type != "ai"
+        or not message.body.strip()
+    ):
         raise HTTPException(
             status_code=400, detail="Only draft messages can be discarded."
         )
@@ -755,16 +805,14 @@ async def record_ai_correction(
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
-    message = (
-        db.query(SmsMessage)
-        .filter(
-            SmsMessage.id == payload.message_id,
-            SmsMessage.conversation_id == conversation.id,
-            SmsMessage.tenant_id == tenant.id,
-            SmsMessage.author_type == "ai",
-        )
-        .first()
-    )
+    message = _scoped_message_query(
+        db,
+        tenant_id=tenant.id,
+        message_id=payload.message_id,
+    ).filter(
+        SmsMessage.conversation_id == conversation.id,
+        SmsMessage.author_type == "ai",
+    ).first()
     if message is None:
         raise HTTPException(status_code=404, detail="AI message not found.")
     record_event(
@@ -795,7 +843,10 @@ async def _transition_endpoint(
     db: Session,
 ) -> SmsConversation:
     conversation = get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=conversation_id,
+        for_update=True,
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -914,7 +965,10 @@ async def update_conversation_controls(
 ):
     """Update conversation assistant UI controls (ai_enabled, is_pinned, is_blocked)."""
     conv = get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=conversation_id,
+        for_update=True,
     )
 
     if not conv:
@@ -1037,7 +1091,10 @@ async def send_manual_reply(
     db: Session = Depends(get_db),
 ):
     conv = get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=conversation_id,
+        for_update=True,
     )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -1153,7 +1210,10 @@ async def takeover_conversation(
     db: Session = Depends(get_db),
 ):
     conv = get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=conversation_id,
+        for_update=True,
     )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -1181,7 +1241,10 @@ async def restore_auto_reply(
     db: Session = Depends(get_db),
 ):
     conv = get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=conversation_id
+        db,
+        tenant_id=tenant.id,
+        conversation_id=conversation_id,
+        for_update=True,
     )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found.")

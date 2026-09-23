@@ -38,6 +38,8 @@ def setup_rate_limit_data(db_session):
         display_name="Rate Limit Line",
         sender_address="61400000003",
         is_enabled=True,
+        ai_enabled=True,
+        ai_mode="autopilot",
         throughput_limit=2,
         quiet_hours_start="22:00",
         quiet_hours_end="07:00"

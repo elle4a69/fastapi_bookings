@@ -1,6 +1,6 @@
 import pytest
-from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
+from fastapi import HTTPException
 
 from app.models.tenant import Tenant
 from app.models.provider import Provider
@@ -164,7 +164,7 @@ def test_outbound_delivery_via_chatwoot_only(db_session, setup_chatwoot_data):
         account=None,
         conversation=conversation,
         body="This is an outbound reply to Chatwoot.",
-        author_type="ai",
+        author_type="staff",
         status="queued"
     )
 
@@ -221,7 +221,7 @@ def test_webhook_loops_prevention_and_staff_takeover(db_session, setup_chatwoot_
         conversation_id=conversation.id,
         body="Message already sent by us.",
         direction="outbound",
-        author_type="ai",
+        author_type="staff",
         status="sent",
         chatwoot_message_id=202
     )
@@ -304,6 +304,210 @@ def test_webhook_loops_prevention_and_staff_takeover(db_session, setup_chatwoot_
     assert event is not None
     assert event.meta.get("chatwoot_message_id") == 203
 
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"id": 1, "content": "Synthetic", "message_type": "incoming", "inbox": []},
+        {
+            "id": -1,
+            "content": "Synthetic",
+            "message_type": "incoming",
+            "inbox": {"id": 45},
+            "conversation": {"id": 500},
+        },
+        {
+            "id": 1,
+            "content": "Synthetic",
+            "message_type": "incoming",
+            "inbox": {"id": True},
+            "conversation": {"id": 500},
+        },
+        {
+            "id": 1.5,
+            "content": "Synthetic",
+            "message_type": "incoming",
+            "inbox": {"id": 45},
+            "conversation": {"id": 500},
+        },
+        {
+            "id": 1,
+            "content": "Synthetic",
+            "message_type": "incoming",
+            "inbox": {"id": 45},
+            "conversation": {"id": {"nested": 500}},
+        },
+    ],
+)
+def test_webhook_rejects_non_positive_or_wrong_type_identifiers(
+    db_session, setup_chatwoot_data, payload
+):
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
+    assert exc_info.value.status_code == 400
+
+
+def test_webhook_bounds_content_and_does_not_log_untrusted_message_type(
+    db_session, setup_chatwoot_data, caplog
+):
+    oversized = {
+        "id": 9001,
+        "content": "x" * 1601,
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {"id": 9500, "contact": {"id": 989}},
+    }
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(db_session, oversized, token="my-webhook-secret")
+    assert exc_info.value.status_code == 422
+
+    canary = "SYNTHETIC_SECRET_MESSAGE_TYPE_CANARY"
+    skipped = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9002,
+            "content": "Synthetic",
+            "message_type": canary,
+            "inbox": {"id": 45},
+            "conversation": {"id": 9500},
+        },
+        token="my-webhook-secret",
+    )
+    assert skipped == {"status": "skipped", "reason": "unsupported_message_type"}
+    assert canary not in caplog.text
+
+
+def test_source_id_echo_is_scoped_to_exact_chatwoot_conversation(
+    db_session, setup_chatwoot_data
+):
+    data = setup_chatwoot_data
+    conversation_a = SmsConversation(
+        tenant_id=data["tenant"].id,
+        provider_id=data["provider"].id,
+        customer_address="+61400000101",
+        state="taken-over",
+        chatwoot_conversation_id=5101,
+        chatwoot_inbox_id=45,
+    )
+    conversation_b = SmsConversation(
+        tenant_id=data["tenant"].id,
+        provider_id=data["provider"].id,
+        customer_address="+61400000102",
+        state="auto-reply",
+        chatwoot_conversation_id=5102,
+        chatwoot_inbox_id=45,
+    )
+    db_session.add_all([conversation_a, conversation_b])
+    db_session.flush()
+    internal = SmsMessage(
+        tenant_id=data["tenant"].id,
+        provider_id=data["provider"].id,
+        conversation_id=conversation_a.id,
+        body="Synthetic FastAPI staff reply",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+        client_request_id="synthetic-cross-thread-source",
+    )
+    db_session.add(internal)
+    db_session.commit()
+
+    result = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9101,
+            "content": "Synthetic Chatwoot staff reply",
+            "source_id": "synthetic-cross-thread-source",
+            "message_type": "outgoing",
+            "inbox": {"id": 45},
+            "conversation": {"id": 5102, "contact": {"id": 991}},
+        },
+        token="my-webhook-secret",
+    )
+    db_session.refresh(internal)
+    assert result["duplicate"] is False
+    assert result["conversation_id"] == conversation_b.id
+    assert internal.chatwoot_message_id is None
+
+
+def test_phone_fallback_never_rebinds_existing_chatwoot_thread(
+    db_session, setup_chatwoot_data
+):
+    data = setup_chatwoot_data
+    existing = SmsConversation(
+        tenant_id=data["tenant"].id,
+        provider_id=data["provider"].id,
+        customer_address="+61400000103",
+        state="paused",
+        chatwoot_conversation_id=5201,
+        chatwoot_contact_id=992,
+        chatwoot_inbox_id=45,
+    )
+    db_session.add(existing)
+    db_session.commit()
+
+    result = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9201,
+            "content": "Synthetic distinct thread",
+            "message_type": "incoming",
+            "inbox": {"id": 45},
+            "conversation": {
+                "id": 5202,
+                "contact": {"id": 993, "phone_number": "+61400000103"},
+            },
+        },
+        token="my-webhook-secret",
+    )
+    db_session.refresh(existing)
+    assert result["conversation_id"] != existing.id
+    assert existing.chatwoot_conversation_id == 5201
+    created = db_session.query(SmsConversation).filter(
+        SmsConversation.id == result["conversation_id"]
+    ).one()
+    assert created.chatwoot_conversation_id == 5202
+
+
+def test_ambiguous_unbound_phone_fallback_fails_closed(
+    db_session, setup_chatwoot_data
+):
+    data = setup_chatwoot_data
+    db_session.add_all(
+        [
+            SmsConversation(
+                tenant_id=data["tenant"].id,
+                provider_id=data["provider"].id,
+                customer_address="61400000104",
+                state="paused",
+            ),
+            SmsConversation(
+                tenant_id=data["tenant"].id,
+                provider_id=data["provider"].id,
+                customer_address="61400000104",
+                state="paused",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(
+            db_session,
+            {
+                "id": 9301,
+                "content": "Synthetic ambiguous mapping",
+                "message_type": "incoming",
+                "inbox": {"id": 45},
+                "conversation": {
+                    "id": 5301,
+                    "contact": {"id": 994, "phone_number": "+61400000104"},
+                },
+            },
+            token="my-webhook-secret",
+        )
+    assert exc_info.value.status_code == 409
+
 def test_internal_outbound_echo_before_remote_message_id_does_not_take_over(
     db_session, setup_chatwoot_data
 ):
@@ -328,16 +532,15 @@ def test_internal_outbound_echo_before_remote_message_id_does_not_take_over(
         conversation_id=conversation.id,
         body="FastAPI generated reply.",
         direction="outbound",
-        author_type="ai",
+        author_type="staff",
         status="sending",
-        client_request_id="fastapi-chatwoot-message-race-test",
     )
     db_session.add(outbound)
     db_session.commit()
 
     payload = {
         "id": 204,
-        "source_id": "fastapi-chatwoot-message-race-test",
+        "source_id": f"fastapi-chatwoot-message-{outbound.id}",
         "content": "FastAPI generated reply.",
         "message_type": "outgoing",
         "inbox": {"id": 45},
@@ -361,7 +564,6 @@ def test_internal_outbound_echo_before_remote_message_id_does_not_take_over(
 
 def test_send_chatwoot_message_success(db_session, setup_chatwoot_data):
     import asyncio
-    import httpx
     from unittest.mock import AsyncMock
     from app.services.sms.chatwoot_service import send_chatwoot_message
     
@@ -414,7 +616,6 @@ def test_send_chatwoot_message_success(db_session, setup_chatwoot_data):
 
 def test_outbox_worker_updates_message_id_on_success(db_session, setup_chatwoot_data):
     import asyncio
-    import httpx
     from unittest.mock import AsyncMock
     
     data = setup_chatwoot_data
@@ -436,7 +637,7 @@ def test_outbox_worker_updates_message_id_on_success(db_session, setup_chatwoot_
         account=None,
         conversation=conversation,
         body="This is an outbound reply to Chatwoot.",
-        author_type="ai",
+        author_type="staff",
         status="queued"
     )
 
@@ -484,7 +685,7 @@ def test_send_chatwoot_message_no_binding(db_session):
 
     with pytest.raises(ValueError) as excinfo:
         asyncio.run(send_chatwoot_message(db_session, conversation, "Hello"))
-    assert "No enabled Chatwoot binding found" in str(excinfo.value)
+    assert "enabled Chatwoot binding" in str(excinfo.value)
 
 def test_send_chatwoot_message_timeout(db_session, setup_chatwoot_data):
     import asyncio
@@ -574,7 +775,7 @@ def test_outbox_worker_retry_on_exception(db_session, setup_chatwoot_data):
         account=None,
         conversation=conversation,
         body="Retrying outbound message.",
-        author_type="ai",
+        author_type="staff",
         status="queued"
     )
 

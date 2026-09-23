@@ -12,7 +12,7 @@ The SMS Assistant module owns:
 - Review-first and safety-gated AI reply generation with tenant, provider, and SMS-account prompt/context isolation.
 - A fail-closed local fallback that can use approved static knowledge but cannot create, cancel, or reschedule bookings.
 - Bi-directional synchronization with Chatwoot omnichannel inboxes.
-- Human takeover state management (`auto-reply` vs `human-takeover`).
+- Human takeover state management (`auto-reply` vs `taken-over`) plus protected review, escalation, pause, and resolution states.
 - Contactless self-arrival check-in chime and repeated lobby notification alerts.
 
 This module deliberately avoids direct network dispatch inside request threads (delegating to transactional outbox workers), cross-tenant/account dialogue context sharing, and direct booking or durable-knowledge mutation from conversation routes. FastAPI Bookings remains the booking authority; the explicitly confirmed conversational-booking workflow is a separate delivery stage.
@@ -112,7 +112,7 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 2. `inbound_service.process_inbound_webhook` resolves the active `SmsAccount` and validates the signature.
 3. A digest of the account identifier and carrier `event_key` is checked against `sms_inbound_receipts`. If already processed, HTTP 200 is returned immediately. A uniqueness collision during receipt insertion is treated as a duplicate only when the winning row matches the exact account and digest.
 4. The message is inserted with a `customer_turn_ref`. If the previous message arrived < 10 seconds ago, it inherits the existing turn reference.
-5. Any pending `SmsAiJob` for the conversation is cancelled, and a new job is scheduled with `run_at = now() + 5s`. This guarantees multi-message bursts are processed as a single semantic turn.
+5. Any pending `SmsAiJob` for the conversation is cancelled, and a new job is scheduled with `run_at = now() + 5s`. This coalesces ordinary bursts, but durable single-job concurrency still depends on the pending AI lease/uniqueness schema work.
 
 ### 4.2 Responder prompt and send safety
 
@@ -124,20 +124,19 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 6. A hard worker crash can leave a `PROCESSING` job without durable retry metadata because the current model has no AI lease/attempt columns. Durable AI retry must not be assumed until that schema work is approved.
 
 ### 4.3 Lobby Arrival Chime & Recurring Alerts
-1. When a client receives an appointment reminder SMS, it includes a short link containing an arrival token (`arrival_service.create_arrival_session`).
-2. Upon arrival at the clinic, clicking the link triggers `/api/sms/arrivals/checkin/{token}`.
-3. The session records `arrived_at = now()`. An `arrival_alert_triggered` event is published to the outbox.
-4. `process_repeated_arrival_alerts` runs periodically. If an arrived client remains unacknowledged after 60 seconds, it sounds repeated chime events to staff dashboards.
+The authoritative arrival contract is documented in Section 8. It accepts a bounded JSON body at `POST /api/admin/sms/arrivals/public/arrive`; capabilities are never accepted in paths or query strings. The service creates structural alert outbox records but does not itself deliver browser push or audio.
 
 ### 4.4 Native staff operations workspace
 
 - Conversation actions are tenant scoped and validate that the bound SMS account belongs to the same tenant and provider.
-- Null-account conversations are operable only when their tenant/provider/inbox resolve to one enabled Chatwoot binding with usable server-side credentials. They enqueue a channel-neutral outbox job with no carrier account, and the worker revalidates Chatwoot scope before delivery.
+- Historical null-account conversations remain readable when their tenant/provider/inbox resolve to one structurally owned Chatwoot binding, even if delivery is disabled. Sending requires exactly one enabled binding with usable server-side credentials; ambiguous bindings fail closed.
 - Lifecycle changes follow an explicit transition matrix. `needs-review` must be cleared, `resolved` must be reopened with a reason, and only `taken-over` can be released to automation. Manual staff replies do not erase review or escalation state.
 - Takeover, release, escalation, resolution, blocking, responder controls, internal notes, corrections, draft edits/approval/discard and explicit bulk draft discard append structural `SmsConversationEvent` records.
 - Corrections remain audit evidence only and never write reusable knowledge. Dynamic-fact corrections are explicitly labelled.
 - Manual sends require a client idempotency key. Blocked contacts and disabled/mismatched lines fail closed.
-- Failed outbound jobs may be retried only while the bound line is enabled and the conversation is not blocked. Raw provider error text is not returned by the operations API.
+- Failed outbound jobs may be retried only when their outbound message shape, lifecycle, channel and current conversation controls still permit delivery. AI and fixed-responder jobs additionally require `auto-reply`, conversation AI enablement, and the corresponding enabled line mode. Raw provider error text is not returned by the operations API.
+- The worker revalidates message direction/status and automation controls immediately before dispatch. Invalid jobs are terminally quarantined with structural audit evidence; discarded drafts cannot be sent by a stale job.
+- Chatwoot webhook identifiers are positive integers, message bodies/source identifiers are bounded, source echoes are matched to the exact inbox and conversation, and phone fallback adopts only one wholly unbound local conversation.
 - The staff timeline merges messages, notes and allowlisted audit metadata. It does not return duplicate message bodies stored inside legacy event metadata.
 - Dynamic booking, price, date, time, availability, link and payment enquiries never fall back to direct local booking actions. They enter `needs-review` unless a verified authoritative path supplies the answer.
 - `POST /answer-info-request` is intentionally rejected with HTTP 409. Corrections are retained as evidence and reusable knowledge enters only through the governed curator proposal/review workflow.
@@ -147,8 +146,8 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 
 ## 5. Data Safety, Multi-Tenancy & PII Isolation
 
-- **Tenant Boundary Enforcement**: `SmsAccount`, `SmsConversation`, `SmsMessage`, and `SmsOutboundJob` all strictly enforce `tenant_id` foreign keys. An SMS account can never access conversation context from another tenant.
-- **Transactional Consistency**: message state, structural events, and an applicable channel-neutral outbox job are committed together by the reviewed operations paths.
+- **Tenant Boundary Enforcement**: `SmsAccount`, `SmsConversation`, and `SmsMessage` carry tenant ownership. `SmsOutboundJob` has no direct tenant column, so every operation derives and validates tenant/provider/account ownership transitively through its message and conversation before use.
+- **Transactional Consistency**: reviewed enqueue and draft-approval paths commit message state, structural events, and an applicable channel-neutral outbox job together. Final delivery applies an independent fail-closed lifecycle and scope gate.
 - **Account-scoped idempotency**: inbound provider identifiers are hashed with their SMS account before receipt storage; outbound UI request identifiers are resolved within tenant, provider, account and conversation scope. Application recovery verifies the exact winning scope after an integrity collision, but concurrent uniqueness still depends on the pending migration.
 - **Offline Carrier Guard**: In automated tests, raw socket calls are blocked; all SMS operations use [fake.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/fake.py) with synthetic phone numbers (`0411000001` - `0411000005`). Real external SMS messages are never sent during testing.
 
@@ -158,8 +157,9 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
+- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `185d9f4519abef48cd03dd5b594b767fdf943ca7`; the strengthened arrival behavior documented in Section 8 requires arrival commit `43542034f3308b1bd3790f88f580a40d5d56b84c`. They are not contained in this operations branch and must be deliberately stacked and jointly verified.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before that migration lands.
-- **Concurrency hardening pending migration**: application-level manual-send and draft-approval checks are idempotent for repeated requests, but database uniqueness for scoped `client_request_id` and one outbound job per message must be added by the migration owner to close concurrent races.
+- **Concurrency hardening pending migration**: PostgreSQL row locks serialize scoped lifecycle, controls, manual-send and draft winner decisions, but database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; the synthetic suite verifies state gates but is not a PostgreSQL concurrency proof.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
 
 ---
@@ -215,26 +215,30 @@ The implementation uses `SmsArrivalSession`, `SmsConversation`, `SmsConversation
 
 ### Core Workflows & Contracts
 
-1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, and client all match transitively. It persists only a SHA-256 token digest and returns the raw capability once to the caller.
-2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. Tokens are never accepted in a URL path. Invalid, malformed, unknown, or expired capabilities receive the same non-disclosing `404` response.
-3. The first valid check-in records `arrived_at` and one structural `customer_arrived` event. A retry returns the existing state without creating a duplicate event.
-4. Staff list arrivals with `GET /api/admin/sms/arrivals` and acknowledge one with `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge`. Both operations are authenticated and tenant scoped. Acknowledgement is idempotent and records one structural closure event.
-5. `process_repeated_arrival_alerts` emits structural `OutboxEvent` rows for eligible unacknowledged arrivals. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication across retries and concurrent workers. Acknowledged, expired, cancelled, or otherwise ineligible arrivals fail closed.
+1. `create_arrival_session` accepts an eligible confirmed booking and a conversation whose tenant, provider, SMS account, client, service, booking location, and booking all match transitively. It persists only a SHA-256 token digest, records a structural `arrival_invitation_issued` event, and returns the raw capability once. A database uniqueness race becomes a stable domain conflict.
+2. A customer submits that capability in a JSON body to `POST /api/admin/sms/arrivals/public/arrive`. The route reads at most 1 KiB and accepts only one string `token` field. Missing, null, wrong-type, nested, oversized, malformed, unknown, and expired capabilities receive the same non-disclosing `404` contract.
+3. Resolution queries the digest first. A legacy plaintext lookup occurs only after a digest miss, and a successful legacy match is rewritten to its digest. The first valid check-in uses a locked row plus a conditional update to record `arrived_at` and exactly one structural `customer_arrived` event.
+4. Staff list arrivals with `GET /api/admin/sms/arrivals` and acknowledge one with `POST /api/admin/sms/arrivals/{arrival_id}/acknowledge`. Both operations are authenticated and tenant scoped. Acknowledgement uses the same locked/conditional winner pattern. Arrivals whose booking later becomes ineligible remain closable by staff.
+5. `process_repeated_arrival_alerts` locks and processes a deterministic batch of at most 100 eligible unacknowledged arrivals. The key `arrival-alert:{session_id}:{sequence}` provides durable deduplication. Acknowledgement and later alert passes terminally quarantine still-unleased `PENDING`/`RETRY` alerts for ineligible sessions.
 
 ### Data Safety & Isolation
 
-- New sessions store only token digests; responses, logs, events, and alert payloads never contain raw tokens, phone numbers, customer identities, message bodies, or booking notes.
-- Scope is checked through the full booking/conversation/account/client/provider/service relationship before a capability is created or exercised. A missing or inconsistent relationship fails closed.
+- New sessions store only token digests; the one-time token is excluded from object representations, and responses, logs, events, and alert payloads never contain raw tokens, phone numbers, customer identities, message bodies, or booking notes.
+- Scope is checked through the full booking/conversation/account/client/provider/service/location relationship before a capability is created or exercised. A missing or inconsistent relationship fails closed.
 - Expiry is computed from the earlier of the maximum session lifetime and the booking-end grace window. Expired capabilities cannot check in.
 - Arrival event metadata and alert payloads are structural and use identifiers and sequence numbers only.
-- The temporary legacy lookup can read an existing raw-token row without returning or logging that value. All newly created sessions use digest storage.
+- PostgreSQL row locks serialize arrive, acknowledge, alert eligibility, and cancellation cleanup. Conditional updates ensure only the lifecycle winner writes its timestamp/event. SQLite ignores `FOR UPDATE`; synthetic tests are not a substitute for a PostgreSQL concurrency test.
+- Pending/retry alert suppression shares the lifecycle transaction. An alert already leased as `PROCESSING` cannot be recalled here; the future delivery consumer must re-check eligibility immediately before visible delivery.
 
 ### Known Issues, Edge Cases & Outstanding Work
 
 - No production reminder or invitation-link producer currently consumes the one-time token returned by `create_arrival_session`. A future producer must commit the session with its reminder state atomically and use a customer page that submits the token in the request body, not a server URL or query string.
-- The customer endpoint is currently under the shared `/api/admin` router mount even though it authenticates by scoped capability rather than a staff session. Moving it requires an approved shared-router contract change.
-- Legacy raw-token lookup remains only for migration compatibility. Remove it after legacy rows have expired and all direct session creators, including synthetic seeders, use `create_arrival_session`.
-- Expiry and ownership are currently derived from existing booking and conversation relationships because no arrival-specific schema migration was approved for this slice. Database-enforced immutable event history and first-class arrival ownership/expiry columns remain follow-up work.
+- The customer endpoint is currently under the shared `/api/admin` router mount even though it authenticates by scoped capability rather than a staff session. Its OpenAPI security inheritance and eventual public remount require an approved shared-router contract change.
+- Legacy raw-token lookup remains only for bounded migration compatibility. Successful use rehashes the row, but a deliberate removal plan remains required.
+- Expiry and ownership are derived from existing relationships because no arrival-specific migration was approved. Database-enforced event immutability/uniqueness and first-class arrival ownership/expiry columns remain follow-up work.
+- There is deliberately no early-arrival business window. A confirmed, unexpired invitation can check in before its computed expiry until product owners approve another rule.
+- The admin list is privacy-minimized but fixed at 50 newest records; alert processing is bounded to 100 deterministic candidates per pass.
+- Capability attempts have bounded request bodies but no dedicated distributed rate limit. Alert delivery leases and final pre-delivery eligibility checks remain consumer responsibilities.
 - Browser push/audio delivery, reminder scheduling, and the customer-facing arrival page are outside this slice. The durable outbox records are only the safe server-side alert boundary.
 - Existing frontend arrival mocks/types may still expose legacy token or PII fields and require a separate approved frontend cleanup.
 

@@ -1,8 +1,6 @@
-import json
 import logging
 import hashlib
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Tuple
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from fastapi import Request, HTTPException
@@ -12,7 +10,7 @@ from ...models.sms_account import SmsAccount
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_receipt import SmsInboundReceipt
-from ...models.sms_outbox import SmsOutboundJob, SmsConversationEvent, SmsAiJob
+from ...models.sms_outbox import SmsConversationEvent, SmsAiJob
 from ...models.client import Client
 from .outbound_service import enqueue_outbound_message_transactional
 
@@ -51,7 +49,7 @@ async def process_inbound_webhook(
     account = db.query(SmsAccount).filter(
         SmsAccount.public_id == account_public_id,
         SmsAccount.transport_type == transport_type,
-        SmsAccount.is_enabled == True
+        SmsAccount.is_enabled.is_(True),
     ).first()
     
     if not account:

@@ -79,13 +79,13 @@ def enqueue_outbound_message_transactional(
     if has_partial_chatwoot_binding:
         raise ValueError("Conversation has an incomplete Chatwoot binding.")
     if has_chatwoot_delivery:
-        binding = db.query(SmsChatwootBinding.id).filter(
+        bindings = db.query(SmsChatwootBinding).filter(
             SmsChatwootBinding.tenant_id == conversation.tenant_id,
             SmsChatwootBinding.provider_id == conversation.provider_id,
             SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
             SmsChatwootBinding.is_enabled.is_(True),
-        ).first()
-        if binding is None:
+        ).limit(2).all()
+        if len(bindings) != 1 or not bindings[0].chatwoot_api_token:
             raise ValueError("No enabled Chatwoot binding exists for this conversation.")
     delivery_unavailable = (
         (account is None and not has_chatwoot_delivery)
