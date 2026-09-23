@@ -1,3 +1,4 @@
+import json
 import pytest
 from datetime import datetime, time, timedelta, timezone
 from unittest.mock import patch, MagicMock
@@ -252,13 +253,14 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     assert db_session.query(Booking).count() == initial_booking_count
     assert db_session.query(OutboxEvent).count() == initial_outbox_count
 
-    # 3. The unauthenticated route rejects every internal client identifier
-    # before resolving it, so a foreign identifier cannot act as an oracle.
+    # 3. The public schema rejects every internal client identifier without
+    # reflecting its submitted value, so a foreign identifier is not an oracle.
     payload_bad_client = valid_payload.copy()
     payload_bad_client["client_id"] = client_b.id
     resp = client.post("/api/public/bookings", json=payload_bad_client, headers=headers_a)
-    assert resp.status_code == status.HTTP_400_BAD_REQUEST
-    assert "contact details" in resp.json()["error"]["message"]
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert resp.json()["error"]["details"] == {}
+    assert f'"input": {client_b.id}' not in json.dumps(resp.json())
     assert str(client_b.id) not in resp.text
     assert db_session.query(Booking).count() == initial_booking_count
     assert db_session.query(OutboxEvent).count() == initial_outbox_count

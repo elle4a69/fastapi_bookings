@@ -52,17 +52,20 @@ safety revisions. This delivery intentionally adds no migration.
 performs the following ordered workflow:
 
 1. Return an existing booking for a same-tenant idempotency replay only after
-   its canonical client identity, service, provider, resolved location,
-   interval, and notes match the original stored booking.
+   a versioned SHA-256 fingerprint of the canonical request matches the digest
+   stored in that booking's tenant/action/target/source-scoped audit snapshot.
+   Replay does not re-run mutable provider, service, location, or client policy.
 2. Fail closed before mutation if the globally unique database key is already
    owned by another tenant.
 3. Resolve an active service and provider inside the explicit tenant, lock the
    provider row where supported, and enforce service/provider/location pairs.
 4. Normalize the start to UTC, derive the end from the stored service duration,
    and reject a caller-supplied interval that does not match.
-5. Resolve an active tenant client. Supplied phone numbers are canonicalized to an
-   E.164-style digit string; existing formatted numbers are compared by their
-   canonical value. Restricted clients fail with the existing 403 contract.
+5. Resolve an active tenant client. Every supplied ID, canonical phone, and
+   lowercased email must identify the same single tenant client. Conflicting or
+   duplicate contact matches fail closed before any command row is created,
+   including ambiguity between active and inactive records. Restricted clients
+   retain the existing 403 contract.
 6. Recompute a full authoritative availability window and require an exact
    provider/start/end match. This includes schedules, special days, active
    bookings, blocks, reservations, buffers, relationships, and resources.
@@ -74,18 +77,31 @@ performs the following ordered workflow:
    location can use global resources only.
 9. Create a `pending` booking, slot/resource allocations, `booking.created`
    outbox event, and structural audit record inside one nested savepoint. The
-   caller commits them together with its surrounding unit of work.
+   outbox allowlist is `id`, `provider_id`, `service_id`, `start_time`,
+   `end_time`, and `status`; it contains no client identifier or contact data.
+   The audit details contain only status, source, fingerprint version, and the
+   digest. The caller commits all rows with its surrounding unit of work.
 
 The public method, path, tenant dependency, and error envelope remain stable.
-The unauthenticated route now rejects `client_id`, requires contact-based
-intake, and returns a deliberately reduced receipt that omits client/contact
-data, notes, and idempotency keys. Other intentional corrections use existing
+The unauthenticated route uses `PublicBookingCreate`, whose closed OpenAPI
+schema does not include `client_id`. The route rejects any unknown input with a
+generic, non-reflecting HTTP 422 before command construction. It requires
+contact-based intake and returns a fully materialized `PublicBookingReceipt`
+that omits client/contact data, notes, and idempotency keys. The receipt is
+validated before the single outer commit; no database read or refresh occurs
+after a successful commit. Other intentional corrections use existing
 validation/conflict semantics:
 
 - an interval that differs from the authoritative service duration returns
   HTTP 400;
 - a requested interval that is not an exact currently available slot returns
   HTTP 409.
+
+The public request schema retains the booking page's established `addon_ids`
+and `product_ids` list fields so empty selections remain compatible. This
+command intentionally preserves the prior behavior of not applying those
+selections; authoritative non-empty add-on/product pricing, duration, and
+persistence require the separate booking-form parity task below.
 
 The returned status is the actual stored `pending` status. This command never
 claims a booking is confirmed.
@@ -96,13 +112,16 @@ claims a booking is confirmed.
   tenant boundary.
 - Compatibility checks use tenant-scoped relationship rows.
 - Idempotent replay is resolved by `(tenant_id, idempotency_key)` at the
-  application layer and canonical request fields are compared before replay.
+  application layer and the stored versioned request digest is compared before
+  replay. The canonical request itself is never stored or logged.
 - Command failures roll back only command-created work to a savepoint. They do
   not commit or roll back unrelated work already owned by the caller.
 - The public route commits only after the command returns and rolls back its
   outer transaction on every mapped or unexpected failure.
-- Audit and outbox payloads are structural. Logs contain no customer identity,
-  contact data, notes, request body, or idempotency key.
+- Audit and outbox payloads use the explicit structural allowlists above. Logs
+  contain no customer identity, contact data, notes, request body, fingerprint,
+  idempotency key, or rejected unknown-field value. Public unknown-field errors
+  do not echo the submitted field name or value.
 - Availability checks and tests perform no external network calls.
 
 ## Known Issues, Edge Cases & Outstanding Work
@@ -114,14 +133,27 @@ claims a booking is confirmed.
 - The admin booking and configurable booking-form routes have not yet been
   migrated to this command. They must be consolidated in a separate parity-
   tested task.
+- Non-empty public add-on and product selections are not yet persisted by this
+  command. Their authoritative service compatibility, price, duration,
+  inventory, and booking linkage must be implemented together in that booking-
+  form parity task; this slice does not partially apply them or include them in
+  the authoritative booking request fingerprint.
 - Client phone canonicalization has no database column or tenant-scoped unique
   constraint. Existing formatted values are compared in application code;
   concurrent first-time client creation can still produce duplicate clients.
 - Availability currently follows the scheduling engine's UTC discipline.
   Customer-facing timezone display policy remains a separate product decision.
 - Canonical replay comparison is application-level. Idempotency keys do not yet
-  persist an immutable request fingerprint, so a tenant-scoped fingerprint and
-  uniqueness migration is still required for a database-enforced guarantee.
+  have a tenant-scoped database uniqueness guarantee. The audit snapshot now
+  persists a versioned immutable request fingerprint, but older bookings without
+  exactly one valid public-booking fingerprint fail closed with HTTP 409 rather
+  than re-running mutable domain policy. A deliberate backfill/migration policy
+  is required if legacy keys must be replayable.
+- Availability discovery and the final command do not yet share one effective-
+  buffer helper. A service configured with zero buffers can advertise an
+  adjacent slot that the command correctly rejects under its minimum 15-minute
+  safety policy. A strict expected-failure regression records this mismatch;
+  changing the shared discovery contract requires a separate scheduling task.
 - Shared-resource row locking is compiled and unit-tested for PostgreSQL, and
   sequential two-provider/capacity-one behavior is covered. SQLite ignores
   `FOR UPDATE`; a genuine multi-session PostgreSQL race test is still required

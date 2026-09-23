@@ -6,9 +6,11 @@ by booking entry points.  It deliberately performs no external network work.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -36,6 +38,7 @@ from .outbox_service import create_outbox_event
 
 
 logger = logging.getLogger(__name__)
+REQUEST_FINGERPRINT_VERSION = 1
 
 
 class BookingCommandError(Exception):
@@ -106,6 +109,86 @@ def _normalized_text(value: str | None) -> str | None:
     return normalized or None
 
 
+def _normalized_email(value: str | None) -> str | None:
+    normalized = _normalized_text(value)
+    return normalized.lower() if normalized else None
+
+
+def _fingerprint_phone(value: str | None) -> str | None:
+    """Canonicalize valid phones and deterministically hash invalid replay input."""
+
+    try:
+        return _canonical_phone(value)
+    except BookingCommandError:
+        normalized = _normalized_text(value)
+        return f"invalid:{normalized}" if normalized else None
+
+
+def _request_fingerprint(*, tenant_id: int, command: BookingCreate) -> str:
+    """Hash a canonical command without retaining its customer-supplied values."""
+
+    canonical = {
+        "version": REQUEST_FINGERPRINT_VERSION,
+        "tenant_id": tenant_id,
+        "idempotency_key": command.idempotency_key,
+        "client_id": command.client_id,
+        "client_name": _normalized_text(command.client_name),
+        "client_email": _normalized_email(command.client_email),
+        "client_phone": _fingerprint_phone(command.client_phone),
+        "provider_id": command.provider_id,
+        "service_id": command.service_id,
+        "location_id": command.location_id,
+        "start_time": _utc(command.start_time).isoformat(),
+        "end_time": _utc(command.end_time).isoformat(),
+        "notes": _normalized_text(command.notes),
+    }
+    encoded = json.dumps(
+        canonical,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _stored_request_fingerprint(
+    db: Session,
+    *,
+    tenant_id: int,
+    booking_id: int,
+) -> str | None:
+    """Return the one valid public-booking fingerprint for this booking."""
+
+    records = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.action == "booking.created",
+            AuditLog.target_type == "booking",
+            AuditLog.target_id == booking_id,
+        )
+        .order_by(AuditLog.id)
+        .all()
+    )
+    public_records: list[dict] = []
+    for record in records:
+        try:
+            details = json.loads(record.details or "")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(details, dict) and details.get("source") == "public_booking":
+            public_records.append(details)
+    if len(public_records) != 1:
+        return None
+    details = public_records[0]
+    fingerprint = details.get("request_fingerprint")
+    if details.get("request_fingerprint_version") != REQUEST_FINGERPRINT_VERSION:
+        return None
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        return None
+    return fingerprint
+
+
 def _assert_replay_matches(
     db: Session,
     *,
@@ -115,60 +198,13 @@ def _assert_replay_matches(
 ) -> None:
     """Reject reuse of a key for a different canonical command."""
 
-    service, provider, location = _resolve_booking_entities(
+    stored = _stored_request_fingerprint(
         db,
         tenant_id=tenant_id,
-        command=command,
+        booking_id=existing.id,
     )
-    requested_start = _utc(command.start_time)
-    requested_end = requested_start + timedelta(minutes=service.duration)
-    supplied_end = _utc(command.end_time)
-    canonical_fields_match = (
-        existing.tenant_id == tenant_id
-        and existing.provider_id == provider.id
-        and existing.service_id == service.id
-        and existing.location_id == (location.id if location else None)
-        and _utc(existing.start_time) == requested_start
-        and _utc(existing.end_time) == requested_end
-        and supplied_end == requested_end
-        and _normalized_text(existing.notes) == _normalized_text(command.notes)
-    )
-
-    client = (
-        db.query(Client)
-        .filter(
-            Client.id == existing.client_id,
-            Client.tenant_id == tenant_id,
-            Client.deleted_at.is_(None),
-        )
-        .first()
-    )
-    client_matches = client is not None and client.active
-    if command.client_id is not None:
-        client_matches = client_matches and command.client_id == existing.client_id
-    else:
-        requested_phone = _canonical_phone(command.client_phone)
-        requested_email = (
-            command.client_email.strip().lower() if command.client_email else None
-        )
-        requested_name = _normalized_text(command.client_name)
-        client_matches = client_matches and bool(
-            requested_phone or requested_email or requested_name
-        )
-        if requested_phone:
-            client_matches = client_matches and (
-                _stored_canonical_phone(client.phone) == requested_phone
-            )
-        if requested_email:
-            client_matches = client_matches and (
-                (client.email or "").strip().lower() == requested_email
-            )
-        if requested_name and not (requested_phone or requested_email):
-            client_matches = client_matches and (
-                _normalized_text(client.name) == requested_name
-            )
-
-    if not canonical_fields_match or not client_matches:
+    requested = _request_fingerprint(tenant_id=tenant_id, command=command)
+    if stored is None or not secrets.compare_digest(stored, requested):
         raise BookingCommandError(
             409,
             "Idempotency key was already used for a different booking request.",
@@ -203,8 +239,11 @@ def _resolve_client(
     tenant_id: int,
     command: BookingCreate,
 ) -> Client:
+    canonical_phone = _canonical_phone(command.client_phone)
+    normalized_email = _normalized_email(command.client_email)
+    id_match: Client | None = None
     if command.client_id is not None:
-        client = (
+        id_match = (
             db.query(Client)
             .filter(
                 Client.id == command.client_id,
@@ -213,59 +252,72 @@ def _resolve_client(
             )
             .first()
         )
-        if not client:
+        if not id_match:
             raise BookingCommandError(404, "Client not found")
+
+    phone_matches: list[Client] = []
+    email_matches: list[Client] = []
+    if canonical_phone:
+        candidates = (
+            db.query(Client)
+            .filter(
+                Client.tenant_id == tenant_id,
+                Client.phone.isnot(None),
+                Client.deleted_at.is_(None),
+            )
+            .order_by(Client.id)
+            .all()
+        )
+        phone_matches = [
+            candidate
+            for candidate in candidates
+            if _stored_canonical_phone(candidate.phone) == canonical_phone
+        ]
+    if normalized_email:
+        email_matches = (
+            db.query(Client)
+            .filter(
+                Client.tenant_id == tenant_id,
+                func.lower(Client.email) == normalized_email,
+                Client.deleted_at.is_(None),
+            )
+            .order_by(Client.id)
+            .all()
+        )
+
+    if len(phone_matches) > 1 or len(email_matches) > 1:
+        raise BookingCommandError(409, "Client contact details are ambiguous.")
+    matched_clients = {
+        match.id: match
+        for match in ([id_match] if id_match else []) + phone_matches + email_matches
+    }
+    if len(matched_clients) > 1:
+        raise BookingCommandError(409, "Client contact details conflict.")
+    client = next(iter(matched_clients.values()), None)
+    if client is not None:
+        if canonical_phone and _stored_canonical_phone(client.phone) != canonical_phone:
+            raise BookingCommandError(409, "Client contact details conflict.")
+        if normalized_email and _normalized_email(client.email) != normalized_email:
+            raise BookingCommandError(409, "Client contact details conflict.")
     else:
-        canonical_phone = _canonical_phone(command.client_phone)
-        normalized_email = command.client_email.strip().lower() if command.client_email else None
-        client = None
-
-        if canonical_phone:
-            candidates = (
-                db.query(Client)
-                .filter(
-                    Client.tenant_id == tenant_id,
-                    Client.phone.isnot(None),
-                    Client.deleted_at.is_(None),
-                )
-                .all()
+        if not (command.client_name or normalized_email or canonical_phone):
+            raise BookingCommandError(
+                400,
+                "Client identification (client_id or client_name/email/phone) is required.",
             )
-            client = next(
-                (
-                    candidate
-                    for candidate in candidates
-                    if _stored_canonical_phone(candidate.phone) == canonical_phone
-                ),
-                None,
-            )
-        if client is None and normalized_email:
-            client = (
-                db.query(Client)
-                .filter(
-                    Client.tenant_id == tenant_id,
-                    func.lower(Client.email) == normalized_email,
-                    Client.deleted_at.is_(None),
-                )
-                .first()
-            )
-
-        if client is None:
-            if not (command.client_name or normalized_email or canonical_phone):
-                raise BookingCommandError(
-                    400,
-                    "Client identification (client_id or client_name/email/phone) is required.",
-                )
-            fallback_name = normalized_email.split("@", 1)[0] if normalized_email else "Guest Client"
-            client = Client(
-                tenant_id=tenant_id,
-                name=(command.client_name or "").strip() or fallback_name,
-                email=normalized_email,
-                phone=canonical_phone,
-                active=True,
-                management_approval_required=False,
-            )
-            db.add(client)
-            db.flush()
+        fallback_name = (
+            normalized_email.split("@", 1)[0] if normalized_email else "Guest Client"
+        )
+        client = Client(
+            tenant_id=tenant_id,
+            name=(command.client_name or "").strip() or fallback_name,
+            email=normalized_email,
+            phone=canonical_phone,
+            active=True,
+            management_approval_required=False,
+        )
+        db.add(client)
+        db.flush()
 
     if not client.active:
         raise BookingCommandError(403, "Client is not active.")
@@ -637,7 +689,6 @@ def create_authoritative_booking(
 
             payload = {
                 "id": booking.id,
-                "client_id": booking.client_id,
                 "provider_id": booking.provider_id,
                 "service_id": booking.service_id,
                 "start_time": booking.start_time.isoformat(),
@@ -652,7 +703,15 @@ def create_authoritative_booking(
                     target_type="booking",
                     target_id=booking.id,
                     details=json.dumps(
-                        {"status": booking.status.value, "source": "public_booking"}
+                        {
+                            "status": booking.status.value,
+                            "source": "public_booking",
+                            "request_fingerprint_version": REQUEST_FINGERPRINT_VERSION,
+                            "request_fingerprint": _request_fingerprint(
+                                tenant_id=tenant_id,
+                                command=command,
+                            ),
+                        }
                     ),
                 )
             )

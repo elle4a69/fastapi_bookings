@@ -27,6 +27,38 @@ class BookingCreate(BookingBase):
     pass
 
 
+class PublicBookingCreate(BaseModel):
+    """Contact-based booking request accepted by the public endpoint."""
+
+    client_name: Optional[str] = Field(None, description="Name of the client")
+    client_email: Optional[str] = Field(None, description="Email of the client")
+    client_phone: Optional[str] = Field(None, description="Phone of the client")
+    provider_id: int = Field(..., description="Identifier of the provider")
+    service_id: int = Field(..., description="Identifier of the service")
+    location_id: Optional[int] = Field(None, description="Identifier of the location")
+    start_time: datetime = Field(..., description="Start time of the appointment")
+    end_time: datetime = Field(..., description="End time of the appointment")
+    notes: Optional[str] = Field(None, description="Notes attached to the booking")
+    addon_ids: list[int] = Field(
+        default_factory=list,
+        description="Existing public-form add-on selections",
+    )
+    product_ids: list[int] = Field(
+        default_factory=list,
+        description="Existing public-form product selections",
+    )
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Unique idempotency key for preventing duplicate submissions",
+    )
+    # Unknown keys are retained only long enough for the public route to reject
+    # them with a non-reflecting error. The published contract remains closed.
+    model_config = ConfigDict(
+        extra="allow",
+        json_schema_extra={"additionalProperties": False},
+    )
+
+
 class BookingUpdate(BaseModel):
     provider_id: Optional[int] = None
     service_id: Optional[int] = None
@@ -87,7 +119,7 @@ class BookingResponse(BaseModel):
     data: Booking
 
 
-class PublicBookingData(BaseModel):
+class PublicBookingReceipt(BaseModel):
     """Non-PII booking receipt returned by the unauthenticated public route."""
 
     id: int
@@ -103,7 +135,7 @@ class PublicBookingData(BaseModel):
 
 class PublicBookingResponse(BaseModel):
     ok: bool
-    data: PublicBookingData
+    data: PublicBookingReceipt
 
 
 class ErrorResponse(BaseModel):

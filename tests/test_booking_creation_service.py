@@ -1,11 +1,13 @@
 """Synthetic regression tests for the authoritative booking command."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
 from app.core.state_machine import BookingStatus
@@ -26,12 +28,13 @@ from app.models import (
     Tenant,
 )
 from app.models.location import LocationProvider, LocationService
-from app.schemas.booking import BookingCreate
+from app.schemas.booking import BookingCreate, PublicBookingCreate, PublicBookingReceipt
 from app.services.booking_creation_service import (
     BookingCommandError,
     _resource_candidates_query,
     create_authoritative_booking,
 )
+from app.services.scheduling_service import compute_availability
 
 
 @pytest.fixture
@@ -144,7 +147,30 @@ def test_command_creates_pending_booking_allocations_event_and_audit(
         target_id=booking.id,
     ).one()
     assert audit.user_id is None
-    assert "pending" in audit.details
+    audit_details = json.loads(audit.details)
+    assert set(audit_details) == {
+        "status",
+        "source",
+        "request_fingerprint_version",
+        "request_fingerprint",
+    }
+    assert audit_details["status"] == "pending"
+    assert audit_details["source"] == "public_booking"
+    assert audit_details["request_fingerprint_version"] == 1
+    assert len(audit_details["request_fingerprint"]) == 64
+    event = (
+        db_session.query(OutboxEvent)
+        .filter_by(tenant_id=data["tenant"].id, type="booking.created")
+        .one()
+    )
+    assert set(event.data()) == {
+        "id",
+        "provider_id",
+        "service_id",
+        "start_time",
+        "end_time",
+        "status",
+    }
 
 
 def test_same_tenant_idempotent_replay_creates_no_new_rows(db_session, booking_command_setup):
@@ -225,6 +251,116 @@ def test_idempotent_contact_replay_uses_stable_identifier_not_display_name(
     )
 
     assert replay.id == first.id
+
+
+def test_idempotent_replay_uses_immutable_fingerprint_after_domain_changes(
+    db_session, booking_command_setup
+):
+    data = booking_command_setup
+    data["client"].email = "stable-original@example.invalid"
+    db_session.commit()
+    command = _command(
+        data,
+        client_id=None,
+        client_name=data["client"].name,
+        client_email=data["client"].email,
+        client_phone=data["client"].phone,
+        idempotency_key=f"immutable-fingerprint-{uuid4()}",
+    )
+    first = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    db_session.commit()
+
+    data["provider"].active = False
+    data["service"].active = False
+    data["service"].duration = 75
+    data["location"].active = False
+    data["client"].active = False
+    data["client"].name = "Synthetic Changed Name"
+    data["client"].email = "changed@example.invalid"
+    data["client"].phone = "+61 499 000 999"
+    db_session.query(LocationProvider).filter_by(
+        tenant_id=data["tenant"].id,
+        location_id=data["location"].id,
+        provider_id=data["provider"].id,
+    ).delete()
+    db_session.query(LocationService).filter_by(
+        tenant_id=data["tenant"].id,
+        location_id=data["location"].id,
+        service_id=data["service"].id,
+    ).delete()
+    db_session.commit()
+
+    replay = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    assert replay.id == first.id
+    with pytest.raises(BookingCommandError) as changed:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command.model_copy(update={"notes": "changed synthetic command"}),
+        )
+    assert changed.value.status_code == 409
+    with pytest.raises(BookingCommandError) as malformed_change:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command.model_copy(update={"client_phone": "not-a-phone"}),
+        )
+    assert malformed_change.value.status_code == 409
+
+
+def test_replay_without_one_valid_versioned_fingerprint_fails_closed(
+    db_session, booking_command_setup
+):
+    data = booking_command_setup
+    command = _command(data, idempotency_key=f"legacy-fingerprint-{uuid4()}")
+    booking = create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=command,
+    )
+    audit = db_session.query(AuditLog).filter_by(
+        tenant_id=data["tenant"].id,
+        action="booking.created",
+        target_type="booking",
+        target_id=booking.id,
+    ).one()
+    duplicate = AuditLog(
+        tenant_id=data["tenant"].id,
+        action="booking.created",
+        target_type="booking",
+        target_id=booking.id,
+        details=audit.details,
+    )
+    db_session.add(duplicate)
+    db_session.flush()
+    with pytest.raises(BookingCommandError) as duplicate_error:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command,
+        )
+    assert duplicate_error.value.status_code == 409
+    db_session.delete(duplicate)
+    db_session.flush()
+
+    audit.details = json.dumps({"status": "pending", "source": "public_booking"})
+    db_session.flush()
+
+    with pytest.raises(BookingCommandError) as missing:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=command,
+        )
+    assert missing.value.status_code == 409
 
 
 def test_cross_tenant_ids_and_global_key_collision_fail_without_partial_rows(
@@ -380,6 +516,90 @@ def test_phone_matching_is_canonical_and_does_not_duplicate_client(
     )
     assert booking.client_id == data["client"].id
     assert db_session.query(Client).count() == initial_clients
+
+
+def test_conflicting_phone_and_email_clients_fail_without_partial_rows(
+    db_session, booking_command_setup
+):
+    data = booking_command_setup
+    other = Client(
+        tenant_id=data["tenant"].id,
+        name="Synthetic Other Contact",
+        email="other-contact@example.invalid",
+        active=True,
+    )
+    db_session.add(other)
+    db_session.commit()
+    initial = {
+        "clients": db_session.query(Client).count(),
+        "bookings": db_session.query(Booking).count(),
+        "events": db_session.query(OutboxEvent).count(),
+        "audits": db_session.query(AuditLog).count(),
+    }
+
+    with pytest.raises(BookingCommandError) as conflict:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=_command(
+                data,
+                client_id=None,
+                client_phone=data["client"].phone,
+                client_email=other.email,
+            ),
+        )
+    assert conflict.value.status_code == 409
+    with pytest.raises(BookingCommandError) as id_conflict:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=_command(
+                data,
+                client_id=data["client"].id,
+                client_phone=None,
+                client_email=other.email,
+            ),
+        )
+    assert id_conflict.value.status_code == 409
+    assert initial == {
+        "clients": db_session.query(Client).count(),
+        "bookings": db_session.query(Booking).count(),
+        "events": db_session.query(OutboxEvent).count(),
+        "audits": db_session.query(AuditLog).count(),
+    }
+
+
+@pytest.mark.parametrize("duplicate_field", ["phone", "email"])
+def test_duplicate_contact_identity_fails_closed_even_when_one_match_is_inactive(
+    db_session, booking_command_setup, duplicate_field
+):
+    data = booking_command_setup
+    data["client"].email = "duplicate@example.invalid"
+    duplicate = Client(
+        tenant_id=data["tenant"].id,
+        name="Synthetic Inactive Duplicate",
+        email=data["client"].email if duplicate_field == "email" else None,
+        phone="0411 222 333" if duplicate_field == "phone" else None,
+        active=False,
+    )
+    db_session.add(duplicate)
+    db_session.commit()
+    initial_bookings = db_session.query(Booking).count()
+
+    overrides = {
+        "client_id": None,
+        "client_name": "Synthetic Ambiguous Contact",
+        "client_phone": data["client"].phone if duplicate_field == "phone" else None,
+        "client_email": data["client"].email if duplicate_field == "email" else None,
+    }
+    with pytest.raises(BookingCommandError) as ambiguous:
+        create_authoritative_booking(
+            db_session,
+            tenant_id=data["tenant"].id,
+            command=_command(data, **overrides),
+        )
+    assert ambiguous.value.status_code == 409
+    assert db_session.query(Booking).count() == initial_bookings
 
 
 def test_inactive_client_is_rejected_by_id_and_contact(db_session, booking_command_setup):
@@ -639,6 +859,41 @@ def test_minimum_buffer_is_revalidated_and_persisted_consistently(
     assert second.start_time == safe_start
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Shared availability discovery does not yet apply the booking command's "
+        "minimum 15-minute buffer policy."
+    ),
+)
+def test_availability_does_not_advertise_a_slot_rejected_by_minimum_buffer(
+    db_session, booking_command_setup
+):
+    data = booking_command_setup
+    data["service"].buffer_before = 0
+    data["service"].buffer_after = 0
+    db_session.flush()
+    create_authoritative_booking(
+        db_session,
+        tenant_id=data["tenant"].id,
+        command=_command(data),
+    )
+    adjacent_start = data["start"] + timedelta(minutes=data["service"].duration)
+    slots = compute_availability(
+        db_session,
+        service=data["service"],
+        provider=data["provider"],
+        location=data["location"],
+        start_time=data["start"].replace(hour=0),
+        end_time=data["start"].replace(hour=23, minute=59),
+    )
+    advertised_starts = {
+        datetime.fromisoformat(slot["start_time"]).astimezone(timezone.utc)
+        for slot in slots
+    }
+    assert adjacent_start not in advertised_starts
+
+
 def test_command_preserves_outer_transaction_work_before_and_after_success(
     db_session, booking_command_setup
 ):
@@ -732,14 +987,27 @@ def test_public_route_commits_only_after_command_returns(monkeypatch, booking_co
     from app.api.routers import public_bookings
 
     data = booking_command_setup
-    command = _command(
-        data,
-        client_id=None,
+    command = PublicBookingCreate(
         client_name=data["client"].name,
         client_phone=data["client"].phone,
+        provider_id=data["provider"].id,
+        service_id=data["service"].id,
+        location_id=data["location"].id,
+        start_time=data["start"],
+        end_time=data["start"] + timedelta(minutes=data["service"].duration),
+        idempotency_key=f"public-commit-{uuid4()}",
     )
     fake_db = MagicMock()
-    returned = SimpleNamespace(id=99)
+    returned = SimpleNamespace(
+        id=99,
+        provider_id=data["provider"].id,
+        service_id=data["service"].id,
+        location_id=data["location"].id,
+        start_time=data["start"],
+        end_time=data["start"] + timedelta(minutes=data["service"].duration),
+        status=BookingStatus.PENDING,
+        created_at=datetime.now(timezone.utc),
+    )
 
     def fake_command(db, *, tenant_id, command):
         assert db is fake_db
@@ -755,8 +1023,45 @@ def test_public_route_commits_only_after_command_returns(monkeypatch, booking_co
     )
 
     fake_db.commit.assert_called_once_with()
-    fake_db.refresh.assert_called_once_with(returned)
-    assert result == {"ok": True, "data": returned}
+    fake_db.refresh.assert_not_called()
+    assert fake_db.method_calls == [call.commit()]
+    assert isinstance(result["data"], PublicBookingReceipt)
+    assert result["data"].id == returned.id
+
+
+def test_public_route_commit_failure_rolls_back_command_rows(
+    db_session, booking_command_setup, monkeypatch
+):
+    from app.api.routers import public_bookings
+
+    data = booking_command_setup
+    command = PublicBookingCreate(
+        client_name="Synthetic Commit Failure",
+        client_email="commit-failure@example.invalid",
+        provider_id=data["provider"].id,
+        service_id=data["service"].id,
+        location_id=data["location"].id,
+        start_time=data["start"],
+        end_time=data["start"] + timedelta(minutes=data["service"].duration),
+        idempotency_key=f"commit-failure-{uuid4()}",
+    )
+    original_commit = db_session.commit
+
+    def fail_commit():
+        raise RuntimeError("synthetic commit failure")
+
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    with pytest.raises(HTTPException) as failure:
+        public_bookings.create_public_booking(
+            command,
+            db=db_session,
+            tenant=data["tenant"],
+        )
+    assert failure.value.status_code == 500
+    assert db_session.query(Booking).count() == 0
+    assert db_session.query(OutboxEvent).count() == 0
+    assert db_session.query(AuditLog).count() == 0
+    monkeypatch.setattr(db_session, "commit", original_commit)
 
 
 def test_public_api_contract_returns_real_pending_status(client, booking_command_setup):
@@ -767,9 +1072,11 @@ def test_public_api_contract_returns_real_pending_status(client, booking_command
         client_name=data["client"].name,
         client_phone=data["client"].phone,
     )
+    payload = command.model_dump(mode="json", exclude={"client_id"})
+    payload.update({"addon_ids": [], "product_ids": []})
     response = client.post(
         "/api/public/bookings",
-        json=command.model_dump(mode="json"),
+        json=payload,
         headers={"X-Tenant": data["tenant"].subdomain},
     )
 
@@ -790,19 +1097,29 @@ def test_public_api_contract_returns_real_pending_status(client, booking_command
 
 
 def test_public_route_rejects_client_id_and_openapi_response_is_redacted(
-    client, booking_command_setup
+    client, booking_command_setup, caplog
 ):
     data = booking_command_setup
+    marker = "synthetic-secret-client-id-marker"
+    payload = _command(data).model_dump(mode="json")
+    payload["client_id"] = marker
     response = client.post(
         "/api/public/bookings",
-        json=_command(data).model_dump(mode="json"),
+        json=payload,
         headers={"X-Tenant": data["tenant"].subdomain},
     )
-    assert response.status_code == 400
-    assert "contact details" in response.json()["error"]["message"]
+    assert response.status_code == 422
+    assert response.json()["error"]["details"] == {}
+    assert marker not in response.text
+    assert marker not in caplog.text
 
     document = client.get("/openapi.json").json()
-    response_schema = document["components"]["schemas"]["PublicBookingData"]
+    operation = document["paths"]["/api/public/bookings"]["post"]
+    request_ref = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+    request_schema = document["components"]["schemas"][request_ref.rsplit("/", 1)[-1]]
+    assert "client_id" not in request_schema["properties"]
+    assert request_schema["additionalProperties"] is False
+    response_schema = document["components"]["schemas"]["PublicBookingReceipt"]
     forbidden = {"client_id", "client", "client_name", "client_email", "client_phone", "notes", "idempotency_key"}
     assert forbidden.isdisjoint(response_schema["properties"])
 
@@ -833,7 +1150,7 @@ def test_unexpected_failure_returns_generic_body_and_never_logs_sensitive_values
     )
     response = client.post(
         "/api/public/bookings",
-        json=command.model_dump(mode="json"),
+        json=command.model_dump(mode="json", exclude={"client_id"}),
         headers={"X-Tenant": data["tenant"].subdomain},
     )
 

@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from ..deps import get_public_tenant, get_db
 from ...models.tenant import Tenant
-from ...schemas.booking import BookingCreate, PublicBookingResponse
+from ...schemas.booking import (
+    BookingCreate,
+    PublicBookingCreate,
+    PublicBookingReceipt,
+    PublicBookingResponse,
+)
 from ...services.booking_creation_service import (
     BookingCommandError,
     create_authoritative_booking,
@@ -24,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/bookings", response_model=PublicBookingResponse)
 def create_public_booking(
-    booking_in: BookingCreate,
+    booking_in: PublicBookingCreate,
     db: Session = Depends(get_db),
     tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
@@ -33,20 +38,23 @@ def create_public_booking(
     The command revalidates the exact live slot and persists the booking,
     allocations, audit record, and outbox event in one transaction.
     """
-    if booking_in.client_id is not None:
+    if booking_in.model_extra:
         raise HTTPException(
-            status_code=400,
-            detail="Public bookings require customer contact details, not client_id.",
+            status_code=422,
+            detail="Public booking request contains unsupported fields.",
         )
 
     try:
+        command = BookingCreate(
+            **booking_in.model_dump(exclude={"addon_ids", "product_ids"})
+        )
         booking = create_authoritative_booking(
             db,
             tenant_id=tenant.id,
-            command=booking_in,
+            command=command,
         )
+        receipt = PublicBookingReceipt.model_validate(booking)
         db.commit()
-        db.refresh(booking)
     except BookingCommandError as exc:
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -58,5 +66,5 @@ def create_public_booking(
             type(exc).__name__,
         )
         raise HTTPException(status_code=500, detail="Unable to create booking.") from None
-    return {"ok": True, "data": booking}
+    return {"ok": True, "data": receipt}
 
