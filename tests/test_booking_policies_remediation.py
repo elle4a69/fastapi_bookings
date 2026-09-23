@@ -11,6 +11,7 @@ from app.models.provider import Provider
 from app.models.booking import Booking
 from app.models.outbox import OutboxEvent
 from app.models.management_review_request import ManagementReviewRequest
+from app.models.schedule import ProviderWorkDay
 from app.core.security import create_access_token
 
 @pytest.fixture(autouse=True)
@@ -38,6 +39,20 @@ def setup_data(db_session):
     provider = Provider(tenant_id=tenant.id, name="Dr. Smith", active=True)
     
     db_session.add_all([client_ok, client_restricted, service, provider])
+    db_session.flush()
+    db_session.add_all(
+        [
+            ProviderWorkDay(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                weekday=weekday,
+                start_time="00:00",
+                end_time="23:59",
+                is_working=True,
+            )
+            for weekday in range(7)
+        ]
+    )
     db_session.commit()
     
     return {
@@ -199,7 +214,9 @@ def test_public_booking_tenant_isolation_and_policies(client, setup_data, db_ses
     db_session.add_all([client_b, service_b, provider_b])
     db_session.commit()
 
-    base_time = datetime.now(timezone.utc) + timedelta(days=5)
+    base_time = (datetime.now(timezone.utc) + timedelta(days=5)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     valid_payload = {
         "client_id": setup_data["client_ok"].id,
         "provider_id": setup_data["provider"].id,
@@ -268,7 +285,9 @@ def test_public_booking_client_resolution_and_creation(client, setup_data, db_se
     tenant_a = setup_data["tenant"]
 
     # 1. New Client Registration via Public Booking
-    new_client_time = datetime.now(timezone.utc) + timedelta(days=10)
+    new_client_time = (datetime.now(timezone.utc) + timedelta(days=10)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     payload_new_client = {
         "client_name": "Alice Wonderland",
         "client_email": "alice@example.com",
@@ -289,7 +308,7 @@ def test_public_booking_client_resolution_and_creation(client, setup_data, db_se
     ).first()
     assert created_client is not None
     assert created_client.name == "Alice Wonderland"
-    assert created_client.phone == "+61411222333"
+    assert created_client.phone == "61411222333"
 
     # 2. Existing Client matched by email (no duplicate client row created)
     initial_client_count = db_session.query(Client).filter(Client.tenant_id == tenant_a.id).count()

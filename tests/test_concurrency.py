@@ -16,6 +16,7 @@ from app.models import (
     Booking as BookingModel,
     BookingSlotAllocation,
     OutboxEvent,
+    ProviderWorkDay,
     WaitlistEntry,
     WaitlistStatus,
 )
@@ -71,6 +72,25 @@ def test_setup(db_session: Session):
         db_session.add(provider)
         db_session.commit()
         db_session.refresh(provider)
+
+    for weekday in range(7):
+        workday = db_session.query(ProviderWorkDay).filter(
+            ProviderWorkDay.tenant_id == tenant.id,
+            ProviderWorkDay.provider_id == provider.id,
+            ProviderWorkDay.weekday == weekday,
+        ).first()
+        if not workday:
+            db_session.add(
+                ProviderWorkDay(
+                    tenant_id=tenant.id,
+                    provider_id=provider.id,
+                    weekday=weekday,
+                    start_time="00:00",
+                    end_time="23:59",
+                    is_working=True,
+                )
+            )
+    db_session.commit()
 
     sp = db_session.query(ServiceProvider).filter(ServiceProvider.service_id == service.id, ServiceProvider.provider_id == provider.id).first()
     if not sp:
@@ -516,12 +536,12 @@ def test_unexpected_outbox_or_runtime_failure_rolls_back_everything(client, test
     service = test_setup["service"]
     provider = test_setup["provider"]
 
-    from app.api.routers import public_bookings
+    from app.services import booking_creation_service
 
     def fake_create_outbox(*args, **kwargs):
         raise RuntimeError("Simulated catastrophic outbox serialization crash")
 
-    monkeypatch.setattr(public_bookings, "create_outbox_event", fake_create_outbox)
+    monkeypatch.setattr(booking_creation_service, "create_outbox_event", fake_create_outbox)
 
     start_dt = (datetime.now(timezone.utc) + timedelta(days=17)).replace(hour=10, minute=0, second=0, microsecond=0)
     end_dt = start_dt + timedelta(minutes=30)
