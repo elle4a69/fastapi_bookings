@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch
 
 from app.models.tenant import Tenant
@@ -76,8 +76,6 @@ def setup_rate_limit_data(db_session):
 
 def test_rate_limiting_service_quiet_hours(db_session, setup_rate_limit_data):
     account = setup_rate_limit_data["account"]
-    tenant = setup_rate_limit_data["tenant"]
-
     # Sydney is +10:00 (or +11:00, let's assume +10:00 for the test calculation or check dynamic timezone conversion)
     # If UTC time is 11:30 AM (11:30), Sydney time is 9:30 PM (21:30). Quiet hours start at 22:00, so 21:30 is OUTSIDE.
     # If UTC time is 12:30 PM (12:30), Sydney time is 10:30 PM (22:30). Quiet hours start at 22:00, so 22:30 is INSIDE.

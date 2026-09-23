@@ -29,6 +29,8 @@ from ...schemas.sms_conversation import (
 )
 from ...schemas.sms_message import SmsMessageCreate, SmsMessageResponse
 from ...services.sms.outbound_service import (
+    OutboundEnqueueResult,
+    OutboundIdempotencyConflict,
     enqueue_outbound_message_transactional,
     is_outbound_body_safe,
 )
@@ -181,7 +183,7 @@ async def retry_outbound_job(
     admin_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    job = (
+    job_probe = (
         db.query(SmsOutboundJob)
         .join(SmsMessage, SmsMessage.id == SmsOutboundJob.message_id)
         .join(SmsConversation, SmsConversation.id == SmsMessage.conversation_id)
@@ -199,20 +201,39 @@ async def retry_outbound_job(
             SmsMessage.provider_id == SmsConversation.provider_id,
             null_safe_message_account_scope(),
         )
-        .with_for_update()
         .first()
     )
 
-    if not job:
+    if not job_probe:
         raise HTTPException(status_code=404, detail="Outbound job not found.")
-    if job.status != "FAILED":
-        raise HTTPException(status_code=409, detail="Only failed outbound jobs can be retried.")
     conversation = get_scoped_conversation(
         db,
         tenant_id=tenant.id,
-        conversation_id=job.message.conversation_id,
+        conversation_id=job_probe.message.conversation_id,
         for_update=True,
     )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Outbound job not found.")
+    message = _scoped_message_query(
+        db,
+        tenant_id=tenant.id,
+        message_id=job_probe.message_id,
+    ).with_for_update().first()
+    job = (
+        db.query(SmsOutboundJob)
+        .filter(
+            SmsOutboundJob.id == job_probe.id,
+            SmsOutboundJob.message_id == message.id,
+        )
+        .with_for_update()
+        .first()
+        if message is not None
+        else None
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail="Outbound job not found.")
+    if job.status != "FAILED":
+        raise HTTPException(status_code=409, detail="Only failed outbound jobs can be retried.")
     if conversation is None or not has_enabled_delivery_target(db, conversation):
         raise HTTPException(status_code=409, detail="The delivery channel is unavailable.")
     try:
@@ -232,9 +253,7 @@ async def retry_outbound_job(
     job.error_log = None
 
     # Also reset the message status to queued
-    message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
-    if message:
-        message.status = "queued"
+    message.status = "queued"
 
     record_event(
         db,
@@ -311,6 +330,32 @@ def _scoped_message_query(db: Session, *, tenant_id: int, message_id: int):
             null_safe_message_account_scope(),
         )
     )
+
+
+def _lock_scoped_message(
+    db: Session, *, tenant_id: int, message_id: int
+) -> tuple[SmsMessage, SmsConversation] | None:
+    """Lock a staff mutation in conversation -> message order."""
+
+    probe = _scoped_message_query(
+        db, tenant_id=tenant_id, message_id=message_id
+    ).first()
+    if probe is None:
+        return None
+    conversation = get_scoped_conversation(
+        db,
+        tenant_id=tenant_id,
+        conversation_id=probe.conversation_id,
+        for_update=True,
+    )
+    if conversation is None:
+        return None
+    message = _scoped_message_query(
+        db, tenant_id=tenant_id, message_id=message_id
+    ).with_for_update().first()
+    if message is None or message.conversation_id != conversation.id:
+        return None
+    return message, conversation
 
 
 def _verified_approved_draft_winner(
@@ -462,9 +507,8 @@ async def review_draft_message(
     db: Session = Depends(get_db),
 ):
     """Review a draft message: approve, discard, or edit."""
-    message = _scoped_message_query(
-        db, tenant_id=tenant.id, message_id=draft_id
-    ).with_for_update().first()
+    locked = _lock_scoped_message(db, tenant_id=tenant.id, message_id=draft_id)
+    message = locked[0] if locked is not None else None
 
     if not message:
         raise HTTPException(status_code=404, detail="Draft message not found.")
@@ -477,14 +521,6 @@ async def review_draft_message(
         raise HTTPException(
             status_code=409, detail="Only pending AI drafts can be reviewed."
         )
-    if get_scoped_conversation(
-        db,
-        tenant_id=tenant.id,
-        conversation_id=message.conversation_id,
-        for_update=True,
-    ) is None:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-
     new_text = payload.text or payload.body
 
     if payload.action == "edit":
@@ -542,6 +578,19 @@ async def bulk_discard_drafts(
 ):
     """Explicitly discard selected drafts and audit each affected conversation."""
 
+    draft_probes = scoped_drafts(
+        db,
+        tenant_id=tenant.id,
+        message_ids=payload.message_ids,
+    )
+    for conversation_id in sorted({draft.conversation_id for draft in draft_probes}):
+        if get_scoped_conversation(
+            db,
+            tenant_id=tenant.id,
+            conversation_id=conversation_id,
+            for_update=True,
+        ) is None:
+            raise HTTPException(status_code=409, detail="Draft ownership changed.")
     drafts = scoped_drafts(
         db,
         tenant_id=tenant.id,
@@ -597,17 +646,11 @@ async def approve_draft_message(
     db: Session = Depends(get_db),
 ):
     # Retrieve message, checking tenant boundary
-    message = _scoped_message_query(
-        db, tenant_id=tenant.id, message_id=message_id
-    ).with_for_update().first()
+    locked = _lock_scoped_message(db, tenant_id=tenant.id, message_id=message_id)
+    message = locked[0] if locked is not None else None
 
     if not message:
         raise HTTPException(status_code=404, detail="Draft message not found.")
-    if get_scoped_conversation(
-        db, tenant_id=tenant.id, conversation_id=message.conversation_id
-    ) is None:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-
     return _approve_locked_draft(
         db,
         message=message,
@@ -623,20 +666,11 @@ async def discard_draft_message(
     admin_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    message = _scoped_message_query(
-        db, tenant_id=tenant.id, message_id=message_id
-    ).with_for_update().first()
+    locked = _lock_scoped_message(db, tenant_id=tenant.id, message_id=message_id)
+    message = locked[0] if locked is not None else None
 
     if not message:
         raise HTTPException(status_code=404, detail="Draft message not found.")
-    if get_scoped_conversation(
-        db,
-        tenant_id=tenant.id,
-        conversation_id=message.conversation_id,
-        for_update=True,
-    ) is None:
-        raise HTTPException(status_code=404, detail="Draft message not found.")
-
     if (
         message.status != "draft"
         or message.direction != "draft"
@@ -1136,7 +1170,7 @@ async def send_manual_reply(
     account = get_scoped_account(db, conversation=conv, require_enabled=True)
 
     try:
-        msg = enqueue_outbound_message_transactional(
+        enqueue_result = enqueue_outbound_message_transactional(
             db=db,
             account=account,
             conversation=conv,
@@ -1145,9 +1179,34 @@ async def send_manual_reply(
             author_id=admin_user.id,
             status="queued",
             client_request_id=payload.client_request_id,
+            return_result=True,
         )
+        if not isinstance(enqueue_result, OutboundEnqueueResult):
+            raise RuntimeError("Outbound enqueue did not return winner metadata.")
+        msg = enqueue_result.message
+    except OutboundIdempotencyConflict as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="The idempotency key is already used for a different message.",
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail="The delivery channel is unavailable.") from exc
+    if not enqueue_result.created:
+        winner = _verified_manual_send_winner(
+            db,
+            tenant_id=tenant.id,
+            provider_id=conv.provider_id,
+            conversation_id=conv.id,
+            sms_account_id=conv.sms_account_id,
+            client_request_id=payload.client_request_id,
+            body=payload.body,
+        )
+        if winner is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Concurrent manual send could not be verified.",
+            )
+        return winner
     if msg.status == "failed":
         db.commit()
         raise HTTPException(

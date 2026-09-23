@@ -1,5 +1,6 @@
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -11,6 +12,18 @@ from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsOutboundJob, SmsConversationEvent
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OutboundEnqueueResult:
+    """The exact message selected by idempotency and whether this call created it."""
+
+    message: SmsMessage
+    created: bool
+
+
+class OutboundIdempotencyConflict(ValueError):
+    """Raised when an idempotency key names a different outbound command."""
 
 OUTBOUND_SAFETY_BLOCKLIST = (
     "[[handoff",
@@ -60,8 +73,9 @@ def enqueue_outbound_message_transactional(
     status: str = "queued",  # 'queued', 'draft'
     parent_message_id: Optional[int] = None,
     customer_turn_ref: Optional[str] = None,
-    client_request_id: Optional[str] = None
-) -> SmsMessage:
+    client_request_id: Optional[str] = None,
+    return_result: bool = False,
+) -> SmsMessage | OutboundEnqueueResult:
     """Creates an SmsMessage and enqueues a delivery job in one transaction."""
     if account is not None and (
         account.id != conversation.sms_account_id
@@ -106,8 +120,30 @@ def enqueue_outbound_message_transactional(
             SmsMessage.client_request_id == client_request_id
         ).first()
         if existing_msg:
+            expected_account_id = account.id if account else None
+            if (
+                existing_msg.body != body
+                or existing_msg.author_type != author_type
+                or existing_msg.author_id != author_id
+                or existing_msg.sms_account_id != expected_account_id
+                or existing_msg.direction
+                != ("draft" if status == "draft" else "outbound")
+                or existing_msg.status
+                not in {"queued", "sending", "sent", "delivered"}
+                or db.query(SmsOutboundJob)
+                .filter(
+                    SmsOutboundJob.message_id == existing_msg.id,
+                    SmsOutboundJob.sms_account_id == expected_account_id,
+                )
+                .first()
+                is None
+            ):
+                raise OutboundIdempotencyConflict(
+                    "The idempotency key is already used for a different message."
+                )
             logger.info("Duplicate outbound send was deduplicated.")
-            return existing_msg
+            result = OutboundEnqueueResult(message=existing_msg, created=False)
+            return result if return_result else result.message
 
     # 2. Prevent duplicate AI replies for the same turn (AI safety rule)
     if author_type == "ai" and customer_turn_ref:
@@ -119,7 +155,8 @@ def enqueue_outbound_message_transactional(
         ).first()
         if existing_ai_reply:
             logger.warning("Duplicate AI reply was blocked.")
-            return existing_ai_reply
+            result = OutboundEnqueueResult(message=existing_ai_reply, created=False)
+            return result if return_result else result.message
 
     # 3. Safety check on outbound body content to prevent leaks
     if not is_outbound_body_safe(body):
@@ -152,7 +189,8 @@ def enqueue_outbound_message_transactional(
         db.add(event)
         db.flush()
         logger.warning("Outbound SMS safety policy blocked delivery.")
-        return message
+        result = OutboundEnqueueResult(message=message, created=True)
+        return result if return_result else result.message
 
     # 4. Create SmsMessage record
     message = SmsMessage(
@@ -190,4 +228,5 @@ def enqueue_outbound_message_transactional(
     conversation.last_activity_at = datetime.now(timezone.utc)
     db.flush()
     
-    return message
+    result = OutboundEnqueueResult(message=message, created=True)
+    return result if return_result else result.message

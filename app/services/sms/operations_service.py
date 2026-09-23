@@ -201,6 +201,22 @@ def ensure_message_delivery_allowed(
     if message.author_type not in {"ai", "fixed_autoresponder"}:
         return
 
+    if message.author_type == "ai" and has_exact_draft_approval(
+        db,
+        conversation=conversation,
+        message=message,
+    ):
+        if conversation.state not in {
+            "auto-reply",
+            "taken-over",
+            "needs-review",
+            "escalated",
+        }:
+            raise SmsOperationConflict(
+                "The approved draft cannot be delivered in this conversation state."
+            )
+        return
+
     if conversation.state != "auto-reply" or not conversation.ai_enabled:
         raise SmsOperationConflict("Automated delivery is disabled for this conversation.")
     account = get_scoped_account(db, conversation=conversation, require_enabled=True)
@@ -212,6 +228,47 @@ def ensure_message_delivery_allowed(
         raise SmsOperationConflict("AI delivery is disabled for this SMS line.")
     if message.author_type == "fixed_autoresponder" and not account.autoresponder_enabled:
         raise SmsOperationConflict("The fixed responder is disabled for this SMS line.")
+
+
+def has_exact_draft_approval(
+    db: Session,
+    *,
+    conversation: SmsConversation,
+    message: SmsMessage,
+) -> bool:
+    """Return whether a human approved this exact AI draft in this thread.
+
+    Approval evidence is deliberately structural: it must be an immutable-style
+    conversation event for this conversation, name this message by integer ID,
+    and identify a positive staff actor.  Merely changing message status is not
+    enough to authorize delivery.
+    """
+
+    if message.author_type != "ai" or message.conversation_id != conversation.id:
+        return False
+    events = (
+        db.query(SmsConversationEvent)
+        .filter(
+            SmsConversationEvent.conversation_id == conversation.id,
+            SmsConversationEvent.type == "draft_approved",
+        )
+        .order_by(SmsConversationEvent.id.desc())
+        .all()
+    )
+    for event in events:
+        metadata = event.meta if isinstance(event.meta, dict) else {}
+        actor_id = metadata.get("actor_id")
+        message_id = metadata.get("message_id")
+        if (
+            isinstance(actor_id, int)
+            and not isinstance(actor_id, bool)
+            and actor_id > 0
+            and isinstance(message_id, int)
+            and not isinstance(message_id, bool)
+            and message_id == message.id
+        ):
+            return True
+    return False
 
 
 def get_scoped_account(

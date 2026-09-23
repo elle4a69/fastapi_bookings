@@ -106,23 +106,50 @@ async def send_chatwoot_message(
 
     if not is_outbound_body_safe(body):
         raise ValueError("Chatwoot message failed outbound safety validation.")
+    if conversation.id is None:
+        raise ValueError("Chatwoot conversation must be persisted before delivery.")
+    with db.no_autoflush:
+        persisted = (
+            db.query(SmsConversation)
+            .filter(
+                SmsConversation.id == conversation.id,
+                SmsConversation.tenant_id == conversation.tenant_id,
+                SmsConversation.provider_id == conversation.provider_id,
+                SmsConversation.sms_account_id == conversation.sms_account_id,
+                SmsConversation.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+                SmsConversation.chatwoot_conversation_id
+                == conversation.chatwoot_conversation_id,
+                SmsConversation.chatwoot_contact_id
+                == conversation.chatwoot_contact_id,
+            )
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+    if persisted is None:
+        raise ValueError("Chatwoot conversation scope is inconsistent.")
     bindings = (
         db.query(SmsChatwootBinding)
         .join(Provider, Provider.id == SmsChatwootBinding.provider_id)
         .filter(
-            SmsChatwootBinding.tenant_id == conversation.tenant_id,
-            SmsChatwootBinding.provider_id == conversation.provider_id,
-            SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+            SmsChatwootBinding.tenant_id == persisted.tenant_id,
+            SmsChatwootBinding.provider_id == persisted.provider_id,
+            SmsChatwootBinding.chatwoot_inbox_id == persisted.chatwoot_inbox_id,
             SmsChatwootBinding.is_enabled.is_(True),
-            Provider.tenant_id == conversation.tenant_id,
+            Provider.tenant_id == persisted.tenant_id,
         )
         .limit(2)
         .all()
     )
     if (
         len(bindings) != 1
-        or conversation.chatwoot_conversation_id is None
-        or conversation.chatwoot_inbox_id is None
+        or _positive_int(persisted.chatwoot_conversation_id) is None
+        or _positive_int(persisted.chatwoot_inbox_id) is None
+        or _positive_int(bindings[0].chatwoot_account_id) is None
+        or (
+            persisted.chatwoot_contact_id is not None
+            and _positive_int(persisted.chatwoot_contact_id) is None
+        )
         or not bindings[0].chatwoot_api_token
     ):
         raise ValueError("No unique enabled Chatwoot binding found for conversation.")
@@ -137,7 +164,7 @@ async def send_chatwoot_message(
     url = (
         f"{binding.chatwoot_base_url.rstrip('/')}/api/v1/accounts/"
         f"{binding.chatwoot_account_id}/conversations/"
-        f"{conversation.chatwoot_conversation_id}/messages"
+        f"{persisted.chatwoot_conversation_id}/messages"
     )
     headers = {
         "api_access_token": binding.chatwoot_api_token,
@@ -168,6 +195,8 @@ def process_chatwoot_webhook(
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Invalid Chatwoot payload.")
     inbox_payload = _mapping(payload.get("inbox"))
+    account_supplied = "account" in payload
+    account_payload = _mapping(payload.get("account"))
     conversation_payload = _mapping(payload.get("conversation"))
     message_payload = _mapping(payload.get("message"))
     contact_payload = _mapping(payload.get("contact"))
@@ -210,6 +239,12 @@ def process_chatwoot_webhook(
         _record_webhook_status("rejected")
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
     binding = matching_bindings[0]
+    if account_supplied:
+        webhook_account_id = _positive_int(account_payload.get("id"))
+        if webhook_account_id != binding.chatwoot_account_id:
+            logger.warning("Chatwoot webhook account binding did not match.")
+            _record_webhook_status("rejected")
+            raise HTTPException(status_code=401, detail="Invalid webhook binding.")
 
     message_type = payload.get("message_type")
     if message_type not in {"incoming", "outgoing"}:
@@ -246,6 +281,7 @@ def process_chatwoot_webhook(
             SmsConversation.chatwoot_inbox_id == inbox_id,
             SmsConversation.chatwoot_conversation_id == chatwoot_conversation_id,
         )
+        .with_for_update()
         .limit(2)
         .all()
     )
@@ -268,6 +304,15 @@ def process_chatwoot_webhook(
     chatwoot_contact_id = _positive_int(
         conversation_contact.get("id") or contact_payload.get("id")
     )
+    if (
+        conversation is not None
+        and conversation.chatwoot_contact_id is not None
+        and chatwoot_contact_id is not None
+        and conversation.chatwoot_contact_id != chatwoot_contact_id
+    ):
+        logger.warning("Chatwoot webhook contact binding did not match.")
+        _record_webhook_status("rejected")
+        raise HTTPException(status_code=409, detail="Chatwoot contact conflict.")
     if conversation is None and normalized_phone:
         unbound_candidates = (
             db.query(SmsConversation)
@@ -361,7 +406,7 @@ def process_chatwoot_webhook(
         _record_webhook_status("duplicate")
         return _duplicate_response(existing_message)
 
-    if source_id:
+    if source_id and message_type == "outgoing":
         source_query = db.query(SmsMessage).filter(
             SmsMessage.tenant_id == binding.tenant_id,
             SmsMessage.provider_id == binding.provider_id,
@@ -382,6 +427,8 @@ def process_chatwoot_webhook(
             source_query = source_query.filter(SmsMessage.client_request_id == source_id)
         internal_outbound = source_query.first()
         if internal_outbound:
+            if not secrets.compare_digest(internal_outbound.body, content):
+                raise HTTPException(status_code=409, detail="Chatwoot source conflict.")
             if internal_outbound.chatwoot_message_id is None:
                 internal_outbound.chatwoot_message_id = message_id
             elif internal_outbound.chatwoot_message_id != message_id:

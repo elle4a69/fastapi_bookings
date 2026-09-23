@@ -14,6 +14,86 @@ from .operations_service import SmsOperationConflict, ensure_message_delivery_al
 logger = logging.getLogger(__name__)
 
 
+def _load_locked_delivery_context(
+    db: Session, job_id: int
+) -> tuple[SmsOutboundJob, SmsMessage, SmsConversation] | None:
+    """Lock one delivery in conversation -> message -> job order."""
+
+    job_probe = db.query(SmsOutboundJob).filter(SmsOutboundJob.id == job_id).first()
+    if job_probe is None:
+        return None
+    message_probe = (
+        db.query(SmsMessage).filter(SmsMessage.id == job_probe.message_id).first()
+    )
+    if message_probe is None:
+        return None
+    conversation = (
+        db.query(SmsConversation)
+        .filter(SmsConversation.id == message_probe.conversation_id)
+        .with_for_update()
+        .first()
+    )
+    if conversation is None:
+        return None
+    message = (
+        db.query(SmsMessage)
+        .filter(SmsMessage.id == message_probe.id)
+        .with_for_update()
+        .first()
+    )
+    job = (
+        db.query(SmsOutboundJob)
+        .filter(SmsOutboundJob.id == job_id)
+        .with_for_update()
+        .first()
+    )
+    if job is None or job.status != "PROCESSING" or job.message_id != message.id:
+        return None
+    return job, message, conversation
+
+
+def _chatwoot_echo_won(
+    db: Session,
+    *,
+    job_id: int,
+    message_id: int,
+) -> bool:
+    """Finalize a job already reconciled by its exact Chatwoot source echo."""
+
+    db.expire_all()
+    message = db.query(SmsMessage).filter(SmsMessage.id == message_id).first()
+    job = db.query(SmsOutboundJob).filter(SmsOutboundJob.id == job_id).first()
+    if (
+        message is None
+        or job is None
+        or job.message_id != message.id
+        or job.sms_account_id != message.sms_account_id
+        or message.chatwoot_message_id is None
+        or message.status not in {"sent", "delivered"}
+    ):
+        return False
+    conversation = (
+        db.query(SmsConversation)
+        .filter(SmsConversation.id == message.conversation_id)
+        .first()
+    )
+    if (
+        conversation is None
+        or message.tenant_id != conversation.tenant_id
+        or message.provider_id != conversation.provider_id
+        or message.sms_account_id != conversation.sms_account_id
+        or conversation.chatwoot_conversation_id is None
+        or conversation.chatwoot_inbox_id is None
+    ):
+        return False
+    job.status = "SUCCESS"
+    job.error_log = None
+    job.lease_expires_at = None
+    job.processed_at = datetime.now(timezone.utc)
+    db.commit()
+    return True
+
+
 def _quarantine_delivery_job(
     db: Session,
     *,
@@ -89,34 +169,47 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
 
         # 3. Process each leased job in its own transaction
         for job_id in leased_jobs:
-            # Re-fetch job in a fresh session block or transaction
-            job = db.query(SmsOutboundJob).filter(SmsOutboundJob.id == job_id).first()
-            if not job or job.status != "PROCESSING":
+            job_probe = db.query(SmsOutboundJob).filter(
+                SmsOutboundJob.id == job_id
+            ).first()
+            if job_probe is None or job_probe.status != "PROCESSING":
                 continue
-
-            message = db.query(SmsMessage).filter(SmsMessage.id == job.message_id).first()
-            if not message:
-                logger.error("Outbound job has no message (job_id=%s).", job.id)
+            message_probe = db.query(SmsMessage).filter(
+                SmsMessage.id == job_probe.message_id
+            ).first()
+            if message_probe is None:
+                logger.error("Outbound job has no message (job_id=%s).", job_probe.id)
                 _quarantine_delivery_job(
                     db,
-                    job=job,
+                    job=job_probe,
                     message=None,
                     conversation=None,
                     reason="MESSAGE_MISSING",
                 )
                 continue
-
-            conversation = db.query(SmsConversation).filter(SmsConversation.id == message.conversation_id).first()
-            if not conversation:
-                logger.error("Outbound job has no conversation (job_id=%s).", job.id)
+            conversation_probe = db.query(SmsConversation).filter(
+                SmsConversation.id == message_probe.conversation_id
+            ).first()
+            if conversation_probe is None:
+                logger.error(
+                    "Outbound job has no conversation (job_id=%s).", job_probe.id
+                )
                 _quarantine_delivery_job(
                     db,
-                    job=job,
-                    message=message,
+                    job=job_probe,
+                    message=message_probe,
                     conversation=None,
                     reason="CONVERSATION_MISSING",
                 )
                 continue
+            # Lock in the same order used by operations mutations. The
+            # conversation lock is intentionally held through provider
+            # acceptance so a protected lifecycle transition cannot return
+            # while a stale automated send is still in flight.
+            locked_context = _load_locked_delivery_context(db, job_id)
+            if locked_context is None:
+                continue
+            job, message, conversation = locked_context
 
             scope_is_valid = (
                 message.tenant_id == conversation.tenant_id
@@ -132,6 +225,22 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     conversation=conversation,
                     reason="DELIVERY_SCOPE_MISMATCH",
                 )
+                continue
+
+            is_chatwoot_thread = (
+                conversation.chatwoot_conversation_id is not None
+                and conversation.chatwoot_inbox_id is not None
+            )
+            if (
+                is_chatwoot_thread
+                and message.chatwoot_message_id is not None
+                and message.status in {"sent", "delivered"}
+            ):
+                job.status = "SUCCESS"
+                job.error_log = None
+                job.lease_expires_at = None
+                job.processed_at = datetime.now(timezone.utc)
+                db.commit()
                 continue
             try:
                 ensure_message_delivery_allowed(
@@ -159,19 +268,17 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 continue
 
             # Route Chatwoot-bound outbound messages directly
-            if (
-                conversation.chatwoot_conversation_id is not None
-                and conversation.chatwoot_inbox_id is not None
-            ):
+            if is_chatwoot_thread:
+                current_message_id = message.id
                 try:
                     from .chatwoot_service import send_chatwoot_message
                     # Persist a deterministic source ID before the network
                     # call. Chatwoot echoes it in its webhook, which closes
                     # the race where the echo can arrive before this worker
                     # receives Chatwoot's response message ID.
-                    source_id = f"fastapi-chatwoot-message-{message.id}"
+                    source_id = f"fastapi-chatwoot-message-{current_message_id}"
                     message.status = "sending"
-                    db.commit()
+                    db.flush()
 
                     mock_msg_id = await send_chatwoot_message(
                         db,
@@ -192,6 +299,20 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     continue
                 except Exception:
                     db.rollback()
+                    if _chatwoot_echo_won(
+                        db,
+                        job_id=job_id,
+                        message_id=current_message_id,
+                    ):
+                        continue
+                    job = db.query(SmsOutboundJob).filter(
+                        SmsOutboundJob.id == job_id
+                    ).first()
+                    message = db.query(SmsMessage).filter(
+                        SmsMessage.id == current_message_id
+                    ).first()
+                    if job is None or message is None:
+                        continue
                     job.retry_count += 1
                     job.error_log = "CHATWOOT_DELIVERY_FAILED"
                     if job.retry_count >= 5:
@@ -199,7 +320,9 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                         message.status = "failed"
                     else:
                         job.status = "PENDING"
-                        job.lease_expires_at = None
+                        job.lease_expires_at = datetime.now(timezone.utc) + timedelta(
+                            seconds=30
+                        )
                         message.status = "queued"
                     db.commit()
                     continue
@@ -263,7 +386,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 # Normalize target address
                 clean_to = adapter.normalise_address(conversation.customer_address)
                 if not clean_to:
-                    raise ValueError(f"Invalid customer phone number: {conversation.customer_address}")
+                    raise ValueError("Invalid customer destination.")
 
                 # Prepare command
                 command = OutboundSmsCommand(
@@ -275,7 +398,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
 
                 # Send via transport adapter
                 message.status = "sending"
-                db.commit()
+                db.flush()
 
                 result = await adapter.send(account, command)
 
@@ -286,7 +409,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     message.provider_message_id = result.provider_message_id
                     logger.info("Outbound SMS delivery succeeded (message_id=%s).", message.id)
                 else:
-                    raise RuntimeError(f"Transport send failure: {result.error_message} ({result.error_code})")
+                    raise RuntimeError("Transport rejected outbound command.")
 
             except Exception:
                 db.rollback()

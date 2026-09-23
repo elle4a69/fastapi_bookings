@@ -1,5 +1,8 @@
+import asyncio
+
+import httpx
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi import HTTPException
 
 from app.models.tenant import Tenant
@@ -10,7 +13,10 @@ from app.models.sms_message import SmsMessage
 from app.models.sms_outbox import SmsAiJob, SmsOutboundJob, SmsConversationEvent
 from app.services.sms.outbound_service import enqueue_outbound_message_transactional
 from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
-from app.services.sms.chatwoot_service import process_chatwoot_webhook
+from app.services.sms.chatwoot_service import (
+    process_chatwoot_webhook,
+    send_chatwoot_message,
+)
 
 @pytest.fixture
 def setup_chatwoot_data(db_session):
@@ -904,3 +910,254 @@ def test_webhook_authentication_regression_cases(db_session, setup_chatwoot_data
     assert conversation.state == "taken-over"
     db_session.refresh(ai_job)
     assert ai_job.status == "CANCELLED"
+
+
+def test_incoming_source_id_never_reconciles_an_outbound_message(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_source",
+        state="paused",
+        ai_enabled=False,
+        chatwoot_conversation_id=9301,
+        chatwoot_contact_id=9302,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    outbound = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic intended outbound",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+    )
+    db_session.add(outbound)
+    db_session.commit()
+
+    result = process_chatwoot_webhook(
+        db_session,
+        {
+            "id": 9303,
+            "message_type": "incoming",
+            "content": "Synthetic customer inbound",
+            "source_id": f"fastapi-chatwoot-message-{outbound.id}",
+            "inbox": {"id": binding.chatwoot_inbox_id},
+            "conversation": {
+                "id": conversation.chatwoot_conversation_id,
+                "contact": {"id": conversation.chatwoot_contact_id},
+            },
+        },
+        token="my-webhook-secret",
+    )
+
+    db_session.refresh(outbound)
+    assert result["duplicate"] is False
+    assert outbound.status == "sending"
+    assert outbound.chatwoot_message_id is None
+    inbound = db_session.query(SmsMessage).filter(
+        SmsMessage.chatwoot_message_id == 9303
+    ).one()
+    assert inbound.direction == "inbound"
+
+
+def test_outgoing_source_echo_requires_exact_body(db_session, setup_chatwoot_data):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_body",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9311,
+        chatwoot_contact_id=9312,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    outbound = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic intended outbound",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+    )
+    db_session.add(outbound)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(
+            db_session,
+            {
+                "id": 9313,
+                "message_type": "outgoing",
+                "content": "Synthetic different staff body",
+                "source_id": f"fastapi-chatwoot-message-{outbound.id}",
+                "inbox": {"id": binding.chatwoot_inbox_id},
+                "conversation": {
+                    "id": conversation.chatwoot_conversation_id,
+                    "contact": {"id": conversation.chatwoot_contact_id},
+                },
+            },
+            token="my-webhook-secret",
+        )
+    assert exc_info.value.status_code == 409
+    db_session.refresh(outbound)
+    assert outbound.chatwoot_message_id is None
+
+
+@pytest.mark.parametrize(
+    ("payload_override", "expected_status"),
+    [
+        ({"account": {"id": 9999}}, 401),
+        ({"conversation": {"id": 9311, "contact": {"id": 9999}}}, 409),
+    ],
+)
+def test_webhook_rejects_contradictory_account_or_contact_binding(
+    db_session, setup_chatwoot_data, payload_override, expected_status
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_binding",
+        state="paused",
+        ai_enabled=False,
+        chatwoot_conversation_id=9311,
+        chatwoot_contact_id=9312,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.commit()
+    payload = {
+        "id": 9314,
+        "message_type": "incoming",
+        "content": "Synthetic binding check",
+        "inbox": {"id": binding.chatwoot_inbox_id},
+        "conversation": {
+            "id": conversation.chatwoot_conversation_id,
+            "contact": {"id": conversation.chatwoot_contact_id},
+        },
+    }
+    payload.update(payload_override)
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(
+            db_session,
+            payload,
+            token="my-webhook-secret",
+        )
+    assert exc_info.value.status_code == expected_status
+    assert db_session.query(SmsMessage).filter(
+        SmsMessage.chatwoot_message_id == 9314
+    ).count() == 0
+
+
+def test_direct_chatwoot_send_rejects_unpersisted_thread_identity(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_direct",
+        state="taken-over",
+        chatwoot_conversation_id=9321,
+        chatwoot_contact_id=9322,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.commit()
+    forged = SmsConversation(
+        id=conversation.id,
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=None,
+        customer_address=conversation.customer_address,
+        state=conversation.state,
+        chatwoot_conversation_id=999999,
+        chatwoot_contact_id=conversation.chatwoot_contact_id,
+        chatwoot_inbox_id=conversation.chatwoot_inbox_id,
+    )
+
+    with patch("httpx.AsyncClient") as client_class:
+        with pytest.raises(ValueError, match="scope is inconsistent"):
+            asyncio.run(
+                send_chatwoot_message(db_session, forged, "Synthetic safe response")
+            )
+    client_class.assert_not_called()
+
+
+def test_chatwoot_worker_honors_echo_that_wins_before_timeout(
+    db_session, setup_chatwoot_data
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_timeout",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9331,
+        chatwoot_contact_id=9332,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic timeout response",
+        direction="outbound",
+        author_type="staff",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(message_id=message.id, sms_account_id=None, status="PENDING")
+    db_session.add(job)
+    db_session.commit()
+
+    async def accepted_then_timeout(db, _conversation, _body, source_id=None):
+        assert source_id == f"fastapi-chatwoot-message-{message.id}"
+        winner = db.query(SmsMessage).filter(SmsMessage.id == message.id).one()
+        winner.chatwoot_message_id = 9333
+        winner.status = "sent"
+        db.commit()
+        raise httpx.TimeoutException("synthetic timeout")
+
+    with (
+        patch(
+            "app.services.sms.chatwoot_service.send_chatwoot_message",
+            side_effect=accepted_then_timeout,
+        ),
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "SUCCESS"
+    assert job.retry_count == 0
+    assert message.status == "sent"
+    assert message.chatwoot_message_id == 9333

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -538,7 +539,7 @@ def test_openapi_requires_manual_idempotency_key_and_documents_conflict(
         json={"body": "Synthetic missing-key message"},
         headers=operations_data["headers"],
     )
-    assert missing_key.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert missing_key.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     assert db_session.query(SmsOutboundJob).count() == 0
 
 
@@ -717,7 +718,7 @@ def test_draft_routes_reject_non_ai_shape_and_blank_edits(
         json={"body": "   ", "client_request_id": "synthetic-blank-request"},
         headers=operations_data["headers"],
     )
-    assert blank.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+    assert blank.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 def test_correction_rejects_message_with_inconsistent_provider_scope(
@@ -828,3 +829,257 @@ def test_draft_approval_then_bulk_discard_has_one_winner(
     assert db_session.query(SmsOutboundJob).filter(
         SmsOutboundJob.message_id == draft.id
     ).count() == 1
+
+
+@pytest.mark.parametrize("state", ["needs-review", "taken-over", "escalated"])
+def test_worker_dispatches_exact_human_approved_ai_draft(
+    db_session, operations_data, state
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state=state,
+        suffix=f"31{len(state)}",
+        ai_enabled=False,
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic human-approved AI response",
+        direction="outbound",
+        author_type="ai",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={"message_id": message.id, "actor_id": operations_data["admin"].id},
+        )
+    )
+    job = SmsOutboundJob(
+        message_id=message.id,
+        sms_account_id=conversation.sms_account_id,
+        status="PENDING",
+    )
+    db_session.add(job)
+    db_session.commit()
+    adapter = MagicMock()
+    adapter.normalise_address.return_value = "61419999991"
+    adapter.send = AsyncMock(
+        return_value=SimpleNamespace(
+            status="success",
+            provider_message_id="synthetic-approved-provider-id",
+        )
+    )
+
+    with (
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+        patch(
+            "app.services.sms.outbox_worker.get_transport_adapter",
+            return_value=adapter,
+        ),
+    ):
+        from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
+
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "SUCCESS"
+    assert message.status == "sent"
+    adapter.send.assert_awaited_once()
+
+
+def test_retry_accepts_only_exact_human_approved_ai_draft(
+    client, db_session, operations_data
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state="needs-review",
+        suffix="314",
+        ai_enabled=False,
+    )
+    approved = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic approved retry",
+        direction="outbound",
+        author_type="ai",
+        status="failed",
+    )
+    unapproved = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic unapproved retry",
+        direction="outbound",
+        author_type="ai",
+        status="failed",
+    )
+    db_session.add_all([approved, unapproved])
+    db_session.flush()
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={"message_id": approved.id, "actor_id": operations_data["admin"].id},
+        )
+    )
+    approved_job = SmsOutboundJob(
+        message_id=approved.id,
+        sms_account_id=conversation.sms_account_id,
+        status="FAILED",
+    )
+    unapproved_job = SmsOutboundJob(
+        message_id=unapproved.id,
+        sms_account_id=conversation.sms_account_id,
+        status="FAILED",
+    )
+    db_session.add_all([approved_job, unapproved_job])
+    db_session.commit()
+
+    accepted = client.post(
+        f"/api/admin/sms/conversations/jobs/{approved_job.id}/retry",
+        headers=operations_data["headers"],
+    )
+    rejected = client.post(
+        f"/api/admin/sms/conversations/jobs/{unapproved_job.id}/retry",
+        headers=operations_data["headers"],
+    )
+    assert accepted.status_code == status.HTTP_200_OK
+    assert rejected.status_code == status.HTTP_409_CONFLICT
+    db_session.refresh(approved_job)
+    db_session.refresh(unapproved_job)
+    assert approved_job.status == "PENDING"
+    assert unapproved_job.status == "FAILED"
+
+
+@pytest.mark.parametrize(
+    ("state", "is_blocked"), [("resolved", False), ("taken-over", True)]
+)
+def test_worker_never_dispatches_approved_draft_from_terminal_protection(
+    db_session, operations_data, state, is_blocked
+):
+    conversation = _conversation(
+        db_session,
+        operations_data,
+        state=state,
+        suffix=f"32{int(is_blocked)}",
+        ai_enabled=False,
+        is_blocked=is_blocked,
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic protected approved response",
+        direction="outbound",
+        author_type="ai",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={"message_id": message.id, "actor_id": operations_data["admin"].id},
+        )
+    )
+    job = SmsOutboundJob(
+        message_id=message.id,
+        sms_account_id=conversation.sms_account_id,
+        status="PENDING",
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    with (
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+        patch("app.services.sms.outbox_worker.get_transport_adapter") as transport,
+    ):
+        from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
+
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "FAILED"
+    assert message.status == "failed"
+    transport.assert_not_called()
+
+
+def test_manual_enqueue_race_revalidates_different_body_and_has_no_side_effects(
+    client, db_session, operations_data
+):
+    conversation = _conversation(
+        db_session, operations_data, state="auto-reply", suffix="315"
+    )
+    from app.api.routers import sms_conversations as router_module
+
+    real_enqueue = router_module.enqueue_outbound_message_transactional
+
+    def concurrent_winner(**kwargs):
+        competing = SmsMessage(
+            tenant_id=conversation.tenant_id,
+            provider_id=conversation.provider_id,
+            sms_account_id=conversation.sms_account_id,
+            conversation_id=conversation.id,
+            body="Synthetic competing body",
+            direction="outbound",
+            author_type="staff",
+            author_id=operations_data["admin"].id,
+            status="queued",
+            client_request_id="synthetic-race-key",
+        )
+        db_session.add(competing)
+        db_session.flush()
+        db_session.add(
+            SmsOutboundJob(
+                message_id=competing.id,
+                sms_account_id=conversation.sms_account_id,
+                status="PENDING",
+            )
+        )
+        db_session.flush()
+        return real_enqueue(**kwargs)
+
+    with patch.object(
+        router_module,
+        "enqueue_outbound_message_transactional",
+        side_effect=concurrent_winner,
+    ):
+        response = client.post(
+            f"/api/admin/sms/conversations/{conversation.id}/messages",
+            json={
+                "body": "Synthetic requested body",
+                "client_request_id": "synthetic-race-key",
+            },
+            headers=operations_data["headers"],
+        )
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    db_session.refresh(conversation)
+    assert conversation.state == "auto-reply"
+    assert db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id == conversation.id,
+        SmsConversationEvent.type == "staff_replied",
+    ).count() == 0
