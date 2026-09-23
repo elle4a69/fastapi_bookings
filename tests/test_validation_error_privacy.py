@@ -182,6 +182,32 @@ def test_query_validation_uses_structural_access_logs_only(
     assert client_record.http_status == 422
 
 
+def test_dynamic_path_value_is_replaced_by_full_route_template(
+    client, db_session, caplog
+):
+    _seed_tenant(db_session)
+    _capture_info(caplog)
+    limiter.reset()
+
+    response = client.post(
+        f"/api/public/booking-forms/{MARKER}/availability",
+        content=b"{",
+        headers={
+            "Content-Type": "application/json",
+            "X-Tenant": "validation-privacy",
+        },
+    )
+
+    _assert_safe_validation_response(response, caplog)
+    app_record = next(
+        record for record in caplog.records if record.name == "app.access"
+    )
+    assert app_record.http_route == (
+        "/api/public/booking-forms/{slug}/availability"
+    )
+    assert MARKER not in repr(app_record.__dict__)
+
+
 class _DynamicPayload(BaseModel):
     values: dict[int, int]
 
