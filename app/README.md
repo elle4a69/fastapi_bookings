@@ -1,0 +1,73 @@
+# Application Entrypoint and HTTP Error Boundary
+
+## Purpose & Scope
+
+The `app` package contains the FastAPI Bookings application. `main.py` creates
+the FastAPI instance, installs middleware and exception handlers, and registers
+the application routers. Business workflows remain owned by their routers and
+services; this entrypoint does not own booking, SMS, AI, calendar, or provider
+domain behavior.
+
+## Architecture & Key Files
+
+- `main.py`: application construction, router registration, middleware, CORS,
+  lifecycle hooks, and shared HTTP error envelopes.
+- `api/`: authenticated and public API routers and dependencies.
+- `services/`: domain workflows and external-integration boundaries.
+- `models/` and `schemas/`: database and API data contracts.
+- `core/`: configuration, security, telemetry, and shared application policy.
+
+## Setup, Configuration & Dependencies
+
+The entrypoint uses the existing FastAPI, Starlette, Pydantic, SQLAlchemy,
+SlowAPI, and OpenTelemetry dependencies. No new environment variables or
+external services are required for validation-error handling. Database schema
+changes are managed through Alembic and are outside this module change.
+
+## Core Workflows & Contracts
+
+`RequestValidationError` produces HTTP 422 with the standard application
+envelope: `ok=false`, error code `VALIDATION_ERROR`, a generic message, bounded
+structural details, and the current trace/request ID when available. Each
+detail exposes only a source category, an allowlisted error category, and a
+fixed message. It does not serialize Pydantic errors verbatim.
+
+HTTP authentication, authorization, not-found, and method-not-allowed behavior
+continues through the existing dependency and HTTP-exception boundaries.
+
+## Data Safety & Isolation
+
+Validation responses and validation-handler logs must never include request
+body values, query/header/cookie values, authorization material, Pydantic
+`input` or `ctx`, raw parser messages, dynamic field keys, prompts, canaries, or
+customer data. The handler emits no validation log and caps its deduplicated
+detail list at 20 entries. Tenant and authorization behavior is unchanged.
+
+## Known Issues, Edge Cases & Outstanding Work
+
+- The structural validation response intentionally omits field-level paths;
+  dynamically keyed objects can otherwise turn error locations into a data-
+  reflection channel.
+- The handler categorizes unknown future Pydantic error types as `invalid`.
+- Access-log configuration is separate from this handler and must independently
+  avoid sensitive query strings in production infrastructure.
+- A full-file Ruff run on `main.py` still reports inherited unused/import-order
+  findings outside this handler. The scoped verification below excludes only
+  those existing `F401`, `E402`, and duplicate-import `F811` categories.
+
+## Verification & Testing Commands
+
+Run synthetic validation privacy and compatibility tests with telemetry off:
+
+```powershell
+$env:OTEL_SDK_DISABLED='true'
+$env:PYTHONDONTWRITEBYTECODE='1'
+python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py
+python -m pytest -q -p no:cacheprovider tests/test_numeric_id_bounds.py tests/test_auth_contract.py
+python -m py_compile app/main.py tests/test_validation_error_privacy.py
+python -m ruff check tests/test_validation_error_privacy.py
+python -m ruff check app/main.py --ignore F401,E402,F811
+```
+
+Tests use in-process TestClient requests and labelled synthetic values only;
+they perform no external network, SMS, booking, payment, or customer action.
