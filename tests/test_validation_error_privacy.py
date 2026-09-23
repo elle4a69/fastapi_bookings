@@ -3,19 +3,31 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
+import os
 import re
+import subprocess
+import sys
 
 from fastapi import Body, Cookie, FastAPI, Header, Query
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import (
+    InMemoryLogRecordExporter,
+    SimpleLogRecordProcessor,
+)
 from pydantic import BaseModel
 from starlette.requests import Request
 
+from app.core.privacy_logging import PrivacySafeAccessFilter
 from app.main import (
     VALIDATION_ERROR_DETAIL_LIMIT,
     VALIDATION_ERROR_SCAN_LIMIT,
+    add_correlation_id_header,
     limiter,
     settings,
     validation_exception_handler,
@@ -445,7 +457,7 @@ def test_uvicorn_access_records_are_sanitized_before_handlers():
 
 def test_http_client_records_discard_messages_arguments_and_exceptions():
     for logger_name, expected_event in (
-        ("httpx2", "http_client_access"),
+        ("httpx._client", "http_client_access"),
         ("httpcore.connection", "http_client_transport"),
     ):
         captured: list[logging.LogRecord] = []
@@ -479,6 +491,386 @@ def test_http_client_records_discard_messages_arguments_and_exceptions():
         assert record.exc_info is None
         assert record.stack_info is None
         assert MARKER not in repr(record.__dict__)
+
+
+class _FilteredCapture(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+        self.addFilter(PrivacySafeAccessFilter())
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def _emit_with_handler(
+    logger_name: str,
+    message: object,
+    args: tuple = (),
+    *,
+    extra: dict | None = None,
+) -> logging.LogRecord:
+    handler = _FilteredCapture()
+    logger = logging.getLogger(logger_name)
+    original_level = logger.level
+    original_propagate = logger.propagate
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(handler)
+    try:
+        logger.info(message, *args, extra=extra)
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+    assert len(handler.records) == 1
+    return handler.records[0]
+
+
+def test_protected_namespaces_include_children_but_not_lookalikes():
+    protected = (
+        ("app.access.child", ("GET", "/safe/{id}", 200, "lt_10ms", "a" * 32)),
+        ("uvicorn.access.child", ("peer", "GET", f"/{MARKER}", "1.1", 200)),
+        ("httpx._client.child", ("GET", f"https://example.invalid/?{MARKER}", "1.1", 200)),
+        ("httpcore.connection.child", (f"transport {MARKER}",)),
+    )
+    for logger_name, args in protected:
+        record = _emit_with_handler(logger_name, f"payload {MARKER} %s", args)
+        assert MARKER not in repr(record.__dict__)
+        assert record.exc_info is None
+        assert record.stack_info is None
+
+    for logger_name in (
+        "app.accessory",
+        "uvicorn.accessibility",
+        "httpx2",
+        "httpcorex",
+    ):
+        record = _emit_with_handler(logger_name, "ordinary %s", ("message",))
+        assert record.getMessage() == "ordinary message"
+        assert not hasattr(record, "http_route")
+
+
+def test_post_extra_filter_strips_payloads_and_avoids_semantic_key_collisions():
+    cases = (
+        (
+            "app.access.child",
+            ("GET", "/safe/{id}", 204, "lt_50ms", "b" * 32),
+            "http_request_completed",
+        ),
+        (
+            "uvicorn.access.child",
+            ("peer", "POST", f"/{MARKER}", "1.1", 201),
+            "http_server_access",
+        ),
+        (
+            "httpx._client.child",
+            ("PATCH", f"https://example.invalid/?token={MARKER}", "1.1", 202),
+            "http_client_access",
+        ),
+        ("httpcore.connection.child", ({"nested": MARKER},), "http_client_transport"),
+    )
+    for logger_name, args, event in cases:
+        record = _emit_with_handler(
+            logger_name,
+            b"ignored bytes payload",
+            args,
+            extra={
+                "http_method": "DELETE",
+                "http_route": f"/{MARKER}",
+                "http_status": 599,
+                "request_id": "c" * 32,
+                "request_url": f"https://example.invalid/?token={MARKER}",
+                "headers": {"authorization": MARKER},
+                "authorization": MARKER,
+            },
+        )
+
+        assert record.getMessage() == event
+        assert "request_url" not in record.__dict__
+        assert "headers" not in record.__dict__
+        assert "authorization" not in record.__dict__
+        assert MARKER not in repr(record.__dict__)
+
+    app_record = _emit_with_handler(
+        "app.access",
+        "ignored",
+        ("GET", "/safe/{id}", 204, "lt_50ms", "b" * 32),
+    )
+    assert app_record.http_method == "GET"
+    assert app_record.http_route == "/safe/{id}"
+    assert app_record.http_status == 204
+    assert app_record.request_id == "b" * 32
+    assert app_record.duration_bucket == "lt_50ms"
+
+
+def test_unrelated_logger_preserves_message_arguments_exception_and_stack():
+    captured: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    logger = logging.getLogger("httpx2")
+    handler = _Capture()
+    original_level = logger.level
+    original_propagate = logger.propagate
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(handler)
+    try:
+        try:
+            raise RuntimeError(MARKER)
+        except RuntimeError:
+            logger.info("ordinary %s", MARKER, exc_info=True, stack_info=True)
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+    assert len(captured) == 1
+    record = captured[0]
+    assert record.getMessage() == f"ordinary {MARKER}"
+    assert record.exc_info is not None
+    assert MARKER in str(record.exc_info[1])
+    assert record.stack_info is not None
+
+
+def test_logger_adapter_semantic_extras_do_not_collide_or_override_structure():
+    handler = _FilteredCapture()
+    logger = logging.getLogger("app.access.adapter")
+    original_level = logger.level
+    original_propagate = logger.propagate
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(handler)
+    adapter = logging.LoggerAdapter(
+        logger,
+        {
+            "http_method": "DELETE",
+            "http_route": f"/{MARKER}",
+            "http_status": 599,
+            "request_id": "c" * 32,
+        },
+    )
+    try:
+        adapter.info(
+            "ignored",
+            "GET",
+            "/safe/{id}",
+            200,
+            "lt_10ms",
+            "d" * 32,
+        )
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+    assert len(handler.records) == 1
+    record = handler.records[0]
+    assert record.http_method == "GET"
+    assert record.http_route == "/safe/{id}"
+    assert record.http_status == 200
+    assert record.request_id == "d" * 32
+    assert MARKER not in repr(record.__dict__)
+
+
+def test_otel_export_contains_only_structural_protected_attributes(monkeypatch):
+    # This provider is strictly in-memory; enabling it locally performs no I/O.
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
+    handler.addFilter(PrivacySafeAccessFilter())
+    cases = (
+        (
+            "app.access.export",
+            ("GET", "/safe/{id}", 200, "lt_10ms", "d" * 32),
+            "http_request_completed",
+        ),
+        (
+            "uvicorn.access.export",
+            ("peer", "POST", f"/{MARKER}", "1.1", 201),
+            "http_server_access",
+        ),
+        (
+            "httpx._client.export",
+            ("PATCH", f"https://example.invalid/?token={MARKER}", "1.1", 202),
+            "http_client_access",
+        ),
+        ("httpcore.connection.export", ({"nested": MARKER},), "http_client_transport"),
+    )
+    configured_loggers: list[tuple[logging.Logger, int, bool]] = []
+    try:
+        for logger_name, args, _event in cases:
+            logger = logging.getLogger(logger_name)
+            configured_loggers.append((logger, logger.level, logger.propagate))
+            logger.setLevel(logging.INFO)
+            logger.propagate = False
+            logger.addHandler(handler)
+            logger.info(
+                "request payload",
+                *args,
+                extra={
+                    "request_url": MARKER,
+                    "headers": {"authorization": MARKER},
+                    "authorization": MARKER,
+                },
+            )
+        provider.force_flush()
+        exported = exporter.get_finished_logs()
+    finally:
+        for logger, original_level, original_propagate in configured_loggers:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
+        provider.shutdown()
+
+    assert len(exported) == len(cases)
+    for exported_record, (_logger_name, _args, event) in zip(exported, cases):
+        log_record = exported_record.log_record
+        assert log_record.body == event
+        assert set(log_record.attributes).isdisjoint(
+            {"request_url", "headers", "authorization"}
+        )
+        assert "_fastapi_bookings_privacy_structure" not in log_record.attributes
+        assert MARKER not in repr(log_record.attributes)
+
+
+def test_web_and_worker_subprocesses_bootstrap_privacy_before_emission():
+    environment = os.environ.copy()
+    environment["OTEL_SDK_DISABLED"] = "true"
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    probe = (
+        "import logging; import {module}; "
+        "logging.getLogger('httpx._client.bootstrap').info("
+        "'request %s', 'https://example.invalid/?token={marker}', "
+        "extra={{'request_url': '{marker}', 'headers': {{'cookie': '{marker}'}}}}); "
+        "print(getattr(logging.getLogRecordFactory(), 'privacy_safe_access', False))"
+    )
+    for module in ("app.main", "app.worker"):
+        result = subprocess.run(
+            [sys.executable, "-c", probe.format(module=module, marker=MARKER)],
+            cwd=os.getcwd(),
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "True"
+        assert "http_client_access" in result.stderr
+        assert MARKER not in result.stdout
+        assert MARKER not in result.stderr
+
+
+def _correlation_test_app(*, cors: bool = False) -> FastAPI:
+    test_app = FastAPI()
+    test_app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+    @test_app.get("/mutate")
+    async def mutate(request: Request):
+        original = request.state.request_id
+        request.state.request_id = "f" * 32
+        response = await validation_exception_handler(
+            request,
+            RequestValidationError(
+                [{"type": "missing", "loc": ("query", "value"), "input": None}]
+            ),
+        )
+        response.headers["X-Original-State-ID"] = original
+        response.headers["X-Projected-State-ID"] = request.state.request_id
+        return response
+
+    @test_app.get("/ok")
+    async def ok(request: Request):
+        return {"request_id": request.state.request_id}
+
+    if cors:
+        test_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["https://allowed.example.invalid"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    test_app.middleware("http")(add_correlation_id_header)
+    return test_app
+
+
+def test_request_id_is_immutable_across_state_envelope_headers_and_access(caplog):
+    _capture_info(caplog)
+    with TestClient(_correlation_test_app()) as test_client:
+        response = test_client.get("/mutate")
+
+    request_id = response.json()["error"]["request_id"]
+    access_record = next(
+        record
+        for record in reversed(caplog.records)
+        if record.name == "app.access" and record.request_id == request_id
+    )
+    assert response.headers["x-request-id"] == request_id
+    assert response.headers["x-trace-id"] == request_id
+    assert response.headers["x-original-state-id"] == request_id
+    assert response.headers["x-projected-state-id"] == request_id
+    assert access_record.request_id == request_id
+
+
+def test_concurrent_requests_keep_distinct_consistent_request_ids():
+    with TestClient(_correlation_test_app()) as test_client:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            responses = list(executor.map(lambda _: test_client.get("/ok"), range(24)))
+
+    request_ids = []
+    for response in responses:
+        assert response.status_code == 200
+        request_id = response.json()["request_id"]
+        assert REQUEST_ID_PATTERN.fullmatch(request_id)
+        assert response.headers["x-request-id"] == request_id
+        assert response.headers["x-trace-id"] == request_id
+        request_ids.append(request_id)
+    assert len(set(request_ids)) == len(request_ids)
+
+
+def test_correlation_wraps_allowed_and_denied_cors_preflight(caplog):
+    _capture_info(caplog)
+    with TestClient(_correlation_test_app(cors=True)) as test_client:
+        allowed = test_client.options(
+            "/ok",
+            headers={
+                "Origin": "https://allowed.example.invalid",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": f"x-{MARKER}",
+            },
+        )
+        denied = test_client.options(
+            "/ok",
+            headers={
+                "Origin": f"https://{MARKER}.example.invalid",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == (
+        "https://allowed.example.invalid"
+    )
+    assert denied.status_code == 400
+    for response in (allowed, denied):
+        request_id = response.headers["x-request-id"]
+        assert REQUEST_ID_PATTERN.fullmatch(request_id)
+        assert response.headers["x-trace-id"] == request_id
+        assert any(
+            record.name == "app.access" and record.request_id == request_id
+            for record in caplog.records
+        )
+    access_records = [record for record in caplog.records if record.name == "app.access"]
+    assert len(access_records) >= 2
+    assert all(record.http_method == "OPTIONS" for record in access_records[-2:])
+    assert MARKER not in repr([record.__dict__ for record in access_records])
 
 
 def test_validation_handler_does_not_change_auth_404_or_405_contracts(

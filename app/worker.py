@@ -7,8 +7,16 @@ import sys
 from contextlib import suppress
 from typing import Awaitable, Callable
 
-from .core.config import settings
-from .services.outbox_worker import start_outbox_worker, start_sms_outbox_worker
+from .core.privacy_logging import configure_privacy_safe_logging
+
+
+configure_privacy_safe_logging(include_server_loggers=False)
+
+from .core.config import settings  # noqa: E402
+from .services.outbox_worker import (  # noqa: E402
+    start_outbox_worker,
+    start_sms_outbox_worker,
+)
 
 
 logger = logging.getLogger(__name__)

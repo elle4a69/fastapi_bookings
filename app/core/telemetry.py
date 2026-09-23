@@ -23,6 +23,7 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
 from ..core.config import settings
+from .privacy_logging import PrivacySafeAccessFilter
 
 logger = logging.getLogger(__name__)
 
@@ -555,7 +556,7 @@ def init_telemetry(app=None) -> None:
     - Dedicated Structured Telemetry: Attached to ``fastapi_bookings.telemetry`` with ``propagate=False``.
     - General Application Logs: Attached to root logger (``logging.getLogger()``). Propagating loggers flow here once.
     - Non-Propagating Server Loggers: Attached to ``uvicorn``, ``uvicorn.error``, ``uvicorn.access``, and ``fastapi``
-      (since ``setup_logging()`` sets ``propagate=False`` on them).
+      (the shared privacy logging bootstrap sets ``propagate=False`` on them).
     - Privacy-Filter: A dedicated ``PrivacySafeLogFilter`` is attached to all operational log handlers to redact
       secrets, query parameters, authorization tokens, passwords, cookies, and sensitive PII before export.
     """
@@ -644,6 +645,7 @@ def init_telemetry(app=None) -> None:
             level=logging.INFO,
             logger_provider=_logger_provider,
         )
+        op_otlp_handler.addFilter(PrivacySafeAccessFilter())
         op_otlp_handler.addFilter(PrivacySafeLogFilter())
 
         # Attach to root logger for all propagating application loggers
@@ -662,6 +664,7 @@ def init_telemetry(app=None) -> None:
             level=logging.DEBUG,
             logger_provider=_logger_provider,
         )
+        dedicated_handler.addFilter(PrivacySafeAccessFilter())
         dedicated = logging.getLogger(_TELEMETRY_LOGGER_NAME)
         dedicated.addHandler(dedicated_handler)
         dedicated.setLevel(logging.DEBUG)

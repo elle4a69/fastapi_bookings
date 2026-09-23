@@ -5,11 +5,10 @@ includes all route modules and initializes the database. It also
 exposes simple health and readiness endpoints.
 """
 
-import json
 import logging
 import os
-import traceback
 import uuid
+from contextvars import ContextVar
 from itertools import islice
 from time import perf_counter
 
@@ -28,6 +27,15 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from .core.privacy_logging import (
+    configure_privacy_safe_logging,
+    is_safe_request_id as _is_safe_request_id,
+    safe_route_template as _safe_route_template,
+)
+
+
+configure_privacy_safe_logging(include_server_loggers=True)
+
 from .core.config import settings
 from .db.database import Base, engine, get_db
 
@@ -40,9 +48,6 @@ HTTP_422_UNPROCESSABLE_CONTENT = getattr(
     "HTTP_422_UNPROCESSABLE_CONTENT",
     422,
 )
-_SAFE_HTTP_METHODS = frozenset(
-    {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
-)
 _SAFE_DURATION_BUCKETS = (
     (0.010, "lt_10ms"),
     (0.050, "lt_50ms"),
@@ -50,32 +55,6 @@ _SAFE_DURATION_BUCKETS = (
     (1.000, "lt_1s"),
     (5.000, "lt_5s"),
 )
-_SAFE_DURATION_LABELS = frozenset(
-    {label for _, label in _SAFE_DURATION_BUCKETS} | {"gte_5s"}
-)
-
-
-def _safe_http_method(value) -> str:
-    method = value.upper() if isinstance(value, str) else ""
-    return method if method in _SAFE_HTTP_METHODS else "OTHER"
-
-
-def _safe_http_status(value) -> int:
-    return value if isinstance(value, int) and 100 <= value <= 599 else 0
-
-
-def _safe_route_template(value) -> str:
-    """Return only a bounded code-owned route template, never a raw URL."""
-
-    if value in {"<unmatched>", "<external>"}:
-        return value
-    if not isinstance(value, str) or not value.startswith("/") or len(value) > 200:
-        return "<unmatched>"
-    if "?" in value or "#" in value:
-        return "<unmatched>"
-    if not all(character.isalnum() or character in "/_-.:{}" for character in value):
-        return "<unmatched>"
-    return value
 
 
 def _matched_route_template(request) -> str:
@@ -108,12 +87,10 @@ def _duration_bucket(seconds: float) -> str:
     return "gte_5s"
 
 
-def _is_safe_request_id(value) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 32
-        and all(character in "0123456789abcdef" for character in value)
-    )
+_REQUEST_ID_CONTEXT: ContextVar[str | None] = ContextVar(
+    "fastapi_bookings_request_id",
+    default=None,
+)
 
 
 def _new_request_id() -> str:
@@ -124,10 +101,10 @@ def _new_request_id() -> str:
 
 
 def _request_id(request) -> str:
-    request_id = getattr(request.state, "request_id", None)
+    request_id = _REQUEST_ID_CONTEXT.get()
     if not _is_safe_request_id(request_id):
         request_id = _new_request_id()
-        request.state.request_id = request_id
+    request.state.request_id = request_id
     return request_id
 
 
@@ -135,135 +112,6 @@ def _set_correlation_headers(response, request_id: str) -> None:
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Trace-ID"] = request_id
 
-
-def _sanitize_access_record(record: logging.LogRecord) -> None:
-    """Replace access/client log messages with fixed structural records."""
-
-    logger_name = record.name.lower()
-    args = record.args if isinstance(record.args, tuple) else ()
-    method = "OTHER"
-    status_code = 0
-    event = "http_access_record"
-    route = "<external>"
-    duration = None
-    request_id = None
-
-    if logger_name == "app.access":
-        event = "http_request_completed"
-        route = "<unmatched>"
-        if len(args) >= 5:
-            method = _safe_http_method(args[0])
-            route = _safe_route_template(args[1])
-            status_code = _safe_http_status(args[2])
-            duration = (
-                args[3]
-                if isinstance(args[3], str) and args[3] in _SAFE_DURATION_LABELS
-                else None
-            )
-            request_id = args[4] if _is_safe_request_id(args[4]) else None
-    elif logger_name == "uvicorn.access":
-        event = "http_server_access"
-        route = "<unmatched>"
-        if len(args) >= 5:
-            method = _safe_http_method(args[1])
-            status_code = _safe_http_status(args[4])
-    elif logger_name.startswith("httpx"):
-        event = "http_client_access"
-        if len(args) >= 4:
-            method = _safe_http_method(args[0])
-            status_code = _safe_http_status(args[3])
-    elif logger_name.startswith("httpcore"):
-        event = "http_client_transport"
-    else:
-        return
-
-    record.msg = event
-    record.args = ()
-    record.exc_info = None
-    record.exc_text = None
-    record.stack_info = None
-    record.http_method = method
-    record.http_route = route
-    record.http_status = status_code
-    if duration is not None:
-        record.duration_bucket = duration
-    if request_id is not None:
-        record.request_id = request_id
-
-
-def _install_privacy_safe_record_factory() -> None:
-    """Sanitize access records before any handler, exporter, or test sees them."""
-
-    current_factory = logging.getLogRecordFactory()
-    if getattr(current_factory, "privacy_safe_access", False):
-        return
-
-    def privacy_safe_factory(*args, **kwargs):
-        record = current_factory(*args, **kwargs)
-        _sanitize_access_record(record)
-        return record
-
-    setattr(privacy_safe_factory, "privacy_safe_access", True)
-    logging.setLogRecordFactory(privacy_safe_factory)
-
-
-class JSONFormatter(logging.Formatter):
-    """Emit each log record as a single JSON line."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        log_data: dict = {
-            "timestamp": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-        }
-        current_span = trace.get_current_span()
-        if current_span and current_span.get_span_context().is_valid:
-            ctx = current_span.get_span_context()
-            log_data["trace_id"] = f"{ctx.trace_id:032x}"
-            log_data["span_id"] = f"{ctx.span_id:016x}"
-        if record.exc_info:
-            log_data["exception"] = "".join(traceback.format_exception(*record.exc_info))
-        if (
-            record.name in {"app.access", "uvicorn.access"}
-            or record.name.lower().startswith(("httpx", "httpcore"))
-        ):
-            log_data["http_method"] = _safe_http_method(
-                getattr(record, "http_method", None)
-            )
-            log_data["http_route"] = _safe_route_template(
-                getattr(record, "http_route", None)
-            )
-            log_data["http_status"] = _safe_http_status(
-                getattr(record, "http_status", None)
-            )
-            duration = getattr(record, "duration_bucket", None)
-            if duration in _SAFE_DURATION_LABELS:
-                log_data["duration_bucket"] = duration
-            request_id = getattr(record, "request_id", None)
-            if _is_safe_request_id(request_id):
-                log_data["request_id"] = request_id
-        return json.dumps(log_data)
-
-
-def setup_logging() -> None:
-    _install_privacy_safe_record_factory()
-    root = logging.getLogger()
-    for h in root.handlers[:]:
-        root.removeHandler(h)
-    handler = logging.StreamHandler()
-    handler.setFormatter(JSONFormatter())
-    root.addHandler(handler)
-    root.setLevel(logging.INFO)
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
-        lg = logging.getLogger(name)
-        for h in lg.handlers[:]:
-            lg.removeHandler(h)
-        lg.addHandler(handler)
-        lg.propagate = False
-
-
-setup_logging()
 
 # --- OpenTelemetry setup ---
 from .core.telemetry import init_telemetry, telemetry_disabled
@@ -375,9 +223,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(PublicRouteRateLimitMiddleware)
 
 
-@app.middleware("http")
 async def add_correlation_id_header(request, call_next):
-    request_id = _request_id(request)
+    request_id = _new_request_id()
+    context_token = _REQUEST_ID_CONTEXT.set(request_id)
+    request.state.request_id = request_id
     started_at = perf_counter()
     status_code = 500
     try:
@@ -386,15 +235,18 @@ async def add_correlation_id_header(request, call_next):
         _set_correlation_headers(response, request_id)
         return response
     finally:
-        route = _matched_route_template(request)
-        logging.getLogger("app.access").info(
-            "http_request_completed",
-            request.method,
-            route,
-            status_code,
-            _duration_bucket(perf_counter() - started_at),
-            request_id,
-        )
+        try:
+            route = _matched_route_template(request)
+            logging.getLogger("app.access").info(
+                "http_request_completed",
+                request.method,
+                route,
+                status_code,
+                _duration_bucket(perf_counter() - started_at),
+                request_id,
+            )
+        finally:
+            _REQUEST_ID_CONTEXT.reset(context_token)
 
 
 
@@ -567,6 +419,10 @@ if origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Registered last so correlation and structural access logging wrap CORS
+# preflight responses as well as the rest of the application stack.
+app.middleware("http")(add_correlation_id_header)
 
 # Include routers with prefixes
 app.include_router(auth.router, prefix="/api")

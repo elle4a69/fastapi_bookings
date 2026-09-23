@@ -12,6 +12,8 @@ domain behavior.
 
 - `main.py`: application construction, router registration, middleware, CORS,
   lifecycle hooks, and shared HTTP error envelopes.
+- `worker.py`: standalone generic/SMS worker entrypoint using the same privacy-
+  safe logging bootstrap as the web process.
 - `api/`: authenticated and public API routers and dependencies.
 - `services/`: domain workflows and external-integration boundaries.
 - `models/` and `schemas/`: database and API data contracts.
@@ -34,10 +36,13 @@ fixed message. It does not serialize Pydantic errors verbatim. The handler
 examines at most 256 errors, deduplicates their structural categories, sorts
 them deterministically, and returns at most 20 details.
 
-The correlation middleware creates one validated 32-character hexadecimal
-request ID (using the active trace ID when valid, otherwise a random ID),
-stores it in `request.state`, and reuses that exact value in the error envelope,
-`X-Request-ID`, `X-Trace-ID`, and the application access event.
+The outermost correlation middleware creates one validated 32-character
+hexadecimal request ID (using the active trace ID when valid, otherwise a
+random ID) and holds it in a request-scoped `ContextVar`. `request.state` is a
+projection, not the authority, so downstream replacement cannot cause the
+error envelope, `X-Request-ID`, `X-Trace-ID`, and application access event to
+diverge. The outer placement also gives allowed and denied CORS preflight
+responses the same correlation and structural access contract.
 
 HTTP authentication, authorization, not-found, and method-not-allowed behavior
 continues through the existing dependency and HTTP-exception boundaries.
@@ -50,16 +55,23 @@ body values, query/header/cookie values, authorization material, Pydantic
 customer data. The handler emits no validation log. Tenant and authorization
 behavior is unchanged.
 
-Application-controlled access logging is structural. Before any configured
-handler or exporter receives a record, records from `app.access`,
-`uvicorn.access`, HTTPX, and HTTPCore have their arbitrary messages, arguments,
-exception text, and stack text replaced. The application event contains only
-an allowlisted method, code-owned route template, numeric status, finite
-latency bucket, and validated request ID. Uvicorn access records retain only
-method/status with an `<unmatched>` route sentinel, and client records use an
-`<external>` sentinel. Raw URLs, query strings, cookies, headers, bodies, and
-arbitrary transport messages are not retained. This boundary is installed
-even when OpenTelemetry is disabled.
+Application-controlled access logging is structural. The process record
+factory first replaces arbitrary messages, arguments, exception text, and
+stack text for the exact `app.access`, `uvicorn.access`, `httpx`, and `httpcore`
+namespaces and their children. Segment-aware matching leaves lookalike or
+unrelated loggers unchanged. A filter on the configured console and
+OpenTelemetry handlers then runs after caller `extra` values are merged,
+removes arbitrary attributes, and publishes only the approved structural
+fields. This two-stage design avoids `LoggerAdapter` semantic-field collisions
+while preventing request URLs, headers, cookies, authorization data, bodies,
+and arbitrary transport data from reaching application-controlled output.
+
+The application event contains only an allowlisted method, code-owned route
+template, numeric status, finite latency bucket, and validated request ID.
+Uvicorn access records retain method/status with an `<unmatched>` route
+sentinel, and client records use an `<external>` sentinel. Both the web and
+standalone worker entrypoints install the boundary before importing their
+application services, including when OpenTelemetry is disabled.
 
 The current FastAPI runtime keeps included routers lazy: the matched route
 stored in the request scope can contain only the router-local path. The
@@ -79,9 +91,17 @@ template retains its full API prefix.
 - Because server/client libraries do not expose a trustworthy code-owned route
   template at record-construction time, their sanitized records deliberately
   use fixed sentinels. `app.access` is the authoritative route-template event.
-- The installed record factory protects application-controlled Python logging.
-  Reverse proxies and platform infrastructure remain separately responsible
-  for disabling raw URL/query logging outside this process.
+- The shared bootstrap protects handlers configured by the application.
+  Future custom handlers must attach `PrivacySafeAccessFilter`; the factory
+  still neutralizes protected message/argument/exception payloads, but a
+  custom unfiltered handler could otherwise export arbitrary caller `extra`
+  attributes. A later library that replaces rather than chains the global
+  record factory can also remove the first-stage boundary.
+- Reverse proxies and platform infrastructure remain separately responsible
+  for disabling raw URL/query logging outside this process. The application
+  deliberately creates its own request ID rather than trusting an inbound
+  proxy-provided value; cross-proxy correlation requires a separately approved
+  trusted-header or trace-context policy.
 - This dependency set predates Starlette's
   `HTTP_422_UNPROCESSABLE_CONTENT` export. The entrypoint uses that name with a
   numeric 422 compatibility fallback and can drop the fallback after Starlette
@@ -99,8 +119,10 @@ $env:OTEL_SDK_DISABLED='true'
 $env:PYTHONDONTWRITEBYTECODE='1'
 python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py
 python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py
-python -m py_compile app/main.py tests/test_validation_error_privacy.py
+python -m py_compile app/main.py app/worker.py app/core/privacy_logging.py app/core/telemetry.py tests/test_validation_error_privacy.py
 python -m ruff check tests/test_validation_error_privacy.py
+python -m ruff check app/core/privacy_logging.py app/worker.py tests/test_validation_error_privacy.py
+python -m ruff check app/core/telemetry.py --ignore F401,F841
 python -m ruff check app/main.py --ignore F401,E402,F811
 ```
 
