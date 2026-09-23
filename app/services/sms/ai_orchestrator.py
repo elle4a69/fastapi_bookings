@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...models.sms_account import SmsAccount
@@ -35,6 +35,7 @@ KNOWLEDGE_ENTRY_LIMIT = 24
 KNOWLEDGE_ENTRY_CHARACTER_LIMIT = 1000
 KNOWLEDGE_CONTEXT_CHARACTER_LIMIT = 8000
 MODEL_CONTEXT_CHARACTER_LIMIT = 30000
+KNOWLEDGE_CATEGORY_CHARACTER_LIMIT = 64
 
 _WITHHELD_DRAFT_BODY = "[AI response withheld by safety policy. Staff review required.]"
 _BLOCKED_OUTBOUND_BODY = "[blocked by outbound safety policy]"
@@ -83,6 +84,9 @@ class SmsAiConfidentialOutputError(SmsAiSafetyError):
 
 class SmsAiContextSafetyError(SmsAiSafetyError):
     """Raised when scoped prompt or knowledge context cannot be bounded safely."""
+
+
+SensitiveContextSnapshot = tuple[tuple[str, ...], tuple[str, ...]]
 
 
 def _validate_account_binding(
@@ -237,6 +241,46 @@ def _bounded_context_text(
     return text
 
 
+def _prompt_fragments(prompt_layers: list[str]) -> tuple[str, ...]:
+    """Return immutable non-empty prompt fragments from the exact input layers."""
+
+    return tuple(
+        line.strip(" -\t")
+        for prompt_text in prompt_layers
+        for line in prompt_text.splitlines()
+        if line.strip(" -\t")
+    )
+
+
+def _snapshot_sensitive_context(
+    *,
+    prompt_layers: list[str],
+    credentials: Any,
+    selected_api_key: str,
+) -> SensitiveContextSnapshot:
+    """Capture the exact bounded confidential context used for one invocation."""
+
+    credential_values = tuple(
+        _iter_credential_strings((credentials or {}, selected_api_key))
+    )
+    return _prompt_fragments(prompt_layers), credential_values
+
+
+def _contains_snapshot_sensitive_output(
+    output: str,
+    snapshot: SensitiveContextSnapshot,
+) -> bool:
+    """Check output against the exact pre-await prompt and credential snapshot."""
+
+    prompt_fragments, credential_values = snapshot
+    return any(
+        _contains_sensitive_value(output, fragment) for fragment in prompt_fragments
+    ) or any(
+        _contains_sensitive_value(output, value, strict=True)
+        for value in credential_values
+    )
+
+
 def _load_prompt_layers(
     db: Session,
     *,
@@ -368,7 +412,15 @@ def _load_scoped_legacy_knowledge(
         if total_characters > KNOWLEDGE_CONTEXT_CHARACTER_LIMIT:
             raise SmsAiContextSafetyError("knowledge_context_too_large")
 
-        category = (entry.category or "").strip().casefold()
+        raw_category = entry.category
+        if (
+            not isinstance(raw_category, str)
+            or not raw_category.strip()
+            or len(raw_category.strip()) > KNOWLEDGE_CATEGORY_CHARACTER_LIMIT
+            or any(ord(character) < 32 or ord(character) == 127 for character in raw_category)
+        ):
+            raise SmsAiContextSafetyError("invalid_knowledge_category")
+        category = " ".join(raw_category.casefold().split())
         normalized_text = " ".join(text.casefold().split())
         if category:
             authoritative_text = categories.get(category)
@@ -427,49 +479,81 @@ def _fail_ai_job_closed(
 ) -> None:
     """Fail an owned job without downgrading a protected conversation state."""
 
-    job = (
-        db.query(SmsAiJob)
+    job_probe = (
+        db.query(SmsAiJob.conversation_id)
         .filter(
             SmsAiJob.id == job_id,
             SmsAiJob.status == "PROCESSING",
-            *(
-                (SmsAiJob.conversation_id == conversation_id,)
-                if conversation_id is not None
-                else ()
-            ),
         )
-        .with_for_update()
         .first()
     )
-    if job is None:
+    if job_probe is None:
+        return
+    probed_conversation_id = int(job_probe[0])
+    if conversation_id is not None and conversation_id != probed_conversation_id:
+        return
+    expected_conversation_id = conversation_id or probed_conversation_id
+
+    conversation_statement, job_statement = _ai_failure_lock_statements(
+        conversation_id=expected_conversation_id,
+        job_id=job_id,
+        tenant_id=tenant_id,
+        provider_id=provider_id,
+        sms_account_id=sms_account_id,
+    )
+    conversation = db.execute(conversation_statement).scalar_one_or_none()
+    if conversation is None:
+        return
+    job = db.execute(job_statement).scalar_one_or_none()
+    if job is None or job.conversation_id != conversation.id:
         return
 
     job.status = "FAILED"
-    conversation_query = db.query(SmsConversation).filter(
-        SmsConversation.id == job.conversation_id
+    if conversation.state == "auto-reply" and not conversation.is_blocked:
+        conversation.state = "needs-review"
+    conversation.ai_enabled = False
+    requires_review = conversation.state != "resolved" and not conversation.is_blocked
+    db.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="ai_job_failed_closed",
+            meta={"job_id": job.id, "requires_review": requires_review},
+        )
     )
-    if conversation_id is not None:
-        conversation_query = conversation_query.filter(
-            SmsConversation.tenant_id == tenant_id,
-            SmsConversation.provider_id == provider_id,
-            SmsConversation.sms_account_id == sms_account_id,
-        )
-    conversation = conversation_query.with_for_update().first()
-    if conversation is not None:
-        if conversation.state == "auto-reply" and not conversation.is_blocked:
-            conversation.state = "needs-review"
-        conversation.ai_enabled = False
-        requires_review = (
-            conversation.state != "resolved" and not conversation.is_blocked
-        )
-        db.add(
-            SmsConversationEvent(
-                conversation_id=conversation.id,
-                type="ai_job_failed_closed",
-                meta={"job_id": job.id, "requires_review": requires_review},
-            )
-        )
     db.commit()
+
+
+def _ai_failure_lock_statements(
+    *,
+    conversation_id: int,
+    job_id: int,
+    tenant_id: int | None = None,
+    provider_id: int | None = None,
+    sms_account_id: int | None = None,
+):
+    """Build the canonical conversation-first lock sequence for AI failure."""
+
+    conversation_filters = [SmsConversation.id == conversation_id]
+    if tenant_id is not None:
+        conversation_filters.append(SmsConversation.tenant_id == tenant_id)
+    if provider_id is not None:
+        conversation_filters.append(SmsConversation.provider_id == provider_id)
+    if sms_account_id is not None:
+        conversation_filters.append(SmsConversation.sms_account_id == sms_account_id)
+    return (
+        select(SmsConversation)
+        .where(*conversation_filters)
+        .execution_options(populate_existing=True)
+        .with_for_update(),
+        select(SmsAiJob)
+        .where(
+            SmsAiJob.id == job_id,
+            SmsAiJob.conversation_id == conversation_id,
+            SmsAiJob.status == "PROCESSING",
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(),
+    )
 
 
 def _retain_ai_review_draft(
@@ -519,9 +603,20 @@ def _retain_ai_review_draft(
         .with_for_update()
         .all()
     )
-    immutable_delivery_conflict = any(
-        message.status in {"sent", "delivered"} for message in same_turn_messages
-    )
+    accepted_message_ids = {
+        message.id
+        for message in same_turn_messages
+        if message.status in {"sent", "delivered"}
+        or (
+            isinstance(message.provider_message_id, str)
+            and bool(message.provider_message_id.strip())
+        )
+        or (
+            isinstance(message.chatwoot_message_id, int)
+            and not isinstance(message.chatwoot_message_id, bool)
+            and message.chatwoot_message_id > 0
+        )
+    }
     message_ids = [message.id for message in same_turn_messages]
     delivery_jobs: list[SmsOutboundJob] = []
     if message_ids:
@@ -539,18 +634,22 @@ def _retain_ai_review_draft(
     suppressed_job_count = 0
     for delivery_job in delivery_jobs:
         if delivery_job.status == "SUCCESS":
-            immutable_delivery_conflict = True
+            accepted_message_ids.add(delivery_job.message_id)
         elif delivery_job.status in {"PENDING", "PROCESSING", "RETRY"}:
+            if delivery_job.message_id in accepted_message_ids:
+                continue
             delivery_job.status = "FAILED"
             delivery_job.lease_expires_at = None
             delivery_job.processed_at = datetime.now(timezone.utc)
             delivery_job.error_log = None
             suppressed_job_count += 1
 
+    immutable_delivery_conflict = bool(accepted_message_ids)
+
     mutable_messages = [
         message
         for message in same_turn_messages
-        if message.status not in {"sent", "delivered"}
+        if message.id not in accepted_message_ids
     ]
     draft = next(
         (
@@ -1168,12 +1267,17 @@ async def call_openai_chat_completions(
         db, account=account, conversation=conversation
     )
     api_key = _get_openai_api_key(account)
-    if not api_key:
+    if not isinstance(api_key, str) or not api_key.strip():
         raise ValueError("OpenAI API Key is missing.")
 
     prompt_canary = secrets.token_urlsafe(24)
     prompt_layers = _load_prompt_layers(
         db, account=account, conversation=conversation
+    )
+    sensitive_snapshot = _snapshot_sensitive_context(
+        prompt_layers=prompt_layers,
+        credentials=account.credentials,
+        selected_api_key=api_key,
     )
     messages: list[dict[str, str]] = []
     for index, prompt_text in enumerate(prompt_layers):
@@ -1253,6 +1357,9 @@ async def call_openai_chat_completions(
         output = result["choices"][0]["message"]["content"].strip()
         if _contains_sensitive_value(
             output, prompt_canary
+        ) or _contains_snapshot_sensitive_output(
+            output,
+            sensitive_snapshot,
         ) or _contains_scoped_sensitive_output(
             db,
             account=account,
@@ -1308,16 +1415,11 @@ def _internal_prompt_fragments(
     account: SmsAccount,
     conversation: SmsConversation,
 ) -> list[str]:
-    fragments: list[str] = []
-    for prompt_text in _load_prompt_layers(
-        db, account=account, conversation=conversation
-    ):
-        fragments.extend(
-            line.strip(" -\t")
-            for line in prompt_text.splitlines()
-            if line.strip(" -\t")
+    return list(
+        _prompt_fragments(
+            _load_prompt_layers(db, account=account, conversation=conversation)
         )
-    return fragments
+    )
 
 
 def _contains_scoped_sensitive_output(

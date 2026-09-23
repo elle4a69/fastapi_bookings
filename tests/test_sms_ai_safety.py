@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import event
+from sqlalchemy.dialects import postgresql
 
 from app.models.provider import Provider
 from app.models.sms_account import SmsAccount
@@ -27,6 +28,7 @@ from app.services.sms.ai_orchestrator import (
     _STATIC_AUTOPILOT_REPLY,
     SmsAiConfidentialOutputError,
     SmsAiSafetyError,
+    _ai_failure_lock_statements,
     _claim_ai_job,
     _fail_ai_job_closed,
     _get_openai_api_key,
@@ -603,6 +605,67 @@ def test_failed_job_preserves_protected_conversation_state(
     assert conversation.ai_enabled is False
 
 
+def test_ai_failure_lock_statements_are_conversation_first_and_exact():
+    statements = _ai_failure_lock_statements(
+        conversation_id=17,
+        job_id=23,
+        tenant_id=29,
+        provider_id=31,
+        sms_account_id=37,
+    )
+    compiled = [
+        str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        for statement in statements
+    ]
+
+    assert "FROM sms_conversations" in compiled[0]
+    assert "sms_conversations.id = 17" in compiled[0]
+    assert "sms_conversations.tenant_id = 29" in compiled[0]
+    assert "sms_conversations.provider_id = 31" in compiled[0]
+    assert "sms_conversations.sms_account_id = 37" in compiled[0]
+    assert compiled[0].rstrip().endswith("FOR UPDATE")
+    assert "FROM sms_ai_jobs" in compiled[1]
+    assert "sms_ai_jobs.id = 23" in compiled[1]
+    assert "sms_ai_jobs.conversation_id = 17" in compiled[1]
+    assert "sms_ai_jobs.status = 'PROCESSING'" in compiled[1]
+    assert compiled[1].rstrip().endswith("FOR UPDATE")
+
+
+def test_ai_failure_scope_mismatch_does_not_mutate_job_or_conversation(
+    db_session, safety_data
+):
+    _, _, _, conversation = safety_data
+    job = SmsAiJob(
+        conversation_id=conversation.id,
+        customer_turn_ref="synthetic-failure-scope-mismatch",
+        status="PROCESSING",
+        run_at=datetime.now(timezone.utc),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    _fail_ai_job_closed(
+        db_session,
+        job.id,
+        conversation_id=conversation.id,
+        tenant_id=conversation.tenant_id + 1000,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+    )
+
+    db_session.refresh(job)
+    db_session.refresh(conversation)
+    assert job.status == "PROCESSING"
+    assert conversation.state == "auto-reply"
+    assert conversation.ai_enabled is True
+    assert db_session.query(SmsConversationEvent).count() == 0
+
+
 def test_job_ownership_change_during_model_call_prevents_finalization(
     db_session, safety_data
 ):
@@ -895,13 +958,19 @@ def test_iterative_credential_scan_handles_deep_cycles_and_unusual_containers():
         list(_iter_credential_strings("x" * (CREDENTIAL_SCAN_MAX_BYTES + 1)))
 
 
+@pytest.mark.parametrize("overflow_kind", ["depth", "items", "bytes"])
 def test_credential_scan_budget_overflow_creates_only_withheld_review_draft(
-    db_session, safety_data
+    db_session, safety_data, overflow_kind
 ):
     _, _, account, conversation = safety_data
-    nested = "BoundedSecret"
-    for index in range(CREDENTIAL_SCAN_MAX_DEPTH + 1):
-        nested = {f"level_{index}": nested}
+    if overflow_kind == "depth":
+        nested = "BoundedSecret"
+        for index in range(CREDENTIAL_SCAN_MAX_DEPTH + 1):
+            nested = {f"level_{index}": nested}
+    elif overflow_kind == "items":
+        nested = list(range(CREDENTIAL_SCAN_MAX_ITEMS + 1))
+    else:
+        nested = "x" * (CREDENTIAL_SCAN_MAX_BYTES + 1)
     account.credentials = {"api_key": "synthetic-key", "nested": nested}
     db_session.commit()
     turn_ref = "synthetic-credential-budget"
@@ -919,6 +988,7 @@ def test_credential_scan_budget_overflow_creates_only_withheld_review_draft(
             run_ai_orchestration(db_session, account, conversation, turn_ref)
         )
 
+    gateway.assert_not_awaited()
     assert outcome == "generated"
     db_session.refresh(conversation)
     assert conversation.state == "needs-review"
@@ -1148,6 +1218,70 @@ def test_static_greeting_never_auto_sends_arbitrary_model_claim(
     assert event_row.meta["output_withheld"] is False
 
 
+@pytest.mark.parametrize("leak_source", ["prompt", "credential"])
+def test_preawait_sensitive_snapshot_survives_configuration_rotation(
+    db_session,
+    safety_data,
+    caplog,
+    leak_source,
+):
+    _, _, account, conversation = safety_data
+    old_prompt = "Synthetic confidential prompt alpha omega"
+    old_credential = "SyntheticCredentialAlphaOmega"
+    account.line_prompt = old_prompt
+    account.credentials = {"api_key": old_credential}
+    db_session.commit()
+    turn_ref = f"synthetic-sensitive-rotation-{leak_source}"
+    _add_inbound(db_session, conversation, account, body="Hello", turn_ref=turn_ref)
+
+    async def rotate_configuration(**_kwargs):
+        account.line_prompt = "Replacement harmless prompt"
+        account.credentials = {"api_key": "ReplacementCredentialBeta"}
+        db_session.flush()
+        leaked_value = old_prompt if leak_source == "prompt" else old_credential
+        return {"choices": [{"message": {"content": leaked_value}}]}
+
+    gateway = AsyncMock(side_effect=rotate_configuration)
+    with caplog.at_level("WARNING"), patch(
+        "app.services.gateway.responses_client.generate_response",
+        new=gateway,
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    gateway.assert_awaited_once()
+    assert outcome == "generated"
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+            SmsMessage.status == "draft",
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    assert db_session.query(SmsOutboundJob).count() == 0
+    event_metadata = repr(
+        [
+            event_row.meta
+            for event_row in db_session.query(SmsConversationEvent)
+            .filter(SmsConversationEvent.conversation_id == conversation.id)
+            .all()
+        ]
+    )
+    for sensitive_value in (old_prompt, old_credential):
+        assert sensitive_value not in drafts[0].body
+        assert sensitive_value not in event_metadata
+        assert sensitive_value not in caplog.text
+        assert sensitive_value not in str(outcome)
+
+
 def test_static_greeting_queues_only_exact_allowlisted_template(
     db_session, safety_data
 ):
@@ -1170,9 +1304,18 @@ def test_static_greeting_queues_only_exact_allowlisted_template(
     assert db_session.query(SmsOutboundJob).filter_by(status="PENDING").count() == 1
 
 
-@pytest.mark.parametrize("existing_status", ["draft", "failed", "queued"])
+@pytest.mark.parametrize(
+    ("existing_status", "delivery_job_status"),
+    [
+        ("draft", None),
+        ("failed", None),
+        ("queued", "PENDING"),
+        ("queued", "PROCESSING"),
+        ("queued", "RETRY"),
+    ],
+)
 def test_confidential_failure_reconciles_existing_same_turn_ai_rows(
-    db_session, safety_data, existing_status
+    db_session, safety_data, existing_status, delivery_job_status
 ):
     _, _, account, conversation = safety_data
     turn_ref = f"synthetic-existing-{existing_status}"
@@ -1196,12 +1339,12 @@ def test_confidential_failure_reconciles_existing_same_turn_ai_rows(
     )
     db_session.add(existing)
     db_session.flush()
-    if existing_status == "queued":
+    if delivery_job_status is not None:
         db_session.add(
             SmsOutboundJob(
                 message_id=existing.id,
                 sms_account_id=account.id,
-                status="PENDING",
+                status=delivery_job_status,
             )
         )
     db_session.commit()
@@ -1246,7 +1389,7 @@ def test_confidential_failure_reconciles_existing_same_turn_ai_rows(
     assert event_row.meta["message_id"] == messages[0].id
     assert event_row.meta["reason_code"] == "confidential_output"
     assert event_row.meta["suppressed_job_count"] == (
-        1 if existing_status == "queued" else 0
+        1 if delivery_job_status is not None else 0
     )
     assert event_row.meta["delivery_conflict"] is False
 
@@ -1416,6 +1559,167 @@ def test_confidential_failure_records_structural_delivered_conflict(
     }
 
 
+def test_confidential_failure_preserves_success_job_message_as_accepted_evidence(
+    db_session, safety_data
+):
+    _, _, account, conversation = safety_data
+    turn_ref = "synthetic-success-evidence-conflict"
+    inbound = _add_inbound(
+        db_session, conversation, account, body="Hello", turn_ref=turn_ref
+    )
+    accepted_body = "Synthetic provider-accepted AI reply"
+    accepted = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=account.id,
+        conversation_id=conversation.id,
+        body=accepted_body,
+        normalized_body=accepted_body.casefold(),
+        direction="outbound",
+        author_type="ai",
+        status="queued",
+        parent_message_id=inbound.id,
+        customer_turn_ref=turn_ref,
+        occurred_at=datetime.now(timezone.utc),
+        received_at=datetime.now(timezone.utc),
+    )
+    db_session.add(accepted)
+    db_session.flush()
+    delivery_job = SmsOutboundJob(
+        message_id=accepted.id,
+        sms_account_id=account.id,
+        status="SUCCESS",
+        processed_at=datetime.now(timezone.utc),
+    )
+    db_session.add(delivery_job)
+    db_session.commit()
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic")),
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    db_session.refresh(accepted)
+    db_session.refresh(delivery_job)
+    assert outcome == "failed"
+    assert (accepted.status, accepted.direction, accepted.body) == (
+        "queued",
+        "outbound",
+        accepted_body,
+    )
+    assert delivery_job.status == "SUCCESS"
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.customer_turn_ref == turn_ref,
+            SmsMessage.status == "draft",
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].id != accepted.id
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    conflict = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_output_safety_conflict")
+        .one()
+    )
+    assert conflict.meta["message_id"] == drafts[0].id
+    assert conflict.meta["reason_code"] == "confidential_output"
+
+
+@pytest.mark.parametrize("identifier_field", ["provider_message_id", "chatwoot_message_id"])
+@pytest.mark.parametrize("delivery_status", ["PROCESSING", "SUCCESS"])
+def test_confidential_failure_preserves_scoped_provider_acceptance_identifiers(
+    db_session,
+    safety_data,
+    identifier_field,
+    delivery_status,
+):
+    _, _, account, conversation = safety_data
+    turn_ref = f"synthetic-identifier-{identifier_field}-{delivery_status}"
+    inbound = _add_inbound(
+        db_session, conversation, account, body="Hello", turn_ref=turn_ref
+    )
+    accepted_body = "Synthetic identifier-accepted AI reply"
+    identifier_value = (
+        "synthetic-provider-acceptance"
+        if identifier_field == "provider_message_id"
+        else 987654
+    )
+    accepted = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=account.id,
+        conversation_id=conversation.id,
+        body=accepted_body,
+        normalized_body=accepted_body.casefold(),
+        direction="outbound",
+        author_type="ai",
+        status="queued" if delivery_status == "PROCESSING" else "sending",
+        parent_message_id=inbound.id,
+        customer_turn_ref=turn_ref,
+        occurred_at=datetime.now(timezone.utc),
+        received_at=datetime.now(timezone.utc),
+        **{identifier_field: identifier_value},
+    )
+    db_session.add(accepted)
+    db_session.flush()
+    delivery_job = SmsOutboundJob(
+        message_id=accepted.id,
+        sms_account_id=account.id,
+        status=delivery_status,
+    )
+    db_session.add(delivery_job)
+    db_session.commit()
+
+    with patch(
+        "app.services.sms.ai_orchestrator.call_openai_chat_completions",
+        new=AsyncMock(side_effect=SmsAiConfidentialOutputError("synthetic")),
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    db_session.refresh(accepted)
+    db_session.refresh(delivery_job)
+    assert outcome == "failed"
+    assert accepted.body == accepted_body
+    assert accepted.direction == "outbound"
+    assert accepted.status == (
+        "queued" if delivery_status == "PROCESSING" else "sending"
+    )
+    assert getattr(accepted, identifier_field) == identifier_value
+    assert delivery_job.status == delivery_status
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.customer_turn_ref == turn_ref,
+            SmsMessage.status == "draft",
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].id != accepted.id
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    conflict = (
+        db_session.query(SmsConversationEvent)
+        .filter(SmsConversationEvent.type == "ai_output_safety_conflict")
+        .one()
+    )
+    assert conflict.meta["message_id"] == drafts[0].id
+    assert conflict.meta["reason_code"] == "confidential_output"
+
+
 def _assert_context_failure_created_review_draft(
     db_session, conversation, *, turn_ref: str
 ):
@@ -1460,6 +1764,44 @@ def test_knowledge_row_limit_overflow_fails_closed_before_gateway(
         )
     db_session.commit()
     turn_ref = "synthetic-knowledge-row-overflow"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with patch("app.services.gateway.responses_client.generate_response", new=gateway):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_category",
+    ["", "   ", "x" * 65, "invalid\x00category", "invalid\ncategory"],
+)
+def test_invalid_knowledge_category_fails_closed_before_gateway(
+    db_session,
+    safety_data,
+    invalid_category,
+):
+    tenant, _, account, conversation = safety_data
+    db_session.add(
+        SmsKnowledgeEntry(
+            tenant_id=tenant.id,
+            category=invalid_category,
+            text="Synthetic invalid-category knowledge",
+            status="approved",
+        )
+    )
+    db_session.commit()
+    turn_ref = f"synthetic-invalid-category-{len(invalid_category)}"
     _add_inbound(
         db_session,
         conversation,

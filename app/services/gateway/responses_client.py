@@ -1,4 +1,3 @@
-import json
 import httpx
 import logging
 import os
@@ -7,6 +6,10 @@ from typing import Dict, Any, Optional
 from .policy_router import validate_request, enforce_tenant_budget
 
 logger = logging.getLogger(__name__)
+
+
+class AiGatewayError(RuntimeError):
+    """Privacy-safe external model gateway failure."""
 
 async def generate_response(
     tenant_id: str,
@@ -59,6 +62,8 @@ async def generate_response(
             enforce_tenant_budget(tenant_id, cost)
             
             return result
-    except Exception as e:
-        logger.error(f"OpenAI Gateway request failed: {e}", exc_info=True)
-        raise
+    except Exception:
+        # Provider exceptions can contain response bodies, request details, or
+        # credentials. Keep the log structural and let the caller fail closed.
+        logger.error("OpenAI gateway request failed.")
+        raise AiGatewayError("AI gateway request failed.") from None
