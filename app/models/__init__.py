@@ -76,6 +76,12 @@ from .sms_outbox import SmsOutboundJob, SmsAiJob, SmsConversationEvent, SmsNote
 from .sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
 from .sms_arrival import SmsArrivalSession
 from .sms_chatwoot import SmsChatwootBinding
+from .assistant_booking_bridge import (
+    AssistantBookingBridgeBinding,
+    AssistantBookingBridgeNonce,
+    AssistantBookingBridgeProposal,
+    AssistantBookingBridgeReceipt,
+)
 
 __all__ = [
     "User",
@@ -131,4 +137,8 @@ __all__ = [
     "SmsPromptProfile",
     "SmsArrivalSession",
     "SmsChatwootBinding",
+    "AssistantBookingBridgeBinding",
+    "AssistantBookingBridgeNonce",
+    "AssistantBookingBridgeProposal",
+    "AssistantBookingBridgeReceipt",
 ]

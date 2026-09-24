@@ -35,3 +35,4 @@ from . import packages  # noqa: F401
 # needed in future, a complete implementation should be added before
 # re‑enabling this router.
 from . import public_bookings  # noqa: F401
+from . import assistant_booking_bridge  # noqa: F401

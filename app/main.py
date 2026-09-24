@@ -83,6 +83,7 @@ from .api.routers import (
     admin_dashboard,
     public_bootstrap,
     public_bookings,
+    assistant_booking_bridge,
     audit,
     payments,
     notifications,
@@ -306,6 +307,7 @@ app.include_router(availability.router, prefix="/api/public")
 app.include_router(admin_dashboard.router, prefix="/api/admin")
 app.include_router(public_bootstrap.router, prefix="/api")
 app.include_router(public_bookings.router)
+app.include_router(assistant_booking_bridge.router)
 app.include_router(audit.router, prefix="/api/admin")
 app.include_router(payments.router, prefix="/api/admin")
 app.include_router(notifications.router, prefix="/api/admin")

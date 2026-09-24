@@ -1,0 +1,30 @@
+# Assistant Booking Bridge
+
+## Purpose & Scope
+
+Private, disabled-by-default booking-domain bridge for Assistant UI's single `primary` line. It owns neither messaging, AI, SMS, calendar synchronization nor customer-facing staff workflow.
+
+## Architecture & Key Files
+
+`assistant_booking_bridge.py` verifies a keyed, replay-protected server-to-server proof, derives scope exclusively from a durable binding, and calls scheduling/allocation services.
+
+## Setup, Configuration & Dependencies
+
+Create a binding through a controlled administrative migration/runbook: a `primary` line, tenant, provider, optional default location, key id, SHA-256 secret verifier and `enabled=false`. No seed or plaintext secret is supplied by this module.
+
+## Core Workflows & Contracts
+
+`GET /api/internal/assistant-booking-bridge/catalog`; `POST /availability`; `POST /proposals`; `POST /confirmations`. Each request requires key-id, epoch timestamp (five minutes), nonce, and an HMAC signature. The HMAC key is `SHA256(raw provisioned secret)` and the canonical UTF-8 input is `METHOD + "\\n" + PATH + "\\n" + TIMESTAMP + "\\n" + NONCE + "\\n" + SHA256(raw request body hex)`. Proposals expire in ten minutes and reserve nothing; confirmations create only `pending` bookings after revalidation.
+
+## Data Safety & Isolation
+
+The request cannot submit tenant/provider/location. Scope is loaded from the binding. Nonces are durable and unique per binding. No outbox, SMS, Chatwoot or AI call occurs. Customer matching is tenant-scoped and ambiguous matches fail closed.
+
+## Known Issues, Edge Cases & Outstanding Work
+
+Binding provisioning and secret delivery must be implemented as a separate owner-approved operational procedure before staging. The current secret-proof format requires TLS and must not be exposed to browsers.
+
+## Verification & Testing Commands
+
+`python -m compileall app/services/assistant_booking_bridge.py app/api/routers/assistant_booking_bridge.py`
+`alembic heads`
