@@ -10,7 +10,7 @@ from app.services import assistant_booking_bridge as bridge
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from app.models import Provider, Service, Client, AuditLog, Tenant, Location
 from app.models.booking import Booking
-from app.schemas.assistant_booking_bridge import AvailabilityRequest
+from app.schemas.assistant_booking_bridge import AvailabilityRequest, ProposalResponse
 from app.models.assistant_booking_bridge import AssistantBookingBridgeProposal, AssistantBookingBridgeReceipt
 from pydantic import ValidationError
 
@@ -220,7 +220,7 @@ def test_signed_api_rejects_missing_auth_replay_invalid_schema_and_foreign_scope
     assert replay.json()["error"]["message"]["code"] == "BRIDGE_REPLAY"
 
 
-def test_signed_catalog_and_proposal_expose_summary_timezone_not_scope_ids(client, db_session, monkeypatch):
+def test_signed_catalog_and_proposal_expose_customer_safe_summary_without_scope_ids(client, db_session, monkeypatch):
     private, _ = _keypair()
     _, service, _ = _api_scope(db_session, private)
     now = datetime.now(timezone.utc).replace(second=0, microsecond=0) + timedelta(days=1)
@@ -243,13 +243,19 @@ def test_signed_catalog_and_proposal_expose_summary_timezone_not_scope_ids(clien
     assert data["canonical_summary"] == {
         "service_id": service.id,
         "service_name": "Bridge Service",
+        "provider_display_name": "Bridge Provider",
+        "location_display_name": "Bridge Location",
         "start_time": now.isoformat(),
         "end_time": (now + timedelta(minutes=30)).isoformat(),
         "duration_minutes": 30,
         "price": "42.50",
+        "currency": "AUD",
         "show_duration": True,
         "timezone": "Australia/Sydney",
     }
+    assert "provider_id" not in data["canonical_summary"]
+    assert "location_id" not in data["canonical_summary"]
+    ProposalResponse.model_validate(proposal.json())
 
 
 def test_api_confirmation_requires_proposal_then_claims_request_idempotently(client, db_session, monkeypatch):

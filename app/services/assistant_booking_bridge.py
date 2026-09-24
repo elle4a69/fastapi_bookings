@@ -28,6 +28,9 @@ from . import scheduling_service, slot_allocation_service
 _WINDOW = timedelta(minutes=5)
 _PROPOSAL_LIFETIME = timedelta(minutes=10)
 _BOOKING_IDEMPOTENCY_PREFIX = "assistant-bridge"
+# FastAPI's current booking/payment domain records service amounts in AUD.
+# This is server-owned contract data, never selected by the bridge caller.
+_BOOKING_CURRENCY = "AUD"
 
 def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
@@ -93,19 +96,29 @@ def business_timezone(db: Session, binding: AssistantBookingBridgeBinding) -> st
 
 
 def canonical_summary(db: Session, binding: AssistantBookingBridgeBinding, proposal: AssistantBookingBridgeProposal) -> dict:
-    """Build the exact customer-safe canonical proposal contract."""
+    """Build the exact customer-safe canonical proposal snapshot contract."""
     service = _service(db, binding, proposal.service_id)
+    provider, location = _scope(db, binding)
     try:
         price = Decimal(str(service.price)).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError, ValueError):
         _error("SUMMARY_UNAVAILABLE", status.HTTP_409_CONFLICT)
+    if not isinstance(provider.name, str) or not provider.name.strip():
+        _error("SUMMARY_UNAVAILABLE", status.HTTP_409_CONFLICT)
+    if location and (not isinstance(location.name, str) or not location.name.strip()):
+        _error("SUMMARY_UNAVAILABLE", status.HTTP_409_CONFLICT)
     return {
         "service_id": service.id,
         "service_name": service.name,
+        # These are plain response snapshots for customer wording, not IDs or
+        # caller-controlled scope inputs. Scope remains binding-derived.
+        "provider_display_name": provider.name.strip(),
+        "location_display_name": location.name.strip() if location else None,
         "start_time": _utc(proposal.start_time).isoformat(),
         "end_time": _utc(proposal.end_time).isoformat(),
         "duration_minutes": service.duration,
         "price": format(price, ".2f"),
+        "currency": _BOOKING_CURRENCY,
         "show_duration": True,
         "timezone": business_timezone(db, binding),
     }

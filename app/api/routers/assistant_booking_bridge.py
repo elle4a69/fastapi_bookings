@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, Header, Request, HTTPException, status
 from sqlalchemy.orm import Session
 from ...db.database import get_db
-from ...schemas.assistant_booking_bridge import AvailabilityRequest, ProposalRequest, ConfirmRequest
+from ...schemas.assistant_booking_bridge import AvailabilityRequest, ProposalRequest, ConfirmRequest, ProposalResponse
 from ...services import assistant_booking_bridge as bridge
 
 router = APIRouter(prefix="/api/internal/assistant-booking-bridge", tags=["assistant-booking-bridge"])
@@ -30,7 +30,7 @@ def catalog(binding=Depends(_binding), db: Session = Depends(get_db)):
 def get_availability(payload: AvailabilityRequest, binding=Depends(_binding), db: Session = Depends(get_db)):
     return {"ok": True, "data": bridge.availability(db, binding, payload.service_id, payload.start_time, payload.end_time)}
 
-@router.post("/proposals")
+@router.post("/proposals", response_model=ProposalResponse)
 def create_proposal(payload: ProposalRequest, binding=Depends(_binding), db: Session = Depends(get_db)):
     item = bridge.propose(db, binding, payload.service_id, payload.start_time)
     return {"ok": True, "data": {
