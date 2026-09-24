@@ -1,6 +1,5 @@
 import httpx
 import logging
-import os
 from typing import Dict, Any, Optional
 
 from .policy_router import validate_request, enforce_tenant_budget
@@ -26,9 +25,8 @@ async def generate_response(
 
     if not api_key:
         from ...core.config import settings
-        api_key = settings.OPENAI_API_KEY
-        if not api_key:
-            api_key = os.getenv("OPENAI_API_KEY")
+
+        api_key = settings.OPENAI_API_KEY.get_secret_value()
 
     if not api_key:
         raise ValueError("OpenAI API Key is missing.")

@@ -78,8 +78,9 @@ Configured in [app/core/config.py](file:///F:/Projects/fastapi_bookings/app/core
 # MobileMessage gateway credentials are encrypted per SMS account rather than
 # exposed through frontend configuration or documented here as plaintext.
 
-# OpenAI Assistant (loaded by server-side settings; an account-scoped
-# encrypted `api_key` may override it for an independently configured line)
+# OpenAI Assistant (typed server-side SecretStr excluded from settings dumps;
+# an account-scoped `api_key` may override it; encrypted storage requires the
+# separately stacked operations-v5 credential boundary)
 OPENAI_API_KEY=sk-proj-...
 
 # Chatwoot Sync
@@ -117,7 +118,7 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 ### 4.2 Responder prompt and send safety
 
 1. Prompt assembly begins with immutable safety rules, then selects exactly zero or one tenant-global prompt and zero or one provider persona. More than one active profile at either authority level is a conflict and fails closed. The bound account's `line_prompt` is the provider-persona fallback, not an additional cross-line layer.
-2. Approved legacy knowledge is loaded deterministically from tenant-shared, provider-wide, then exact-account scope. Entries for another account are excluded. Differing approved texts in the same category are treated as an unresolved authority conflict and fail closed rather than being passed to the model.
+2. Approved legacy knowledge is loaded deterministically from tenant-shared, provider-wide, then exact-account scope. Entries for another account are excluded. Category identifiers reject Unicode control/format/unassigned/private/surrogate code points before and after NFKC normalization, then use deterministic case-folded whitespace canonicalization. Differing approved texts in the same canonical category are treated as an unresolved authority conflict and fail closed rather than being passed to the model.
 3. AI jobs use `PENDING -> PROCESSING -> PROCESSED | FAILED | CANCELLED`. Claiming is conditional, and successful completion commits the generated message, outbox decision, structural event, and job completion together.
 4. Autopilot accepts only the exact fact-free template `Thanks for your message. How can we help?` for the narrow greeting/thanks intent set. Any other model prose, including invented services, walk-in policy or opening-hours claims, becomes an AI-authored review draft with no delivery job. Uncertain or dynamic replies and replies using legacy knowledge are always review-only.
 5. Confidential, unsafe, conflicting or over-budget output/context is replaced by the generic withheld draft, creates no deliverable outbox job, disables conversation automation and moves the conversation to `needs-review`. Same-turn AI rows are locked and reconciled to exactly one review draft; pending/retry/processing delivery jobs for mutable rows are terminally suppressed. Sent/delivered rows, rows backed by a successful delivery job, and exact-scope rows carrying provider acceptance identifiers are immutable and produce a structural conflict event plus a separate withheld draft.
@@ -159,7 +160,7 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
-- **Stack dependency**: this branch contains the responder safety behavior documented in Section 4.2 and remains based on operations-v3. Operations-v4 commit `e50d190` and arrival successor `95bf119` are not merged here; they must be deliberately stacked and jointly verified. Their concurrent edits to this README require a manual documentation resolution that retains both AI bounds and operations approval/recovery limitations.
+- **Stack dependency**: this branch contains the responder safety behavior documented in Section 4.2 and remains based on the operations-v3 lineage. Operations-v5 commit `832414d`, arrival successors, and validation successors are not merged here; they must be deliberately stacked and jointly verified. Operations-v5 and this branch both change this README, so integration requires a manual documentation resolution retaining the AI bounds, credential contracts, and operations approval/recovery limitations.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. Operations-v4 additionally records that immutable body-versioned draft approval evidence and a separate user active/disabled state require approved schema work; its event evidence remains mutable application data until then. A migration must be added only after the concurrent migration branches are reconciled to one clean Alembic head. This slice is not deployable before the required migrations land.
 - **Concurrency hardening pending migration**: PostgreSQL conversation-first row locks serialize reviewed lifecycle, controls, manual-send, draft-winner, webhook-mutation and final-dispatch decisions. Holding a database lock during provider I/O is the deliberate no-migration safety trade-off and can reduce throughput during a slow provider call. Database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; synthetic state/race tests and PostgreSQL SQL compilation are not a live PostgreSQL concurrency proof.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
@@ -179,6 +180,7 @@ Run the SMS test suite:
 # 2a. Test AI job lifecycle, prompt/history isolation, and unsafe-output handling
 $env:OTEL_SDK_DISABLED='true'
 $env:PYTHONDONTWRITEBYTECODE='1'
+$env:OPENAI_API_KEY=''
 .\.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_sms_ai_safety.py -q
 
 # 3. Test prompt hierarchy and persona overrides

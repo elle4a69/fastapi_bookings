@@ -14,7 +14,7 @@ except ImportError:
     # Fallback for environments with Pydantic v1
     from pydantic import BaseSettings
     SettingsConfigDict = dict
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 
 
 class Settings(BaseSettings):
@@ -74,6 +74,14 @@ class Settings(BaseSettings):
 
     # Mapbox Settings
     MAPBOX_ACCESS_TOKEN: str = Field("", description="Mapbox Access Token")
+
+    # AI provider settings
+    OPENAI_API_KEY: SecretStr = Field(
+        default_factory=lambda: SecretStr(""),
+        description="Server-side OpenAI API credential",
+        exclude=True,
+        repr=False,
+    )
 
     # Outbox settings
     OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")

@@ -1,11 +1,15 @@
 import asyncio
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
+import secrets
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import event
 from sqlalchemy.dialects import postgresql
 
+from app.core.config import settings
 from app.models.provider import Provider
 from app.models.sms_account import SmsAccount
 from app.models.sms_conversation import SmsConversation
@@ -27,7 +31,9 @@ from app.services.sms.ai_orchestrator import (
     PROMPT_PROFILE_CHARACTER_LIMIT,
     _STATIC_AUTOPILOT_REPLY,
     SmsAiConfidentialOutputError,
+    SmsAiContextSafetyError,
     SmsAiSafetyError,
+    _canonicalize_knowledge_category,
     _ai_failure_lock_statements,
     _claim_ai_job,
     _fail_ai_job_closed,
@@ -38,6 +44,13 @@ from app.services.sms.ai_orchestrator import (
     process_pending_sms_ai_jobs,
     run_ai_orchestration,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_global_openai_credential(monkeypatch):
+    """Keep every AI safety test on a labelled synthetic credential boundary."""
+
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", SecretStr(""))
 
 
 @pytest.fixture
@@ -958,6 +971,59 @@ def test_iterative_credential_scan_handles_deep_cycles_and_unusual_containers():
         list(_iter_credential_strings("x" * (CREDENTIAL_SCAN_MAX_BYTES + 1)))
 
 
+@pytest.mark.parametrize(
+    "invalid_category",
+    [
+        pytest.param("control\u0085", id="unicode-control"),
+        pytest.param("format\u200b", id="unicode-format"),
+        pytest.param("unassigned\u0378", id="unicode-unassigned"),
+        pytest.param("private\ue000", id="unicode-private-use"),
+        pytest.param("surrogate\ud800", id="unicode-surrogate"),
+    ],
+)
+def test_knowledge_category_rejects_every_unicode_other_class(invalid_category):
+    with pytest.raises(SmsAiContextSafetyError) as error:
+        _canonicalize_knowledge_category(invalid_category)
+
+    assert str(error.value) == "invalid_knowledge_category"
+
+
+def test_credential_enumeration_failure_has_no_sensitive_exception_chain(caplog):
+    marker = "SYNTHETIC_CREDENTIAL_ENUMERATION_EXCEPTION_MARKER"
+
+    class ExplodingMapping(Mapping):
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+        def __iter__(self):
+            return iter(())
+
+        def __len__(self):
+            return 1
+
+        def values(self):
+            raise RuntimeError(marker)
+
+    with caplog.at_level("WARNING"), pytest.raises(
+        SmsAiConfidentialOutputError
+    ) as error:
+        list(_iter_credential_strings(ExplodingMapping()))
+
+    exception_chain = []
+    current = error.value
+    while current is not None and id(current) not in {
+        id(item) for item in exception_chain
+    }:
+        exception_chain.append(current)
+        current = current.__cause__ or current.__context__
+
+    assert len(exception_chain) == 1
+    assert error.value.__cause__ is None
+    assert error.value.__context__ is None
+    assert marker not in repr(exception_chain)
+    assert marker not in caplog.text
+
+
 @pytest.mark.parametrize("overflow_kind", ["depth", "items", "bytes"])
 def test_credential_scan_budget_overflow_creates_only_withheld_review_draft(
     db_session, safety_data, overflow_kind
@@ -1278,6 +1344,65 @@ def test_preawait_sensitive_snapshot_survives_configuration_rotation(
     for sensitive_value in (old_prompt, old_credential):
         assert sensitive_value not in drafts[0].body
         assert sensitive_value not in event_metadata
+        assert sensitive_value not in caplog.text
+        assert sensitive_value not in str(outcome)
+
+
+def test_preawait_global_api_key_snapshot_survives_rotation(
+    db_session,
+    safety_data,
+    caplog,
+    monkeypatch,
+):
+    _, _, account, conversation = safety_data
+    old_key = "SyntheticGlobalCredentialAlphaOmega"
+    replacement_key = "SyntheticReplacementCredentialBeta"
+    account.credentials = {}
+    db_session.commit()
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", SecretStr(old_key))
+    turn_ref = "synthetic-global-key-rotation"
+    _add_inbound(db_session, conversation, account, body="Hello", turn_ref=turn_ref)
+
+    async def rotate_configuration(**_kwargs):
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", SecretStr(replacement_key))
+        return {"choices": [{"message": {"content": old_key}}]}
+
+    gateway = AsyncMock(side_effect=rotate_configuration)
+    with caplog.at_level("WARNING"), patch(
+        "app.services.gateway.responses_client.generate_response",
+        new=gateway,
+    ):
+        outcome = asyncio.run(
+            run_ai_orchestration(db_session, account, conversation, turn_ref)
+        )
+
+    gateway.assert_awaited_once()
+    assert secrets.compare_digest(gateway.await_args.kwargs["api_key"], old_key)
+    assert outcome == "generated"
+    drafts = (
+        db_session.query(SmsMessage)
+        .filter(
+            SmsMessage.conversation_id == conversation.id,
+            SmsMessage.author_type == "ai",
+            SmsMessage.customer_turn_ref == turn_ref,
+        )
+        .all()
+    )
+    assert len(drafts) == 1
+    assert drafts[0].body == (
+        "[AI response withheld by safety policy. Staff review required.]"
+    )
+    assert db_session.query(SmsOutboundJob).count() == 0
+    persisted = repr(drafts) + repr(
+        [
+            event_row.meta
+            for event_row in db_session.query(SmsConversationEvent)
+            .filter(SmsConversationEvent.conversation_id == conversation.id)
+            .all()
+        ]
+    )
+    for sensitive_value in (old_key, replacement_key):
+        assert sensitive_value not in persisted
         assert sensitive_value not in caplog.text
         assert sensitive_value not in str(outcome)
 
@@ -1784,7 +1909,15 @@ def test_knowledge_row_limit_overflow_fails_closed_before_gateway(
 
 @pytest.mark.parametrize(
     "invalid_category",
-    ["", "   ", "x" * 65, "invalid\x00category", "invalid\ncategory"],
+    [
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="whitespace"),
+        pytest.param("x" * 65, id="too-long"),
+        pytest.param("invalid\x00category", id="ascii-control"),
+        pytest.param("invalid\ncategory", id="newline-control"),
+        pytest.param("invalid\u0085category", id="unicode-c1-control"),
+        pytest.param("invalid\u200bcategory", id="unicode-format-control"),
+    ],
 )
 def test_invalid_knowledge_category_fails_closed_before_gateway(
     db_session,
@@ -1818,6 +1951,53 @@ def test_invalid_knowledge_category_fails_closed_before_gateway(
     _assert_context_failure_created_review_draft(
         db_session, conversation, turn_ref=turn_ref
     )
+
+
+def test_nfkc_equivalent_knowledge_categories_conflict_before_gateway(
+    db_session,
+    safety_data,
+    caplog,
+):
+    tenant, _, account, conversation = safety_data
+    knowledge_marker = "SYNTHETIC_CONFLICTING_KNOWLEDGE_MARKER"
+    db_session.add_all(
+        [
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                category="hours",
+                text="Synthetic first approved answer",
+                status="approved",
+            ),
+            SmsKnowledgeEntry(
+                tenant_id=tenant.id,
+                category="ｈｏｕｒｓ",
+                text=knowledge_marker,
+                status="approved",
+            ),
+        ]
+    )
+    db_session.commit()
+    turn_ref = "synthetic-nfkc-category-conflict"
+    _add_inbound(
+        db_session,
+        conversation,
+        account,
+        body="Tell me something useful",
+        turn_ref=turn_ref,
+    )
+    gateway = AsyncMock()
+
+    with caplog.at_level("WARNING"), patch(
+        "app.services.gateway.responses_client.generate_response",
+        new=gateway,
+    ):
+        asyncio.run(run_ai_orchestration(db_session, account, conversation, turn_ref))
+
+    gateway.assert_not_awaited()
+    _assert_context_failure_created_review_draft(
+        db_session, conversation, turn_ref=turn_ref
+    )
+    assert knowledge_marker not in caplog.text
 
 
 def test_conflicting_prompt_profiles_fail_closed_before_gateway(

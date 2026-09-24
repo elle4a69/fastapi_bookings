@@ -22,10 +22,12 @@ lifecycle gates before and after this gateway.
 
 ## Setup, Configuration & Dependencies
 
-The caller should pass the already selected server-side API credential. The
-legacy settings/environment fallback remains for other existing callers but
-must never be exposed in responses, logs, events, or telemetry. External calls
-use `httpx` with the provider URL and a 30-second timeout.
+The caller should pass the already selected server-side API credential. Legacy
+callers that omit it use the typed server-side `settings.OPENAI_API_KEY`
+`SecretStr`; the gateway reveals that value only while constructing the exact
+provider authorization header. The field is excluded from settings
+serialization and representations. External calls use `httpx` with the
+provider URL and a 30-second timeout.
 
 ## Core Workflows & Contracts
 
@@ -51,9 +53,9 @@ content, credentials, prompts, or customer data.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
-- The gateway retains a legacy configuration fallback for callers that do not
-  pass a credential. New security-sensitive callers should select and validate
-  the exact credential before invocation.
+- The gateway retains a typed global configuration fallback for callers that
+  do not pass a credential. New security-sensitive callers should select and
+  validate the exact credential before invocation.
 - A fixed 30-second timeout exists, but provider retry and circuit-breaker
   policy are not implemented here.
 - The placeholder cost accounting is not production billing evidence.
@@ -63,9 +65,10 @@ content, credentials, prompts, or customer data.
 ## Verification & Testing Commands
 
 ```powershell
+$env:OPENAI_API_KEY=''
 python -m pytest -q -p no:cacheprovider tests/test_gateway_responses_privacy.py
-python -m py_compile app/services/gateway/responses_client.py
-python -m ruff check app/services/gateway/responses_client.py tests/test_gateway_responses_privacy.py
+python -m py_compile app/core/config.py app/services/gateway/responses_client.py
+python -m ruff check app/core/config.py app/services/gateway/responses_client.py tests/test_gateway_responses_privacy.py
 ```
 
 Tests must use mocked transports and synthetic markers. They must never call a

@@ -1,6 +1,7 @@
 import logging
 import re
 import secrets
+import unicodedata
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -221,10 +222,14 @@ def _iter_credential_strings(value: Any):
                 stack.append((nested_value, depth + 1))
         except SmsAiConfidentialOutputError:
             raise
-        except Exception as exc:
+        except Exception:
+            enumeration_failed = True
+        else:
+            enumeration_failed = False
+        if enumeration_failed:
             raise SmsAiConfidentialOutputError(
                 "Credential inspection could not safely enumerate configuration."
-            ) from exc
+            ) from None
 
 
 def _bounded_context_text(
@@ -239,6 +244,32 @@ def _bounded_context_text(
     if len(text) > per_entry_limit:
         raise SmsAiContextSafetyError(reason_code)
     return text
+
+
+def _canonicalize_knowledge_category(raw_category: Any) -> str:
+    """Return one bounded Unicode-safe category identifier or fail closed."""
+
+    if (
+        not isinstance(raw_category, str)
+        or not raw_category.strip()
+        or len(raw_category.strip()) > KNOWLEDGE_CATEGORY_CHARACTER_LIMIT
+        or any(
+            unicodedata.category(character).startswith("C")
+            for character in raw_category
+        )
+    ):
+        raise SmsAiContextSafetyError("invalid_knowledge_category")
+    canonical_category = unicodedata.normalize("NFKC", raw_category)
+    if (
+        not canonical_category.strip()
+        or len(canonical_category.strip()) > KNOWLEDGE_CATEGORY_CHARACTER_LIMIT
+        or any(
+            unicodedata.category(character).startswith("C")
+            for character in canonical_category
+        )
+    ):
+        raise SmsAiContextSafetyError("invalid_knowledge_category")
+    return " ".join(canonical_category.casefold().split())
 
 
 def _prompt_fragments(prompt_layers: list[str]) -> tuple[str, ...]:
@@ -412,15 +443,7 @@ def _load_scoped_legacy_knowledge(
         if total_characters > KNOWLEDGE_CONTEXT_CHARACTER_LIMIT:
             raise SmsAiContextSafetyError("knowledge_context_too_large")
 
-        raw_category = entry.category
-        if (
-            not isinstance(raw_category, str)
-            or not raw_category.strip()
-            or len(raw_category.strip()) > KNOWLEDGE_CATEGORY_CHARACTER_LIMIT
-            or any(ord(character) < 32 or ord(character) == 127 for character in raw_category)
-        ):
-            raise SmsAiContextSafetyError("invalid_knowledge_category")
-        category = " ".join(raw_category.casefold().split())
+        category = _canonicalize_knowledge_category(entry.category)
         normalized_text = " ".join(text.casefold().split())
         if category:
             authoritative_text = categories.get(category)
@@ -440,7 +463,8 @@ def _get_openai_api_key(account: SmsAccount) -> Optional[str]:
 
     from ...core.config import settings
 
-    return getattr(settings, "OPENAI_API_KEY", None)
+    configured_key = settings.OPENAI_API_KEY.get_secret_value()
+    return configured_key or None
 
 
 def _claim_ai_job(db: Session, job_id: int, *, now: datetime) -> bool:
@@ -1008,6 +1032,7 @@ async def run_ai_orchestration(
                 turn_ref,
                 include_legacy_knowledge=not verified_static_request,
                 include_history=not verified_static_request,
+                selected_api_key=openai_key,
             )
         except SmsAiConfidentialOutputError:
             logger.warning("AI completion failed the confidential-output safety check.")
@@ -1260,13 +1285,18 @@ async def call_openai_chat_completions(
     *,
     include_legacy_knowledge: bool = True,
     include_history: bool = True,
+    selected_api_key: str | None = None,
 ) -> str:
     """Assemble a scoped, capped prompt and call the configured gateway."""
 
     account, conversation = _validate_account_binding(
         db, account=account, conversation=conversation
     )
-    api_key = _get_openai_api_key(account)
+    api_key = (
+        selected_api_key
+        if selected_api_key is not None
+        else _get_openai_api_key(account)
+    )
     if not isinstance(api_key, str) or not api_key.strip():
         raise ValueError("OpenAI API Key is missing.")
 
