@@ -1,5 +1,5 @@
 """Private booking-domain bridge for the single approved Assistant UI line."""
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request, HTTPException, status
 from sqlalchemy.orm import Session
 from ...db.database import get_db
 from ...schemas.assistant_booking_bridge import AvailabilityRequest, ProposalRequest, ConfirmRequest
@@ -16,8 +16,14 @@ def catalog(binding=Depends(_binding), db: Session = Depends(get_db)):
     data = []
     from ...models import Service
     for service in db.query(Service).filter(Service.tenant_id == binding.tenant_id, Service.active.is_(True), Service.deleted_at.is_(None)).all():
-        try: bridge._service(db, binding, service.id)
-        except Exception: continue
+        try:
+            bridge._service(db, binding, service.id)
+        except HTTPException as exc:
+            if exc.status_code < 500:
+                continue
+            raise
+        except Exception:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, {"code": "BRIDGE_UNAVAILABLE"})
         data.append({"id": service.id, "name": service.name, "duration_minutes": service.duration, "price": str(service.price) if service.price is not None else None})
     return {"ok": True, "data": {"services": data, "provider": {"id": provider.id, "name": provider.name}, "location": {"id": location.id, "name": location.name} if location else None}}
 

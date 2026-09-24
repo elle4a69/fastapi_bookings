@@ -1,16 +1,24 @@
 """Deliberately small request/response contract for Assistant UI booking calls."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+class _UtcTimes(BaseModel):
+    @field_validator("start_time", "end_time", check_fields=False)
+    @classmethod
+    def require_utc_offset(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("offset-aware UTC timestamp required")
+        return value.astimezone(__import__("datetime").timezone.utc)
 
 
-class AvailabilityRequest(BaseModel):
+class AvailabilityRequest(_UtcTimes):
     service_id: int = Field(gt=0)
     start_time: datetime
     end_time: datetime
 
 
-class ProposalRequest(BaseModel):
+class ProposalRequest(_UtcTimes):
     service_id: int = Field(gt=0)
     start_time: datetime
 

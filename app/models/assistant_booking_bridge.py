@@ -13,8 +13,8 @@ class AssistantBookingBridgeBinding(Base):
     provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False, index=True)
     default_location_id = Column(Integer, ForeignKey("locations.id", ondelete="SET NULL"), nullable=True)
     credential_key_id = Column(String(96), unique=True, nullable=False)
-    # SHA-256 of the server-to-server bridge secret. The plaintext is never persisted.
-    secret_verifier = Column(String(64), nullable=False)
+    # Base64 raw Ed25519 public key. Private signing material never enters FastAPI.
+    public_key = Column(String(128), nullable=False)
     enabled = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 

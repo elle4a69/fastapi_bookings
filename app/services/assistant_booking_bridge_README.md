@@ -10,11 +10,11 @@ Private, disabled-by-default booking-domain bridge for Assistant UI's single `pr
 
 ## Setup, Configuration & Dependencies
 
-Create a binding through a controlled administrative migration/runbook: a `primary` line, tenant, provider, optional default location, key id, SHA-256 secret verifier and `enabled=false`. No seed or plaintext secret is supplied by this module.
+Create a binding through a controlled administrative migration/runbook: a `primary` line, tenant, provider, optional default location, key id, base64 Ed25519 public key and `enabled=false`. The Assistant private key belongs only in its runtime secret configuration; it is never supplied to FastAPI.
 
 ## Core Workflows & Contracts
 
-`GET /api/internal/assistant-booking-bridge/catalog`; `POST /availability`; `POST /proposals`; `POST /confirmations`. Each request requires key-id, epoch timestamp (five minutes), nonce, and an HMAC signature. The HMAC key is `SHA256(raw provisioned secret)` and the canonical UTF-8 input is `METHOD + "\\n" + PATH + "\\n" + TIMESTAMP + "\\n" + NONCE + "\\n" + SHA256(raw request body hex)`. Proposals expire in ten minutes and reserve nothing; confirmations create only `pending` bookings after revalidation.
+`GET /api/internal/assistant-booking-bridge/catalog`; `POST /availability`; `POST /proposals`; `POST /confirmations`. Each request requires key-id, epoch timestamp (five minutes), nonce, and base64 Ed25519 signature. The canonical UTF-8 input is `METHOD + "\\n" + PATH + "\\n" + TIMESTAMP + "\\n" + NONCE + "\\n" + SHA256(raw request body hex)`. Proposals expire in ten minutes and reserve nothing; confirmations create only `pending` bookings after revalidation.
 
 ## Data Safety & Isolation
 

@@ -20,7 +20,7 @@ def upgrade():
         sa.Column("provider_id", sa.Integer(), sa.ForeignKey("providers.id", ondelete="CASCADE"), nullable=False),
         sa.Column("default_location_id", sa.Integer(), sa.ForeignKey("locations.id", ondelete="SET NULL")),
         sa.Column("credential_key_id", sa.String(length=96), nullable=False, unique=True),
-        sa.Column("secret_verifier", sa.String(length=64), nullable=False),
+        sa.Column("public_key", sa.String(length=128), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
