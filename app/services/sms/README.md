@@ -93,6 +93,22 @@ OUTBOX_LEASE_SECONDS=120
 OUTBOX_BATCH_SIZE=20
 ```
 
+### Credential storage and provider-error contract
+
+SMS-account and Chatwoot credentials are encrypted before mapped storage is
+replaced. Encryption failure leaves an existing ciphertext unchanged and raises
+a fixed typed failure. Non-empty plaintext, invalid ciphertext and malformed
+decrypted values fail closed; they are never silently treated as usable empty
+credentials. Provider adapters and webhook routes translate failures into
+generic structural outcomes and do not log or return raw provider exceptions,
+response bodies, route identifiers, message bodies, destinations or secrets.
+
+Older deployments may contain rows written by the former plaintext fallback.
+Do not inspect or export those values. A separately approved rotation runbook
+must locate affected row IDs by envelope shape only, rotate each external
+credential, write it through the encrypted setter, verify access and revoke the
+old credential. No legacy-data inspection or migration is part of this slice.
+
 ### Models & Schema Dependencies
 Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_bookings/app/models/):
 - `sms_accounts`: Gateway credentials, transport type, prompt profiles, AI mode (`off`, `draft`, `autopilot`).
@@ -157,6 +173,7 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
+- **Legacy credential rotation**: older rows may lack the encrypted envelope. They now fail closed and require the ID-only discovery, provider rotation and revocation runbook described above; this branch does not inspect or migrate production data.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
 - **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `af613f143357c8f6764d164032f8a4f6d7e1f28c`; the strengthened arrival behavior documented in Section 8 requires arrival commit `95bf119`. They are not contained in this operations branch and must be deliberately stacked and jointly verified. This branch includes commit `363fcad`, an equivalent cherry-pick of the validation-privacy successor `922c6b17404fcbec30e00b7e47f06d43cadc7404`.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. Immutable, body-versioned approval evidence and a separate user active/disabled state also require approved schema work; the current event record is structurally checked but remains mutable application data. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before the required migrations land.

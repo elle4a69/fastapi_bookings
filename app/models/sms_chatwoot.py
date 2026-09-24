@@ -1,11 +1,19 @@
 from datetime import datetime, timezone
 import base64
 import hashlib
+import logging
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 from ..core.config import settings
+
+
+logger = logging.getLogger(__name__)
+
+
+class SmsChatwootCredentialError(RuntimeError):
+    """Fixed, non-sensitive failure raised for unusable Chatwoot secrets."""
 
 
 def _chatwoot_token_cipher():
@@ -17,7 +25,11 @@ def _chatwoot_token_cipher():
     """
     from cryptography.fernet import Fernet
 
-    secret = settings.PUBLIC_API_KEY or settings.SECRET_KEY or "fallback-default-secret-key-change-me"
+    secret = settings.PUBLIC_API_KEY or settings.SECRET_KEY
+    if not secret:
+        raise SmsChatwootCredentialError(
+            "Chatwoot credential encryption is unavailable."
+        )
     key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(key_bytes))
 
@@ -45,10 +57,11 @@ class SmsChatwootBinding(Base):
             return ""
         try:
             return _chatwoot_token_cipher().decrypt(self._chatwoot_api_token.encode("utf-8")).decode("utf-8")
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Failed to decrypt chatwoot_api_token for SmsChatwootBinding {self.id}: {e}")
-            return ""
+        except Exception:
+            logger.error("Chatwoot API token decryption failed.")
+            raise SmsChatwootCredentialError(
+                "Chatwoot API token decryption failed."
+            ) from None
 
     @chatwoot_api_token.setter
     def chatwoot_api_token(self, value: str):
@@ -57,9 +70,13 @@ class SmsChatwootBinding(Base):
             self._chatwoot_api_token = ""
             return
         try:
-            self._chatwoot_api_token = _chatwoot_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
+            encrypted = _chatwoot_token_cipher().encrypt(value.encode("utf-8"))
         except Exception:
-            self._chatwoot_api_token = value
+            logger.error("Chatwoot API token encryption failed.")
+            raise SmsChatwootCredentialError(
+                "Chatwoot API token encryption failed."
+            ) from None
+        self._chatwoot_api_token = encrypted.decode("utf-8")
 
     @property
     def webhook_secret(self) -> str:
@@ -68,10 +85,11 @@ class SmsChatwootBinding(Base):
             return ""
         try:
             return _chatwoot_token_cipher().decrypt(self._webhook_secret.encode("utf-8")).decode("utf-8")
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"Failed to decrypt webhook_secret for SmsChatwootBinding {self.id}: {e}")
-            return ""
+        except Exception:
+            logger.error("Chatwoot webhook secret decryption failed.")
+            raise SmsChatwootCredentialError(
+                "Chatwoot webhook secret decryption failed."
+            ) from None
 
     @webhook_secret.setter
     def webhook_secret(self, value: str):
@@ -80,9 +98,13 @@ class SmsChatwootBinding(Base):
             self._webhook_secret = ""
             return
         try:
-            self._webhook_secret = _chatwoot_token_cipher().encrypt(value.encode("utf-8")).decode("utf-8")
+            encrypted = _chatwoot_token_cipher().encrypt(value.encode("utf-8"))
         except Exception:
-            self._webhook_secret = value
+            logger.error("Chatwoot webhook secret encryption failed.")
+            raise SmsChatwootCredentialError(
+                "Chatwoot webhook secret encryption failed."
+            ) from None
+        self._webhook_secret = encrypted.decode("utf-8")
 
     # Relationships
     tenant = relationship("Tenant")

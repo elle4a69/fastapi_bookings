@@ -1,8 +1,31 @@
+import base64
 from datetime import datetime, timezone
+import hashlib
+import json
+import logging
 import uuid
+
+from cryptography.fernet import Fernet
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
+
+from ..core.config import settings
 from ..db.database import Base
+
+
+logger = logging.getLogger(__name__)
+
+
+class SmsCredentialError(RuntimeError):
+    """Fixed, non-sensitive failure raised for unusable credential storage."""
+
+
+def _sms_credential_cipher() -> Fernet:
+    secret = settings.SECRET_KEY or settings.PUBLIC_API_KEY
+    if not secret:
+        raise SmsCredentialError("SMS credential encryption is unavailable.")
+    key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
 
 class SmsAccount(Base):
     __tablename__ = "sms_accounts"
@@ -22,27 +45,23 @@ class SmsAccount(Base):
         """Decrypts and returns credentials from the database JSON field."""
         if not self._credentials:
             return {}
-        if isinstance(self._credentials, dict) and "encrypted_data" in self._credentials:
-            try:
-                import os
-                import base64
-                import hashlib
-                import json
-                from cryptography.fernet import Fernet
-                
-                secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-                key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-                fernet_key = base64.urlsafe_b64encode(key_bytes)
-                f = Fernet(fernet_key)
-                
-                encrypted_str = self._credentials["encrypted_data"]
-                decrypted_bytes = f.decrypt(encrypted_str.encode("utf-8"))
-                return json.loads(decrypted_bytes.decode("utf-8"))
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).error(f"Failed to decrypt credentials for SmsAccount {self.id}: {e}")
-                return {}
-        return self._credentials if isinstance(self._credentials, dict) else {}
+        try:
+            if not isinstance(self._credentials, dict):
+                raise SmsCredentialError("SMS credential storage is invalid.")
+            encrypted_value = self._credentials.get("encrypted_data")
+            if not isinstance(encrypted_value, str) or not encrypted_value:
+                raise SmsCredentialError("SMS credential storage is invalid.")
+            decrypted = _sms_credential_cipher().decrypt(encrypted_value.encode("utf-8"))
+            value = json.loads(decrypted.decode("utf-8"))
+            if not isinstance(value, dict):
+                raise SmsCredentialError("SMS credential storage is invalid.")
+            return value
+        except SmsCredentialError:
+            logger.error("SMS credential decryption failed.")
+            raise
+        except Exception:
+            logger.error("SMS credential decryption failed.")
+            raise SmsCredentialError("SMS credential decryption failed.") from None
 
     @credentials.setter
     def credentials(self, value: dict):
@@ -51,22 +70,14 @@ class SmsAccount(Base):
             self._credentials = {}
             return
         try:
-            import os
-            import base64
-            import hashlib
-            import json
-            from cryptography.fernet import Fernet
-            
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
-            key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
-            fernet_key = base64.urlsafe_b64encode(key_bytes)
-            f = Fernet(fernet_key)
-            
-            serialized = json.dumps(value)
-            encrypted_str = f.encrypt(serialized.encode("utf-8")).decode("utf-8")
-            self._credentials = {"encrypted_data": encrypted_str}
+            if not isinstance(value, dict):
+                raise SmsCredentialError("SMS credentials must be a mapping.")
+            serialized = json.dumps(value, separators=(",", ":"), sort_keys=True)
+            encrypted = _sms_credential_cipher().encrypt(serialized.encode("utf-8"))
         except Exception:
-            self._credentials = value
+            logger.error("SMS credential encryption failed.")
+            raise SmsCredentialError("SMS credential encryption failed.") from None
+        self._credentials = {"encrypted_data": encrypted.decode("utf-8")}
     
     # Autoresponder config
     autoresponder_enabled = Column(Boolean, default=False, nullable=False)

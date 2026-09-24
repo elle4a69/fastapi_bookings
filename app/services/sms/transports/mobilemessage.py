@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional
 import httpx
 from fastapi import Request, HTTPException
 
@@ -13,7 +13,7 @@ from .base import (
     DeliveryUpdate,
     normalize_sms_destination
 )
-from ....models.sms_account import SmsAccount
+from ....models.sms_account import SmsAccount, SmsCredentialError
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,13 @@ class MobileMessageAdapter(SmsTransportAdapter):
         MobileMessage uses a configured secret token sent as a header
         or a query parameter, if set up in the account credentials.
         """
-        creds = account.credentials or {}
+        try:
+            creds = account.credentials or {}
+        except SmsCredentialError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="SMS webhook authentication is unavailable.",
+            ) from exc
         webhook_secret = creds.get("webhook_secret")
         if not webhook_secret:
             # If no secret is configured, allow the webhook but log a warning.
@@ -36,15 +42,15 @@ class MobileMessageAdapter(SmsTransportAdapter):
         # Check standard headers for authorization/signature
         signature = request.headers.get("X-MobileMessage-Signature") or request.query_params.get("secret")
         if not signature or signature != webhook_secret:
-            logger.warning(f"Webhook authentication failed for SMS Account {account.id}")
+            logger.warning("MobileMessage webhook authentication failed.")
             raise HTTPException(status_code=401, detail="Invalid webhook signature or secret.")
 
     async def parse_inbound(self, request: Request, account: SmsAccount) -> NormalizedInboundMessage:
         try:
             body_bytes = await request.body()
             payload = json.loads(body_bytes.decode("utf-8"))
-        except Exception as e:
-            logger.error(f"Failed to parse MobileMessage inbound JSON: {e}")
+        except Exception:
+            logger.error("MobileMessage inbound payload parsing failed.")
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
         # MobileMessage inbound payload format:
@@ -84,7 +90,14 @@ class MobileMessageAdapter(SmsTransportAdapter):
         )
 
     async def send(self, account: SmsAccount, command: OutboundSmsCommand) -> TransportSendResult:
-        creds = account.credentials or {}
+        try:
+            creds = account.credentials or {}
+        except SmsCredentialError:
+            return TransportSendResult(
+                status="error",
+                error_code="CREDENTIALS_UNAVAILABLE",
+                error_message="SMS delivery credentials are unavailable.",
+            )
         username = creds.get("username", "").strip()
         password = creds.get("password", "").strip()
         
@@ -126,7 +139,6 @@ class MobileMessageAdapter(SmsTransportAdapter):
                     timeout=15.0
                 )
                 
-                raw_response = resp.text
                 if resp.status_code in (200, 201):
                     data = resp.json()
                     results = data.get("results", [])
@@ -137,37 +149,33 @@ class MobileMessageAdapter(SmsTransportAdapter):
                         return TransportSendResult(
                             status="success",
                             provider_message_id=provider_msg_id,
-                            raw_response=raw_response
                         )
                     else:
-                        error_detail = results[0].get("error") if results else "Unknown rejection"
                         return TransportSendResult(
                             status="error",
                             error_code="REJECTED_BY_PROVIDER",
-                            error_message=f"MobileMessage rejected send: {error_detail}",
-                            raw_response=raw_response
+                            error_message="Provider rejected the outbound command.",
                         )
                 else:
                     return TransportSendResult(
                         status="error",
-                        error_code=f"HTTP_{resp.status_code}",
-                        error_message=f"MobileMessage API error ({resp.status_code}): {raw_response}",
-                        raw_response=raw_response
+                        error_code="PROVIDER_HTTP_ERROR",
+                        error_message="Provider delivery request failed.",
                     )
-            except Exception as e:
-                logger.error(f"Exception during MobileMessage API send: {e}")
+            except Exception:
+                logger.error("MobileMessage outbound request failed.")
                 return TransportSendResult(
-                    status="exception",
+                    status="error",
                     error_code="CONNECTION_ERROR",
-                    error_message=str(e)
+                    error_message="Provider delivery request failed.",
                 )
 
     async def parse_delivery_receipt(self, request: Request, account: SmsAccount) -> DeliveryUpdate:
         try:
             body_bytes = await request.body()
             payload = json.loads(body_bytes.decode("utf-8"))
-        except Exception as e:
-            logger.error(f"Failed to parse MobileMessage delivery receipt: {e}")
+        except Exception:
+            logger.error("MobileMessage delivery receipt parsing failed.")
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
         # Expected receipt format:
@@ -180,9 +188,17 @@ class MobileMessageAdapter(SmsTransportAdapter):
         return DeliveryUpdate(
             provider_message_id=payload.get("message_id", ""),
             status=payload.get("status", "unknown"),
-            error_code=payload.get("error_code"),
-            error_message=payload.get("error_message"),
-            raw_payload=json.dumps(payload)
+            error_code=(
+                "PROVIDER_REPORTED_FAILURE"
+                if payload.get("error_code") or payload.get("error_message")
+                else None
+            ),
+            error_message=(
+                "Provider reported a delivery failure."
+                if payload.get("error_code") or payload.get("error_message")
+                else None
+            ),
+            raw_payload=None,
         )
 
     def normalise_address(self, value: str) -> Optional[str]:

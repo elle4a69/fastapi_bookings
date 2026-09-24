@@ -30,10 +30,10 @@ async def inbound_webhook(
             request=request
         )
         return result
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logger.error(f"Error processing inbound SMS webhook for transport={transport_type}: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Inbound SMS webhook processing failed.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error processing inbound webhook."
@@ -51,11 +51,11 @@ async def delivery_receipt_webhook(
     account = db.query(SmsAccount).filter(
         SmsAccount.public_id == account_public_id,
         SmsAccount.transport_type == transport_type,
-        SmsAccount.is_enabled == True
+        SmsAccount.is_enabled.is_(True),
     ).first()
     
     if not account:
-        logger.warning(f"Delivery receipt webhook rejected: SMS Account not found or disabled for public_id={account_public_id}, transport={transport_type}")
+        logger.warning("Delivery receipt webhook account resolution failed.")
         raise HTTPException(status_code=404, detail="SMS account not found or disabled.")
 
     try:
@@ -77,7 +77,7 @@ async def delivery_receipt_webhook(
         
         if not message:
             # If not found, log it but return success to provider (acknowledgement)
-            logger.info(f"Delivery receipt received for untracked provider_message_id={update.provider_message_id}")
+            logger.info("Delivery receipt did not match a tracked message.")
             return {"status": "success", "detail": "Message not tracked or already deleted."}
 
         # 5. Update message status
@@ -97,10 +97,10 @@ async def delivery_receipt_webhook(
         
         return {"status": "success", "message_id": message.id, "new_status": update.status}
         
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logger.error(f"Error processing delivery receipt webhook: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("Delivery receipt webhook processing failed.")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error processing delivery status webhook."

@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 from ...models.client import Client
 from ...models.provider import Provider
 from ...models.sms_account import SmsAccount
-from ...models.sms_chatwoot import SmsChatwootBinding
+from ...models.sms_chatwoot import (
+    SmsChatwootBinding,
+    SmsChatwootCredentialError,
+)
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
@@ -49,6 +52,28 @@ def _positive_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value if value > 0 else None
+
+
+def _usable_api_token(binding: SmsChatwootBinding) -> str | None:
+    try:
+        token = binding.chatwoot_api_token
+    except SmsChatwootCredentialError:
+        return None
+    return token or None
+
+
+def _webhook_secret_matches(
+    binding: SmsChatwootBinding, supplied_token: str | None
+) -> bool:
+    if not supplied_token:
+        return False
+    try:
+        stored_secret = binding.webhook_secret
+    except SmsChatwootCredentialError:
+        return False
+    return bool(stored_secret) and secrets.compare_digest(
+        supplied_token, stored_secret
+    )
 
 
 def _exact_chatwoot_message(
@@ -141,6 +166,8 @@ async def send_chatwoot_message(
         .limit(2)
         .all()
     )
+    binding = bindings[0] if len(bindings) == 1 else None
+    api_token = _usable_api_token(binding) if binding is not None else None
     if (
         len(bindings) != 1
         or _positive_int(persisted.chatwoot_conversation_id) is None
@@ -150,7 +177,7 @@ async def send_chatwoot_message(
             persisted.chatwoot_contact_id is not None
             and _positive_int(persisted.chatwoot_contact_id) is None
         )
-        or not bindings[0].chatwoot_api_token
+        or api_token is None
     ):
         raise ValueError("No unique enabled Chatwoot binding found for conversation.")
     if source_id is not None and (
@@ -160,14 +187,14 @@ async def send_chatwoot_message(
     ):
         raise ValueError("Invalid Chatwoot source identifier.")
 
-    binding = bindings[0]
+    assert binding is not None
     url = (
         f"{binding.chatwoot_base_url.rstrip('/')}/api/v1/accounts/"
         f"{binding.chatwoot_account_id}/conversations/"
         f"{persisted.chatwoot_conversation_id}/messages"
     )
     headers = {
-        "api_access_token": binding.chatwoot_api_token,
+        "api_access_token": api_token,
         "Content-Type": "application/json",
     }
     outbound_payload = {"content": body, "message_type": "outgoing"}
@@ -228,11 +255,7 @@ def process_chatwoot_webhook(
         _record_webhook_status("rejected")
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
     matching_bindings = [
-        candidate
-        for candidate in bindings
-        if token
-        and candidate.webhook_secret
-        and secrets.compare_digest(token, candidate.webhook_secret)
+        candidate for candidate in bindings if _webhook_secret_matches(candidate, token)
     ]
     if len(matching_bindings) != 1:
         logger.warning("Chatwoot webhook authentication failed.")
@@ -427,8 +450,8 @@ def process_chatwoot_webhook(
             source_query = source_query.filter(SmsMessage.client_request_id == source_id)
         internal_outbound = source_query.first()
         if internal_outbound:
-            # Message content is not a secret. Ordinary equality is exact and
-            # supports the full Unicode SMS/Chatwoot character set.
+            # Ordinary equality provides exact full-Unicode matching. Message
+            # bodies remain confidential and are never emitted to logs.
             if internal_outbound.body != content:
                 raise HTTPException(status_code=409, detail="Chatwoot source conflict.")
             if internal_outbound.chatwoot_message_id is None:
