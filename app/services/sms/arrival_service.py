@@ -37,6 +37,8 @@ ARRIVAL_ALERT_BATCH_LIMIT = 100
 ARRIVAL_TOKEN_COLLISION_RETRIES = 3
 _PENDING_OUTBOX_STATUSES = ("PENDING", "RETRY")
 _ARRIVAL_SCOPE_INVALID = "ARRIVAL_SCOPE_INVALID"
+_ARRIVAL_ALERT_KEY_VERSION = "v2"
+_MAX_DATABASE_ID = 2_147_483_647
 
 
 class ArrivalNotFoundError(LookupError):
@@ -53,6 +55,14 @@ class ArrivalStateError(ValueError):
 
 class ArrivalPersistenceError(RuntimeError):
     """Arrival persistence failed without exposing database error details."""
+
+
+def _require_database_id(value: object) -> int:
+    """Validate a PostgreSQL ``INTEGER`` identifier before any database use."""
+
+    if type(value) is not int or not 0 < value <= _MAX_DATABASE_ID:
+        raise ArrivalNotFoundError("arrival session is unavailable")
+    return value
 
 
 @dataclass(frozen=True)
@@ -151,8 +161,7 @@ def _validate_scope(
 ) -> None:
     """Enforce the transitive tenant/provider/account/client boundary."""
 
-    if tenant_id <= 0:
-        raise ArrivalNotFoundError("arrival session is unavailable")
+    _require_database_id(tenant_id)
     if booking.tenant_id != tenant_id or conversation.tenant_id != tenant_id:
         raise ArrivalNotFoundError("arrival session is unavailable")
     if account.tenant_id != tenant_id or conversation.sms_account_id != account.id:
@@ -248,6 +257,9 @@ def create_arrival_session(
     rejected because the original plaintext token cannot be recovered.
     """
 
+    _require_database_id(tenant_id)
+    _require_database_id(conversation_id)
+    _require_database_id(booking_id)
     current_time = _as_utc(now or datetime.now(timezone.utc))
     booking = (
         db.query(Booking)
@@ -475,14 +487,24 @@ def _suppress_pending_session_alerts(
 ) -> int:
     """Quarantine pending/retry alerts that have not already been leased."""
 
-    prefix = f"arrival-alert:{scoped.session.id}:%"
+    prefix = (
+        _arrival_alert_prefix(
+            scoped.booking.tenant_id,
+            scoped.session.id,
+        )
+        + "%"
+    )
+    legacy_prefix = f"arrival-alert:{scoped.session.id}:%"
     suppressed = (
         db.query(OutboxEvent)
         .filter(
             OutboxEvent.tenant_id == scoped.booking.tenant_id,
             OutboxEvent.type == "arrival.alert",
             OutboxEvent.status.in_(_PENDING_OUTBOX_STATUSES),
-            OutboxEvent.idempotency_key.like(prefix),
+            or_(
+                OutboxEvent.idempotency_key.like(prefix),
+                OutboxEvent.idempotency_key.like(legacy_prefix),
+            ),
         )
         .update(
             {
@@ -525,6 +547,9 @@ def acknowledge_arrival(
 ) -> ArrivalMutation:
     """Idempotently acknowledge/close an arrived tenant-scoped session."""
 
+    _require_database_id(tenant_id)
+    _require_database_id(arrival_id)
+    _require_database_id(actor_user_id)
     actor_exists = (
         db.query(User.id)
         .filter(
@@ -602,6 +627,7 @@ def list_tenant_arrivals(
 ) -> list[ScopedArrival]:
     """Return structurally scoped arrival records without capability or PII."""
 
+    _require_database_id(tenant_id)
     rows = (
         _scoped_query(db)
         .filter(
@@ -644,8 +670,68 @@ def _alert_sequence(arrived_at: datetime, now: datetime) -> int:
     return elapsed // ARRIVAL_ALERT_INTERVAL_SECONDS
 
 
+def _arrival_alert_prefix(tenant_id: int, arrival_id: int) -> str:
+    """Return the versioned tenant/session namespace for arrival alert keys."""
+
+    return (
+        f"arrival-alert:{_ARRIVAL_ALERT_KEY_VERSION}:"
+        f"tenant:{tenant_id}:session:{arrival_id}:"
+    )
+
+
+def _arrival_alert_key(tenant_id: int, arrival_id: int, sequence: int) -> str:
+    return f"{_arrival_alert_prefix(tenant_id, arrival_id)}sequence:{sequence}"
+
+
+def _legacy_arrival_alert_key(arrival_id: int, sequence: int) -> str:
+    return f"arrival-alert:{arrival_id}:{sequence}"
+
+
+def _scope_invalid_key(tenant_id: int, arrival_id: int) -> str:
+    return f"{_arrival_alert_prefix(tenant_id, arrival_id)}scope-invalid"
+
+
+def _legacy_scope_invalid_key(arrival_id: int) -> str:
+    return f"arrival-alert:{arrival_id}:scope-invalid"
+
+
+def _arrival_alert_prefix_expression():
+    return (
+        literal(f"arrival-alert:{_ARRIVAL_ALERT_KEY_VERSION}:tenant:")
+        + cast(Booking.tenant_id, String)
+        + literal(":session:")
+        + cast(SmsArrivalSession.id, String)
+        + literal(":")
+    )
+
+
 def _current_alert_key_expression(db: Session, current_time: datetime):
     """Build the current interval key so deduped rows are excluded pre-LIMIT."""
+
+    if db.get_bind().dialect.name == "sqlite":
+        def sqlite_epoch_millis(value):
+            whole_seconds = cast(func.strftime("%s", value), Integer) * 1000
+            milliseconds = cast(func.substr(func.strftime("%f", value), 4), Integer)
+            return whole_seconds + milliseconds
+
+        elapsed_seconds = (
+            sqlite_epoch_millis(current_time)
+            - sqlite_epoch_millis(SmsArrivalSession.arrived_at)
+        ) / 1000
+    else:
+        elapsed_seconds = func.extract(
+            "epoch", literal(current_time) - SmsArrivalSession.arrived_at
+        )
+    sequence = cast(
+        func.floor(elapsed_seconds / ARRIVAL_ALERT_INTERVAL_SECONDS), Integer
+    )
+    return _arrival_alert_prefix_expression() + literal("sequence:") + cast(
+        sequence, String
+    )
+
+
+def _legacy_current_alert_key_expression(db: Session, current_time: datetime):
+    """Build the v1 key for strictly scoped migration-free compatibility."""
 
     if db.get_bind().dialect.name == "sqlite":
         def sqlite_epoch_millis(value):
@@ -672,15 +758,96 @@ def _current_alert_key_expression(db: Session, current_time: datetime):
     )
 
 
-def _scope_invalid_key(arrival_id: int) -> str:
-    return f"arrival-alert:{arrival_id}:scope-invalid"
-
-
 def _scope_invalid_key_expression():
+    return _arrival_alert_prefix_expression() + literal("scope-invalid")
+
+
+def _legacy_scope_invalid_key_expression():
     return (
         literal("arrival-alert:")
         + cast(SmsArrivalSession.id, String)
         + literal(":scope-invalid")
+    )
+
+
+def _exact_alert_identity_predicates(*, key_expression):
+    """Return the tenant/type/key identity required for alert deduplication."""
+
+    return (
+        OutboxEvent.tenant_id == Booking.tenant_id,
+        OutboxEvent.type == "arrival.alert",
+        OutboxEvent.idempotency_key == key_expression,
+    )
+
+
+def _scope_invalid_payload_expression():
+    return (
+        literal('{"arrival_session_id": ')
+        + cast(SmsArrivalSession.id, String)
+        + literal("}")
+    )
+
+
+def _exact_terminal_marker_predicates(*, key_expression):
+    """Return the complete structural identity of a terminal scope marker."""
+
+    return (
+        *_exact_alert_identity_predicates(key_expression=key_expression),
+        OutboxEvent.status == "QUARANTINED",
+        OutboxEvent.processed.is_(True),
+        OutboxEvent.processed_at.isnot(None),
+        OutboxEvent.terminal_at.isnot(None),
+        OutboxEvent.next_attempt_at.is_(None),
+        OutboxEvent.error_code == _ARRIVAL_SCOPE_INVALID,
+        OutboxEvent.payload == _scope_invalid_payload_expression(),
+    )
+
+
+def _is_exact_terminal_marker(
+    event: OutboxEvent,
+    *,
+    tenant_id: int,
+    arrival_id: int,
+    idempotency_key: str,
+) -> bool:
+    return (
+        event.tenant_id == tenant_id
+        and event.type == "arrival.alert"
+        and event.idempotency_key == idempotency_key
+        and event.status == "QUARANTINED"
+        and event.processed is True
+        and event.processed_at is not None
+        and event.terminal_at is not None
+        and event.next_attempt_at is None
+        and event.error_code == _ARRIVAL_SCOPE_INVALID
+        and event.data() == {"arrival_session_id": arrival_id}
+    )
+
+
+def _is_exact_current_alert(
+    event: OutboxEvent,
+    *,
+    tenant_id: int,
+    idempotency_key: str,
+    payload: dict[str, int],
+) -> bool:
+    return (
+        event.tenant_id == tenant_id
+        and event.type == "arrival.alert"
+        and event.idempotency_key == idempotency_key
+        and event.data() == payload
+    )
+
+
+def _load_global_idempotency_winner(
+    db: Session,
+    *,
+    idempotency_key: str,
+) -> Optional[OutboxEvent]:
+    return (
+        db.query(OutboxEvent)
+        .filter(OutboxEvent.idempotency_key == idempotency_key)
+        .first()
     )
 
 
@@ -693,29 +860,54 @@ def _quarantine_invalid_scope_candidate(
 ) -> None:
     """Persist one terminal structural marker for a post-lock scope failure."""
 
+    tenant_id = _require_database_id(booking.tenant_id)
+    arrival_id = _require_database_id(arrival.id)
+    legacy_key = _legacy_scope_invalid_key(arrival_id)
+    legacy = _load_global_idempotency_winner(db, idempotency_key=legacy_key)
+    if legacy is not None:
+        if _is_exact_terminal_marker(
+            legacy,
+            tenant_id=tenant_id,
+            arrival_id=arrival_id,
+            idempotency_key=legacy_key,
+        ):
+            return
+        raise ArrivalPersistenceError("arrival alert idempotency conflict")
+
+    idempotency_key = _scope_invalid_key(tenant_id, arrival_id)
     try:
         with db.begin_nested():
             db.add(
                 OutboxEvent(
-                    tenant_id=booking.tenant_id,
+                    tenant_id=tenant_id,
                     type="arrival.alert",
                     payload=json.dumps(
-                        {"arrival_session_id": arrival.id}, sort_keys=True
+                        {"arrival_session_id": arrival_id}, sort_keys=True
                     ),
                     status="QUARANTINED",
                     processed=True,
                     processed_at=current_time,
                     terminal_at=current_time,
                     error_code=_ARRIVAL_SCOPE_INVALID,
-                    idempotency_key=_scope_invalid_key(arrival.id),
+                    idempotency_key=idempotency_key,
                     created_at=current_time,
                     next_attempt_at=null(),
                 )
             )
             db.flush()
     except IntegrityError:
-        # Another worker already recorded the same structural quarantine marker.
-        return
+        winner = _load_global_idempotency_winner(
+            db,
+            idempotency_key=idempotency_key,
+        )
+        if winner is not None and _is_exact_terminal_marker(
+            winner,
+            tenant_id=tenant_id,
+            arrival_id=arrival_id,
+            idempotency_key=idempotency_key,
+        ):
+            return
+        raise ArrivalPersistenceError("arrival alert idempotency conflict") from None
 
 
 def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
@@ -740,10 +932,15 @@ def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
                 OutboxEvent.tenant_id == Booking.tenant_id,
                 OutboxEvent.type == "arrival.alert",
                 OutboxEvent.status.in_(_PENDING_OUTBOX_STATUSES),
-                OutboxEvent.idempotency_key.like(
-                    literal("arrival-alert:")
-                    + cast(SmsArrivalSession.id, String)
-                    + literal(":%")
+                or_(
+                    OutboxEvent.idempotency_key.like(
+                        _arrival_alert_prefix_expression() + literal("%")
+                    ),
+                    OutboxEvent.idempotency_key.like(
+                        literal("arrival-alert:")
+                        + cast(SmsArrivalSession.id, String)
+                        + literal(":%")
+                    ),
                 ),
             ),
         )
@@ -777,15 +974,18 @@ def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
     return suppressed
 
 
-def _process_repeated_arrival_alerts(
+def _arrival_alert_candidate_query(
     db: Session,
     *,
     current_time: datetime,
-) -> int:
-    _suppress_ineligible_alerts(db, current_time=current_time)
+):
+    """Build the bounded, scope-safe candidate query for one producer pass."""
+
     current_key = _current_alert_key_expression(db, current_time)
+    legacy_current_key = _legacy_current_alert_key_expression(db, current_time)
     invalid_scope_key = _scope_invalid_key_expression()
-    rows = (
+    legacy_invalid_scope_key = _legacy_scope_invalid_key_expression()
+    return (
         _scoped_query(db)
         .filter(
             SmsArrivalSession.arrived_at.isnot(None),
@@ -798,10 +998,28 @@ def _process_repeated_arrival_alerts(
             Booking.end_time > current_time - ARRIVAL_POST_BOOKING_GRACE,
             *_valid_scope_predicates(),
             ~exists()
-            .where(OutboxEvent.idempotency_key == current_key)
+            .where(*_exact_alert_identity_predicates(key_expression=current_key))
             .correlate(SmsArrivalSession),
             ~exists()
-            .where(OutboxEvent.idempotency_key == invalid_scope_key)
+            .where(
+                *_exact_alert_identity_predicates(
+                    key_expression=legacy_current_key
+                )
+            )
+            .correlate(SmsArrivalSession),
+            ~exists()
+            .where(
+                *_exact_terminal_marker_predicates(
+                    key_expression=invalid_scope_key
+                )
+            )
+            .correlate(SmsArrivalSession),
+            ~exists()
+            .where(
+                *_exact_terminal_marker_predicates(
+                    key_expression=legacy_invalid_scope_key
+                )
+            )
             .correlate(SmsArrivalSession),
         )
         .order_by(
@@ -810,8 +1028,16 @@ def _process_repeated_arrival_alerts(
         )
         .limit(ARRIVAL_ALERT_BATCH_LIMIT)
         .with_for_update(of=(SmsArrivalSession, Booking), skip_locked=True)
-        .all()
     )
+
+
+def _process_repeated_arrival_alerts(
+    db: Session,
+    *,
+    current_time: datetime,
+) -> int:
+    _suppress_ineligible_alerts(db, current_time=current_time)
+    rows = _arrival_alert_candidate_query(db, current_time=current_time).all()
     created = 0
     for row in rows:
         try:
@@ -832,14 +1058,6 @@ def _process_repeated_arrival_alerts(
         sequence = _alert_sequence(scoped.session.arrived_at, current_time)
         if sequence < 1:
             continue
-        idempotency_key = f"arrival-alert:{scoped.session.id}:{sequence}"
-        if (
-            db.query(OutboxEvent.id)
-            .filter(OutboxEvent.idempotency_key == idempotency_key)
-            .first()
-            is not None
-        ):
-            continue
         payload = {
             "arrival_session_id": scoped.session.id,
             "booking_id": scoped.booking.id,
@@ -848,10 +1066,40 @@ def _process_repeated_arrival_alerts(
             "sms_account_id": scoped.account.id,
             "alert_sequence": sequence,
         }
+        tenant_id = scoped.booking.tenant_id
+        idempotency_key = _arrival_alert_key(
+            tenant_id,
+            scoped.session.id,
+            sequence,
+        )
+        legacy_key = _legacy_arrival_alert_key(scoped.session.id, sequence)
+        existing = _load_global_idempotency_winner(
+            db,
+            idempotency_key=idempotency_key,
+        )
+        if existing is not None:
+            if _is_exact_current_alert(
+                existing,
+                tenant_id=tenant_id,
+                idempotency_key=idempotency_key,
+                payload=payload,
+            ):
+                continue
+            raise ArrivalPersistenceError("arrival alert idempotency conflict")
+        legacy = _load_global_idempotency_winner(db, idempotency_key=legacy_key)
+        if legacy is not None:
+            if _is_exact_current_alert(
+                legacy,
+                tenant_id=tenant_id,
+                idempotency_key=legacy_key,
+                payload=payload,
+            ):
+                continue
+            raise ArrivalPersistenceError("arrival alert idempotency conflict")
         try:
             with db.begin_nested():
                 outbox = OutboxEvent(
-                    tenant_id=scoped.booking.tenant_id,
+                    tenant_id=tenant_id,
                     type="arrival.alert",
                     payload=json.dumps(payload, sort_keys=True),
                     status="PENDING",
@@ -877,8 +1125,18 @@ def _process_repeated_arrival_alerts(
                 db.flush()
             created += 1
         except IntegrityError:
-            # Another worker won the same unique outbox key.
-            continue
+            winner = _load_global_idempotency_winner(
+                db,
+                idempotency_key=idempotency_key,
+            )
+            if winner is not None and _is_exact_current_alert(
+                winner,
+                tenant_id=tenant_id,
+                idempotency_key=idempotency_key,
+                payload=payload,
+            ):
+                continue
+            raise ArrivalPersistenceError("arrival alert idempotency conflict") from None
     if created:
         logger.info("arrival_alerts_enqueued count=%s", created)
     return created

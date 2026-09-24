@@ -3,10 +3,13 @@
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import create_mock_engine, event, null
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token
 from app.core.state_machine import BookingStatus
@@ -28,9 +31,13 @@ from app.services.sms.arrival_service import (
     ArrivalNotFoundError,
     ArrivalPersistenceError,
     ArrivalStateError,
+    _arrival_alert_candidate_query,
+    _arrival_alert_key,
+    _scope_invalid_key,
     acknowledge_arrival,
     create_arrival_session,
     hash_arrival_token,
+    list_tenant_arrivals,
     mark_customer_arrived,
     process_repeated_arrival_alerts,
 )
@@ -63,6 +70,50 @@ def _staff_headers(tenant: Tenant, user: User) -> dict[str, str]:
         "X-Tenant": tenant.subdomain,
         "X-Token": create_access_token({"sub": str(user.id)}),
     }
+
+
+def _alert_payload(synthetic_arrival_data, arrival, sequence: int) -> dict[str, int]:
+    suffix = (
+        "a"
+        if arrival.booking_id == synthetic_arrival_data["booking_a"].id
+        else "b"
+    )
+    booking = synthetic_arrival_data[f"booking_{suffix}"]
+    conversation = synthetic_arrival_data[f"conversation_{suffix}"]
+    account = synthetic_arrival_data[f"account_{suffix}"]
+    return {
+        "arrival_session_id": arrival.id,
+        "booking_id": booking.id,
+        "conversation_id": conversation.id,
+        "provider_id": booking.provider_id,
+        "sms_account_id": account.id,
+        "alert_sequence": sequence,
+    }
+
+
+def _terminal_scope_marker(
+    *,
+    tenant_id: int,
+    arrival_id: int,
+    key: str,
+    now: datetime,
+    **overrides,
+) -> OutboxEvent:
+    values = {
+        "tenant_id": tenant_id,
+        "type": "arrival.alert",
+        "payload": json.dumps({"arrival_session_id": arrival_id}, sort_keys=True),
+        "status": "QUARANTINED",
+        "processed": True,
+        "processed_at": now,
+        "terminal_at": now,
+        "error_code": "ARRIVAL_SCOPE_INVALID",
+        "idempotency_key": key,
+        "created_at": now,
+        "next_attempt_at": null(),
+    }
+    values.update(overrides)
+    return OutboxEvent(**values)
 
 
 @pytest.fixture
@@ -809,7 +860,14 @@ def test_repeated_alerts_use_durable_structural_deduplication(
 
     outbox = (
         db_session.query(OutboxEvent)
-        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{arrival.id}:2")
+        .filter(
+            OutboxEvent.idempotency_key
+            == _arrival_alert_key(
+                synthetic_arrival_data["tenant_a"].id,
+                arrival.id,
+                2,
+            )
+        )
         .one()
     )
     payload = outbox.data()
@@ -1149,7 +1207,14 @@ def test_expired_candidates_are_excluded_before_bounded_alert_batch(
     assert process_repeated_arrival_alerts(db_session, now=now) == 1
     assert (
         db_session.query(OutboxEvent)
-        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{eligible.id}:3")
+        .filter(
+            OutboxEvent.idempotency_key
+            == _arrival_alert_key(
+                synthetic_arrival_data["tenant_a"].id,
+                eligible.id,
+                3,
+            )
+        )
         .count()
         == 1
     )
@@ -1192,7 +1257,14 @@ def test_sql_provable_scope_mismatches_do_not_starve_alert_batch(
     assert process_repeated_arrival_alerts(db_session, now=now) == 1
     assert (
         db_session.query(OutboxEvent)
-        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{eligible.id}:3")
+        .filter(
+            OutboxEvent.idempotency_key
+            == _arrival_alert_key(
+                synthetic_arrival_data["tenant_a"].id,
+                eligible.id,
+                3,
+            )
+        )
         .count()
         == 1
     )
@@ -1227,7 +1299,10 @@ def test_post_lock_scope_failure_is_terminally_quarantined_and_advances(
         db_session.query(OutboxEvent)
         .filter(
             OutboxEvent.idempotency_key
-            == f"arrival-alert:{first.id}:scope-invalid"
+            == _scope_invalid_key(
+                synthetic_arrival_data["tenant_a"].id,
+                first.id,
+            )
         )
         .one()
     )
@@ -1241,7 +1316,14 @@ def test_post_lock_scope_failure_is_terminally_quarantined_and_advances(
     assert process_repeated_arrival_alerts(db_session, now=now) == 1
     assert (
         db_session.query(OutboxEvent)
-        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{second.id}:2")
+        .filter(
+            OutboxEvent.idempotency_key
+            == _arrival_alert_key(
+                synthetic_arrival_data["tenant_b"].id,
+                second.id,
+                2,
+            )
+        )
         .count()
         == 1
     )
@@ -1317,3 +1399,335 @@ def test_acknowledge_service_rejects_untrusted_actor_ids(
         == synthetic_arrival_data["conversation_a"].id,
         SmsConversationEvent.type == "arrival_acknowledged",
     ).count() == 0
+
+
+@pytest.mark.parametrize("invalid_id", [True, False, 0, -1, 2_147_483_648])
+@pytest.mark.parametrize("field", ["tenant_id", "conversation_id", "booking_id"])
+def test_create_rejects_invalid_scalar_ids_before_any_query(field, invalid_id):
+    db = MagicMock()
+    values = {"tenant_id": 1, "conversation_id": 1, "booking_id": 1}
+    values[field] = invalid_id
+
+    with pytest.raises(ArrivalNotFoundError, match="unavailable"):
+        create_arrival_session(db, **values)
+
+    db.query.assert_not_called()
+
+
+@pytest.mark.parametrize("invalid_id", [True, False, 0, -1, 2_147_483_648])
+@pytest.mark.parametrize("field", ["tenant_id", "arrival_id", "actor_user_id"])
+def test_acknowledge_rejects_invalid_scalar_ids_before_any_query(field, invalid_id):
+    db = MagicMock()
+    values = {"tenant_id": 1, "arrival_id": 1, "actor_user_id": 1}
+    values[field] = invalid_id
+
+    with pytest.raises(ArrivalNotFoundError, match="unavailable"):
+        acknowledge_arrival(db, **values)
+
+    db.query.assert_not_called()
+
+
+@pytest.mark.parametrize("invalid_id", [True, False, 0, -1, 2_147_483_648])
+def test_list_rejects_invalid_tenant_id_before_any_query(invalid_id):
+    db = MagicMock()
+
+    with pytest.raises(ArrivalNotFoundError, match="unavailable"):
+        list_tenant_arrivals(db, tenant_id=invalid_id)
+
+    db.query.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("_case", "overrides"),
+    [
+        (
+            "pending",
+            {
+                "status": "PENDING",
+                "processed": False,
+                "processed_at": None,
+                "terminal_at": None,
+                "next_attempt_at": "now",
+            },
+        ),
+        (
+            "retry",
+            {
+                "status": "RETRY",
+                "processed": False,
+                "processed_at": None,
+                "terminal_at": None,
+                "next_attempt_at": "now",
+            },
+        ),
+        (
+            "processing",
+            {
+                "status": "PROCESSING",
+                "processed": False,
+                "processed_at": None,
+                "terminal_at": None,
+                "lease_owner": "synthetic-worker",
+                "lease_token": "00000000-0000-0000-0000-000000000099",
+                "lease_expires_at": "later",
+            },
+        ),
+        ("succeeded", {"status": "SUCCEEDED"}),
+        ("missing_processed_at", {"processed_at": None}),
+        ("wrong_error", {"error_code": "ARRIVAL_EXPIRED"}),
+        ("malformed_payload", {"payload": "not-json"}),
+        ("wrong_type", {"type": "sms.send"}),
+        ("wrong_tenant", {"tenant_id": "other"}),
+    ],
+)
+def test_invalid_v2_terminal_marker_never_suppresses_or_becomes_truth(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    monkeypatch,
+    _case,
+    overrides,
+):
+    from app.services.sms import arrival_service
+
+    now = synthetic_arrival_data["now"]
+    arrival = synthetic_arrival_data["invitation_a"].session
+    tenant_id = synthetic_arrival_data["tenant_a"].id
+    arrival.arrived_at = now - timedelta(minutes=2)
+    key = _scope_invalid_key(tenant_id, arrival.id)
+    resolved = dict(overrides)
+    if resolved.get("next_attempt_at") == "now":
+        resolved["next_attempt_at"] = now
+    if resolved.get("lease_expires_at") == "later":
+        resolved["lease_expires_at"] = now + timedelta(minutes=1)
+    if resolved.get("tenant_id") == "other":
+        resolved["tenant_id"] = synthetic_arrival_data["tenant_b"].id
+    marker_tenant_id = resolved.pop("tenant_id", tenant_id)
+    marker = _terminal_scope_marker(
+        tenant_id=marker_tenant_id,
+        arrival_id=arrival.id,
+        key=key,
+        now=now,
+        **resolved,
+    )
+    db_session.add(marker)
+    db_session.commit()
+
+    def reject_scope(_row):
+        raise ArrivalNotFoundError("synthetic scope change")
+
+    monkeypatch.setattr(arrival_service, "_to_scoped", reject_scope)
+    with pytest.raises(ArrivalPersistenceError, match="idempotency conflict"):
+        process_repeated_arrival_alerts(db_session, now=now)
+
+    db_session.refresh(marker)
+    assert marker.idempotency_key == key
+
+
+def test_exact_terminal_marker_is_excluded_before_limit_for_fairness(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    monkeypatch,
+):
+    from app.services.sms import arrival_service
+
+    now = synthetic_arrival_data["now"]
+    marked = synthetic_arrival_data["invitation_a"].session
+    eligible = synthetic_arrival_data["invitation_b"].session
+    marked.arrived_at = now - timedelta(minutes=2)
+    eligible.arrived_at = now - timedelta(minutes=2, seconds=1)
+    tenant_id = synthetic_arrival_data["tenant_a"].id
+    db_session.add(
+        _terminal_scope_marker(
+            tenant_id=tenant_id,
+            arrival_id=marked.id,
+            key=_scope_invalid_key(tenant_id, marked.id),
+            now=now,
+        )
+    )
+    db_session.commit()
+    monkeypatch.setattr(arrival_service, "ARRIVAL_ALERT_BATCH_LIMIT", 1)
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 1
+    alert = (
+        db_session.query(OutboxEvent)
+        .filter(OutboxEvent.status == "PENDING")
+        .one()
+    )
+    assert alert.data()["arrival_session_id"] == eligible.id
+
+
+def test_exact_v2_and_legacy_terminal_markers_are_migration_safe(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+):
+    now = synthetic_arrival_data["now"]
+    arrivals = [
+        synthetic_arrival_data["invitation_a"].session,
+        synthetic_arrival_data["invitation_b"].session,
+    ]
+    tenants = [
+        synthetic_arrival_data["tenant_a"].id,
+        synthetic_arrival_data["tenant_b"].id,
+    ]
+    for index, (arrival, tenant_id) in enumerate(zip(arrivals, tenants, strict=True)):
+        arrival.arrived_at = now - timedelta(minutes=2)
+        key = (
+            _scope_invalid_key(tenant_id, arrival.id)
+            if index == 0
+            else f"arrival-alert:{arrival.id}:scope-invalid"
+        )
+        db_session.add(
+            _terminal_scope_marker(
+                tenant_id=tenant_id,
+                arrival_id=arrival.id,
+                key=key,
+                now=now,
+            )
+        )
+    db_session.commit()
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 0
+    assert db_session.query(OutboxEvent).count() == 2
+
+
+def test_arbitrary_legacy_terminal_marker_is_not_accepted(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    monkeypatch,
+):
+    from app.services.sms import arrival_service
+
+    now = synthetic_arrival_data["now"]
+    arrival = synthetic_arrival_data["invitation_a"].session
+    tenant_id = synthetic_arrival_data["tenant_a"].id
+    arrival.arrived_at = now - timedelta(minutes=2)
+    db_session.add(
+        _terminal_scope_marker(
+            tenant_id=tenant_id,
+            arrival_id=arrival.id,
+            key=f"arrival-alert:{arrival.id}:scope-invalid",
+            now=now,
+            payload="malformed-legacy-marker",
+        )
+    )
+    db_session.commit()
+
+    def reject_scope(_row):
+        raise ArrivalNotFoundError("synthetic scope change")
+
+    monkeypatch.setattr(arrival_service, "_to_scoped", reject_scope)
+    with pytest.raises(ArrivalPersistenceError, match="idempotency conflict"):
+        process_repeated_arrival_alerts(db_session, now=now)
+
+    assert db_session.query(OutboxEvent).count() == 1
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_exact_current_key_prevents_duplicate_across_key_versions(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    legacy,
+):
+    now = synthetic_arrival_data["now"]
+    arrival = synthetic_arrival_data["invitation_a"].session
+    tenant_id = synthetic_arrival_data["tenant_a"].id
+    arrival.arrived_at = now - timedelta(minutes=2)
+    sequence = 2
+    key = (
+        f"arrival-alert:{arrival.id}:{sequence}"
+        if legacy
+        else _arrival_alert_key(tenant_id, arrival.id, sequence)
+    )
+    db_session.add(
+        OutboxEvent(
+            tenant_id=tenant_id,
+            type="arrival.alert",
+            payload=json.dumps(
+                _alert_payload(synthetic_arrival_data, arrival, sequence),
+                sort_keys=True,
+            ),
+            status="PENDING",
+            processed=False,
+            idempotency_key=key,
+            created_at=now,
+            next_attempt_at=now,
+        )
+    )
+    db_session.commit()
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 0
+    assert db_session.query(OutboxEvent).count() == 1
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_mismatched_current_key_winner_fails_closed(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    legacy,
+):
+    now = synthetic_arrival_data["now"]
+    arrival = synthetic_arrival_data["invitation_a"].session
+    tenant_id = synthetic_arrival_data["tenant_a"].id
+    arrival.arrived_at = now - timedelta(minutes=2)
+    sequence = 2
+    key = (
+        f"arrival-alert:{arrival.id}:{sequence}"
+        if legacy
+        else _arrival_alert_key(tenant_id, arrival.id, sequence)
+    )
+    db_session.add(
+        OutboxEvent(
+            tenant_id=synthetic_arrival_data["tenant_b"].id,
+            type="sms.send",
+            payload=json.dumps(
+                _alert_payload(synthetic_arrival_data, arrival, sequence),
+                sort_keys=True,
+            ),
+            status="PENDING",
+            processed=False,
+            idempotency_key=key,
+            created_at=now,
+            next_attempt_at=now,
+        )
+    )
+    db_session.commit()
+
+    with pytest.raises(ArrivalPersistenceError, match="idempotency conflict"):
+        process_repeated_arrival_alerts(db_session, now=now)
+
+    assert db_session.query(OutboxEvent).count() == 1
+
+
+def test_postgresql_candidate_sql_scopes_dedupe_before_limit():
+    engine = create_mock_engine("postgresql://", lambda *_args, **_kwargs: None)
+    db = Session(bind=engine)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    statement = _arrival_alert_candidate_query(db, current_time=now).statement
+    sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).lower()
+    limit_index = sql.index("limit 100")
+    for required in (
+        "outbox_events.tenant_id = bookings.tenant_id",
+        "outbox_events.type = 'arrival.alert'",
+        "outbox_events.status = 'quarantined'",
+        "outbox_events.processed is true",
+        "outbox_events.terminal_at is not null",
+        "outbox_events.error_code = 'arrival_scope_invalid'",
+        "arrival-alert:v2:tenant:",
+        "scope-invalid",
+    ):
+        assert required in sql
+        assert sql.index(required) < limit_index
+    assert "for update" in sql
+    assert "skip locked" in sql

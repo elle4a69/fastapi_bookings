@@ -40,8 +40,10 @@ logs or telemetry.
 
 - Arrival alert production must remain disabled until its dedicated consumer
   and final delivery eligibility gate exist.
-- This README is new on the arrival branch. Validation-v3 also introduces an
-  `app/core/README.md`; integration must merge the two documents deliberately.
+- Validation-v4 owns the canonical privacy-logging/bootstrap material in this
+  same README. Branch integration must preserve that material and merge this
+  arrival feature-gate contract into it; replacing either document wholesale
+  would make the combined documentation inaccurate.
 
 ## Verification and testing commands
 
