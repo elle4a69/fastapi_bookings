@@ -14,6 +14,40 @@ from .operations_service import SmsOperationConflict, ensure_message_delivery_al
 
 logger = logging.getLogger(__name__)
 
+CHATWOOT_ACCEPTED_MESSAGE_STATUSES = frozenset(
+    {"queued", "sending", "sent", "delivered"}
+)
+CHATWOOT_ACCEPTED_AUTHOR_TYPES = frozenset({"staff", "ai"})
+
+
+def _positive_non_bool_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _has_exact_chatwoot_acceptance(
+    *,
+    job: SmsOutboundJob,
+    message: SmsMessage,
+    conversation: SmsConversation,
+) -> bool:
+    """Validate durable Chatwoot acceptance without reapplying live controls."""
+
+    return (
+        _positive_non_bool_int(message.chatwoot_message_id)
+        and _positive_non_bool_int(conversation.chatwoot_conversation_id)
+        and _positive_non_bool_int(conversation.chatwoot_inbox_id)
+        and job.status == "PROCESSING"
+        and job.message_id == message.id
+        and job.sms_account_id == message.sms_account_id
+        and message.conversation_id == conversation.id
+        and message.tenant_id == conversation.tenant_id
+        and message.provider_id == conversation.provider_id
+        and message.sms_account_id == conversation.sms_account_id
+        and message.direction == "outbound"
+        and message.author_type in CHATWOOT_ACCEPTED_AUTHOR_TYPES
+        and message.status in CHATWOOT_ACCEPTED_MESSAGE_STATUSES
+    )
+
 
 def _delivery_lock_statements(
     *, conversation_id: int, message_id: int, job_id: int
@@ -106,12 +140,20 @@ def _recover_chatwoot_delivery_after_error(
         )
         return True
 
-    if message.chatwoot_message_id is not None and message.status in {
-        "queued",
-        "sending",
-        "sent",
-        "delivered",
-    }:
+    if message.chatwoot_message_id is not None:
+        if not _has_exact_chatwoot_acceptance(
+            job=job,
+            message=message,
+            conversation=conversation,
+        ):
+            _quarantine_delivery_job(
+                db,
+                job=job,
+                message=message,
+                conversation=conversation,
+                reason="CHATWOOT_ACCEPTANCE_INVALID",
+            )
+            return True
         if message.status != "delivered":
             message.status = "sent"
         job.status = "SUCCESS"
@@ -273,11 +315,20 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 conversation.chatwoot_conversation_id is not None
                 and conversation.chatwoot_inbox_id is not None
             )
-            if (
-                is_chatwoot_thread
-                and message.chatwoot_message_id is not None
-                and message.status in {"queued", "sending", "sent", "delivered"}
-            ):
+            if message.chatwoot_message_id is not None:
+                if not _has_exact_chatwoot_acceptance(
+                    job=job,
+                    message=message,
+                    conversation=conversation,
+                ):
+                    _quarantine_delivery_job(
+                        db,
+                        job=job,
+                        message=message,
+                        conversation=conversation,
+                        reason="CHATWOOT_ACCEPTANCE_INVALID",
+                    )
+                    continue
                 if message.status != "delivered":
                     message.status = "sent"
                 job.status = "SUCCESS"

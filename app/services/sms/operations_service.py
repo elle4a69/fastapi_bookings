@@ -10,13 +10,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from ...models.client import Client
 from ...models.provider import Provider
 from ...models.sms_account import SmsAccount
-from ...models.sms_chatwoot import SmsChatwootBinding
+from ...models.sms_chatwoot import (
+    SmsChatwootBinding,
+    SmsChatwootCredentialError,
+)
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent, SmsNote
@@ -56,6 +59,26 @@ TRANSITION_MATRIX: dict[str, dict[str, str]] = {
     "reopen": {"resolved": "taken-over"},
     "release": {"taken-over": "auto-reply"},
 }
+
+
+def _draft_approval_event_statement(conversation: SmsConversation):
+    """Build the bounded structural lookup without casting JSON values."""
+
+    return (
+        select(SmsConversationEvent)
+        .join(
+            SmsConversation,
+            SmsConversation.id == SmsConversationEvent.conversation_id,
+        )
+        .where(
+            SmsConversationEvent.conversation_id == conversation.id,
+            SmsConversationEvent.type == "draft_approved",
+            SmsConversation.tenant_id == conversation.tenant_id,
+            SmsConversation.provider_id == conversation.provider_id,
+        )
+        .order_by(SmsConversationEvent.id.desc())
+        .limit(APPROVAL_EVENT_SCAN_LIMIT)
+    )
 
 
 def null_safe_message_account_scope():
@@ -160,8 +183,12 @@ def get_scoped_chatwoot_binding(
     if len(bindings) != 1:
         return None
     binding = bindings[0]
-    if require_credentials and not binding.chatwoot_api_token:
-        return None
+    if require_credentials:
+        try:
+            if not binding.chatwoot_api_token:
+                return None
+        except SmsChatwootCredentialError:
+            return None
     return binding
 
 
@@ -255,29 +282,23 @@ def has_exact_draft_approval(
         or message.sms_account_id != conversation.sms_account_id
     ):
         return False
-    events = (
-        db.query(SmsConversationEvent)
-        .filter(
-            SmsConversationEvent.conversation_id == conversation.id,
-            SmsConversationEvent.type == "draft_approved",
-            SmsConversationEvent.meta["message_id"].as_integer() == message.id,
-        )
-        .order_by(SmsConversationEvent.id.desc())
-        .limit(APPROVAL_EVENT_SCAN_LIMIT)
-        .all()
-    )
+    statement = _draft_approval_event_statement(conversation)
+    events = db.execute(statement).scalars().all()
     actor_ids: set[int] = set()
     for event in events:
         metadata = event.meta if isinstance(event.meta, dict) else {}
         actor_id = metadata.get("actor_id")
         message_id = metadata.get("message_id")
+        approved = metadata.get("approved")
         if (
             isinstance(actor_id, int)
             and not isinstance(actor_id, bool)
             and actor_id > 0
             and isinstance(message_id, int)
             and not isinstance(message_id, bool)
+            and message_id > 0
             and message_id == message.id
+            and approved is True
         ):
             actor_ids.add(actor_id)
     if not actor_ids:

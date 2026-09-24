@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import status
+from sqlalchemy.dialects import postgresql
 
 from app.core.security import create_access_token
 from app.models.client import Client
@@ -21,6 +22,7 @@ from app.services.sms.chatwoot_service import process_chatwoot_webhook
 from app.services.sms.inbound_service import find_duplicate_inbound_winner
 from app.services.sms.operations_service import (
     SmsOperationConflict,
+    _draft_approval_event_statement,
     has_exact_draft_approval,
     transition_conversation,
 )
@@ -861,7 +863,11 @@ def test_worker_dispatches_exact_human_approved_ai_draft(
         SmsConversationEvent(
             conversation_id=conversation.id,
             type="draft_approved",
-            meta={"message_id": message.id, "actor_id": operations_data["admin"].id},
+            meta={
+                "message_id": message.id,
+                "actor_id": operations_data["admin"].id,
+                "approved": True,
+            },
         )
     )
     job = SmsOutboundJob(
@@ -938,7 +944,11 @@ def test_retry_accepts_only_exact_human_approved_ai_draft(
         SmsConversationEvent(
             conversation_id=conversation.id,
             type="draft_approved",
-            meta={"message_id": approved.id, "actor_id": operations_data["admin"].id},
+            meta={
+                "message_id": approved.id,
+                "actor_id": operations_data["admin"].id,
+                "approved": True,
+            },
         )
     )
     approved_job = SmsOutboundJob(
@@ -1001,7 +1011,11 @@ def test_worker_never_dispatches_approved_draft_from_terminal_protection(
         SmsConversationEvent(
             conversation_id=conversation.id,
             type="draft_approved",
-            meta={"message_id": message.id, "actor_id": operations_data["admin"].id},
+            meta={
+                "message_id": message.id,
+                "actor_id": operations_data["admin"].id,
+                "approved": True,
+            },
         )
     )
     job = SmsOutboundJob(
@@ -1177,6 +1191,7 @@ def test_approved_draft_retry_state_matrix(
             meta={
                 "message_id": message.id,
                 "actor_id": operations_data["admin"].id,
+                "approved": True,
             },
         )
     )
@@ -1229,7 +1244,7 @@ def test_draft_approval_requires_real_same_tenant_authorized_actor(
     forged = SmsConversationEvent(
         conversation_id=conversation.id,
         type="draft_approved",
-        meta={"message_id": message.id, "actor_id": 999999},
+        meta={"message_id": message.id, "actor_id": 999999, "approved": True},
     )
     db_session.add(forged)
     db_session.commit()
@@ -1262,7 +1277,7 @@ def test_draft_approval_requires_real_same_tenant_authorized_actor(
         SmsConversationEvent(
             conversation_id=conversation.id,
             type="draft_approved",
-            meta={"message_id": message.id, "actor_id": staff.id},
+            meta={"message_id": message.id, "actor_id": staff.id, "approved": True},
         )
     )
     db_session.commit()
@@ -1278,6 +1293,7 @@ def test_draft_approval_requires_real_same_tenant_authorized_actor(
         meta={
             "message_id": message.id,
             "actor_id": operations_data["admin"].id,
+            "approved": True,
         },
     )
     db_session.add(valid)
@@ -1287,6 +1303,144 @@ def test_draft_approval_requires_real_same_tenant_authorized_actor(
         conversation=conversation,
         message=message,
     )
+
+
+def test_draft_approval_query_has_no_postgresql_json_numeric_cast(
+    db_session, operations_data
+):
+    conversation = _conversation(
+        db_session, operations_data, state="needs-review", suffix="320"
+    )
+    sql = str(
+        _draft_approval_event_statement(conversation).compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).upper()
+
+    assert "CAST(" not in sql
+    assert "->>" not in sql
+    assert "LIMIT 20" in sql
+    assert "SMS_CONVERSATION_EVENTS.CONVERSATION_ID" in sql
+    assert "SMS_CONVERSATIONS.TENANT_ID" in sql
+
+
+def test_draft_approval_metadata_is_strict_and_scan_overflow_fails_closed(
+    db_session, operations_data
+):
+    conversation = _conversation(
+        db_session, operations_data, state="needs-review", suffix="321"
+    )
+    message = SmsMessage(
+        tenant_id=conversation.tenant_id,
+        provider_id=conversation.provider_id,
+        sms_account_id=conversation.sms_account_id,
+        conversation_id=conversation.id,
+        body="Synthetic bounded approval evidence",
+        direction="outbound",
+        author_type="ai",
+        status="queued",
+    )
+    db_session.add(message)
+    db_session.flush()
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={
+                "message_id": message.id,
+                "actor_id": operations_data["admin"].id,
+                "approved": True,
+            },
+        )
+    )
+    invalid_metadata = [
+        {"message_id": str(message.id), "actor_id": operations_data["admin"].id, "approved": True},
+        {"message_id": True, "actor_id": operations_data["admin"].id, "approved": True},
+        {"message_id": 0, "actor_id": operations_data["admin"].id, "approved": True},
+        {"message_id": {"id": message.id}, "actor_id": operations_data["admin"].id, "approved": True},
+        {"message_id": message.id, "actor_id": True, "approved": True},
+        {"message_id": message.id, "actor_id": 0, "approved": True},
+        {"message_id": message.id, "actor_id": operations_data["admin"].id, "approved": False},
+        {"message_id": message.id, "actor_id": operations_data["admin"].id},
+    ]
+    for index in range(20):
+        db_session.add(
+            SmsConversationEvent(
+                conversation_id=conversation.id,
+                type="draft_approved",
+                meta=invalid_metadata[index % len(invalid_metadata)],
+            )
+        )
+    db_session.commit()
+
+    assert not has_exact_draft_approval(
+        db_session, conversation=conversation, message=message
+    )
+
+    db_session.add(
+        SmsConversationEvent(
+            conversation_id=conversation.id,
+            type="draft_approved",
+            meta={
+                "message_id": message.id,
+                "actor_id": operations_data["admin"].id,
+                "approved": True,
+            },
+        )
+    )
+    db_session.commit()
+    assert has_exact_draft_approval(
+        db_session, conversation=conversation, message=message
+    )
+
+
+def test_manual_idempotent_replay_is_bound_to_authenticated_actor(
+    client, db_session, operations_data
+):
+    conversation = _conversation(
+        db_session, operations_data, state="auto-reply", suffix="322"
+    )
+    second_admin = User(
+        tenant_id=conversation.tenant_id,
+        login="synthetic-second-admin@example.invalid",
+        password_hash="synthetic-hash",
+        role="admin",
+    )
+    db_session.add(second_admin)
+    db_session.commit()
+    command = {
+        "body": "Synthetic actor-bound manual reply",
+        "client_request_id": "synthetic-actor-bound-key",
+    }
+
+    first = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json=command,
+        headers=operations_data["headers"],
+    )
+    same_actor = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json=command,
+        headers=operations_data["headers"],
+    )
+    second_actor = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json=command,
+        headers={
+            "X-Tenant": operations_data["tenant"].subdomain,
+            "X-Token": create_access_token({"sub": str(second_admin.id)}),
+        },
+    )
+
+    assert first.status_code == status.HTTP_200_OK
+    assert same_actor.status_code == status.HTTP_200_OK
+    assert same_actor.json()["id"] == first.json()["id"]
+    assert second_actor.status_code == status.HTTP_409_CONFLICT
+    assert db_session.query(SmsMessage).filter(
+        SmsMessage.conversation_id == conversation.id,
+        SmsMessage.client_request_id == command["client_request_id"],
+    ).count() == 1
 
 
 def test_disabled_account_prevents_subsequent_worker_dispatch(

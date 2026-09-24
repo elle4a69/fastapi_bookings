@@ -28,7 +28,9 @@ Carrier routes are `POST /api/sms/webhooks/{transport_type}/{account_public_id}`
 and `POST /api/sms/webhooks/{transport_type}/{account_public_id}/delivery`.
 They return stable generic client errors. Staff conversation operations use the
 application admin/tenant dependencies and preserve service-level conflict
-status codes.
+status codes. Manual-message idempotent replay is valid only for the same
+tenant/provider/account/conversation, request body and authenticated actor; a
+different administrator reusing a key receives HTTP 409 without new effects.
 
 ## 5. Data Safety & Isolation
 

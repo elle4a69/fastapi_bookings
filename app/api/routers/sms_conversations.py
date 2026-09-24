@@ -386,6 +386,7 @@ def _verified_manual_send_winner(
     provider_id: int,
     conversation_id: int,
     sms_account_id: int | None,
+    author_id: int,
     client_request_id: str,
     body: str,
 ) -> SmsMessage | None:
@@ -396,6 +397,7 @@ def _verified_manual_send_winner(
         SmsMessage.sms_account_id == sms_account_id,
         SmsMessage.client_request_id == client_request_id,
         SmsMessage.author_type == "staff",
+        SmsMessage.author_id == author_id,
         SmsMessage.body == body,
         SmsMessage.status.in_(("queued", "sending", "sent", "delivered")),
     ).first()
@@ -481,7 +483,7 @@ def _approve_locked_draft(
         conversation_id=message.conversation_id,
         event_type="draft_approved",
         actor_id=actor_id,
-        metadata={"message_id": message.id},
+        metadata={"message_id": message.id, "approved": True},
     )
     try:
         db.commit()
@@ -1163,6 +1165,7 @@ async def send_manual_reply(
             provider_id=conv.provider_id,
             conversation_id=conv.id,
             sms_account_id=conv.sms_account_id,
+            author_id=admin_user.id,
             client_request_id=payload.client_request_id,
             body=payload.body,
         )
@@ -1204,6 +1207,7 @@ async def send_manual_reply(
             provider_id=conv.provider_id,
             conversation_id=conv.id,
             sms_account_id=conv.sms_account_id,
+            author_id=admin_user.id,
             client_request_id=payload.client_request_id,
             body=payload.body,
         )
@@ -1254,6 +1258,7 @@ async def send_manual_reply(
             provider_id=conv.provider_id,
             conversation_id=conv.id,
             sms_account_id=conv.sms_account_id,
+            author_id=admin_user.id,
             client_request_id=payload.client_request_id,
             body=payload.body,
         )

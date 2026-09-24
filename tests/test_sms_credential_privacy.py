@@ -174,6 +174,45 @@ async def test_mobilemessage_provider_failure_is_structural_only(caplog):
 
 
 @pytest.mark.asyncio
+async def test_mobilemessage_http_failure_does_not_return_provider_body():
+    account = _sms_account()
+    account.credentials = {
+        "username": "synthetic-user",
+        "password": "synthetic-password",
+    }
+    adapter = MobileMessageAdapter()
+
+    class FailedResponse:
+        status_code = 503
+        text = CANARY
+
+    class FailedHttpClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            return FailedResponse()
+
+    with patch(
+        "app.services.sms.transports.mobilemessage.httpx.AsyncClient",
+        return_value=FailedHttpClient(),
+    ):
+        result = await adapter.send(
+            account,
+            OutboundSmsCommand(to="61410000002", body="Synthetic test message"),
+        )
+
+    assert result.status == "error"
+    assert result.error_code == "PROVIDER_HTTP_ERROR"
+    assert result.error_message == "Provider delivery request failed."
+    assert result.raw_response is None
+    assert CANARY not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
 async def test_mobilemessage_receipt_error_fields_are_not_retained():
     adapter = MobileMessageAdapter()
     request = MagicMock()

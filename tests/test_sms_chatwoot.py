@@ -16,6 +16,7 @@ from app.models.sms_outbox import SmsAiJob, SmsOutboundJob, SmsConversationEvent
 from app.services.sms.outbound_service import enqueue_outbound_message_transactional
 from app.services.sms.outbox_worker import (
     _delivery_lock_statements,
+    _has_exact_chatwoot_acceptance,
     process_pending_sms_outbound_jobs,
 )
 from app.services.sms.chatwoot_service import (
@@ -1366,6 +1367,136 @@ def test_legacy_sending_row_with_chatwoot_id_is_accepted_without_resend(
     db_session.refresh(message)
     assert job.status == "SUCCESS"
     assert message.status == "sent"
+    send.assert_not_awaited()
+
+
+def test_exact_chatwoot_acceptance_rejects_non_positive_bool_and_wrong_shape():
+    conversation = SmsConversation(
+        id=1,
+        tenant_id=1,
+        provider_id=2,
+        sms_account_id=None,
+        customer_address="synthetic-transient-contact",
+        chatwoot_conversation_id=3,
+        chatwoot_inbox_id=4,
+    )
+    message = SmsMessage(
+        id=5,
+        tenant_id=1,
+        provider_id=2,
+        sms_account_id=None,
+        conversation_id=1,
+        body="Synthetic accepted evidence",
+        direction="outbound",
+        author_type="staff",
+        status="sending",
+        chatwoot_message_id=6,
+    )
+    job = SmsOutboundJob(
+        id=7,
+        message_id=5,
+        sms_account_id=None,
+        status="PROCESSING",
+    )
+
+    assert _has_exact_chatwoot_acceptance(
+        job=job, message=message, conversation=conversation
+    )
+    message.author_type = "ai"
+    assert _has_exact_chatwoot_acceptance(
+        job=job, message=message, conversation=conversation
+    )
+    message.author_type = "staff"
+    for invalid_id in (True, 0, -1):
+        message.chatwoot_message_id = invalid_id
+        assert not _has_exact_chatwoot_acceptance(
+            job=job, message=message, conversation=conversation
+        )
+    message.chatwoot_message_id = 6
+    message.direction = "inbound"
+    assert not _has_exact_chatwoot_acceptance(
+        job=job, message=message, conversation=conversation
+    )
+    message.direction = "outbound"
+    message.author_type = "customer"
+    assert not _has_exact_chatwoot_acceptance(
+        job=job, message=message, conversation=conversation
+    )
+    message.author_type = "staff"
+    message.status = "draft"
+    assert not _has_exact_chatwoot_acceptance(
+        job=job, message=message, conversation=conversation
+    )
+
+
+@pytest.mark.parametrize(
+    ("direction", "author_type", "chatwoot_message_id", "message_status"),
+    [
+        ("inbound", "staff", 9383, "sending"),
+        ("outbound", "customer", 9383, "sending"),
+        ("outbound", "staff", 0, "sending"),
+        ("outbound", "staff", 9383, "draft"),
+    ],
+)
+def test_invalid_chatwoot_acceptance_is_quarantined_without_resend(
+    db_session,
+    setup_chatwoot_data,
+    direction,
+    author_type,
+    chatwoot_message_id,
+    message_status,
+):
+    binding = setup_chatwoot_data["binding"]
+    conversation = SmsConversation(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        customer_address="chatwoot_contact_synthetic_invalid_acceptance",
+        state="taken-over",
+        ai_enabled=False,
+        chatwoot_conversation_id=9381,
+        chatwoot_contact_id=9382,
+        chatwoot_inbox_id=binding.chatwoot_inbox_id,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=binding.tenant_id,
+        provider_id=binding.provider_id,
+        sms_account_id=None,
+        conversation_id=conversation.id,
+        body="Synthetic invalid accepted evidence",
+        direction=direction,
+        author_type=author_type,
+        status=message_status,
+        chatwoot_message_id=chatwoot_message_id,
+    )
+    db_session.add(message)
+    db_session.flush()
+    job = SmsOutboundJob(message_id=message.id, sms_account_id=None, status="PENDING")
+    db_session.add(job)
+    db_session.commit()
+    send = AsyncMock()
+
+    with (
+        patch("app.services.sms.chatwoot_service.send_chatwoot_message", new=send),
+        patch(
+            "app.services.sms.ai_orchestrator.process_pending_sms_ai_jobs",
+            new=AsyncMock(),
+        ),
+        patch("app.services.sms.arrival_service.process_repeated_arrival_alerts"),
+    ):
+        asyncio.run(process_pending_sms_outbound_jobs(db_session))
+
+    db_session.refresh(job)
+    db_session.refresh(message)
+    assert job.status == "FAILED"
+    assert job.error_log == "CHATWOOT_ACCEPTANCE_INVALID"
+    assert message.status == ("failed" if message_status == "sending" else "draft")
+    assert db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id == conversation.id,
+        SmsConversationEvent.type == "outbound_delivery_quarantined",
+    ).count() == 1
     send.assert_not_awaited()
 
 
