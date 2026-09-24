@@ -63,10 +63,12 @@ its fixed family. Segment-aware matching leaves lookalike or unrelated loggers
 unchanged. A filter on the configured console and OpenTelemetry handlers then
 runs after caller `extra` values are merged, removes every caller attribute
 (including values named like OpenTelemetry correlation fields), and publishes
-only the approved structural fields captured privately by the factory. This
-two-stage design avoids `LoggerAdapter` semantic-field collisions while
-preventing request URLs, headers, cookies, authorization data, bodies, child
-logger suffixes, and arbitrary transport data from reaching configured output.
+only approved structural fields captured in a lock-protected weak sidecar keyed
+by record identity. If factory provenance is absent, configured filters use a
+fixed family-only fallback without inspecting message, arguments, or extras.
+This design avoids `LoggerAdapter` semantic-field collisions while preventing
+request URLs, headers, cookies, authorization data, bodies, child logger
+suffixes, and arbitrary transport data from reaching configured output.
 
 The application event contains only an allowlisted method, code-owned route
 template, numeric status, finite latency bucket, and validated request ID.
@@ -83,6 +85,8 @@ only when available. Trace/span correlation comes from the active trusted OTel
 context and service identity comes from the configured provider resource;
 caller `otel*` extras are never promoted. Tests use an in-memory exporter and
 do not establish delivery or privacy behavior in a real collector.
+Telemetry initialization failures and success state use fixed structural event
+codes; exception text, tracebacks, and collector endpoints are not logged.
 
 The current FastAPI runtime keeps included routers lazy: the matched route
 stored in the request scope can contain only the router-local path. The
@@ -110,7 +114,8 @@ template retains its full API prefix.
   but a custom unfiltered handler could export arbitrary caller `extra`
   attributes. A later library that replaces rather than chains the global
   record factory can remove the first-stage protection for unfiltered custom
-  handlers; configured handlers retain their filter-stage fail-closed path.
+  handlers; configured handlers ignore caller-forged provenance and retain a
+  deterministic filter-stage fail-closed fallback.
 - The protected OTel attribute builder pins the installed SDK's private
   `_get_attributes(record)` hook and fails initialization if its signature is
   incompatible. Any OpenTelemetry SDK upgrade must rerun the in-memory exact-
@@ -136,10 +141,10 @@ Run synthetic validation privacy and compatibility tests with telemetry off:
 $env:OTEL_SDK_DISABLED='true'
 $env:PYTHONDONTWRITEBYTECODE='1'
 python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py
-python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py
-python -m py_compile app/main.py app/worker.py app/core/privacy_logging.py app/core/telemetry.py tests/test_validation_error_privacy.py
-python -m ruff check tests/test_validation_error_privacy.py
-python -m ruff check app/core/privacy_logging.py app/worker.py tests/test_validation_error_privacy.py
+python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py tests/test_telemetry_pipeline.py
+python -m py_compile app/main.py app/worker.py app/core/privacy_logging.py app/core/telemetry.py tests/test_validation_error_privacy.py tests/test_telemetry_pipeline.py
+python -m ruff check tests/test_validation_error_privacy.py tests/test_telemetry_pipeline.py
+python -m ruff check app/core/privacy_logging.py app/worker.py tests/test_validation_error_privacy.py tests/test_telemetry_pipeline.py
 python -m ruff check app/core/telemetry.py --ignore F401,F841
 python -m ruff check app/main.py --ignore F401,E402,F811
 ```

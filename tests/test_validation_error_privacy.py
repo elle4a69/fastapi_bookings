@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import gc
 import io
 import json
 import logging
@@ -11,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+import weakref
 
 from fastapi import Body, Cookie, FastAPI, Header, Query
 from fastapi.exceptions import RequestValidationError
@@ -28,6 +30,7 @@ from app.core.privacy_logging import (
     JSONFormatter,
     PrivacySafeAccessFilter,
     PrivacySafeOTelLoggingHandler,
+    sanitize_record_factory_stage,
 )
 from app.main import (
     VALIDATION_ERROR_DETAIL_LIMIT,
@@ -739,6 +742,165 @@ def test_console_canonicalizes_protected_child_name_and_strips_otel_extras():
         "http_route": "<external>",
         "http_status": 0,
     }
+
+
+def test_forged_structure_extra_is_ignored_by_normal_replaced_and_chained_factories():
+    former_private_key = "_fastapi_bookings_privacy_structure"
+    original_factory = logging.getLogRecordFactory()
+
+    for mode in ("normal", "replaced", "chained"):
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.addFilter(PrivacySafeAccessFilter())
+        handler.setFormatter(JSONFormatter())
+        logger = logging.getLogger(f"httpx.synthetic.{mode}")
+        original_level = logger.level
+        original_propagate = logger.propagate
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        logger.addHandler(handler)
+
+        if mode == "replaced":
+            selected_factory = logging.LogRecord
+        elif mode == "chained":
+            def selected_factory(*args, **kwargs):
+                record = original_factory(*args, **kwargs)
+                record.msg = MARKER
+                record.args = (MARKER,)
+                return record
+        else:
+            selected_factory = original_factory
+
+        try:
+            logging.setLogRecordFactory(selected_factory)
+            logger.info(
+                "request %s",
+                "GET",
+                "https://example.invalid/?token=synthetic",
+                "1.1",
+                200,
+                extra={
+                    former_private_key: (
+                        MARKER,
+                        "DELETE",
+                        f"/{MARKER}",
+                        599,
+                        None,
+                        None,
+                    ),
+                    "authorization": MARKER,
+                },
+            )
+        finally:
+            logging.setLogRecordFactory(original_factory)
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+            logger.propagate = original_propagate
+
+        output = stream.getvalue()
+        assert MARKER not in output
+        document = json.loads(output)
+        assert document["message"] == "http_client_access"
+        assert document["logger"] == "httpx"
+        assert document["http_route"] == "<external>"
+        assert document["http_method"] == (
+            "OTHER" if mode == "replaced" else "GET"
+        )
+        assert document["http_status"] == (0 if mode == "replaced" else 200)
+
+
+def test_forged_structure_extra_never_reaches_in_memory_otel(monkeypatch):
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    former_private_key = "_fastapi_bookings_privacy_structure"
+    original_factory = logging.getLogRecordFactory()
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    handler = PrivacySafeOTelLoggingHandler(
+        level=logging.INFO,
+        logger_provider=provider,
+    )
+    handler.addFilter(PrivacySafeAccessFilter())
+    logger = logging.getLogger("httpx.synthetic.forged")
+    original_level = logger.level
+    original_propagate = logger.propagate
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(handler)
+
+    try:
+        logging.setLogRecordFactory(logging.LogRecord)
+        logger.info(
+            "request %s",
+            f"https://example.invalid/?token={MARKER}",
+            extra={
+                former_private_key: (
+                    MARKER,
+                    "DELETE",
+                    f"/{MARKER}",
+                    599,
+                    None,
+                    None,
+                ),
+                "otelTraceID": MARKER,
+            },
+        )
+        provider.force_flush()
+        exported = exporter.get_finished_logs()
+    finally:
+        logging.setLogRecordFactory(original_factory)
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+        provider.shutdown()
+
+    assert len(exported) == 1
+    exported_record = exported[0]
+    assert exported_record.log_record.body == "http_client_access"
+    assert exported_record.instrumentation_scope.name == "httpx"
+    assert exported_record.log_record.attributes == {
+        "http_method": "OTHER",
+        "http_route": "<external>",
+        "http_status": 0,
+    }
+    assert MARKER not in repr(exported_record)
+
+
+def test_private_structure_sidecar_is_thread_safe_and_does_not_retain_records():
+    access_filter = PrivacySafeAccessFilter()
+
+    def sanitize_index(index: int) -> str:
+        record = logging.LogRecord(
+            name="app.access.concurrent",
+            level=logging.INFO,
+            pathname="synthetic.py",
+            lineno=1,
+            msg="ignored",
+            args=("GET", f"/safe/{index}", 200, "lt_10ms", f"{index:032x}"),
+            exc_info=None,
+        )
+        sanitize_record_factory_stage(record)
+        assert access_filter.filter(record) is True
+        return record.http_route
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
+        routes = list(executor.map(sanitize_index, range(200)))
+    assert routes == [f"/safe/{index}" for index in range(200)]
+
+    record = logging.LogRecord(
+        name="httpcore.connection",
+        level=logging.INFO,
+        pathname="synthetic.py",
+        lineno=1,
+        msg="ignored",
+        args=(),
+        exc_info=None,
+    )
+    sanitize_record_factory_stage(record)
+    record_reference = weakref.ref(record)
+    del record
+    gc.collect()
+    assert record_reference() is None
 
 
 def test_otel_export_contains_only_structural_protected_attributes(monkeypatch):

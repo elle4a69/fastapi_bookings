@@ -606,8 +606,8 @@ def init_telemetry(app=None) -> None:
             BatchSpanProcessor(safe, max_queue_size=2048, max_export_batch_size=512)
         )
         trace.set_tracer_provider(_tracer_provider)
-    except Exception as exc:
-        logger.warning("Trace provider init failed: %s", exc)
+    except Exception:
+        logger.warning("telemetry_trace_provider_init_failed")
 
     # 2. Metrics
     try:
@@ -621,8 +621,8 @@ def init_telemetry(app=None) -> None:
         )
         _meter_provider = MeterProvider(resource=resource, metric_readers=[mr])
         metrics.set_meter_provider(_meter_provider)
-    except Exception as exc:
-        logger.warning("Metric provider init failed: %s", exc)
+    except Exception:
+        logger.warning("telemetry_metric_provider_init_failed")
 
     # 3. Logs — dedicated structured OTLP pipeline + privacy-filtered general server logs
     try:
@@ -669,8 +669,8 @@ def init_telemetry(app=None) -> None:
         dedicated.propagate = False
         _telemetry_owned_handlers.append((dedicated, dedicated_handler))
 
-    except Exception as exc:
-        logger.warning("Log provider init failed: %s", exc)
+    except Exception:
+        logger.warning("telemetry_log_provider_init_failed")
 
     # 4. Auto-instrumentations
     if app and _tracer_provider:
@@ -679,8 +679,8 @@ def init_telemetry(app=None) -> None:
             FastAPIInstrumentor.instrument_app(
                 app, tracer_provider=_tracer_provider,
             )
-        except Exception as exc:
-            logger.warning("FastAPI instrumentation failed: %s", exc)
+        except Exception:
+            logger.warning("telemetry_fastapi_instrumentation_failed")
 
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -688,18 +688,18 @@ def init_telemetry(app=None) -> None:
         SQLAlchemyInstrumentor().instrument(
             engine=engine, tracer_provider=_tracer_provider,
         )
-    except Exception as exc:
-        logger.warning("SQLAlchemy instrumentation failed: %s", exc)
+    except Exception:
+        logger.warning("telemetry_sqlalchemy_instrumentation_failed")
 
     try:
         from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
         HTTPXClientInstrumentor().instrument(tracer_provider=_tracer_provider)
-    except Exception as exc:
-        logger.warning("HTTPX instrumentation failed: %s", exc)
+    except Exception:
+        logger.warning("telemetry_httpx_instrumentation_failed")
 
     _telemetry_initialized = True
     _last_export_status = "idle"
-    logger.info("Telemetry initialized (OTLP base: %s)", base)
+    logger.info("telemetry_initialized")
 
 
 def shutdown_telemetry() -> None:

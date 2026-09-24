@@ -11,8 +11,10 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import threading
 import traceback
 from typing import Final
+from weakref import WeakKeyDictionary
 
 from opentelemetry import trace
 
@@ -39,7 +41,8 @@ _PROTECTED_NAMESPACES: Final = (
 _STANDARD_LOG_RECORD_FIELDS: Final = frozenset(
     logging.makeLogRecord({}).__dict__.keys()
 )
-_PRIVATE_STRUCTURE_FIELD: Final = "_fastapi_bookings_privacy_structure"
+_PRIVATE_STRUCTURES: WeakKeyDictionary[logging.LogRecord, tuple] = WeakKeyDictionary()
+_PRIVATE_STRUCTURES_LOCK = threading.Lock()
 
 
 def logger_is_in_namespace(logger_name: str, namespace: str) -> bool:
@@ -139,11 +142,7 @@ def sanitize_record_factory_stage(record: logging.LogRecord) -> None:
     structure = _structure_from_record(record)
     if family is None or not structure:
         return
-    # The factory runs before ``extra`` is merged. A caller therefore cannot
-    # replace this private field: logging rejects a colliding ``extra`` key.
-    # The handler filter retains it for every configured handler but the OTel
-    # translation below never exports it.
-    setattr(record, _PRIVATE_STRUCTURE_FIELD, structure)
+    _store_private_structure(record, structure)
     record.name = family
     record.msg = structure[0]
     record.args = ()
@@ -169,12 +168,39 @@ def install_privacy_safe_record_factory() -> None:
 
 
 def _private_structure(record: logging.LogRecord) -> tuple:
-    """Return only factory/filter-owned structure, never caller public extras."""
+    """Return only sidecar-captured structure, never caller record extras."""
 
-    structure = getattr(record, _PRIVATE_STRUCTURE_FIELD, ())
+    with _PRIVATE_STRUCTURES_LOCK:
+        structure = _PRIVATE_STRUCTURES.get(record, ())
     if not isinstance(structure, tuple) or len(structure) != 6:
         return ()
     return structure
+
+
+def _store_private_structure(record: logging.LogRecord, structure: tuple) -> None:
+    """Associate trusted structure without retaining or mutating public extras."""
+
+    with _PRIVATE_STRUCTURES_LOCK:
+        _PRIVATE_STRUCTURES[record] = structure
+
+
+def _fixed_fallback_structure(family: str) -> tuple:
+    """Return a family-only fallback without inspecting caller-controlled data."""
+
+    events = {
+        "app.access": "http_request_completed",
+        "uvicorn.access": "http_server_access",
+        "httpx": "http_client_access",
+        "httpcore": "http_client_transport",
+    }
+    return (
+        events[family],
+        "OTHER",
+        "<external>" if family in {"httpx", "httpcore"} else "<unmatched>",
+        0,
+        None,
+        None,
+    )
 
 
 class PrivacySafeAccessFilter(logging.Filter):
@@ -187,30 +213,13 @@ class PrivacySafeAccessFilter(logging.Filter):
 
         structure = _private_structure(record)
         if not structure:
-            sanitize_record_factory_stage(record)
-            structure = _private_structure(record)
-        if not structure:
-            # A protected record without trustworthy private structure is
-            # still neutralized rather than passed through with public extras.
-            structure = (
-                "http_access_record",
-                "OTHER",
-                (
-                    "<external>"
-                    if family in {"httpx", "httpcore"}
-                    else "<unmatched>"
-                ),
-                0,
-                None,
-                None,
-            )
-            setattr(record, _PRIVATE_STRUCTURE_FIELD, structure)
+            # A replaced/default factory provides no trusted provenance. Do
+            # not recover anything from message, arguments, or public extras.
+            structure = _fixed_fallback_structure(family)
+            _store_private_structure(record, structure)
 
         for key in tuple(record.__dict__):
-            if (
-                key not in _STANDARD_LOG_RECORD_FIELDS
-                and key != _PRIVATE_STRUCTURE_FIELD
-            ):
+            if key not in _STANDARD_LOG_RECORD_FIELDS:
                 del record.__dict__[key]
 
         event, method, route, status_code, duration, request_id = structure

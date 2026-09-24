@@ -7,7 +7,8 @@ status reporting.
 """
 
 import logging
-import re
+import sys
+import types
 import pytest
 from unittest.mock import MagicMock
 
@@ -18,24 +19,21 @@ from opentelemetry.exporter.otlp.proto.common._internal.trace_encoder import (
     encode_spans,
 )
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.metrics.export import (
+    InMemoryMetricReader,
+    MetricExporter,
+    MetricExportResult,
+)
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
+from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
 
 from app.core.config import settings
+from app.core.privacy_logging import PrivacySafeOTelLoggingHandler
+import app.core.telemetry as telemetry_module
 from app.core.telemetry import (
     PrivacySafeSpanExporter,
-    SanitizedSpanProxy,
-    SAFE_ATTRIBUTE_KEYS,
-    VALID_EVENT_CODES,
-    VALID_MODULES,
-    WEBHOOK_STATUSES,
-    SMS_STATUSES,
-    AI_STATUSES,
-    record_webhook_event,
-    record_sms_event,
-    record_ai_event,
-    record_arrival_event,
-    record_link_failure,
-    record_booking_failure,
     record_telemetry_log,
     get_telemetry_status_data,
     sanitize_url_path,
@@ -44,6 +42,42 @@ from app.core.telemetry import (
     shutdown_telemetry,
 )
 from app.main import app
+
+
+class _NoNetworkMetricExporter(MetricExporter):
+    def export(self, metrics_data, timeout_millis=10000, **kwargs):
+        return MetricExportResult.SUCCESS
+
+    def force_flush(self, timeout_millis=10000):
+        return True
+
+    def shutdown(self, timeout_millis=30000, **kwargs):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def no_live_telemetry_exporters(monkeypatch):
+    """Keep telemetry lifecycle checks wholly in-memory and deterministic."""
+
+    from opentelemetry.exporter.otlp.proto.http import _log_exporter
+    from opentelemetry.exporter.otlp.proto.http import metric_exporter
+    from opentelemetry.exporter.otlp.proto.http import trace_exporter
+
+    monkeypatch.setattr(
+        trace_exporter,
+        "OTLPSpanExporter",
+        lambda *_args, **_kwargs: InMemorySpanExporter(),
+    )
+    monkeypatch.setattr(
+        metric_exporter,
+        "OTLPMetricExporter",
+        lambda *_args, **_kwargs: _NoNetworkMetricExporter(),
+    )
+    monkeypatch.setattr(
+        _log_exporter,
+        "OTLPLogExporter",
+        lambda *_args, **_kwargs: InMemoryLogRecordExporter(),
+    )
 
 
 # ── 1. Configuration Resolution ──────────────────────────────────────────
@@ -320,7 +354,7 @@ def test_idempotency():
     tl = logging.getLogger(_TELEMETRY_LOGGER_NAME)
     otlp_handlers = [
         h for h in tl.handlers
-        if type(h).__name__ == "LoggingHandler"
+        if isinstance(h, PrivacySafeOTelLoggingHandler)
     ]
     assert len(otlp_handlers) <= 1
 
@@ -415,7 +449,11 @@ def test_init_telemetry_repeated_adds_no_duplicate_handlers(monkeypatch):
     ]
 
     for lg in target_loggers:
-        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        otlp_handlers = [
+            h
+            for h in lg.handlers
+            if isinstance(h, PrivacySafeOTelLoggingHandler)
+        ]
         assert len(otlp_handlers) == 1, f"Logger {lg.name or 'root'} has {len(otlp_handlers)} OTLP handlers instead of 1"
 
 
@@ -436,14 +474,117 @@ def test_init_shutdown_init_lifecycle_leaves_exactly_one_handler(monkeypatch):
 
     # After shutdown, all OTLP handlers must be removed
     for lg in target_loggers:
-        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        otlp_handlers = [
+            h
+            for h in lg.handlers
+            if isinstance(h, PrivacySafeOTelLoggingHandler)
+        ]
         assert len(otlp_handlers) == 0, f"Logger {lg.name or 'root'} still has {len(otlp_handlers)} OTLP handlers after shutdown"
 
     # Re-initialize
     init_telemetry(app)
     for lg in target_loggers:
-        otlp_handlers = [h for h in lg.handlers if type(h).__name__ == "LoggingHandler"]
+        otlp_handlers = [
+            h
+            for h in lg.handlers
+            if isinstance(h, PrivacySafeOTelLoggingHandler)
+        ]
         assert len(otlp_handlers) == 1, f"Logger {lg.name or 'root'} has {len(otlp_handlers)} OTLP handlers after re-init"
+
+
+def test_telemetry_initialization_failures_use_fixed_non_reflecting_codes(
+    monkeypatch,
+    caplog,
+):
+    marker = "SYNTHETIC_TELEMETRY_INITIALIZATION_EXCEPTION_MARKER"
+    endpoint_marker = "synthetic-endpoint-marker.invalid"
+
+    class FailingExporter:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError(marker)
+
+    class FailingFastAPIInstrumentor:
+        @staticmethod
+        def instrument_app(*_args, **_kwargs):
+            raise RuntimeError(marker)
+
+    class FailingInstrumentor:
+        def instrument(self, *_args, **_kwargs):
+            raise RuntimeError(marker)
+
+    class StaleTracerProvider:
+        def force_flush(self, *_args, **_kwargs):
+            return True
+
+        def shutdown(self, *_args, **_kwargs):
+            return None
+
+    modules = {
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter": (
+            "OTLPSpanExporter",
+            FailingExporter,
+        ),
+        "opentelemetry.exporter.otlp.proto.http.metric_exporter": (
+            "OTLPMetricExporter",
+            FailingExporter,
+        ),
+        "opentelemetry.exporter.otlp.proto.http._log_exporter": (
+            "OTLPLogExporter",
+            FailingExporter,
+        ),
+        "opentelemetry.instrumentation.fastapi": (
+            "FastAPIInstrumentor",
+            FailingFastAPIInstrumentor,
+        ),
+        "opentelemetry.instrumentation.sqlalchemy": (
+            "SQLAlchemyInstrumentor",
+            FailingInstrumentor,
+        ),
+        "opentelemetry.instrumentation.httpx": (
+            "HTTPXClientInstrumentor",
+            FailingInstrumentor,
+        ),
+    }
+    for module_name, (attribute_name, component) in modules.items():
+        fake_module = types.ModuleType(module_name)
+        setattr(fake_module, attribute_name, component)
+        monkeypatch.setitem(sys.modules, module_name, fake_module)
+
+    shutdown_telemetry()
+    monkeypatch.setattr(settings, "OTEL_SDK_DISABLED", False)
+    monkeypatch.setattr(
+        settings,
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        f"https://{endpoint_marker}/?token={marker}",
+    )
+    monkeypatch.setattr(
+        telemetry_module,
+        "_tracer_provider",
+        StaleTracerProvider(),
+    )
+
+    try:
+        with caplog.at_level(logging.INFO, logger=telemetry_module.__name__):
+            init_telemetry(app)
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == telemetry_module.__name__
+        ]
+    finally:
+        shutdown_telemetry()
+
+    assert messages == [
+        "telemetry_trace_provider_init_failed",
+        "telemetry_metric_provider_init_failed",
+        "telemetry_log_provider_init_failed",
+        "telemetry_fastapi_instrumentation_failed",
+        "telemetry_sqlalchemy_instrumentation_failed",
+        "telemetry_httpx_instrumentation_failed",
+        "telemetry_initialized",
+    ]
+    assert marker not in caplog.text
+    assert endpoint_marker not in caplog.text
 
 
 def test_repeated_shutdown_is_safe():

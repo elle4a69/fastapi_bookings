@@ -36,14 +36,16 @@ For the exact `app.access`, `uvicorn.access`, `httpx`, and `httpcore`
 namespaces and their children:
 
 1. The process `LogRecordFactory` replaces message/argument/exception/stack
-   payloads with a fixed event, captures bounded structure in a private
-   collision-resistant field, and canonicalizes a protected child logger name
-   to its fixed family before handlers run. It does not create public semantic
-   attributes that can collide with caller `extra` values.
+   payloads with a fixed event, captures bounded structure in a lock-protected
+   weak sidecar keyed by record identity, and canonicalizes a protected child
+   logger name to its fixed family before handlers run. No trusted structure is
+   stored in caller-controlled `LogRecord` extras.
 2. `PrivacySafeAccessFilter` runs after `extra` merging. It deletes arbitrary
    attributes, including caller `otel*` values, and emits only the privately
    captured bounded method, route sentinel/template, status, duration bucket,
-   and request ID.
+   and request ID. When factory provenance is absent, it uses a deterministic
+   family-only `OTHER`/zero/sentinel fallback without reading the message,
+   arguments, or extras.
 3. `JSONFormatter` renders the structural console event. The privacy-specific
    OTel handler builds an exact protected attribute dictionary and excludes
    stock code-file/function/line attributes. Trace/span context and resource
@@ -65,6 +67,8 @@ This policy is process-local and contains no tenant data. Tenant/customer
 identifiers must not be added to protected records. OpenTelemetry trace/span
 correlation is taken from the active SDK context, and service identity from the
 configured provider resource; neither is accepted from caller log extras.
+Telemetry initialization failures use fixed structural event codes and never
+include exception text, tracebacks, or configured collector endpoints.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
@@ -75,8 +79,11 @@ configured provider resource; neither is accepted from caller log extras.
   filter can remove caller `extra` attributes.
 - A third-party library that replaces instead of chains the global record
   factory can remove factory-stage protection from an unfiltered custom
-  handler. Configured handlers still apply the filter-stage fail-closed path.
-  Startup integration tests cover the supported web and worker entrypoints.
+  handler. Configured handlers ignore caller-shaped provenance and apply a
+  family-only filter-stage fallback. Startup integration tests cover the
+  supported web and worker entrypoints.
+- Trusted sidecar entries are weakly keyed and released with each log record;
+  access is serialized so concurrent logging cannot mix record structure.
 - The privacy OTel handler pins the installed SDK's private
   `_get_attributes(record)` hook and refuses initialization when that signature
   changes. SDK upgrades require the exact in-memory export tests; no live
@@ -91,9 +98,9 @@ configured provider resource; neither is accepted from caller log extras.
 ```powershell
 $env:OTEL_SDK_DISABLED='true'
 $env:PYTHONDONTWRITEBYTECODE='1'
-python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py
-python -m py_compile app/main.py app/worker.py app/core/privacy_logging.py app/core/telemetry.py tests/test_validation_error_privacy.py
-python -m ruff check app/core/privacy_logging.py app/worker.py tests/test_validation_error_privacy.py
+python -m pytest -q -p no:cacheprovider tests/test_validation_error_privacy.py tests/test_numeric_id_bounds.py tests/test_auth_contract.py tests/test_telemetry_pipeline.py
+python -m py_compile app/main.py app/worker.py app/core/privacy_logging.py app/core/telemetry.py tests/test_validation_error_privacy.py tests/test_telemetry_pipeline.py
+python -m ruff check app/core/privacy_logging.py app/worker.py tests/test_validation_error_privacy.py tests/test_telemetry_pipeline.py
 python -m ruff check app/core/telemetry.py --ignore F401,F841
 python -m ruff check app/main.py --ignore F401,E402,F811
 ```
