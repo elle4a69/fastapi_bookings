@@ -135,9 +135,15 @@ def test_existing_booking_claim_is_a_stable_retry_and_rejects_payload_reuse(db_s
         end_time=start + timedelta(minutes=service.duration),
         status="pending",
         idempotency_key=bridge._booking_idempotency_key(binding.id, request_id),
-        notes=bridge._fingerprint_note(fingerprint),
     )
     db_session.add(booking)
+    db_session.flush()
+    db_session.add(AssistantBookingBridgeReceipt(
+        binding_id=binding.id,
+        request_id=request_id,
+        request_fingerprint=fingerprint,
+        booking_id=booking.id,
+    ))
     db_session.commit()
 
     assert bridge.confirm(
@@ -148,6 +154,35 @@ def test_existing_booking_claim_is_a_stable_retry_and_rejects_payload_reuse(db_s
             db_session, binding, proposal_id, request_id, "Changed Customer", "+61000000000", None,
         )
     assert conflict.value.detail["code"] == "REQUEST_ID_CONFLICT"
+
+
+def test_unfinished_booking_claim_fails_closed_without_a_second_booking(db_session):
+    private, _ = _keypair()
+    binding, service, _ = _api_scope(db_session, private)
+    client = Client(tenant_id=binding.tenant_id, name="Synthetic Customer", phone="+61000000001", active=True)
+    db_session.add(client)
+    db_session.flush()
+    request_id = "synthetic-in-progress"
+    proposal_id = "00000000-0000-0000-0000-000000000112"
+    start = datetime.now(timezone.utc) + timedelta(days=1)
+    db_session.add(Booking(
+        tenant_id=binding.tenant_id,
+        client_id=client.id,
+        provider_id=binding.provider_id,
+        service_id=service.id,
+        start_time=start,
+        end_time=start + timedelta(minutes=service.duration),
+        status="pending",
+        idempotency_key=bridge._booking_idempotency_key(binding.id, request_id),
+    ))
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as in_progress:
+        bridge.confirm(
+            db_session, binding, proposal_id, request_id, "Synthetic Customer", "+61000000001", None,
+        )
+    assert in_progress.value.detail["code"] == "REQUEST_IN_PROGRESS"
+    assert db_session.query(Booking).filter_by(tenant_id=binding.tenant_id).count() == 1
 
 
 def test_signed_api_rejects_missing_auth_replay_invalid_schema_and_foreign_scope(client, db_session, monkeypatch):
@@ -204,16 +239,16 @@ def test_signed_catalog_and_proposal_expose_summary_timezone_not_scope_ids(clien
     }, "api-proposal")
     assert proposal.status_code == 200
     data = proposal.json()["data"]
-    assert set(data) == {"proposal_id", "summary", "expires_at", "status"}
-    assert data["summary"] == {
+    assert set(data) == {"proposal_id", "canonical_summary", "expires_at", "status"}
+    assert data["canonical_summary"] == {
+        "service_id": service.id,
         "service_name": "Bridge Service",
-        "duration_minutes": 30,
-        "price": "42.50",
         "start_time": now.isoformat(),
         "end_time": (now + timedelta(minutes=30)).isoformat(),
+        "duration_minutes": 30,
+        "price": "42.50",
+        "show_duration": True,
         "timezone": "Australia/Sydney",
-        "provider_name": "Bridge Provider",
-        "location_name": "Bridge Location",
     }
 
 
@@ -255,5 +290,12 @@ def test_api_confirmation_requires_proposal_then_claims_request_idempotently(cli
     conflict = _signed_api(client, private, "POST", "/api/internal/assistant-booking-bridge/confirmations", changed, "api-confirm-conflict")
     assert conflict.status_code == 409
     assert conflict.json()["error"]["message"]["code"] == "REQUEST_ID_CONFLICT"
-    assert db_session.query(Booking).filter_by(tenant_id=binding.tenant_id).count() == 1
-    assert db_session.query(AssistantBookingBridgeReceipt).filter_by(binding_id=binding.id, request_id=command["request_id"]).count() == 1
+    bookings = db_session.query(Booking).filter_by(tenant_id=binding.tenant_id).all()
+    assert len(bookings) == 1
+    assert bookings[0].notes is None
+    receipt = db_session.query(AssistantBookingBridgeReceipt).filter_by(
+        binding_id=binding.id, request_id=command["request_id"],
+    ).one()
+    assert receipt.request_fingerprint == bridge._request_fingerprint(
+        proposal_id, command["customer_name"], command["customer_phone"], None,
+    )

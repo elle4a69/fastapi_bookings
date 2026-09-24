@@ -50,6 +50,7 @@ def upgrade():
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("binding_id", sa.Integer(), sa.ForeignKey("assistant_booking_bridge_bindings.id", ondelete="CASCADE"), nullable=False),
         sa.Column("request_id", sa.String(length=96), nullable=False),
+        sa.Column("request_fingerprint", sa.String(length=64), nullable=False),
         sa.Column("booking_id", sa.Integer(), sa.ForeignKey("bookings.id", ondelete="RESTRICT"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("binding_id", "request_id", name="uq_assistant_bridge_receipt"),

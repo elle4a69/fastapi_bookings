@@ -45,5 +45,7 @@ class AssistantBookingBridgeReceipt(Base):
     id = Column(Integer, primary_key=True)
     binding_id = Column(Integer, ForeignKey("assistant_booking_bridge_bindings.id", ondelete="CASCADE"), nullable=False, index=True)
     request_id = Column(String(96), nullable=False)
+    # SHA-256 of canonical command inputs; no customer-visible booking field is used.
+    request_fingerprint = Column(String(64), nullable=False)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="RESTRICT"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

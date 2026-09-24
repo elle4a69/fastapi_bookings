@@ -5,6 +5,7 @@ import hashlib
 import uuid
 import base64
 import json
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -27,7 +28,6 @@ from . import scheduling_service, slot_allocation_service
 _WINDOW = timedelta(minutes=5)
 _PROPOSAL_LIFETIME = timedelta(minutes=10)
 _BOOKING_IDEMPOTENCY_PREFIX = "assistant-bridge"
-_FINGERPRINT_NOTE_PREFIX = "assistant_bridge_request_sha256:"
 
 def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
@@ -92,19 +92,22 @@ def business_timezone(db: Session, binding: AssistantBookingBridgeBinding) -> st
         _error("BRIDGE_UNAVAILABLE", status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
-def proposal_summary(db: Session, binding: AssistantBookingBridgeBinding, proposal: AssistantBookingBridgeProposal) -> dict:
-    """Build the customer-safe authoritative summary for a staged proposal."""
+def canonical_summary(db: Session, binding: AssistantBookingBridgeBinding, proposal: AssistantBookingBridgeProposal) -> dict:
+    """Build the exact customer-safe canonical proposal contract."""
     service = _service(db, binding, proposal.service_id)
-    provider, location = _scope(db, binding)
+    try:
+        price = Decimal(str(service.price)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError):
+        _error("SUMMARY_UNAVAILABLE", status.HTTP_409_CONFLICT)
     return {
+        "service_id": service.id,
         "service_name": service.name,
-        "duration_minutes": service.duration,
-        "price": str(service.price) if service.price is not None else None,
         "start_time": _utc(proposal.start_time).isoformat(),
         "end_time": _utc(proposal.end_time).isoformat(),
+        "duration_minutes": service.duration,
+        "price": format(price, ".2f"),
+        "show_duration": True,
         "timezone": business_timezone(db, binding),
-        "provider_name": provider.name,
-        "location_name": location.name if location else None,
     }
 
 
@@ -185,10 +188,6 @@ def _request_fingerprint(proposal_id: str, name: str, phone: Optional[str], emai
     ).hexdigest()
 
 
-def _fingerprint_note(fingerprint: str) -> str:
-    return f"{_FINGERPRINT_NOTE_PREFIX}{fingerprint}"
-
-
 def _existing_idempotent_booking(
     db: Session,
     binding: AssistantBookingBridgeBinding,
@@ -202,7 +201,14 @@ def _existing_idempotent_booking(
     ).first()
     if not existing:
         return None
-    if existing.notes != _fingerprint_note(fingerprint):
+    receipt = db.query(AssistantBookingBridgeReceipt).filter_by(
+        binding_id=binding.id,
+        request_id=request_id,
+        booking_id=existing.id,
+    ).first()
+    if receipt is None:
+        _error("REQUEST_IN_PROGRESS", status.HTTP_409_CONFLICT)
+    if receipt.request_fingerprint != fingerprint:
         _error("REQUEST_ID_CONFLICT", status.HTTP_409_CONFLICT)
     return existing
 
@@ -243,7 +249,6 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
         end_time=proposal_end,
         status=BookingStatus.PENDING,
         idempotency_key=_booking_idempotency_key(binding.id, request_id),
-        notes=_fingerprint_note(fingerprint),
     )
     try:
         with db.begin_nested():
@@ -251,7 +256,12 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
             # durable command claim; the receipt commits atomically with it.
             db.add(booking)
             db.flush()
-            db.add(AssistantBookingBridgeReceipt(binding_id=binding.id, request_id=request_id, booking_id=booking.id))
+            db.add(AssistantBookingBridgeReceipt(
+                binding_id=binding.id,
+                request_id=request_id,
+                request_fingerprint=fingerprint,
+                booking_id=booking.id,
+            ))
             db.flush()
             slot_allocation_service.create_allocations_for_booking(db, booking=booking, buffer_before=max(15, service.buffer_before or 0), buffer_after=max(15, service.buffer_after or 0))
             scheduling_service.allocate_resources(db, booking=booking, commit=False)

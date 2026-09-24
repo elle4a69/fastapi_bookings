@@ -35,7 +35,7 @@ def create_proposal(payload: ProposalRequest, binding=Depends(_binding), db: Ses
     item = bridge.propose(db, binding, payload.service_id, payload.start_time)
     return {"ok": True, "data": {
         "proposal_id": item.id,
-        "summary": bridge.proposal_summary(db, binding, item),
+        "canonical_summary": bridge.canonical_summary(db, binding, item),
         "expires_at": item.expires_at,
         "status": "awaiting_customer_confirmation",
     }}
