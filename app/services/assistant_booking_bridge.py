@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import uuid
 import base64
 from datetime import datetime, timedelta, timezone
@@ -32,7 +31,7 @@ def _error(code: str, http_status: int) -> None:
 
 
 def canonical_request(method: str, path: str, timestamp: str, nonce: str, body: bytes) -> bytes:
-    """Stable HMAC input. Body is represented only by its SHA-256 digest."""
+    """Stable Ed25519 input. Body is represented only by its SHA-256 digest."""
     return "\n".join((method.upper(), path, timestamp, nonce, hashlib.sha256(body).hexdigest())).encode("utf-8")
 
 
@@ -140,6 +139,13 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
     if existing:
         return db.query(Booking).filter_by(id=existing.booking_id, tenant_id=binding.tenant_id).first()
     proposal = db.query(AssistantBookingBridgeProposal).filter_by(id=proposal_id, binding_id=binding.id).with_for_update().first()
+    # A concurrent request may have created its receipt while this transaction
+    # waited for the proposal lock. Re-read before considering proposal expiry.
+    existing = db.query(AssistantBookingBridgeReceipt).filter_by(binding_id=binding.id, request_id=request_id).first()
+    if existing:
+        result = db.query(Booking).filter_by(id=existing.booking_id, tenant_id=binding.tenant_id).first()
+        if result:
+            return result
     now = datetime.now(timezone.utc)
     if not proposal or proposal.confirmed_at or proposal.expires_at <= now:
         _error("PROPOSAL_EXPIRED", status.HTTP_409_CONFLICT)
@@ -155,11 +161,14 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
     booking = Booking(tenant_id=binding.tenant_id, client_id=client.id, provider_id=provider.id, service_id=service.id, location_id=location.id if location else None, start_time=proposal.start_time, end_time=proposal.end_time, status=BookingStatus.PENDING, idempotency_key=f"assistant-bridge:{binding.id}:{request_id}")
     db.add(booking); db.flush()
     try:
-        slot_allocation_service.create_allocations_for_booking(db, booking=booking, buffer_before=max(15, service.buffer_before or 0), buffer_after=max(15, service.buffer_after or 0))
-        scheduling_service.allocate_resources(db, booking=booking, commit=False)
-        proposal.confirmed_at = now
-        db.add(AssistantBookingBridgeReceipt(binding_id=binding.id, request_id=request_id, booking_id=booking.id))
-        db.add(AuditLog(tenant_id=binding.tenant_id, action="assistant_bridge.booking_created", target_type="booking", target_id=booking.id, details="bridge_line=primary;status=pending"))
+        # The receipt uniqueness constraint is the final concurrent idempotency
+        # arbiter. A unique conflict is recovered below as the original result.
+        with db.begin_nested():
+            slot_allocation_service.create_allocations_for_booking(db, booking=booking, buffer_before=max(15, service.buffer_before or 0), buffer_after=max(15, service.buffer_after or 0))
+            scheduling_service.allocate_resources(db, booking=booking, commit=False)
+            proposal.confirmed_at = now
+            db.add(AssistantBookingBridgeReceipt(binding_id=binding.id, request_id=request_id, booking_id=booking.id))
+            db.add(AuditLog(tenant_id=binding.tenant_id, action="assistant_bridge.booking_created", target_type="booking", target_id=booking.id, details="bridge_line=primary;status=pending"))
         db.commit()
     except IntegrityError:
         db.rollback()
