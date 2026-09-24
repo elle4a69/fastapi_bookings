@@ -14,11 +14,11 @@ Create a binding through a controlled administrative migration/runbook: a `prima
 
 ## Core Workflows & Contracts
 
-`GET /api/internal/assistant-booking-bridge/catalog`; `POST /availability`; `POST /proposals`; `POST /confirmations`. Each request requires key-id, epoch timestamp (five minutes), nonce, and base64 Ed25519 signature. The canonical UTF-8 input is `METHOD + "\\n" + PATH + "\\n" + TIMESTAMP + "\\n" + NONCE + "\\n" + SHA256(raw request body hex)`. Proposals expire in ten minutes and reserve nothing; confirmations create only `pending` bookings after revalidation.
+`GET /api/internal/assistant-booking-bridge/catalog`; `POST /availability`; `POST /proposals`; `POST /confirmations`. Each request requires key-id, epoch timestamp (five minutes), nonce, and base64 Ed25519 signature. The canonical UTF-8 input is `METHOD + "\\n" + PATH + "\\n" + TIMESTAMP + "\\n" + NONCE + "\\n" + SHA256(raw request body hex)`. Catalogue returns only customer-safe services and the authoritative business timezone. A proposal returns a customer-safe canonical summary (service, duration, price, time, timezone and display names), never scope identifiers. Proposals expire in ten minutes and reserve nothing; confirmations create only `pending` bookings after revalidation.
 
 ## Data Safety & Isolation
 
-The request cannot submit tenant/provider/location. Scope is loaded from the binding. Nonces are durable and unique per binding. No outbox, SMS, Chatwoot or AI call occurs. Customer matching is tenant-scoped and ambiguous matches fail closed.
+The request cannot submit tenant/provider/location. Scope is loaded from the binding. Nonces are durable and unique per binding. The booking idempotency key is the first durable request claim; it is bound to the bridge binding and inbound request ID, while a non-PII command fingerprint rejects altered request-ID reuse. No outbox, SMS, Chatwoot or AI call occurs. Customer matching is tenant-scoped and ambiguous matches fail closed.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
@@ -26,5 +26,6 @@ Binding provisioning and secret delivery must be implemented as a separate owner
 
 ## Verification & Testing Commands
 
+`python -m pytest -p no:cacheprovider -q tests/test_assistant_booking_bridge.py`
 `python -m compileall app/services/assistant_booking_bridge.py app/api/routers/assistant_booking_bridge.py`
 `alembic heads`

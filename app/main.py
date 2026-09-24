@@ -247,7 +247,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
         trace_id = f"{current_span.get_span_context().trace_id:032x}"
         
     response = JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "ok": False,
             "error": {

@@ -12,7 +12,6 @@ async def _binding(request: Request, db: Session = Depends(get_db), key_id: str 
 
 @router.get("/catalog")
 def catalog(binding=Depends(_binding), db: Session = Depends(get_db)):
-    provider, location = bridge._scope(db, binding)
     data = []
     from ...models import Service
     for service in db.query(Service).filter(Service.tenant_id == binding.tenant_id, Service.active.is_(True), Service.deleted_at.is_(None)).all():
@@ -25,7 +24,7 @@ def catalog(binding=Depends(_binding), db: Session = Depends(get_db)):
         except Exception:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, {"code": "BRIDGE_UNAVAILABLE"})
         data.append({"id": service.id, "name": service.name, "duration_minutes": service.duration, "price": str(service.price) if service.price is not None else None})
-    return {"ok": True, "data": {"services": data, "provider": {"id": provider.id, "name": provider.name}, "location": {"id": location.id, "name": location.name} if location else None}}
+    return {"ok": True, "data": {"services": data, "timezone": bridge.business_timezone(db, binding)}}
 
 @router.post("/availability")
 def get_availability(payload: AvailabilityRequest, binding=Depends(_binding), db: Session = Depends(get_db)):
@@ -34,7 +33,12 @@ def get_availability(payload: AvailabilityRequest, binding=Depends(_binding), db
 @router.post("/proposals")
 def create_proposal(payload: ProposalRequest, binding=Depends(_binding), db: Session = Depends(get_db)):
     item = bridge.propose(db, binding, payload.service_id, payload.start_time)
-    return {"ok": True, "data": {"proposal_id": item.id, "start_time": item.start_time, "end_time": item.end_time, "expires_at": item.expires_at, "status": "awaiting_customer_confirmation"}}
+    return {"ok": True, "data": {
+        "proposal_id": item.id,
+        "summary": bridge.proposal_summary(db, binding, item),
+        "expires_at": item.expires_at,
+        "status": "awaiting_customer_confirmation",
+    }}
 
 @router.post("/confirmations")
 def confirm_booking(payload: ConfirmRequest, binding=Depends(_binding), db: Session = Depends(get_db)):

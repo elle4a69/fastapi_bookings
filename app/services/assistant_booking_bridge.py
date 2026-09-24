@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 import uuid
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
 from ..core.state_machine import BookingStatus
-from ..models import Client, Location, Provider, Service
+from ..models import Client, Location, Provider, Service, Tenant
 from ..models.booking import Booking
 from ..models.assistant_booking_bridge import (
     AssistantBookingBridgeBinding, AssistantBookingBridgeNonce,
@@ -24,6 +26,8 @@ from . import scheduling_service, slot_allocation_service
 
 _WINDOW = timedelta(minutes=5)
 _PROPOSAL_LIFETIME = timedelta(minutes=10)
+_BOOKING_IDEMPOTENCY_PREFIX = "assistant-bridge"
+_FINGERPRINT_NOTE_PREFIX = "assistant_bridge_request_sha256:"
 
 def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
@@ -75,6 +79,33 @@ def _scope(db: Session, binding: AssistantBookingBridgeBinding):
     if not provider or (binding.default_location_id and not location):
         _error("BRIDGE_UNAVAILABLE", status.HTTP_503_SERVICE_UNAVAILABLE)
     return provider, location
+
+
+def business_timezone(db: Session, binding: AssistantBookingBridgeBinding) -> str:
+    """Return the configured booking timezone without exposing scope identifiers."""
+    _, location = _scope(db, binding)
+    tenant = db.query(Tenant).filter(Tenant.id == binding.tenant_id).first()
+    timezone_name = (location.timezone if location and location.timezone else getattr(tenant, "timezone", None)) or "UTC"
+    try:
+        return ZoneInfo(timezone_name).key
+    except ZoneInfoNotFoundError:
+        _error("BRIDGE_UNAVAILABLE", status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
+def proposal_summary(db: Session, binding: AssistantBookingBridgeBinding, proposal: AssistantBookingBridgeProposal) -> dict:
+    """Build the customer-safe authoritative summary for a staged proposal."""
+    service = _service(db, binding, proposal.service_id)
+    provider, location = _scope(db, binding)
+    return {
+        "service_name": service.name,
+        "duration_minutes": service.duration,
+        "price": str(service.price) if service.price is not None else None,
+        "start_time": _utc(proposal.start_time).isoformat(),
+        "end_time": _utc(proposal.end_time).isoformat(),
+        "timezone": business_timezone(db, binding),
+        "provider_name": provider.name,
+        "location_name": location.name if location else None,
+    }
 
 
 def _service(db: Session, binding: AssistantBookingBridgeBinding, service_id: int) -> Service:
@@ -137,18 +168,57 @@ def _resolve_client(db: Session, binding: AssistantBookingBridgeBinding, name: s
     db.add(client); db.flush(); return client
 
 
+def _booking_idempotency_key(binding_id: int, request_id: str) -> str:
+    return f"{_BOOKING_IDEMPOTENCY_PREFIX}:{binding_id}:{request_id}"
+
+
+def _request_fingerprint(proposal_id: str, name: str, phone: Optional[str], email: Optional[str]) -> str:
+    """Hash canonical command inputs without logging or returning customer data."""
+    normalized = {
+        "proposal_id": proposal_id,
+        "customer_name": name.strip(),
+        "customer_phone": phone.strip() if phone else None,
+        "customer_email": email.strip().lower() if email else None,
+    }
+    return hashlib.sha256(
+        json.dumps(normalized, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _fingerprint_note(fingerprint: str) -> str:
+    return f"{_FINGERPRINT_NOTE_PREFIX}{fingerprint}"
+
+
+def _existing_idempotent_booking(
+    db: Session,
+    binding: AssistantBookingBridgeBinding,
+    request_id: str,
+    fingerprint: str,
+) -> Optional[Booking]:
+    """Return an equivalent completed command, rejecting altered request reuse."""
+    existing = db.query(Booking).filter_by(
+        tenant_id=binding.tenant_id,
+        idempotency_key=_booking_idempotency_key(binding.id, request_id),
+    ).first()
+    if not existing:
+        return None
+    if existing.notes != _fingerprint_note(fingerprint):
+        _error("REQUEST_ID_CONFLICT", status.HTTP_409_CONFLICT)
+    return existing
+
+
 def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: str, request_id: str, name: str, phone: Optional[str], email: Optional[str]) -> Booking:
-    existing = db.query(AssistantBookingBridgeReceipt).filter_by(binding_id=binding.id, request_id=request_id).with_for_update().first()
+    fingerprint = _request_fingerprint(proposal_id, name, phone, email)
+    existing = _existing_idempotent_booking(db, binding, request_id, fingerprint)
     if existing:
-        return db.query(Booking).filter_by(id=existing.booking_id, tenant_id=binding.tenant_id).first()
+        return existing
     proposal = db.query(AssistantBookingBridgeProposal).filter_by(id=proposal_id, binding_id=binding.id).with_for_update().first()
-    # A concurrent request may have created its receipt while this transaction
-    # waited for the proposal lock. Re-read before considering proposal expiry.
-    existing = db.query(AssistantBookingBridgeReceipt).filter_by(binding_id=binding.id, request_id=request_id).first()
+    # A concurrent command may have committed while this request waited for the
+    # proposal lock. The booking's unique idempotency key is the first durable
+    # claim, so re-read it before expiry or revalidation checks.
+    existing = _existing_idempotent_booking(db, binding, request_id, fingerprint)
     if existing:
-        result = db.query(Booking).filter_by(id=existing.booking_id, tenant_id=binding.tenant_id).first()
-        if result:
-            return result
+        return existing
     now = datetime.now(timezone.utc)
     if not proposal or proposal.confirmed_at or _utc(proposal.expires_at) <= now:
         _error("PROPOSAL_EXPIRED", status.HTTP_409_CONFLICT)
@@ -163,22 +233,35 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
     from ..models import Resource, ServiceResourceRequirement, AuditLog
     # Lock all applicable exclusive-capacity resources in stable order before recheck/allocation.
     db.query(Resource).join(ServiceResourceRequirement, ServiceResourceRequirement.resource_type == Resource.type).filter(ServiceResourceRequirement.service_id == service.id, Resource.tenant_id == binding.tenant_id, Resource.active.is_(True)).order_by(Resource.id).with_for_update().all()
-    booking = Booking(tenant_id=binding.tenant_id, client_id=client.id, provider_id=provider.id, service_id=service.id, location_id=location.id if location else None, start_time=proposal_start, end_time=proposal_end, status=BookingStatus.PENDING, idempotency_key=f"assistant-bridge:{binding.id}:{request_id}")
-    db.add(booking); db.flush()
+    booking = Booking(
+        tenant_id=binding.tenant_id,
+        client_id=client.id,
+        provider_id=provider.id,
+        service_id=service.id,
+        location_id=location.id if location else None,
+        start_time=proposal_start,
+        end_time=proposal_end,
+        status=BookingStatus.PENDING,
+        idempotency_key=_booking_idempotency_key(binding.id, request_id),
+        notes=_fingerprint_note(fingerprint),
+    )
     try:
-        # The receipt uniqueness constraint is the final concurrent idempotency
-        # arbiter. A unique conflict is recovered below as the original result.
         with db.begin_nested():
+            # Flush the unique booking key before allocation work. This is the
+            # durable command claim; the receipt commits atomically with it.
+            db.add(booking)
+            db.flush()
+            db.add(AssistantBookingBridgeReceipt(binding_id=binding.id, request_id=request_id, booking_id=booking.id))
+            db.flush()
             slot_allocation_service.create_allocations_for_booking(db, booking=booking, buffer_before=max(15, service.buffer_before or 0), buffer_after=max(15, service.buffer_after or 0))
             scheduling_service.allocate_resources(db, booking=booking, commit=False)
             proposal.confirmed_at = now
-            db.add(AssistantBookingBridgeReceipt(binding_id=binding.id, request_id=request_id, booking_id=booking.id))
             db.add(AuditLog(tenant_id=binding.tenant_id, action="assistant_bridge.booking_created", target_type="booking", target_id=booking.id, details="bridge_line=primary;status=pending"))
         db.commit()
     except IntegrityError:
         db.rollback()
-        retry = db.query(AssistantBookingBridgeReceipt).filter_by(binding_id=binding.id, request_id=request_id).first()
+        retry = _existing_idempotent_booking(db, binding, request_id, fingerprint)
         if retry:
-            return db.query(Booking).filter_by(id=retry.booking_id, tenant_id=binding.tenant_id).first()
+            return retry
         _error("SLOT_UNAVAILABLE", status.HTTP_409_CONFLICT)
     db.refresh(booking); return booking
