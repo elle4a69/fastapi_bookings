@@ -102,6 +102,11 @@ decrypted values fail closed; they are never silently treated as usable empty
 credentials. Provider adapters and webhook routes translate failures into
 generic structural outcomes and do not log or return raw provider exceptions,
 response bodies, route identifiers, message bodies, destinations or secrets.
+Each enabled MobileMessage webhook line requires a nonblank string
+`webhook_secret` inside its encrypted account credential mapping. Missing,
+malformed or undecryptable secrets reject inbound and delivery webhooks with a
+generic HTTP 503 before payload parsing or mutation; valid supplied secrets are
+compared in constant time.
 
 Older deployments may contain rows written by the former plaintext fallback.
 Do not inspect or export those values. A separately approved rotation runbook
@@ -129,6 +134,14 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 3. A digest of the account identifier and carrier `event_key` is checked against `sms_inbound_receipts`. If already processed, HTTP 200 is returned immediately. A uniqueness collision during receipt insertion is treated as a duplicate only when the winning row matches the exact account and digest.
 4. The message is inserted with a `customer_turn_ref`. If the previous message arrived < 10 seconds ago, it inherits the existing turn reference.
 5. Any pending `SmsAiJob` for the conversation is cancelled, and a new job is scheduled with `run_at = now() + 5s`. This coalesces ordinary bursts, but durable single-job concurrency still depends on the pending AI lease/uniqueness schema work.
+
+Delivery receipts use an exact bounded provider-status map (`queued`, `sent`,
+`delivered`, `failed`). Unknown, malformed and oversized values are rejected
+before a message lookup. The exact account-scoped outbound message is locked
+before applying the monotonic transition matrix; `delivered` and `failed` are
+terminal, and duplicate/incompatible/untracked receipts are fixed no-op
+acknowledgements. Successful and no-op acknowledgements return only
+`{"status":"success"}` and never expose provider/message correlation.
 
 ### 4.2 Responder prompt and send safety
 
@@ -177,7 +190,7 @@ The authoritative arrival contract is documented in Section 8. It accepts a boun
 - **Carrier Inbound Retries**: duplicate delivery is handled by a persisted account-scoped receipt digest. No latency or carrier retry-window guarantee has been established.
 - **Legacy credential rotation**: older rows may lack the encrypted envelope. They now fail closed and require the ID-only discovery, provider rotation and revocation runbook described above; this branch does not inspect or migrate production data.
 - **Chatwoot Outages**: outbound failures remain in the shared outbox retry lifecycle, but exponential backoff and a delivery-time guarantee have not been established.
-- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI commits through `af613f143357c8f6764d164032f8a4f6d7e1f28c`; the strengthened arrival behavior documented in Section 8 requires arrival commit `95bf119`. They are not contained in this operations branch and must be deliberately stacked and jointly verified. This branch includes commit `363fcad`, an equivalent cherry-pick of the validation-privacy successor `922c6b17404fcbec30e00b7e47f06d43cadc7404`.
+- **Stack dependency**: the responder safety behavior documented in Section 4.2 requires AI-v6 commit `e27fbb85ebacf792f9183ff54806ea695c03f081`; the strengthened arrival behavior documented in Section 8 requires arrival commit `95bf119`. They are not contained in this operations branch and must be deliberately stacked and jointly verified. This branch contains an older equivalent validation-privacy chain; validation-v4 commit `87cb4884a71e04f57613bf5686d9fdd7061c5851` must be reconciled deliberately because `app/main.py`, `app/README.md` and its regression test have textual conflicts. No clean successor-stack integration is claimed here.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. Immutable, body-versioned approval evidence and a separate user active/disabled state also require approved schema work; the current event record is structurally checked but remains mutable application data. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before the required migrations land.
 - **Concurrency hardening pending migration**: PostgreSQL conversation-first row locks serialize reviewed lifecycle, controls, manual-send, draft-winner, webhook-mutation and final-dispatch decisions. Timeout/error recovery reacquires conversation, message and job locks in the same order before writing retry or accepted state. Holding a database lock during provider I/O is the deliberate no-migration safety trade-off and can reduce throughput during a slow provider call. Database uniqueness is still required for scoped `client_request_id`, one outbound job per message, one Chatwoot binding per tenant/provider/inbox, and one inbound Chatwoot message identity. SQLite ignores `FOR UPDATE`; synthetic before/after ordering tests and PostgreSQL SQL compilation verify the intended lock shape but are not a live PostgreSQL concurrency proof.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.

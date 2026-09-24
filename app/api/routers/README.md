@@ -19,18 +19,25 @@ business persistence rules.
 
 Routers use FastAPI dependencies from `app/api/deps.py`, SQLAlchemy sessions,
 Pydantic schemas and service-layer contracts. Public SMS webhook routes require
-the provider-specific server-side credential configured on the matched SMS
-account.
+the nonblank provider-specific server-side webhook secret configured inside the
+matched SMS account's encrypted credentials. Missing, malformed or
+undecryptable webhook credentials reject both inbound and delivery traffic
+before payload parsing or mutation.
 
 ## 4. Core Workflows & Contracts
 
 Carrier routes are `POST /api/sms/webhooks/{transport_type}/{account_public_id}`
 and `POST /api/sms/webhooks/{transport_type}/{account_public_id}/delivery`.
-They return stable generic client errors. Staff conversation operations use the
-application admin/tenant dependencies and preserve service-level conflict
-status codes. Manual-message idempotent replay is valid only for the same
-tenant/provider/account/conversation, request body and authenticated actor; a
-different administrator reusing a key receives HTTP 409 without new effects.
+They return stable generic client errors. Delivery success, duplicate,
+out-of-order and untracked acknowledgements use the same fixed
+`{"status":"success"}` response, so callers cannot use the response to confirm
+a provider identifier/message correlation. Valid delivery mutations lock the
+exact account-scoped outbound message and enforce the documented monotonic
+status matrix. Staff conversation operations use the application admin/tenant
+dependencies and preserve service-level conflict status codes. Manual-message
+idempotent replay is valid only for the same tenant/provider/account/
+conversation, request body and authenticated actor; a different administrator
+reusing a key receives HTTP 409 without new effects.
 
 ## 5. Data Safety & Isolation
 
@@ -44,6 +51,9 @@ read/write through the current tenant and applicable provider/account.
 - Historical provider receipt rows may contain legacy raw payloads. This task
   stops new MobileMessage receipts from retaining raw error payloads but does
   not inspect or migrate existing rows.
+- Existing enabled MobileMessage lines without a usable encrypted
+  `webhook_secret` now fail closed with HTTP 503. Configure and verify the
+  provider webhook secret before routing customer traffic to such a line.
 - Credential rotation and legacy plaintext cleanup require the separately
   approved runbook documented in `app/models/README.md`.
 

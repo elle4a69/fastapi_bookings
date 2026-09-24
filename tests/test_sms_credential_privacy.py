@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,11 @@ from app.models.sms_chatwoot import (
     SmsChatwootBinding,
     SmsChatwootCredentialError,
 )
+from app.models.sms_conversation import SmsConversation
+from app.models.sms_message import SmsMessage
+from app.models.sms_receipt import SmsDeliveryReceipt, SmsInboundReceipt
+from app.models.provider import Provider
+from app.models.tenant import Tenant
 from app.services.sms.transports.base import OutboundSmsCommand
 from app.services.sms.transports.mobilemessage import MobileMessageAdapter
 
@@ -40,6 +46,63 @@ def _chatwoot_binding() -> SmsChatwootBinding:
         webhook_secret="synthetic-secret",
         is_enabled=True,
     )
+
+
+def _persist_mobilemessage_delivery(
+    db_session,
+    *,
+    credentials: dict,
+    message_status: str = "queued",
+) -> tuple[SmsAccount, SmsMessage]:
+    tenant = Tenant(
+        name="Synthetic credential privacy tenant",
+        subdomain="synthetic-credential-privacy",
+    )
+    db_session.add(tenant)
+    db_session.flush()
+    provider = Provider(
+        tenant_id=tenant.id,
+        name="Synthetic credential privacy provider",
+        active=True,
+    )
+    db_session.add(provider)
+    db_session.flush()
+    account = SmsAccount(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        transport_type="mobilemessage",
+        display_name="Synthetic credential privacy line",
+        sender_address="61410000001",
+        is_enabled=True,
+    )
+    account.credentials = credentials
+    db_session.add(account)
+    db_session.flush()
+    conversation = SmsConversation(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        sms_account_id=account.id,
+        customer_address="61410000002",
+        state="paused",
+        ai_enabled=False,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    message = SmsMessage(
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        sms_account_id=account.id,
+        conversation_id=conversation.id,
+        body="Synthetic outbound receipt target",
+        normalized_body="synthetic outbound receipt target",
+        direction="outbound",
+        author_type="staff",
+        status=message_status,
+        provider_message_id="synthetic-provider-message",
+    )
+    db_session.add(message)
+    db_session.commit()
+    return account, message
 
 
 def test_sms_credential_encryption_failure_preserves_existing_ciphertext(caplog):
@@ -277,3 +340,253 @@ async def test_missing_delivery_account_log_does_not_reflect_route_values(caplog
     assert exc_info.value.detail == "SMS account not found or disabled."
     assert CANARY not in caplog.text
     assert CANARY not in str(exc_info.value.detail)
+
+
+@pytest.mark.parametrize("route_suffix", ["", "/delivery"])
+@pytest.mark.parametrize(
+    "credential_shape",
+    ["missing", "blank", "wrong_type", "corrupt_ciphertext"],
+)
+def test_public_mobilemessage_routes_require_usable_webhook_secret_before_mutation(
+    client,
+    db_session,
+    caplog,
+    route_suffix,
+    credential_shape,
+):
+    credentials: dict = {
+        "username": "synthetic-user",
+        "password": "synthetic-password",
+    }
+    if credential_shape == "blank":
+        credentials["webhook_secret"] = "   "
+    elif credential_shape == "wrong_type":
+        credentials["webhook_secret"] = 12345
+    account, message = _persist_mobilemessage_delivery(
+        db_session,
+        credentials=credentials,
+    )
+    if credential_shape == "corrupt_ciphertext":
+        account._credentials = {"encrypted_data": CANARY}
+        db_session.commit()
+
+    payload = (
+        {
+            "message_id": "synthetic-provider-message",
+            "status": "delivered",
+        }
+        if route_suffix
+        else {
+            "message_id": "synthetic-inbound-event",
+            "sender": "0410000002",
+            "to": "0410000001",
+            "message": CANARY,
+        }
+    )
+    with caplog.at_level(logging.ERROR):
+        response = client.post(
+            f"/api/sms/webhooks/mobilemessage/{account.public_id}{route_suffix}",
+            headers={"X-MobileMessage-Signature": CANARY},
+            json=payload,
+        )
+
+    assert response.status_code == 503
+    error_payload = response.json()
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["message"] == (
+        "SMS webhook authentication is unavailable."
+    )
+    assert CANARY not in response.text
+    assert CANARY not in caplog.text
+    db_session.refresh(message)
+    assert message.status == "queued"
+    assert db_session.query(SmsDeliveryReceipt).count() == 0
+    assert db_session.query(SmsInboundReceipt).count() == 0
+    assert db_session.query(SmsMessage).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_mobilemessage_valid_secret_uses_constant_time_comparison():
+    account = _sms_account()
+    account.credentials = {"webhook_secret": "synthetic-webhook-secret"}
+    request = MagicMock()
+    request.headers = {"X-MobileMessage-Signature": "wrong-secret"}
+    request.query_params = {}
+
+    with (
+        patch(
+            "app.services.sms.transports.mobilemessage.secrets.compare_digest",
+            wraps=secrets.compare_digest,
+        ) as compare_digest,
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await MobileMessageAdapter().verify_webhook(request, account)
+
+    assert exc_info.value.status_code == 401
+    compare_digest.assert_called_once_with(
+        "wrong-secret", "synthetic-webhook-secret"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider_status",
+    [None, "", CANARY, "x" * 33, ["delivered"]],
+)
+async def test_mobilemessage_rejects_unrecognized_delivery_status_without_reflection(
+    provider_status,
+    caplog,
+):
+    request = MagicMock()
+    raw_body = json.dumps(
+        {
+            "message_id": "synthetic-provider-message",
+            "status": provider_status,
+        }
+    ).encode("utf-8")
+
+    async def body():
+        return raw_body
+
+    request.body = body
+    with caplog.at_level(logging.ERROR), pytest.raises(HTTPException) as exc_info:
+        await MobileMessageAdapter().parse_delivery_receipt(request, _sms_account())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid delivery receipt."
+    assert CANARY not in str(exc_info.value.detail)
+    assert CANARY not in caplog.text
+
+
+def test_delivery_receipt_transition_duplicate_and_downgrade_are_private_and_idempotent(
+    client,
+    db_session,
+):
+    secret = "synthetic-webhook-secret"
+    account, message = _persist_mobilemessage_delivery(
+        db_session,
+        credentials={"webhook_secret": secret},
+    )
+    url = f"/api/sms/webhooks/mobilemessage/{account.public_id}/delivery"
+    headers = {"X-MobileMessage-Signature": secret}
+
+    sent = client.post(
+        url,
+        headers=headers,
+        json={"message_id": message.provider_message_id, "status": "sent"},
+    )
+    assert sent.status_code == 200
+    assert sent.json() == {"status": "success"}
+    db_session.refresh(message)
+    assert message.status == "sent"
+    assert db_session.query(SmsDeliveryReceipt).count() == 1
+
+    duplicate = client.post(
+        url,
+        headers=headers,
+        json={"message_id": message.provider_message_id, "status": "sent"},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json() == {"status": "success"}
+    assert db_session.query(SmsDeliveryReceipt).count() == 1
+
+    delivered = client.post(
+        url,
+        headers=headers,
+        json={"message_id": message.provider_message_id, "status": "delivered"},
+    )
+    assert delivered.status_code == 200
+    assert delivered.json() == {"status": "success"}
+    db_session.refresh(message)
+    assert message.status == "delivered"
+    assert db_session.query(SmsDeliveryReceipt).count() == 2
+
+    downgrade = client.post(
+        url,
+        headers=headers,
+        json={"message_id": message.provider_message_id, "status": "sent"},
+    )
+    assert downgrade.status_code == 200
+    assert downgrade.json() == {"status": "success"}
+    db_session.refresh(message)
+    assert message.status == "delivered"
+    assert db_session.query(SmsDeliveryReceipt).count() == 2
+
+    untracked = client.post(
+        url,
+        headers=headers,
+        json={"message_id": "synthetic-untracked", "status": "sent"},
+    )
+    assert untracked.status_code == 200
+    assert untracked.json() == sent.json()
+
+
+@pytest.mark.parametrize(
+    ("terminal_status", "incoming_status"),
+    [
+        ("delivered", "queued"),
+        ("delivered", "failed"),
+        ("failed", "queued"),
+        ("failed", "sent"),
+        ("failed", "delivered"),
+    ],
+)
+def test_delivery_receipt_preserves_terminal_state(
+    client,
+    db_session,
+    terminal_status,
+    incoming_status,
+):
+    secret = "synthetic-webhook-secret"
+    account, message = _persist_mobilemessage_delivery(
+        db_session,
+        credentials={"webhook_secret": secret},
+        message_status=terminal_status,
+    )
+    response = client.post(
+        f"/api/sms/webhooks/mobilemessage/{account.public_id}/delivery",
+        headers={"X-MobileMessage-Signature": secret},
+        json={
+            "message_id": message.provider_message_id,
+            "status": incoming_status,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "success"}
+    db_session.refresh(message)
+    assert message.status == terminal_status
+    assert db_session.query(SmsDeliveryReceipt).count() == 0
+
+
+@pytest.mark.parametrize("provider_status", [CANARY, "x" * 33, 12345])
+def test_delivery_receipt_route_rejects_bad_status_without_mutation_or_reflection(
+    client,
+    db_session,
+    caplog,
+    provider_status,
+):
+    secret = "synthetic-webhook-secret"
+    account, message = _persist_mobilemessage_delivery(
+        db_session,
+        credentials={"webhook_secret": secret},
+    )
+    with caplog.at_level(logging.ERROR):
+        response = client.post(
+            f"/api/sms/webhooks/mobilemessage/{account.public_id}/delivery",
+            headers={"X-MobileMessage-Signature": secret},
+            json={
+                "message_id": message.provider_message_id,
+                "status": provider_status,
+            },
+        )
+
+    assert response.status_code == 400
+    error_payload = response.json()
+    assert error_payload["ok"] is False
+    assert error_payload["error"]["message"] == "Invalid delivery receipt."
+    assert CANARY not in response.text
+    assert CANARY not in caplog.text
+    db_session.refresh(message)
+    assert message.status == "queued"
+    assert db_session.query(SmsDeliveryReceipt).count() == 0

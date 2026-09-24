@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sms/webhooks", tags=["sms-webhooks"])
 
+DELIVERY_STATUS_TRANSITIONS = {
+    "queued": frozenset({"sent", "delivered", "failed"}),
+    "sending": frozenset({"sent", "delivered", "failed"}),
+    "sent": frozenset({"delivered", "failed"}),
+    "delivered": frozenset(),
+    "failed": frozenset(),
+}
+DELIVERY_ACKNOWLEDGEMENT = {"status": "success"}
+
 @router.post("/{transport_type}/{account_public_id}")
 async def inbound_webhook(
     transport_type: str,
@@ -73,12 +82,24 @@ async def delivery_receipt_webhook(
             SmsMessage.sms_account_id == account.id,
             SmsMessage.provider_message_id == update.provider_message_id,
             SmsMessage.direction == "outbound"
-        ).first()
+        ).with_for_update().first()
         
         if not message:
             # If not found, log it but return success to provider (acknowledgement)
             logger.info("Delivery receipt did not match a tracked message.")
-            return {"status": "success", "detail": "Message not tracked or already deleted."}
+            return DELIVERY_ACKNOWLEDGEMENT
+
+        if message.status == update.status:
+            logger.info("Duplicate delivery receipt was acknowledged.")
+            return DELIVERY_ACKNOWLEDGEMENT
+
+        allowed_next_statuses = DELIVERY_STATUS_TRANSITIONS.get(message.status)
+        if (
+            allowed_next_statuses is None
+            or update.status not in allowed_next_statuses
+        ):
+            logger.info("Out-of-order delivery receipt was acknowledged without mutation.")
+            return DELIVERY_ACKNOWLEDGEMENT
 
         # 5. Update message status
         message.status = update.status
@@ -95,7 +116,7 @@ async def delivery_receipt_webhook(
         db.add(receipt)
         db.commit()
         
-        return {"status": "success", "message_id": message.id, "new_status": update.status}
+        return DELIVERY_ACKNOWLEDGEMENT
         
     except HTTPException:
         raise

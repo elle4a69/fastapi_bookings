@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 import httpx
@@ -18,6 +19,13 @@ from ....models.sms_account import SmsAccount, SmsCredentialError
 logger = logging.getLogger(__name__)
 
 API_BASE_URL = "https://api.mobilemessage.com.au/v1"
+MAX_DELIVERY_STATUS_LENGTH = 32
+MOBILEMESSAGE_DELIVERY_STATUS_MAP = {
+    "queued": "queued",
+    "sent": "sent",
+    "delivered": "delivered",
+    "failed": "failed",
+}
 
 class MobileMessageAdapter(SmsTransportAdapter):
     transport_type: str = "mobilemessage"
@@ -35,13 +43,22 @@ class MobileMessageAdapter(SmsTransportAdapter):
                 detail="SMS webhook authentication is unavailable.",
             ) from exc
         webhook_secret = creds.get("webhook_secret")
-        if not webhook_secret:
-            # If no secret is configured, allow the webhook but log a warning.
-            return
+        if (
+            not isinstance(webhook_secret, str)
+            or not webhook_secret.strip()
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="SMS webhook authentication is unavailable.",
+            )
 
         # Check standard headers for authorization/signature
         signature = request.headers.get("X-MobileMessage-Signature") or request.query_params.get("secret")
-        if not signature or signature != webhook_secret:
+        if (
+            not isinstance(signature, str)
+            or not signature
+            or not secrets.compare_digest(signature, webhook_secret)
+        ):
             logger.warning("MobileMessage webhook authentication failed.")
             raise HTTPException(status_code=401, detail="Invalid webhook signature or secret.")
 
@@ -178,6 +195,19 @@ class MobileMessageAdapter(SmsTransportAdapter):
             logger.error("MobileMessage delivery receipt parsing failed.")
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Invalid delivery receipt.")
+        provider_status = payload.get("status")
+        if (
+            not isinstance(provider_status, str)
+            or not provider_status
+            or len(provider_status) > MAX_DELIVERY_STATUS_LENGTH
+        ):
+            raise HTTPException(status_code=400, detail="Invalid delivery receipt.")
+        canonical_status = MOBILEMESSAGE_DELIVERY_STATUS_MAP.get(provider_status)
+        if canonical_status is None:
+            raise HTTPException(status_code=400, detail="Invalid delivery receipt.")
+
         # Expected receipt format:
         # {
         #   "message_id": "msg_123",
@@ -187,7 +217,7 @@ class MobileMessageAdapter(SmsTransportAdapter):
         # }
         return DeliveryUpdate(
             provider_message_id=payload.get("message_id", ""),
-            status=payload.get("status", "unknown"),
+            status=canonical_status,
             error_code=(
                 "PROVIDER_REPORTED_FAILURE"
                 if payload.get("error_code") or payload.get("error_message")
