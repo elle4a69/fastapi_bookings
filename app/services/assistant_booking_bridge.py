@@ -25,6 +25,9 @@ from . import scheduling_service, slot_allocation_service
 _WINDOW = timedelta(minutes=5)
 _PROPOSAL_LIFETIME = timedelta(minutes=10)
 
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
 
 def _error(code: str, http_status: int) -> None:
     raise HTTPException(http_status, {"code": code})
@@ -147,18 +150,20 @@ def confirm(db: Session, binding: AssistantBookingBridgeBinding, proposal_id: st
         if result:
             return result
     now = datetime.now(timezone.utc)
-    if not proposal or proposal.confirmed_at or proposal.expires_at <= now:
+    if not proposal or proposal.confirmed_at or _utc(proposal.expires_at) <= now:
         _error("PROPOSAL_EXPIRED", status.HTTP_409_CONFLICT)
     service = _service(db, binding, proposal.service_id)
     provider, location = _scope(db, binding)
     # A proposal does not reserve; recalculate at the point of confirmation.
-    if not any(datetime.fromisoformat(str(slot.get("start_time")).replace("Z", "+00:00")).astimezone(timezone.utc) == proposal.start_time for slot in availability(db, binding, service.id, proposal.start_time, proposal.end_time)):
+    proposal_start = _utc(proposal.start_time)
+    proposal_end = _utc(proposal.end_time)
+    if not any(datetime.fromisoformat(str(slot.get("start_time")).replace("Z", "+00:00")).astimezone(timezone.utc) == proposal_start for slot in availability(db, binding, service.id, proposal_start, proposal_end)):
         _error("SLOT_UNAVAILABLE", status.HTTP_409_CONFLICT)
     client = _resolve_client(db, binding, name, phone, email)
     from ..models import Resource, ServiceResourceRequirement, AuditLog
     # Lock all applicable exclusive-capacity resources in stable order before recheck/allocation.
     db.query(Resource).join(ServiceResourceRequirement, ServiceResourceRequirement.resource_type == Resource.type).filter(ServiceResourceRequirement.service_id == service.id, Resource.tenant_id == binding.tenant_id, Resource.active.is_(True)).order_by(Resource.id).with_for_update().all()
-    booking = Booking(tenant_id=binding.tenant_id, client_id=client.id, provider_id=provider.id, service_id=service.id, location_id=location.id if location else None, start_time=proposal.start_time, end_time=proposal.end_time, status=BookingStatus.PENDING, idempotency_key=f"assistant-bridge:{binding.id}:{request_id}")
+    booking = Booking(tenant_id=binding.tenant_id, client_id=client.id, provider_id=provider.id, service_id=service.id, location_id=location.id if location else None, start_time=proposal_start, end_time=proposal_end, status=BookingStatus.PENDING, idempotency_key=f"assistant-bridge:{binding.id}:{request_id}")
     db.add(booking); db.flush()
     try:
         # The receipt uniqueness constraint is the final concurrent idempotency
