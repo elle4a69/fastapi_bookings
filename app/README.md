@@ -58,13 +58,15 @@ behavior is unchanged.
 Application-controlled access logging is structural. The process record
 factory first replaces arbitrary messages, arguments, exception text, and
 stack text for the exact `app.access`, `uvicorn.access`, `httpx`, and `httpcore`
-namespaces and their children. Segment-aware matching leaves lookalike or
-unrelated loggers unchanged. A filter on the configured console and
-OpenTelemetry handlers then runs after caller `extra` values are merged,
-removes arbitrary attributes, and publishes only the approved structural
-fields. This two-stage design avoids `LoggerAdapter` semantic-field collisions
-while preventing request URLs, headers, cookies, authorization data, bodies,
-and arbitrary transport data from reaching application-controlled output.
+namespaces and their children and canonicalizes every protected child name to
+its fixed family. Segment-aware matching leaves lookalike or unrelated loggers
+unchanged. A filter on the configured console and OpenTelemetry handlers then
+runs after caller `extra` values are merged, removes every caller attribute
+(including values named like OpenTelemetry correlation fields), and publishes
+only the approved structural fields captured privately by the factory. This
+two-stage design avoids `LoggerAdapter` semantic-field collisions while
+preventing request URLs, headers, cookies, authorization data, bodies, child
+logger suffixes, and arbitrary transport data from reaching configured output.
 
 The application event contains only an allowlisted method, code-owned route
 template, numeric status, finite latency bucket, and validated request ID.
@@ -72,6 +74,15 @@ Uvicorn access records retain method/status with an `<unmatched>` route
 sentinel, and client records use an `<external>` sentinel. Both the web and
 standalone worker entrypoints install the boundary before importing their
 application services, including when OpenTelemetry is disabled.
+
+The privacy-specific OpenTelemetry logging handler delegates unrelated records
+to the installed SDK behavior. For protected records it constructs an exact
+attribute set after stock translation would normally add code-location fields:
+method, route sentinel/template and status, plus duration bucket and request ID
+only when available. Trace/span correlation comes from the active trusted OTel
+context and service identity comes from the configured provider resource;
+caller `otel*` extras are never promoted. Tests use an in-memory exporter and
+do not establish delivery or privacy behavior in a real collector.
 
 The current FastAPI runtime keeps included routers lazy: the matched route
 stored in the request scope can contain only the router-local path. The
@@ -92,11 +103,18 @@ template retains its full API prefix.
   template at record-construction time, their sanitized records deliberately
   use fixed sentinels. `app.access` is the authoritative route-template event.
 - The shared bootstrap protects handlers configured by the application.
-  Future custom handlers must attach `PrivacySafeAccessFilter`; the factory
-  still neutralizes protected message/argument/exception payloads, but a
-  custom unfiltered handler could otherwise export arbitrary caller `extra`
+  Future custom console handlers must attach `PrivacySafeAccessFilter`, and
+  custom OTel handlers must use `PrivacySafeOTelLoggingHandler` as well; the
+  filter alone cannot stop a stock OTel handler adding code-location fields.
+  The factory still neutralizes protected message/argument/exception payloads,
+  but a custom unfiltered handler could export arbitrary caller `extra`
   attributes. A later library that replaces rather than chains the global
-  record factory can also remove the first-stage boundary.
+  record factory can remove the first-stage protection for unfiltered custom
+  handlers; configured handlers retain their filter-stage fail-closed path.
+- The protected OTel attribute builder pins the installed SDK's private
+  `_get_attributes(record)` hook and fails initialization if its signature is
+  incompatible. Any OpenTelemetry SDK upgrade must rerun the in-memory exact-
+  body, scope, resource and attribute tests before deployment.
 - Reverse proxies and platform infrastructure remain separately responsible
   for disabling raw URL/query logging outside this process. The application
   deliberately creates its own request ID rather than trusting an inbound

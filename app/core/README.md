@@ -25,8 +25,10 @@ before application-service imports. The standalone worker calls the same
 bootstrap with server logger configuration disabled.
 
 OpenTelemetry remains controlled by the existing settings documented in
-`telemetry.py`. When telemetry is enabled, its operational `LoggingHandler`
-has both `PrivacySafeAccessFilter` and the existing general redaction filter.
+`telemetry.py`. When telemetry is enabled, its operational
+`PrivacySafeOTelLoggingHandler` has both `PrivacySafeAccessFilter` and the
+existing general redaction filter. Synthetic verification uses only an
+in-memory exporter; no real collector behavior is claimed.
 
 ## Core Workflows & Contracts
 
@@ -34,13 +36,18 @@ For the exact `app.access`, `uvicorn.access`, `httpx`, and `httpcore`
 namespaces and their children:
 
 1. The process `LogRecordFactory` replaces message/argument/exception/stack
-   payloads with a fixed event before handlers run. It does not create public
-   semantic attributes that can collide with caller `extra` values.
+   payloads with a fixed event, captures bounded structure in a private
+   collision-resistant field, and canonicalizes a protected child logger name
+   to its fixed family before handlers run. It does not create public semantic
+   attributes that can collide with caller `extra` values.
 2. `PrivacySafeAccessFilter` runs after `extra` merging. It deletes arbitrary
-   attributes and emits only bounded method, route sentinel/template, status,
-   duration bucket, request ID, and validated OpenTelemetry correlation fields.
-3. `JSONFormatter` renders the resulting structural event. OpenTelemetry sees
-   the same filtered record and therefore cannot export removed attributes.
+   attributes, including caller `otel*` values, and emits only the privately
+   captured bounded method, route sentinel/template, status, duration bucket,
+   and request ID.
+3. `JSONFormatter` renders the structural console event. The privacy-specific
+   OTel handler builds an exact protected attribute dictionary and excludes
+   stock code-file/function/line attributes. Trace/span context and resource
+   identity are supplied by the trusted SDK context/provider, not log extras.
 
 Namespace matching is segment-aware. For example, `httpx._client` is
 protected while `httpx2` is unrelated and remains unchanged.
@@ -48,23 +55,32 @@ protected while `httpx2` is unrelated and remains unchanged.
 ## Data Safety & Isolation
 
 Protected records never retain raw URLs, query strings, headers, cookies,
-authorization values, bodies, exception text, stack text, or arbitrary
-caller-supplied attributes in configured console or telemetry output. Route
-data is accepted only as a bounded code-owned template; external client logs
-use `<external>` and server logs use `<unmatched>`.
+authorization values, bodies, exception text, stack text, arbitrary child
+logger suffixes, caller-supplied OTel correlation fields, or other caller
+attributes in configured console or telemetry output. Route data is accepted
+only as a bounded code-owned template; external client logs use `<external>`
+and server logs use `<unmatched>`.
 
 This policy is process-local and contains no tenant data. Tenant/customer
-identifiers must not be added to protected records. Safe OpenTelemetry trace
-and span identifiers are format-validated before retention.
+identifiers must not be added to protected records. OpenTelemetry trace/span
+correlation is taken from the active SDK context, and service identity from the
+configured provider resource; neither is accepted from caller log extras.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
-- Custom handlers added after bootstrap must attach
-  `PrivacySafeAccessFilter`. The factory neutralizes message payloads, but only
-  the post-merge filter can remove caller `extra` attributes.
+- Custom console handlers added after bootstrap must attach
+  `PrivacySafeAccessFilter`; custom OTel handlers must also use
+  `PrivacySafeOTelLoggingHandler` so stock translation cannot add code-location
+  fields. The factory neutralizes message payloads, but only the post-merge
+  filter can remove caller `extra` attributes.
 - A third-party library that replaces instead of chains the global record
-  factory can remove the factory-stage protection. Startup integration tests
-  cover the supported web and worker entrypoints.
+  factory can remove factory-stage protection from an unfiltered custom
+  handler. Configured handlers still apply the filter-stage fail-closed path.
+  Startup integration tests cover the supported web and worker entrypoints.
+- The privacy OTel handler pins the installed SDK's private
+  `_get_attributes(record)` hook and refuses initialization when that signature
+  changes. SDK upgrades require the exact in-memory export tests; no live
+  collector has been verified by this module.
 - Reverse-proxy and platform logs are outside this Python-process boundary and
   require independent raw-query and credential logging controls.
 - Inbound proxy request IDs are intentionally not trusted. Cross-proxy

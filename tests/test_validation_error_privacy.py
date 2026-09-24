@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import io
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from fastapi import Body, Cookie, FastAPI, Header, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
     InMemoryLogRecordExporter,
     SimpleLogRecordProcessor,
@@ -23,7 +24,11 @@ from opentelemetry.sdk._logs.export import (
 from pydantic import BaseModel
 from starlette.requests import Request
 
-from app.core.privacy_logging import PrivacySafeAccessFilter
+from app.core.privacy_logging import (
+    JSONFormatter,
+    PrivacySafeAccessFilter,
+    PrivacySafeOTelLoggingHandler,
+)
 from app.main import (
     VALIDATION_ERROR_DETAIL_LIMIT,
     VALIDATION_ERROR_SCAN_LIMIT,
@@ -529,13 +534,26 @@ def _emit_with_handler(
 
 def test_protected_namespaces_include_children_but_not_lookalikes():
     protected = (
-        ("app.access.child", ("GET", "/safe/{id}", 200, "lt_10ms", "a" * 32)),
-        ("uvicorn.access.child", ("peer", "GET", f"/{MARKER}", "1.1", 200)),
-        ("httpx._client.child", ("GET", f"https://example.invalid/?{MARKER}", "1.1", 200)),
-        ("httpcore.connection.child", (f"transport {MARKER}",)),
+        (
+            "app.access.child",
+            "app.access",
+            ("GET", "/safe/{id}", 200, "lt_10ms", "a" * 32),
+        ),
+        (
+            "uvicorn.access.child",
+            "uvicorn.access",
+            ("peer", "GET", f"/{MARKER}", "1.1", 200),
+        ),
+        (
+            "httpx._client.child",
+            "httpx",
+            ("GET", f"https://example.invalid/?{MARKER}", "1.1", 200),
+        ),
+        ("httpcore.connection.child", "httpcore", (f"transport {MARKER}",)),
     )
-    for logger_name, args in protected:
+    for logger_name, expected_family, args in protected:
         record = _emit_with_handler(logger_name, f"payload {MARKER} %s", args)
+        assert record.name == expected_family
         assert MARKER not in repr(record.__dict__)
         assert record.exc_info is None
         assert record.stack_info is None
@@ -583,6 +601,11 @@ def test_post_extra_filter_strips_payloads_and_avoids_semantic_key_collisions():
                 "request_url": f"https://example.invalid/?token={MARKER}",
                 "headers": {"authorization": MARKER},
                 "authorization": MARKER,
+                "otelTraceID": "a" * 32,
+                "otelSpanID": "b" * 16,
+                "otelTraceSampled": True,
+                "otelServiceName": MARKER,
+                "otelPrivateToken": MARKER,
             },
         )
 
@@ -590,6 +613,7 @@ def test_post_extra_filter_strips_payloads_and_avoids_semantic_key_collisions():
         assert "request_url" not in record.__dict__
         assert "headers" not in record.__dict__
         assert "authorization" not in record.__dict__
+        assert not any(key.startswith("otel") for key in record.__dict__)
         assert MARKER not in repr(record.__dict__)
 
     app_record = _emit_with_handler(
@@ -676,35 +700,97 @@ def test_logger_adapter_semantic_extras_do_not_collide_or_override_structure():
     assert MARKER not in repr(record.__dict__)
 
 
+def test_console_canonicalizes_protected_child_name_and_strips_otel_extras():
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(PrivacySafeAccessFilter())
+    handler.setFormatter(JSONFormatter())
+    logger = logging.getLogger(f"httpx.{MARKER}")
+    original_level = logger.level
+    original_propagate = logger.propagate
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(handler)
+    try:
+        logger.info(
+            "request %s",
+            f"https://example.invalid/?token={MARKER}",
+            extra={
+                "otelTraceID": "a" * 32,
+                "otelSpanID": "b" * 16,
+                "otelTraceSampled": True,
+                "otelServiceName": MARKER,
+            },
+        )
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+
+    output = stream.getvalue()
+    assert MARKER not in output
+    document = json.loads(output)
+    assert document == {
+        "timestamp": document["timestamp"],
+        "level": "INFO",
+        "message": "http_client_access",
+        "logger": "httpx",
+        "http_method": "OTHER",
+        "http_route": "<external>",
+        "http_status": 0,
+    }
+
+
 def test_otel_export_contains_only_structural_protected_attributes(monkeypatch):
     # This provider is strictly in-memory; enabling it locally performs no I/O.
     monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
     exporter = InMemoryLogRecordExporter()
     provider = LoggerProvider()
     provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
-    handler = LoggingHandler(level=logging.INFO, logger_provider=provider)
+    handler = PrivacySafeOTelLoggingHandler(
+        level=logging.INFO,
+        logger_provider=provider,
+    )
     handler.addFilter(PrivacySafeAccessFilter())
     cases = (
         (
-            "app.access.export",
+            f"app.access.{MARKER}",
             ("GET", "/safe/{id}", 200, "lt_10ms", "d" * 32),
             "http_request_completed",
+            "app.access",
+            {
+                "http_method",
+                "http_route",
+                "http_status",
+                "duration_bucket",
+                "request_id",
+            },
         ),
         (
-            "uvicorn.access.export",
+            f"uvicorn.access.{MARKER}",
             ("peer", "POST", f"/{MARKER}", "1.1", 201),
             "http_server_access",
+            "uvicorn.access",
+            {"http_method", "http_route", "http_status"},
         ),
         (
-            "httpx._client.export",
+            f"httpx.{MARKER}",
             ("PATCH", f"https://example.invalid/?token={MARKER}", "1.1", 202),
             "http_client_access",
+            "httpx",
+            {"http_method", "http_route", "http_status"},
         ),
-        ("httpcore.connection.export", ({"nested": MARKER},), "http_client_transport"),
+        (
+            f"httpcore.{MARKER}",
+            ({"nested": MARKER},),
+            "http_client_transport",
+            "httpcore",
+            {"http_method", "http_route", "http_status"},
+        ),
     )
     configured_loggers: list[tuple[logging.Logger, int, bool]] = []
     try:
-        for logger_name, args, _event in cases:
+        for logger_name, args, _event, _scope, _attribute_keys in cases:
             logger = logging.getLogger(logger_name)
             configured_loggers.append((logger, logger.level, logger.propagate))
             logger.setLevel(logging.INFO)
@@ -717,6 +803,11 @@ def test_otel_export_contains_only_structural_protected_attributes(monkeypatch):
                     "request_url": MARKER,
                     "headers": {"authorization": MARKER},
                     "authorization": MARKER,
+                    "otelTraceID": "a" * 32,
+                    "otelSpanID": "b" * 16,
+                    "otelTraceSampled": True,
+                    "otelServiceName": MARKER,
+                    "otelPrivateToken": MARKER,
                 },
             )
         provider.force_flush()
@@ -729,14 +820,81 @@ def test_otel_export_contains_only_structural_protected_attributes(monkeypatch):
         provider.shutdown()
 
     assert len(exported) == len(cases)
-    for exported_record, (_logger_name, _args, event) in zip(exported, cases):
+    for exported_record, (
+        _logger_name,
+        _args,
+        event,
+        expected_scope,
+        expected_attribute_keys,
+    ) in zip(exported, cases):
         log_record = exported_record.log_record
         assert log_record.body == event
-        assert set(log_record.attributes).isdisjoint(
-            {"request_url", "headers", "authorization"}
+        assert set(log_record.attributes) == expected_attribute_keys
+        assert exported_record.instrumentation_scope.name == expected_scope
+        protected_export = repr(
+            (
+                log_record.body,
+                log_record.attributes,
+                exported_record.resource.attributes,
+                exported_record.instrumentation_scope,
+            )
         )
-        assert "_fastapi_bookings_privacy_structure" not in log_record.attributes
-        assert MARKER not in repr(log_record.attributes)
+        assert MARKER not in protected_export
+
+
+def test_privacy_otel_handler_delegates_lookalike_logger_translation(monkeypatch):
+    monkeypatch.setenv("OTEL_SDK_DISABLED", "false")
+    exporter = InMemoryLogRecordExporter()
+    provider = LoggerProvider()
+    provider.add_log_record_processor(SimpleLogRecordProcessor(exporter))
+    handler = PrivacySafeOTelLoggingHandler(
+        level=logging.INFO,
+        logger_provider=provider,
+    )
+    handler.addFilter(PrivacySafeAccessFilter())
+    logger = logging.getLogger("httpx2")
+    original_level = logger.level
+    original_propagate = logger.propagate
+    original_disabled = logger.disabled
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.disabled = False
+    logger.addHandler(handler)
+    try:
+        logger.info("ordinary %s", MARKER, extra={"unrelated_value": MARKER})
+        provider.force_flush()
+        exported = exporter.get_finished_logs()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
+        logger.propagate = original_propagate
+        logger.disabled = original_disabled
+        provider.shutdown()
+
+    assert len(exported) == 1
+    exported_record = exported[0]
+    assert exported_record.log_record.body == f"ordinary {MARKER}"
+    assert exported_record.log_record.attributes["unrelated_value"] == MARKER
+    assert exported_record.instrumentation_scope.name == "httpx2"
+
+
+def test_privacy_otel_handler_fails_closed_on_incompatible_sdk_hook(monkeypatch):
+    sdk_handler = PrivacySafeOTelLoggingHandler.__mro__[1]
+
+    def incompatible_get_attributes(record, future_argument):
+        return {"unsafe": MARKER}
+
+    monkeypatch.setattr(
+        sdk_handler,
+        "_get_attributes",
+        staticmethod(incompatible_get_attributes),
+    )
+    try:
+        PrivacySafeOTelLoggingHandler()
+    except RuntimeError as error:
+        assert str(error) == "Unsupported OpenTelemetry logging handler API."
+    else:
+        raise AssertionError("incompatible OTel handler API was accepted")
 
 
 def test_web_and_worker_subprocesses_bootstrap_privacy_before_emission():

@@ -8,13 +8,20 @@ HTTP fields.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
-import re
 import traceback
 from typing import Final
 
 from opentelemetry import trace
+
+try:
+    from opentelemetry.instrumentation.logging.handler import (
+        LoggingHandler as _OpenTelemetryLoggingHandler,
+    )
+except ImportError:
+    from opentelemetry.sdk._logs import LoggingHandler as _OpenTelemetryLoggingHandler
 
 
 SAFE_HTTP_METHODS: Final = frozenset(
@@ -32,18 +39,7 @@ _PROTECTED_NAMESPACES: Final = (
 _STANDARD_LOG_RECORD_FIELDS: Final = frozenset(
     logging.makeLogRecord({}).__dict__.keys()
 )
-_HEX_16 = re.compile(r"^[0-9a-f]{16}$")
-_HEX_32 = re.compile(r"^[0-9a-f]{32}$")
-_SERVICE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
-
-
-class _PrivacySafeEvent(str):
-    """Fixed event text carrying non-exported structural parsing state."""
-
-    def __new__(cls, value: str, structure: tuple):
-        instance = super().__new__(cls, value)
-        instance.structure = structure
-        return instance
+_PRIVATE_STRUCTURE_FIELD: Final = "_fastapi_bookings_privacy_structure"
 
 
 def logger_is_in_namespace(logger_name: str, namespace: str) -> bool:
@@ -139,10 +135,17 @@ def _structure_from_record(record: logging.LogRecord) -> tuple:
 def sanitize_record_factory_stage(record: logging.LogRecord) -> None:
     """Neutralize protected payloads without creating ``extra`` collisions."""
 
+    family = protected_logger_family(record.name)
     structure = _structure_from_record(record)
-    if not structure:
+    if family is None or not structure:
         return
-    record.msg = _PrivacySafeEvent(structure[0], structure)
+    # The factory runs before ``extra`` is merged. A caller therefore cannot
+    # replace this private field: logging rejects a colliding ``extra`` key.
+    # The handler filter retains it for every configured handler but the OTel
+    # translation below never exports it.
+    setattr(record, _PRIVATE_STRUCTURE_FIELD, structure)
+    record.name = family
+    record.msg = structure[0]
     record.args = ()
     record.exc_info = None
     record.exc_text = None
@@ -165,44 +168,13 @@ def install_privacy_safe_record_factory() -> None:
     logging.setLogRecordFactory(privacy_safe_factory)
 
 
-def _safe_otel_fields(record: logging.LogRecord) -> dict[str, object]:
-    fields: dict[str, object] = {}
-    trace_id = getattr(record, "otelTraceID", None)
-    span_id = getattr(record, "otelSpanID", None)
-    sampled = getattr(record, "otelTraceSampled", None)
-    service_name = getattr(record, "otelServiceName", None)
-    if isinstance(trace_id, str) and _HEX_32.fullmatch(trace_id):
-        fields["otelTraceID"] = trace_id
-    if isinstance(span_id, str) and _HEX_16.fullmatch(span_id):
-        fields["otelSpanID"] = span_id
-    if isinstance(sampled, bool):
-        fields["otelTraceSampled"] = sampled
-    if isinstance(service_name, str) and _SERVICE_NAME.fullmatch(service_name):
-        fields["otelServiceName"] = service_name
-    return fields
+def _private_structure(record: logging.LogRecord) -> tuple:
+    """Return only factory/filter-owned structure, never caller public extras."""
 
-
-def _published_structure(record: logging.LogRecord, family: str) -> tuple:
-    """Recover fields already finalized by an earlier handler filter."""
-
-    expected_events = {
-        "app.access": "http_request_completed",
-        "uvicorn.access": "http_server_access",
-        "httpx": "http_client_access",
-        "httpcore": "http_client_transport",
-    }
-    if record.msg != expected_events[family] or record.args:
+    structure = getattr(record, _PRIVATE_STRUCTURE_FIELD, ())
+    if not isinstance(structure, tuple) or len(structure) != 6:
         return ()
-    duration = getattr(record, "duration_bucket", None)
-    request_id = getattr(record, "request_id", None)
-    return (
-        record.msg,
-        safe_http_method(getattr(record, "http_method", None)),
-        safe_route_template(getattr(record, "http_route", None)),
-        safe_http_status(getattr(record, "http_status", None)),
-        duration if duration in SAFE_DURATION_LABELS else None,
-        request_id if is_safe_request_id(request_id) else None,
-    )
+    return structure
 
 
 class PrivacySafeAccessFilter(logging.Filter):
@@ -213,21 +185,36 @@ class PrivacySafeAccessFilter(logging.Filter):
         if family is None:
             return True
 
-        structure = getattr(record.msg, "structure", ())
-        if not structure:
-            structure = _published_structure(record, family)
+        structure = _private_structure(record)
         if not structure:
             sanitize_record_factory_stage(record)
-            structure = getattr(record.msg, "structure", ())
+            structure = _private_structure(record)
         if not structure:
-            return True
+            # A protected record without trustworthy private structure is
+            # still neutralized rather than passed through with public extras.
+            structure = (
+                "http_access_record",
+                "OTHER",
+                (
+                    "<external>"
+                    if family in {"httpx", "httpcore"}
+                    else "<unmatched>"
+                ),
+                0,
+                None,
+                None,
+            )
+            setattr(record, _PRIVATE_STRUCTURE_FIELD, structure)
 
-        safe_otel_fields = _safe_otel_fields(record)
         for key in tuple(record.__dict__):
-            if key not in _STANDARD_LOG_RECORD_FIELDS:
+            if (
+                key not in _STANDARD_LOG_RECORD_FIELDS
+                and key != _PRIVATE_STRUCTURE_FIELD
+            ):
                 del record.__dict__[key]
 
         event, method, route, status_code, duration, request_id = structure
+        record.name = family
         record.msg = event
         record.args = ()
         record.exc_info = None
@@ -240,8 +227,52 @@ class PrivacySafeAccessFilter(logging.Filter):
             record.duration_bucket = duration
         if is_safe_request_id(request_id):
             record.request_id = request_id
-        record.__dict__.update(safe_otel_fields)
         return True
+
+
+def _protected_otel_attributes(record: logging.LogRecord) -> dict[str, object]:
+    """Build the exact protected-record attribute allowlist."""
+
+    structure = _private_structure(record)
+    if not structure:
+        return {}
+    _event, method, route, status_code, duration, request_id = structure
+    attributes: dict[str, object] = {
+        "http_method": safe_http_method(method),
+        "http_route": safe_route_template(route),
+        "http_status": safe_http_status(status_code),
+    }
+    if duration in SAFE_DURATION_LABELS:
+        attributes["duration_bucket"] = duration
+    if is_safe_request_id(request_id):
+        attributes["request_id"] = request_id
+    return attributes
+
+
+class PrivacySafeOTelLoggingHandler(_OpenTelemetryLoggingHandler):
+    """Translate protected records with an exact fail-closed attribute set."""
+
+    def __init__(self, *args, **kwargs):
+        translator = getattr(_OpenTelemetryLoggingHandler, "_get_attributes", None)
+        parameters = (
+            tuple(inspect.signature(translator).parameters)
+            if callable(translator)
+            else ()
+        )
+        if parameters != ("record",):
+            raise RuntimeError("Unsupported OpenTelemetry logging handler API.")
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _get_attributes(record: logging.LogRecord):
+        if protected_logger_family(record.name) is None:
+            return _OpenTelemetryLoggingHandler._get_attributes(record)
+        try:
+            return _protected_otel_attributes(record)
+        except Exception:
+            # SDK/export translation must never recover caller extras or code
+            # location fields after a protected record has been recognized.
+            return {}
 
 
 class JSONFormatter(logging.Formatter):
@@ -305,6 +336,7 @@ def configure_privacy_safe_logging(*, include_server_loggers: bool) -> None:
 __all__ = [
     "JSONFormatter",
     "PrivacySafeAccessFilter",
+    "PrivacySafeOTelLoggingHandler",
     "SAFE_DURATION_LABELS",
     "configure_privacy_safe_logging",
     "install_privacy_safe_record_factory",

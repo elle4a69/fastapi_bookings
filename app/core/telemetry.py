@@ -23,7 +23,10 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 
 from ..core.config import settings
-from .privacy_logging import PrivacySafeAccessFilter
+from .privacy_logging import (
+    PrivacySafeAccessFilter,
+    PrivacySafeOTelLoggingHandler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -628,11 +631,6 @@ def init_telemetry(app=None) -> None:
         )
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-        try:
-            from opentelemetry.instrumentation.logging.handler import LoggingHandler
-        except ImportError:
-            from opentelemetry.sdk._logs import LoggingHandler
-
         l_exp = OTLPLogExporter(endpoint=f"{base}/v1/logs", timeout=3)
         _logger_provider = LoggerProvider(resource=resource)
         _logger_provider.add_log_record_processor(
@@ -641,7 +639,7 @@ def init_telemetry(app=None) -> None:
         )
 
         # Operational log handler with privacy redaction filter
-        op_otlp_handler = LoggingHandler(
+        op_otlp_handler = PrivacySafeOTelLoggingHandler(
             level=logging.INFO,
             logger_provider=_logger_provider,
         )
@@ -660,7 +658,7 @@ def init_telemetry(app=None) -> None:
             _telemetry_owned_handlers.append((target_logger, op_otlp_handler))
 
         # Attach dedicated structured telemetry handler ONLY to dedicated logger
-        dedicated_handler = LoggingHandler(
+        dedicated_handler = PrivacySafeOTelLoggingHandler(
             level=logging.DEBUG,
             logger_provider=_logger_provider,
         )
