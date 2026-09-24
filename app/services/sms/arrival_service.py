@@ -10,11 +10,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import Integer, String, cast, exists, func, literal, or_
+from sqlalchemy import Integer, String, cast, exists, func, literal, null, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...core.state_machine import BookingStatus
+from ...core.config import settings
 from ...models.booking import Booking
 from ...models.client import Client
 from ...models.location import Location
@@ -25,6 +26,7 @@ from ...models.sms_account import SmsAccount
 from ...models.sms_arrival import SmsArrivalSession
 from ...models.sms_conversation import SmsConversation
 from ...models.sms_outbox import SmsConversationEvent
+from ...models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ ARRIVAL_ALERT_INTERVAL_SECONDS = 60
 ARRIVAL_ALERT_BATCH_LIMIT = 100
 ARRIVAL_TOKEN_COLLISION_RETRIES = 3
 _PENDING_OUTBOX_STATUSES = ("PENDING", "RETRY")
+_ARRIVAL_SCOPE_INVALID = "ARRIVAL_SCOPE_INVALID"
 
 
 class ArrivalNotFoundError(LookupError):
@@ -187,6 +190,22 @@ def _scoped_query(db: Session):
         .join(Provider, Provider.id == Booking.provider_id)
         .join(Service, Service.id == Booking.service_id)
         .outerjoin(Location, Location.id == Booking.location_id)
+    )
+
+
+def _valid_scope_predicates():
+    """Return scope relationships cheap enough to reject before batching."""
+
+    return (
+        Booking.tenant_id == SmsConversation.tenant_id,
+        Booking.tenant_id == SmsAccount.tenant_id,
+        Booking.tenant_id == Client.tenant_id,
+        Booking.tenant_id == Provider.tenant_id,
+        Booking.tenant_id == Service.tenant_id,
+        or_(Booking.location_id.is_(None), Booking.tenant_id == Location.tenant_id),
+        Booking.provider_id == SmsConversation.provider_id,
+        SmsAccount.provider_id == SmsConversation.provider_id,
+        SmsConversation.client_id == Booking.client_id,
     )
 
 
@@ -395,6 +414,8 @@ def resolve_arrival_token(
         raise ArrivalNotFoundError("arrival session is unavailable")
     scoped = _to_scoped(row)
     current_time = _as_utc(now or datetime.now(timezone.utc))
+    if scoped.session.acknowledged_at is not None:
+        raise ArrivalNotFoundError("arrival session is unavailable")
     if arrival_expires_at(scoped.session, scoped.booking) <= current_time:
         raise ArrivalExpiredError("arrival session is unavailable")
     if not arrival_booking_is_eligible(scoped.booking):
@@ -503,6 +524,18 @@ def acknowledge_arrival(
     now: Optional[datetime] = None,
 ) -> ArrivalMutation:
     """Idempotently acknowledge/close an arrived tenant-scoped session."""
+
+    actor_exists = (
+        db.query(User.id)
+        .filter(
+            User.id == actor_user_id,
+            User.tenant_id == tenant_id,
+            User.role.in_(("owner", "admin")),
+        )
+        .first()
+    )
+    if actor_exists is None:
+        raise ArrivalNotFoundError("arrival session is unavailable")
 
     row = (
         _scoped_query(db)
@@ -639,6 +672,52 @@ def _current_alert_key_expression(db: Session, current_time: datetime):
     )
 
 
+def _scope_invalid_key(arrival_id: int) -> str:
+    return f"arrival-alert:{arrival_id}:scope-invalid"
+
+
+def _scope_invalid_key_expression():
+    return (
+        literal("arrival-alert:")
+        + cast(SmsArrivalSession.id, String)
+        + literal(":scope-invalid")
+    )
+
+
+def _quarantine_invalid_scope_candidate(
+    db: Session,
+    *,
+    arrival: SmsArrivalSession,
+    booking: Booking,
+    current_time: datetime,
+) -> None:
+    """Persist one terminal structural marker for a post-lock scope failure."""
+
+    try:
+        with db.begin_nested():
+            db.add(
+                OutboxEvent(
+                    tenant_id=booking.tenant_id,
+                    type="arrival.alert",
+                    payload=json.dumps(
+                        {"arrival_session_id": arrival.id}, sort_keys=True
+                    ),
+                    status="QUARANTINED",
+                    processed=True,
+                    processed_at=current_time,
+                    terminal_at=current_time,
+                    error_code=_ARRIVAL_SCOPE_INVALID,
+                    idempotency_key=_scope_invalid_key(arrival.id),
+                    created_at=current_time,
+                    next_attempt_at=null(),
+                )
+            )
+            db.flush()
+    except IntegrityError:
+        # Another worker already recorded the same structural quarantine marker.
+        return
+
+
 def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
     """Bound cleanup of pending alerts whose session can no longer alert.
 
@@ -698,20 +777,14 @@ def _suppress_ineligible_alerts(db: Session, *, current_time: datetime) -> int:
     return suppressed
 
 
-def process_repeated_arrival_alerts(
+def _process_repeated_arrival_alerts(
     db: Session,
     *,
-    now: Optional[datetime] = None,
+    current_time: datetime,
 ) -> int:
-    """Enqueue one durable structural alert per elapsed interval.
-
-    The outbox unique idempotency key is the concurrency backstop. No bearer
-    token, customer identity, phone number or message content enters the event.
-    """
-
-    current_time = _as_utc(now or datetime.now(timezone.utc))
-    suppressed = _suppress_ineligible_alerts(db, current_time=current_time)
+    _suppress_ineligible_alerts(db, current_time=current_time)
     current_key = _current_alert_key_expression(db, current_time)
+    invalid_scope_key = _scope_invalid_key_expression()
     rows = (
         _scoped_query(db)
         .filter(
@@ -720,8 +793,15 @@ def process_repeated_arrival_alerts(
             <= current_time - timedelta(seconds=ARRIVAL_ALERT_INTERVAL_SECONDS),
             SmsArrivalSession.acknowledged_at.is_(None),
             Booking.status == BookingStatus.CONFIRMED,
+            SmsArrivalSession.created_at
+            > current_time - ARRIVAL_TOKEN_MAX_AGE,
+            Booking.end_time > current_time - ARRIVAL_POST_BOOKING_GRACE,
+            *_valid_scope_predicates(),
             ~exists()
             .where(OutboxEvent.idempotency_key == current_key)
+            .correlate(SmsArrivalSession),
+            ~exists()
+            .where(OutboxEvent.idempotency_key == invalid_scope_key)
             .correlate(SmsArrivalSession),
         )
         .order_by(
@@ -737,6 +817,12 @@ def process_repeated_arrival_alerts(
         try:
             scoped = _to_scoped(row)
         except ArrivalNotFoundError:
+            _quarantine_invalid_scope_candidate(
+                db,
+                arrival=row[0],
+                booking=row[1],
+                current_time=current_time,
+            )
             logger.warning("arrival_scope_mismatch_skipped")
             continue
         if not arrival_booking_is_eligible(scoped.booking):
@@ -793,8 +879,28 @@ def process_repeated_arrival_alerts(
         except IntegrityError:
             # Another worker won the same unique outbox key.
             continue
-    if created or suppressed:
-        db.commit()
     if created:
         logger.info("arrival_alerts_enqueued count=%s", created)
     return created
+
+
+def process_repeated_arrival_alerts(
+    db: Session,
+    *,
+    now: Optional[datetime] = None,
+) -> int:
+    """Safely enqueue repeated alerts only when the delivery path is enabled.
+
+    The default-disabled path performs no database work. When enabled, this
+    function owns and completes a transaction only if the caller does not
+    already have one; otherwise it confines its work to a nested savepoint and
+    leaves the caller's transaction uncommitted and rollback-capable.
+    """
+
+    if not settings.ARRIVAL_ALERT_PRODUCTION_ENABLED:
+        return 0
+
+    current_time = _as_utc(now or datetime.now(timezone.utc))
+    transaction = db.begin_nested() if db.in_transaction() else db.begin()
+    with transaction:
+        return _process_repeated_arrival_alerts(db, current_time=current_time)

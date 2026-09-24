@@ -47,6 +47,17 @@ def _isolate_arrival_rate_limiter():
     arrival_capability_limiter.reset()
 
 
+@pytest.fixture
+def enabled_arrival_alerts(monkeypatch):
+    """Explicitly enable the synthetic-only producer for alert tests."""
+
+    from app.services.sms import arrival_service
+
+    monkeypatch.setattr(
+        arrival_service.settings, "ARRIVAL_ALERT_PRODUCTION_ENABLED", True
+    )
+
+
 def _staff_headers(tenant: Tenant, user: User) -> dict[str, str]:
     return {
         "X-Tenant": tenant.subdomain,
@@ -780,7 +791,7 @@ def test_lifecycle_paths_request_arrival_row_locks(
 
 
 def test_repeated_alerts_use_durable_structural_deduplication(
-    client, db_session, synthetic_arrival_data
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
 ):
     arrival_time = synthetic_arrival_data["now"]
     response = client.post(
@@ -818,7 +829,9 @@ def test_repeated_alerts_use_durable_structural_deduplication(
     )
 
 
-def test_acknowledgement_stops_future_alerts(client, db_session, synthetic_arrival_data):
+def test_acknowledgement_stops_future_alerts(
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
     client.post(
         "/api/admin/sms/arrivals/public/arrive",
         json={"token": synthetic_arrival_data["invitation_a"].token},
@@ -837,7 +850,7 @@ def test_acknowledgement_stops_future_alerts(client, db_session, synthetic_arriv
 
 
 def test_acknowledgement_quarantines_pending_alert(
-    client, db_session, synthetic_arrival_data
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
 ):
     client.post(
         "/api/admin/sms/arrivals/public/arrive",
@@ -870,7 +883,7 @@ def test_acknowledgement_quarantines_pending_alert(
 
 
 def test_acknowledgement_does_not_claim_to_recall_leased_alert(
-    client, db_session, synthetic_arrival_data
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
 ):
     client.post(
         "/api/admin/sms/arrivals/public/arrive",
@@ -901,7 +914,9 @@ def test_acknowledgement_does_not_claim_to_recall_leased_alert(
     assert alert.status == "PROCESSING"
 
 
-def test_cancelled_booking_stops_future_alerts(client, db_session, synthetic_arrival_data):
+def test_cancelled_booking_stops_future_alerts(
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
     client.post(
         "/api/admin/sms/arrivals/public/arrive",
         json={"token": synthetic_arrival_data["invitation_a"].token},
@@ -914,7 +929,7 @@ def test_cancelled_booking_stops_future_alerts(client, db_session, synthetic_arr
 
 
 def test_cancelled_booking_quarantines_existing_pending_alert(
-    client, db_session, synthetic_arrival_data
+    client, db_session, synthetic_arrival_data, enabled_arrival_alerts
 ):
     client.post(
         "/api/admin/sms/arrivals/public/arrive",
@@ -962,7 +977,7 @@ def test_ineligible_booking_is_listed_and_may_be_operationally_acknowledged(
 
 
 def test_alert_batch_is_bounded_and_deterministic(
-    db_session, synthetic_arrival_data, monkeypatch
+    db_session, synthetic_arrival_data, monkeypatch, enabled_arrival_alerts
 ):
     from app.services.sms import arrival_service
 
@@ -997,7 +1012,7 @@ def test_alert_batch_is_bounded_and_deterministic(
 
 
 def test_alert_batch_progresses_beyond_one_hundred_and_across_tenants(
-    db_session, synthetic_arrival_data
+    db_session, synthetic_arrival_data, enabled_arrival_alerts
 ):
     now = synthetic_arrival_data["now"]
     invitation_a = synthetic_arrival_data["invitation_a"]
@@ -1042,3 +1057,263 @@ def test_alert_batch_progresses_beyond_one_hundred_and_across_tenants(
         ).count()
         == 1
     )
+
+
+def test_alert_production_is_disabled_by_default_without_starting_transaction(
+    db_session, synthetic_arrival_data
+):
+    invitation = synthetic_arrival_data["invitation_a"]
+    invitation.session.arrived_at = synthetic_arrival_data["now"] - timedelta(
+        minutes=2
+    )
+    db_session.commit()
+    assert db_session.in_transaction() is False
+
+    assert process_repeated_arrival_alerts(
+        db_session, now=synthetic_arrival_data["now"]
+    ) == 0
+    assert db_session.in_transaction() is False
+    assert db_session.query(OutboxEvent).filter(
+        OutboxEvent.type == "arrival.alert"
+    ).count() == 0
+
+
+def test_enabled_alert_noop_completes_owned_transaction(
+    db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
+    db_session.commit()
+    assert db_session.in_transaction() is False
+
+    assert process_repeated_arrival_alerts(
+        db_session, now=synthetic_arrival_data["now"]
+    ) == 0
+    assert db_session.in_transaction() is False
+
+
+def test_enabled_alert_preserves_caller_transaction_and_rollback(
+    db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
+    sentinel = Tenant(
+        name="SYNTHETIC Arrival Transaction Sentinel",
+        subdomain="synthetic-arrival-transaction-sentinel",
+    )
+    db_session.add(sentinel)
+    db_session.flush()
+    sentinel_id = sentinel.id
+    assert db_session.in_transaction() is True
+
+    assert process_repeated_arrival_alerts(
+        db_session, now=synthetic_arrival_data["now"]
+    ) == 0
+    assert db_session.in_transaction() is True
+
+    db_session.rollback()
+    assert db_session.query(Tenant).filter(Tenant.id == sentinel_id).first() is None
+
+
+def test_expired_candidates_are_excluded_before_bounded_alert_batch(
+    db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
+    now = synthetic_arrival_data["now"]
+    eligible = synthetic_arrival_data["invitation_a"].session
+    eligible.arrived_at = now - timedelta(minutes=3)
+    eligible.created_at = now
+
+    for index in range(100):
+        start = now + timedelta(hours=10, minutes=index)
+        booking = Booking(
+            tenant_id=synthetic_arrival_data["tenant_a"].id,
+            client_id=synthetic_arrival_data["client_a"].id,
+            provider_id=synthetic_arrival_data["provider_a"].id,
+            service_id=synthetic_arrival_data["booking_a"].service_id,
+            start_time=start,
+            end_time=start + timedelta(minutes=30),
+            status=BookingStatus.CONFIRMED,
+            idempotency_key=f"synthetic-arrival-expired-batch-{index}",
+        )
+        db_session.add(booking)
+        db_session.flush()
+        db_session.add(
+            SmsArrivalSession(
+                booking_id=booking.id,
+                conversation_id=synthetic_arrival_data["conversation_a"].id,
+                token=hash_arrival_token(
+                    f"synthetic-arrival-expired-batch-token-{index:04d}"
+                ),
+                arrived_at=now - timedelta(minutes=2),
+                created_at=now - timedelta(days=8),
+            )
+        )
+    db_session.commit()
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 1
+    assert (
+        db_session.query(OutboxEvent)
+        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{eligible.id}:3")
+        .count()
+        == 1
+    )
+
+
+def test_sql_provable_scope_mismatches_do_not_starve_alert_batch(
+    db_session, synthetic_arrival_data, enabled_arrival_alerts
+):
+    now = synthetic_arrival_data["now"]
+    eligible = synthetic_arrival_data["invitation_a"].session
+    eligible.arrived_at = now - timedelta(minutes=3)
+
+    for index in range(100):
+        start = now + timedelta(hours=12, minutes=index)
+        booking = Booking(
+            tenant_id=synthetic_arrival_data["tenant_a"].id,
+            client_id=synthetic_arrival_data["client_a"].id,
+            provider_id=synthetic_arrival_data["provider_a"].id,
+            service_id=synthetic_arrival_data["booking_a"].service_id,
+            start_time=start,
+            end_time=start + timedelta(minutes=30),
+            status=BookingStatus.CONFIRMED,
+            idempotency_key=f"synthetic-arrival-invalid-scope-{index}",
+        )
+        db_session.add(booking)
+        db_session.flush()
+        db_session.add(
+            SmsArrivalSession(
+                booking_id=booking.id,
+                conversation_id=synthetic_arrival_data["conversation_b"].id,
+                token=hash_arrival_token(
+                    f"synthetic-arrival-invalid-scope-token-{index:04d}"
+                ),
+                arrived_at=now - timedelta(minutes=2),
+                created_at=now,
+            )
+        )
+    db_session.commit()
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 1
+    assert (
+        db_session.query(OutboxEvent)
+        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{eligible.id}:3")
+        .count()
+        == 1
+    )
+
+
+def test_post_lock_scope_failure_is_terminally_quarantined_and_advances(
+    db_session,
+    synthetic_arrival_data,
+    enabled_arrival_alerts,
+    monkeypatch,
+):
+    from app.services.sms import arrival_service
+
+    now = synthetic_arrival_data["now"]
+    first = synthetic_arrival_data["invitation_a"].session
+    second = synthetic_arrival_data["invitation_b"].session
+    first.arrived_at = now - timedelta(minutes=2)
+    second.arrived_at = now - timedelta(minutes=2, seconds=1)
+    db_session.commit()
+    monkeypatch.setattr(arrival_service, "ARRIVAL_ALERT_BATCH_LIMIT", 1)
+    original_to_scoped = arrival_service._to_scoped
+
+    def reject_first(row):
+        if row[0].id == first.id:
+            raise ArrivalNotFoundError("synthetic scope change")
+        return original_to_scoped(row)
+
+    monkeypatch.setattr(arrival_service, "_to_scoped", reject_first)
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 0
+    marker = (
+        db_session.query(OutboxEvent)
+        .filter(
+            OutboxEvent.idempotency_key
+            == f"arrival-alert:{first.id}:scope-invalid"
+        )
+        .one()
+    )
+    assert marker.tenant_id == synthetic_arrival_data["tenant_a"].id
+    assert marker.status == "QUARANTINED"
+    assert marker.processed is True
+    assert marker.error_code == "ARRIVAL_SCOPE_INVALID"
+    assert marker.next_attempt_at is None
+    assert marker.data() == {"arrival_session_id": first.id}
+
+    assert process_repeated_arrival_alerts(db_session, now=now) == 1
+    assert (
+        db_session.query(OutboxEvent)
+        .filter(OutboxEvent.idempotency_key == f"arrival-alert:{second.id}:2")
+        .count()
+        == 1
+    )
+
+
+def test_acknowledged_capability_is_revoked_without_duplicate_events(
+    client, db_session, synthetic_arrival_data
+):
+    invitation = synthetic_arrival_data["invitation_a"]
+    headers = _staff_headers(
+        synthetic_arrival_data["tenant_a"], synthetic_arrival_data["admin_a"]
+    )
+    assert client.post(
+        "/api/admin/sms/arrivals/public/arrive",
+        json={"token": invitation.token},
+    ).status_code == 200
+    assert client.post(
+        f"/api/admin/sms/arrivals/{invitation.session.id}/acknowledge",
+        headers=headers,
+    ).status_code == 200
+    event_count = db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id
+        == synthetic_arrival_data["conversation_a"].id
+    ).count()
+
+    replay = client.post(
+        "/api/admin/sms/arrivals/public/arrive",
+        json={"token": invitation.token},
+    )
+    assert replay.status_code == 404
+    assert replay.json()["error"]["message"] == "Arrival session is invalid or expired."
+    assert invitation.token not in replay.text
+    assert db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id
+        == synthetic_arrival_data["conversation_a"].id
+    ).count() == event_count
+
+
+def test_acknowledge_service_rejects_untrusted_actor_ids(
+    db_session, synthetic_arrival_data
+):
+    invitation = synthetic_arrival_data["invitation_a"]
+    mark_customer_arrived(
+        db_session, invitation.token, now=synthetic_arrival_data["now"]
+    )
+    staff = User(
+        tenant_id=synthetic_arrival_data["tenant_a"].id,
+        login="synthetic-arrival-staff",
+        password_hash="synthetic-not-a-credential",
+        role="staff",
+    )
+    db_session.add(staff)
+    db_session.flush()
+
+    for actor_id in (
+        staff.id,
+        synthetic_arrival_data["admin_b"].id,
+        9_223_372_036_854_775_000,
+    ):
+        with pytest.raises(ArrivalNotFoundError, match="unavailable"):
+            acknowledge_arrival(
+                db_session,
+                tenant_id=synthetic_arrival_data["tenant_a"].id,
+                arrival_id=invitation.session.id,
+                actor_user_id=actor_id,
+                now=synthetic_arrival_data["now"],
+            )
+
+    db_session.refresh(invitation.session)
+    assert invitation.session.acknowledged_at is None
+    assert db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id
+        == synthetic_arrival_data["conversation_a"].id,
+        SmsConversationEvent.type == "arrival_acknowledged",
+    ).count() == 0

@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     OUTBOX_RETRY_BASE_SECONDS: float = Field(5.0, ge=0.1, description="Initial outbox retry delay")
     OUTBOX_RETRY_MAX_SECONDS: float = Field(300.0, ge=1.0, description="Maximum outbox retry delay")
     OUTBOX_RETRY_JITTER_RATIO: float = Field(0.2, ge=0.0, le=1.0, description="Bounded outbox retry jitter")
+    ARRIVAL_ALERT_PRODUCTION_ENABLED: bool = Field(
+        False,
+        description=(
+            "Enable durable arrival.alert production only when a dedicated "
+            "leased consumer with a final eligibility gate is deployed"
+        ),
+    )
 
     # OpenTelemetry / observability
     OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
