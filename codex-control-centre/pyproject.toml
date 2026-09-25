@@ -1,0 +1,21 @@
+[project]
+name = "codex-control-centre"
+version = "0.1.0"
+description = "Codex Control Centre"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disable_error_code = ["assignment", "arg-type", "union-attr", "attr-defined", "type-arg", "var-annotated"]

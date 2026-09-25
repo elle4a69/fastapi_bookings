@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #F7F7F5;
+    --surface-primary: #FFFFFF;
+    --surface-secondary: #F1F3F5;
+    --surface-elevated: #FFFFFF;
+    --surface-hover: #E9ECEF;
+    --text-primary: #1F2328;
+    --text-secondary: #667085;
+    --text-subtle: #8A94A6;
+    --border: #E1E5EA;
+    --border-strong: #C9D0D9;
+    --accent: #2F6FEB;
+    --accent-hover: #1F5AD6;
+    --accent-subtle: #EBF2FF;
+    --accent-foreground: #FFFFFF;
+    --success: #238636;
+    --success-subtle: #E6FFEC;
+    --warning: #A15C00;
+    --warning-subtle: #FFF8C5;
+    --danger: #C93C37;
+    --danger-subtle: #FFEBE9;
+    --diff-add-bg: #E6FFEC;
+    --diff-add-text: #1A7F37;
+    --diff-add-border: #ACF2BD;
+    --diff-del-bg: #FFEBE9;
+    --diff-del-text: #CF222E;
+    --diff-del-border: #FFC1BA;
+    --code-bg: #F4F6F8;
+    --code-border: #E1E5EA;
+  }
+
+  .dark {
+    --bg-app: #0F1115;
+    --surface-primary: #161A20;
+    --surface-secondary: #1D222B;
+    --surface-elevated: #202630;
+    --surface-hover: #262D38;
+    --text-primary: #F2F4F7;
+    --text-secondary: #AAB2C0;
+    --text-subtle: #7E8796;
+    --border: #2B323D;
+    --border-strong: #3B4553;
+    --accent: #7AA2F7;
+    --accent-hover: #89B4FA;
+    --accent-subtle: rgba(122, 162, 247, 0.15);
+    --accent-foreground: #0F1115;
+    --success: #4FBF78;
+    --success-subtle: rgba(79, 191, 120, 0.15);
+    --warning: #E6A34A;
+    --warning-subtle: rgba(230, 163, 74, 0.15);
+    --danger: #F06A66;
+    --danger-subtle: rgba(240, 106, 102, 0.15);
+    --diff-add-bg: rgba(46, 160, 67, 0.15);
+    --diff-add-text: #4FBF78;
+    --diff-add-border: rgba(79, 191, 120, 0.35);
+    --diff-del-bg: rgba(248, 81, 73, 0.15);
+    --diff-del-text: #F06A66;
+    --diff-del-border: rgba(240, 106, 102, 0.35);
+    --code-bg: #12151B;
+    --code-border: #252B35;
+  }
+
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+
+  html, body, #app {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+}
+
+/* Custom workbench scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* WCAG 2.2 AA Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
