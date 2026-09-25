@@ -15,6 +15,7 @@ class BookingStatus(str, Enum):
 
     PENDING = "pending"
     CONFIRMED = "confirmed"
+    IN_PROGRESS = "in_progress"
     CANCELLED = "cancelled"
     COMPLETED = "completed"
     NO_SHOW = "no_show"
@@ -24,8 +25,9 @@ class BookingStatus(str, Enum):
 # Define allowed state transitions. Keys are current statuses and values
 # are lists of statuses that are permitted to follow.
 ALLOWED_TRANSITIONS: Dict[BookingStatus, List[BookingStatus]] = {
-    BookingStatus.PENDING: [BookingStatus.CONFIRMED, BookingStatus.CANCELLED, BookingStatus.RESCHEDULED],
-    BookingStatus.CONFIRMED: [BookingStatus.CANCELLED, BookingStatus.COMPLETED, BookingStatus.NO_SHOW, BookingStatus.RESCHEDULED],
+    BookingStatus.PENDING: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.CANCELLED, BookingStatus.RESCHEDULED],
+    BookingStatus.CONFIRMED: [BookingStatus.IN_PROGRESS, BookingStatus.CANCELLED, BookingStatus.COMPLETED, BookingStatus.NO_SHOW, BookingStatus.RESCHEDULED],
+    BookingStatus.IN_PROGRESS: [BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.NO_SHOW],
     BookingStatus.CANCELLED: [],
     BookingStatus.COMPLETED: [],
     BookingStatus.NO_SHOW: [],

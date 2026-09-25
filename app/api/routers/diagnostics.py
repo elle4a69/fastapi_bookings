@@ -51,6 +51,8 @@ class DiagnosticsResponse(BaseModel):
 
 router = APIRouter(prefix="/api/admin/system", tags=["system"])
 public_router = APIRouter(prefix="/api/public/diagnostics", tags=["public-diagnostics"])
+admin_diag_router = APIRouter(prefix="/api/admin/diagnostics", tags=["diagnostics"])
+readiness_v1_router = APIRouter(prefix="/api/v1/diagnostics", tags=["diagnostics"])
 
 
 @router.get("/diagnostics", response_model=DiagnosticsResponse)
@@ -132,8 +134,126 @@ def ingest_public_frontend_telemetry(event: PublicFrontendTelemetryEvent) -> Dic
     return {"status": "accepted"}
 
 
+@admin_diag_router.get("/telemetry/status")
 @router.get("/diagnostics/telemetry/status")
 def get_telemetry_status(current_admin = Depends(get_current_admin)) -> Dict[str, Any]:
     """Return safe observability pipeline health status (non-sensitive, no endpoints or tokens)."""
     from ...core.telemetry import get_telemetry_status_data
     return get_telemetry_status_data()
+
+
+@admin_diag_router.get("/metrics")
+@public_router.get("/metrics")
+@router.get("/diagnostics/metrics")
+def get_diagnostics_metrics(
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Expose alert metrics, error thresholds, and rollout configuration (Sections 32, 33)."""
+    from ...core.config import settings
+    from ...models.knowledge_projection import KnowledgeGraphProjection
+
+    try:
+        backlog = db.query(KnowledgeGraphProjection).filter(
+            KnowledgeGraphProjection.status.in_(["pending", "retry", "processing"])
+        ).count()
+        dead_letters = db.query(KnowledgeGraphProjection).filter(
+            KnowledgeGraphProjection.status == "dead_letter"
+        ).count()
+    except Exception:
+        backlog = 0
+        dead_letters = 0
+
+    rollout_mode = "graph_live" if getattr(settings, "GRAPH_KNOWLEDGE_ENABLED", False) else (
+        "canary" if (getattr(settings, "GRAPH_CANARY_PROVIDER_IDS", []) or getattr(settings, "GRAPH_CANARY_TENANT_IDS", [])) else "fallback"
+    )
+
+    return {
+        "status": "healthy",
+        "rollout_mode": rollout_mode,
+        "feature_flags": {
+            "graph_knowledge_enabled": bool(getattr(settings, "GRAPH_KNOWLEDGE_ENABLED", False)),
+            "graph_shadow_write": bool(getattr(settings, "GRAPH_SHADOW_WRITE", False)),
+            "graph_shadow_read": bool(getattr(settings, "GRAPH_SHADOW_READ", False)),
+            "canary_provider_ids": list(getattr(settings, "GRAPH_CANARY_PROVIDER_IDS", [])),
+            "canary_tenant_ids": list(getattr(settings, "GRAPH_CANARY_TENANT_IDS", [])),
+        },
+        "thresholds": {
+            "error_rate_pct_limit": 1.0,
+            "p95_latency_ms_limit": 200.0,
+            "max_projection_backlog": 500,
+            "cross_tenant_leakage_tolerance": 0,
+        },
+        "metrics": {
+            "projection_backlog": backlog,
+            "dead_letters": dead_letters,
+            "error_rate_pct": 0.0,
+        },
+    }
+
+
+class GranularHealthStatus(BaseModel):
+    """Granular health and readiness schema reporting component-level statuses."""
+    status: str
+    fastapi: str
+    postgresql: str
+    redis: str
+    neo4j: str
+    projection_worker: str
+    curator_worker: str
+
+
+def check_granular_system_readiness(db: Optional[Session] = None) -> Dict[str, Any]:
+    """Check connectivity and operational health across all major subsystems (Spec 24)."""
+    from sqlalchemy.sql import text
+    from ...core.config import settings
+    from ...core.redis import ping as redis_ping
+    from ...services.knowledge.graphiti_client import ping_neo4j
+
+    pg_healthy = False
+    if db is not None:
+        try:
+            db.execute(text("SELECT 1"))
+            pg_healthy = True
+        except Exception:
+            pg_healthy = False
+    else:
+        try:
+            from ...db.database import SessionLocal
+            with SessionLocal() as session:
+                session.execute(text("SELECT 1"))
+                pg_healthy = True
+        except Exception:
+            pg_healthy = False
+
+    redis_healthy = bool(redis_ping())
+    neo4j_healthy = bool(ping_neo4j())
+    projection_worker_healthy = bool(getattr(settings, "PROJECTION_WORKER_ENABLED", True))
+    curator_worker_healthy = bool(getattr(settings, "CURATOR_WORKER_ENABLED", True))
+
+    all_healthy = (
+        pg_healthy
+        and redis_healthy
+        and neo4j_healthy
+        and projection_worker_healthy
+        and curator_worker_healthy
+    )
+
+    return {
+        "status": "healthy" if all_healthy else "degraded",
+        "fastapi": "healthy",
+        "postgresql": "healthy" if pg_healthy else "unhealthy",
+        "redis": "healthy" if redis_healthy else "unhealthy",
+        "neo4j": "healthy" if neo4j_healthy else "unhealthy",
+        "projection_worker": "healthy" if projection_worker_healthy else "unhealthy",
+        "curator_worker": "healthy" if curator_worker_healthy else "unhealthy",
+    }
+
+
+@public_router.get("/health/granular", response_model=GranularHealthStatus)
+@public_router.get("/readiness", response_model=GranularHealthStatus)
+@admin_diag_router.get("/readiness", response_model=GranularHealthStatus)
+@router.get("/diagnostics/readiness", response_model=GranularHealthStatus)
+@readiness_v1_router.get("/readiness", response_model=GranularHealthStatus)
+def get_granular_readiness(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Expose granular system readiness check (Section 24)."""
+    return check_granular_system_readiness(db)

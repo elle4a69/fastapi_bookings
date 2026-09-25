@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ...core.config import settings
 
-from ..deps import get_current_admin, get_db, get_current_tenant, get_public_tenant, DatabaseId
+from ..deps import get_current_admin, get_current_owner, get_db, get_current_tenant, get_public_tenant, DatabaseId
 from ...models import (
     AddOn,
     Booking,
@@ -502,7 +502,7 @@ def create_payment_processor_config(
     payload: PaymentProcessorConfigCreate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin)
+    current_user=Depends(get_current_owner)
 ) -> PaymentProcessorConfig:
     config_dict = payload.model_dump()
     config_dict["tenant_id"] = tenant.id
@@ -519,7 +519,7 @@ def update_payment_processor_config(
     payload: PaymentProcessorConfigUpdate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin)
+    current_user=Depends(get_current_owner)
 ) -> PaymentProcessorConfig:
     config = db.query(PaymentProcessorConfig).filter(
         PaymentProcessorConfig.id == config_id,

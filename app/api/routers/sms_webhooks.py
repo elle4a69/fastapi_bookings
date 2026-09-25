@@ -14,6 +14,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sms/webhooks", tags=["sms-webhooks"])
 
+@router.post("/incoming")
+async def inbound_webhook_generic(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Generic or simulated incoming SMS webhook intake."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    transport_type = data.get("transport_type", "simulator")
+    account_public_id = data.get("account_public_id")
+    
+    if not account_public_id:
+        account = db.query(SmsAccount).filter(SmsAccount.is_enabled == True).first()
+        if not account:
+            raise HTTPException(status_code=400, detail="No active SMS account found.")
+        account_public_id = account.public_id
+        transport_type = account.transport_type
+
+    return await process_inbound_webhook(
+        db=db,
+        transport_type=transport_type,
+        account_public_id=account_public_id,
+        request=request
+    )
+
 @router.post("/{transport_type}/{account_public_id}")
 async def inbound_webhook(
     transport_type: str,

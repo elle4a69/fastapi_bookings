@@ -17,11 +17,22 @@ def _create_engine(url: str):
     SQLite requires special handling to allow multi‑threaded access from
     FastAPI's async request handlers. When the database URL begins with
     ``sqlite``, the ``check_same_thread`` flag must be disabled.
+    When connecting to PostgreSQL, connection pool parameters and pool_pre_ping
+    are configured.
     """
     connect_args = {}
     if url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
-    return create_engine(url, connect_args=connect_args)
+        return create_engine(url, connect_args=connect_args)
+    return create_engine(
+        url,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        pool_recycle=settings.DB_POOL_RECYCLE,
+        pool_pre_ping=True,
+        connect_args=connect_args,
+    )
 
 
 # SQLAlchemy engine bound to the configured database URL

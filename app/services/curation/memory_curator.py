@@ -25,6 +25,9 @@ from ...models.provider import Provider
 from ...models.user import User
 from .knowledge_policy import APPROVED_AUTHORITIES, classify_knowledge_safety
 from .pii_scrubber import scrub_pii
+from ...core.config import settings
+from ...models.knowledge_projection import KnowledgeGraphProjection
+from app.services.knowledge.gateway import knowledge_gateway
 
 
 class CuratorPolicy(BaseModel):
@@ -575,6 +578,27 @@ async def ingest_trusted_knowledge(
     )
     db.add(memory)
     await db.flush()
+
+    if settings.GRAPH_SHADOW_WRITE or settings.GRAPH_KNOWLEDGE_ENABLED:
+        graph_group_id = (
+            f"tenant:{tenant_id}:provider:{provider_id}"
+            if provider_id is not None
+            else f"tenant:{tenant_id}:shared"
+        )
+        proj = KnowledgeGraphProjection(
+            tenant_id=tenant_id,
+            provider_id=provider_id,
+            curated_memory_id=memory.id,
+            projection_type="upsert_fact",
+            graph_group_id=graph_group_id,
+            status="pending",
+            projection_version="2.0",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(proj)
+    knowledge_gateway.invalidate(tenant_id, provider_id)
+
     await _audit(
         db,
         tenant_id=tenant_id,
@@ -669,6 +693,27 @@ async def review_proposal(
             )
             db.add(created_memory)
             await db.flush()
+
+            if settings.GRAPH_SHADOW_WRITE or settings.GRAPH_KNOWLEDGE_ENABLED:
+                graph_group_id = (
+                    f"tenant:{tenant_id}:provider:{proposal.provider_id}"
+                    if proposal.provider_id is not None
+                    else f"tenant:{tenant_id}:shared"
+                )
+                proj = KnowledgeGraphProjection(
+                    tenant_id=tenant_id,
+                    provider_id=proposal.provider_id,
+                    curated_memory_id=created_memory.id,
+                    projection_type="supersede_fact" if proposal.target_memory_id is not None else "upsert_fact",
+                    graph_group_id=graph_group_id,
+                    status="pending",
+                    projection_version="2.0",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(proj)
+            knowledge_gateway.invalidate(tenant_id, proposal.provider_id)
+
             proposal.status = "accepted"
     else:
         proposal.status = {

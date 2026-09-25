@@ -1,5 +1,6 @@
 import json
 import logging
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
@@ -31,7 +32,7 @@ async def process_inbound_webhook(
     ).first()
     
     if not account:
-        logger.warning(f"Inbound webhook rejected: SMS Account not found or disabled for public_id={account_public_id}, transport={transport_type}")
+        logger.warning("Inbound webhook rejected for an unknown or disabled SMS account.")
         raise HTTPException(status_code=404, detail="SMS account not found or disabled.")
 
     adapter = get_transport_adapter(transport_type)
@@ -47,13 +48,16 @@ async def process_inbound_webhook(
         raise HTTPException(status_code=422, detail="Customer phone number format is invalid.")
 
     # 4. Idempotency Check using Inbound Receipts
+    receipt_key = hashlib.sha256(
+        f"{account.id}:{norm_msg.event_key}".encode("utf-8")
+    ).hexdigest()
     existing_receipt = db.query(SmsInboundReceipt).filter(
         SmsInboundReceipt.sms_account_id == account.id,
-        SmsInboundReceipt.event_key == norm_msg.event_key
+        SmsInboundReceipt.event_key == receipt_key,
     ).first()
     
     if existing_receipt:
-        logger.info(f"Duplicate inbound event detected and deduplicated: {norm_msg.event_key}")
+        logger.info("Duplicate inbound event was deduplicated.")
         # Resolve conversation to return correct status
         conversation = db.query(SmsConversation).filter(
             SmsConversation.sms_account_id == account.id,
@@ -76,12 +80,37 @@ async def process_inbound_webhook(
     if not conversation:
         is_new_conversation = True
         # Try to find matching Client in the tenant
-        matching_client = None
-        clients = db.query(Client).filter(Client.tenant_id == account.tenant_id).all()
-        for client in clients:
-            if client.phone and adapter.normalise_address(client.phone) == customer_address:
-                matching_client = client
-                break
+        candidate_phones = [customer_address]
+        if not customer_address.startswith("+"):
+            candidate_phones.append(f"+{customer_address}")
+        if customer_address.startswith("61") and len(customer_address) == 11:
+            candidate_phones.append(f"0{customer_address[2:]}")
+        elif customer_address.startswith("+61") and len(customer_address) == 12:
+            candidate_phones.append(f"0{customer_address[3:]}")
+
+        matching_client = (
+            db.query(Client)
+            .filter(
+                Client.tenant_id == account.tenant_id,
+                Client.phone.in_(candidate_phones),
+            )
+            .first()
+        )
+        if not matching_client and len(customer_address) >= 8:
+            suffix = customer_address[-8:]
+            candidates = (
+                db.query(Client)
+                .filter(
+                    Client.tenant_id == account.tenant_id,
+                    Client.phone.like(f"%{suffix}"),
+                )
+                .limit(10)
+                .all()
+            )
+            for c in candidates:
+                if c.phone and adapter.normalise_address(c.phone) == customer_address:
+                    matching_client = c
+                    break
                 
         conversation = SmsConversation(
             tenant_id=account.tenant_id,
@@ -89,7 +118,11 @@ async def process_inbound_webhook(
             sms_account_id=account.id,
             customer_address=customer_address,
             client_id=matching_client.id if matching_client else None,
-            state="auto-reply",  # starts in auto-reply mode
+            state=(
+                "auto-reply"
+                if account.ai_enabled and account.ai_mode in {"draft", "autopilot"}
+                else "paused"
+            ),
             unread_count=0
         )
         db.add(conversation)
@@ -98,8 +131,8 @@ async def process_inbound_webhook(
     # 6. Save receipt, message, and update conversation
     receipt = SmsInboundReceipt(
         sms_account_id=account.id,
-        event_key=norm_msg.event_key,
-        raw_payload=norm_msg.raw_payload
+        event_key=receipt_key,
+        raw_payload=None,
     )
     db.add(receipt)
 
@@ -110,8 +143,14 @@ async def process_inbound_webhook(
         SmsMessage.conversation_id == conversation.id
     ).order_by(SmsMessage.occurred_at.desc()).first()
     
-    if last_msg and last_msg.direction == "inbound":
-        time_diff = norm_msg.received_at - last_msg.received_at
+    if last_msg and last_msg.direction == "inbound" and last_msg.received_at:
+        t1 = norm_msg.received_at
+        t2 = last_msg.received_at
+        if t1.tzinfo is not None and t2.tzinfo is None:
+            t2 = t2.replace(tzinfo=timezone.utc)
+        elif t1.tzinfo is None and t2.tzinfo is not None:
+            t1 = t1.replace(tzinfo=timezone.utc)
+        time_diff = t1 - t2
         if time_diff.total_seconds() <= 10.0:
             turn_ref = last_msg.customer_turn_ref or turn_ref
 
@@ -139,7 +178,12 @@ async def process_inbound_webhook(
 
     # 7. Check for First-Contact Fixed Autoresponder
     autoresponder_sent = False
-    if account.autoresponder_enabled and account.autoresponder_text:
+    if (
+        account.autoresponder_enabled
+        and account.autoresponder_text
+        and conversation.state == "auto-reply"
+        and not getattr(conversation, "is_blocked", False)
+    ):
         # Check if autoresponder has already been sent in this conversation
         prior_autoresponder = db.query(SmsMessage).filter(
             SmsMessage.conversation_id == conversation.id,
@@ -169,14 +213,21 @@ async def process_inbound_webhook(
             event = SmsConversationEvent(
                 conversation_id=conversation.id,
                 type="autoresponder_triggered",
-                meta={"message_body": reply_body}
+                meta={"message_id": inbound_message.id}
             )
             db.add(event)
             autoresponder_sent = True
 
-    # 8. Check for AI Reply enqueuing (if enabled, not taken over, and not autoresponder_only/autoresponder_sent)
+    # 8. Check for AI Reply enqueuing (if enabled, not taken over, not blocked, and not autoresponder_only/autoresponder_sent)
     ai_job_enqueued = False
-    if account.ai_enabled and conversation.state == "auto-reply" and not autoresponder_sent:
+    if (
+        account.ai_enabled
+        and account.ai_mode in {"draft", "autopilot"}
+        and conversation.state == "auto-reply"
+        and getattr(conversation, "ai_enabled", True)
+        and not getattr(conversation, "is_blocked", False)
+        and not autoresponder_sent
+    ):
         # Cancel any pending AI jobs for this conversation (burst debounce)
         db.query(SmsAiJob).filter(
             SmsAiJob.conversation_id == conversation.id,

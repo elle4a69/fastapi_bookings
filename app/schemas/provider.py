@@ -1,6 +1,7 @@
 """Pydantic models for providers."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,6 +20,11 @@ class ProviderBase(BaseModel):
     ignore_company_hours: bool = Field(False, description="Whether this provider ignores company-wide working hours")
     image: Optional[str] = Field(None, description="Provider profile image (base64 or URL)")
     weekly_schedule: Optional[dict] = Field(None, description="Provider's 7-day weekly schedule")
+    in_call_address: Optional[str] = Field(None, description="In-call physical address")
+    out_call_radius_km: float = Field(25.0, description="Out-call service radius in km")
+    base_outcall_surcharge: Decimal = Field(Decimal("0.00"), description="Base surcharge for out-call services")
+    per_km_fee: Decimal = Field(Decimal("0.00"), description="Per-km travel fee for out-call services")
+    turnaround_buffer_mins: int = Field(15, description="Turnaround buffer in minutes")
 
 
 class ProviderCreate(ProviderBase):
@@ -39,6 +45,11 @@ class ProviderUpdate(BaseModel):
     image: Optional[str] = None
     weekly_schedule: Optional[dict] = None
     service_ids: Optional[list[int]] = None
+    in_call_address: Optional[str] = None
+    out_call_radius_km: Optional[float] = None
+    base_outcall_surcharge: Optional[Decimal] = None
+    per_km_fee: Optional[Decimal] = None
+    turnaround_buffer_mins: Optional[int] = None
 
 
 class ProviderInDBBase(ProviderBase):

@@ -348,6 +348,13 @@ def test_status_endpoint_honest(client, db_session):
     assert r.status_code == 200
     data = r.json()
 
+    r2 = client.get(
+        "/api/admin/diagnostics/telemetry/status",
+        headers={"X-Tenant": "status-biz", "X-Token": token},
+    )
+    assert r2.status_code == 200
+    assert r2.json() == data
+
     assert "telemetry_enabled" in data
     assert "last_export_status" in data
     assert data["service_name"] == "fastapi-bookings"

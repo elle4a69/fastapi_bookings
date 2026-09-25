@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
-from ..deps import get_current_admin, get_current_company, get_db, get_current_tenant, get_public_tenant, DatabaseId
+from ..deps import get_current_admin, get_current_staff, get_current_company, get_db, get_current_tenant, get_public_tenant, DatabaseId
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
@@ -36,7 +36,7 @@ def list_bookings(
     date_from: Optional[datetime] = Query(None, description="Filter bookings starting after this date"),
     date_to: Optional[datetime] = Query(None, description="Filter bookings starting before this date"),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Return a paginated list of bookings with optional filters."""
     query = db.query(BookingModel).options(
@@ -49,8 +49,13 @@ def list_bookings(
         query = query.filter(BookingModel.status == status_filter)
     if client_id:
         query = query.filter(BookingModel.client_id == client_id)
-    if provider_id:
+
+    # Provider scoping: when role is provider, strictly scope to current_user.provider_id
+    if current_user.role == "provider":
+        query = query.filter(BookingModel.provider_id == current_user.provider_id)
+    elif provider_id:
         query = query.filter(BookingModel.provider_id == provider_id)
+
     if date_from:
         query = query.filter(BookingModel.start_time >= date_from)
     if date_to:
@@ -268,9 +273,12 @@ def create_booking(
 
 
 @router.get("/bookings/{booking_id}", response_model=BookingResponse, tags=["bookings"])
-def get_booking(booking_id: DatabaseId, db: Session = Depends(get_db), current_user = Depends(get_current_admin)) -> dict:
+def get_booking(booking_id: DatabaseId, db: Session = Depends(get_db), current_user = Depends(get_current_staff)) -> dict:
     """Retrieve a booking by its ID."""
-    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
+    query = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id)
+    if current_user.role == "provider":
+        query = query.filter(BookingModel.provider_id == current_user.provider_id)
+    booking = query.first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
     return {"ok": True, "data": booking}
@@ -281,12 +289,14 @@ def update_booking(
     booking_id: DatabaseId,
     booking_in: BookingUpdate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Update a booking's basic details (not state transitions)."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     update_data = booking_in.model_dump(exclude_unset=True)
     # Validate status transitions if provided
     if "status" in update_data:
@@ -307,12 +317,14 @@ def update_booking(
 def confirm_booking(
     booking_id: DatabaseId,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Confirm a pending booking."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     if not is_valid_transition(booking.status, BookingStatus.CONFIRMED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     booking.status = BookingStatus.CONFIRMED
@@ -331,16 +343,49 @@ def confirm_booking(
     return {"ok": True, "data": booking}
 
 
+@router.post("/bookings/{booking_id}/start", response_model=BookingResponse, tags=["bookings"])
+@router.post("/bookings/{booking_id}/in-progress", response_model=BookingResponse, tags=["bookings"])
+def start_booking(
+    booking_id: DatabaseId,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_staff),
+) -> dict:
+    """Mark a booking as in-progress."""
+    booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
+    if not is_valid_transition(booking.status, BookingStatus.IN_PROGRESS):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Cannot transition from {booking.status} to in_progress")
+    booking.status = BookingStatus.IN_PROGRESS
+    payload = {
+        "id": booking.id,
+        "client_id": booking.client_id,
+        "provider_id": booking.provider_id,
+        "service_id": booking.service_id,
+        "start_time": booking.start_time.isoformat() if booking.start_time else None,
+        "end_time": booking.end_time.isoformat() if booking.end_time else None,
+        "status": booking.status
+    }
+    create_outbox_event(db, "booking.in_progress", payload, tenant_id=booking.tenant_id)
+    db.commit()
+    db.refresh(booking)
+    return {"ok": True, "data": booking}
+
+
 @router.post("/bookings/{booking_id}/cancel", response_model=BookingResponse, tags=["bookings"])
 def cancel_booking(
     booking_id: DatabaseId,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Cancel a booking."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     if not is_valid_transition(booking.status, BookingStatus.CANCELLED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     # Update status and release slot allocations and resources
@@ -366,12 +411,14 @@ def cancel_booking(
 def complete_booking(
     booking_id: DatabaseId,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Mark a booking as completed."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     if not is_valid_transition(booking.status, BookingStatus.COMPLETED):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     booking.status = BookingStatus.COMPLETED
@@ -396,12 +443,14 @@ def complete_booking(
 def noshow_booking(
     booking_id: DatabaseId,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_staff),
 ) -> dict:
     """Mark a booking as no‑show."""
     booking = db.query(BookingModel).filter(BookingModel.id == booking_id, BookingModel.tenant_id == current_user.tenant_id).first()
     if not booking:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     if not is_valid_transition(booking.status, BookingStatus.NO_SHOW):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     booking.status = BookingStatus.NO_SHOW

@@ -30,6 +30,8 @@ class Service(Base):
     fixed_start_times = Column(String, nullable=True)
 
     is_visible = Column(Boolean, default=True, nullable=False)
+    allow_in_call = Column(Boolean, default=True, nullable=False)
+    allow_out_call = Column(Boolean, default=True, nullable=False)
     deposit_amount = Column(Numeric(10, 2), default=0.0, nullable=False)
     max_advance_days = Column(Integer, nullable=True)
     tax_rate_id = Column(Integer, ForeignKey("tax_rates.id", ondelete="SET NULL"), nullable=True)

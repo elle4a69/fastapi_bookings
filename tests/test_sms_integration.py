@@ -121,7 +121,18 @@ def test_ai_orchestration_draft_mode(db_session, setup_integration_data):
     db_session.commit()
 
     # 2. Run AI Orchestrator
-    asyncio.run(process_pending_sms_ai_jobs(db_session))
+    from unittest.mock import patch, AsyncMock, MagicMock
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"choices": [{"message": {"content": "Mocked draft response"}}]}
+    mock_resp.raise_for_status = MagicMock()
+    
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client_class.return_value = mock_client
+        mock_client.post.return_value = mock_resp
+        asyncio.run(process_pending_sms_ai_jobs(db_session))
 
     # 3. Verify AI reply is created as a DRAFT message (not enqueued for sending)
     ai_msg = db_session.query(SmsMessage).filter(
@@ -165,9 +176,20 @@ def test_ai_orchestration_autopilot_flow(client, db_session, setup_integration_d
     })
     db_session.commit()
     
-    asyncio.run(process_pending_sms_ai_jobs(db_session))
+    from unittest.mock import patch, AsyncMock, MagicMock
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"choices": [{"message": {"content": "Mocked autopilot response"}}]}
+    mock_resp.raise_for_status = MagicMock()
+    
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client_class.return_value = mock_client
+        mock_client.post.return_value = mock_resp
+        asyncio.run(process_pending_sms_ai_jobs(db_session))
 
-    # 3. Verify AI reply is enqueued as outbound message
+    # 3. Dynamic requests fail closed into review even in autopilot mode.
     ai_msg = db_session.query(SmsMessage).filter(
         SmsMessage.conversation_id == conv.id,
         SmsMessage.author_type == "ai",
@@ -175,10 +197,11 @@ def test_ai_orchestration_autopilot_flow(client, db_session, setup_integration_d
     ).first()
     
     assert ai_msg is not None
-    assert ai_msg.direction == "outbound"
-    assert ai_msg.status == "queued"
+    assert ai_msg.direction == "draft"
+    assert ai_msg.status == "draft"
+    db_session.refresh(conv)
+    assert conv.state == "needs-review"
 
-    # Verify SmsOutboundJob exists
+    # Review-first safety: no provider delivery job exists before approval.
     job = db_session.query(SmsOutboundJob).filter(SmsOutboundJob.message_id == ai_msg.id).first()
-    assert job is not None
-    assert job.status == "PENDING"
+    assert job is None

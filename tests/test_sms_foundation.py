@@ -126,6 +126,28 @@ def test_provider_and_account_isolation(client, setup_sms_test_data, db_session)
     assert messages_b[0]["body"] == "Hello Line B"
 
 
+def test_operations_route_auth_method_and_not_found_contracts(
+    client, setup_sms_test_data
+):
+    unauthenticated = client.get(
+        "/api/admin/sms/conversations",
+        headers={"X-Tenant": setup_sms_test_data["tenant"].subdomain},
+    )
+    assert unauthenticated.status_code == status.HTTP_401_UNAUTHORIZED
+
+    wrong_method = client.post(
+        "/api/admin/sms/conversations",
+        headers=setup_sms_test_data["headers"],
+    )
+    assert wrong_method.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+    missing = client.get(
+        "/api/admin/sms/conversations/9223372036854775807",
+        headers=setup_sms_test_data["headers"],
+    )
+    assert missing.status_code == status.HTTP_404_NOT_FOUND
+
+
 def test_inbound_webhook_idempotency(client, setup_sms_test_data, db_session):
     acc_a = setup_sms_test_data["account_a"]
     payload = {
@@ -153,7 +175,36 @@ def test_inbound_webhook_idempotency(client, setup_sms_test_data, db_session):
 
     receipts = db_session.query(SmsInboundReceipt).all()
     assert len(receipts) == 1
-    assert receipts[0].event_key == "evt-idemp-1"
+    assert receipts[0].event_key != "evt-idemp-1"
+    assert len(receipts[0].event_key) == 64
+
+
+def test_inbound_idempotency_is_scoped_to_sms_account(client, setup_sms_test_data, db_session):
+    account_a = setup_sms_test_data["account_a"]
+    account_b = setup_sms_test_data["account_b"]
+    common = {
+        "message_id": "synthetic-shared-provider-id",
+        "sender": "0412 345 678",
+        "message": "Synthetic account isolation check",
+        "received_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    response_a = client.post(
+        f"/api/sms/webhooks/simulator/{account_a.public_id}",
+        json={**common, "to": account_a.sender_address},
+    )
+    response_b = client.post(
+        f"/api/sms/webhooks/simulator/{account_b.public_id}",
+        json={**common, "to": account_b.sender_address},
+    )
+
+    assert response_a.status_code == status.HTTP_200_OK
+    assert response_b.status_code == status.HTTP_200_OK
+    assert response_a.json()["duplicate"] is False
+    assert response_b.json()["duplicate"] is False
+    receipts = db_session.query(SmsInboundReceipt).all()
+    assert len(receipts) == 2
+    assert receipts[0].event_key != receipts[1].event_key
 
 
 def test_chronological_rendering_order(client, setup_sms_test_data, db_session):
@@ -472,4 +523,246 @@ def test_list_outbound_jobs_route_precedence(client, db_session, setup_sms_test_
     assert resp.status_code == status.HTTP_200_OK, resp.text
     data = resp.json()
     assert isinstance(data, list)
-    assert any(j["id"] == job.id for j in data)
+    listed_job = next(j for j in data if j["id"] == job.id)
+    assert "error_log" not in listed_job
+    assert listed_job["has_error"] is False
+
+    pending_retry = client.post(
+        f"/api/admin/sms/conversations/jobs/{job.id}/retry", headers=headers
+    )
+    assert pending_retry.status_code == status.HTTP_409_CONFLICT
+
+    job.status = "FAILED"
+    job.error_log = "Synthetic structural failure marker"
+    conv.is_blocked = True
+    db_session.commit()
+    blocked_retry = client.post(
+        f"/api/admin/sms/conversations/jobs/{job.id}/retry", headers=headers
+    )
+    assert blocked_retry.status_code == status.HTTP_409_CONFLICT
+
+    conv.is_blocked = False
+    db_session.commit()
+    accepted_retry = client.post(
+        f"/api/admin/sms/conversations/jobs/{job.id}/retry", headers=headers
+    )
+    assert accepted_retry.status_code == status.HTTP_200_OK
+    db_session.refresh(job)
+    assert job.status == "PENDING"
+    assert job.error_log is None
+
+
+def test_staff_lifecycle_timeline_and_correction_are_audited(
+    client, db_session, setup_sms_test_data
+):
+    from app.models.sms_knowledge import SmsKnowledgeEntry
+    from app.models.sms_outbox import SmsConversationEvent, SmsNote
+
+    headers = setup_sms_test_data["headers"]
+    account = setup_sms_test_data["account_a"]
+    conversation = SmsConversation(
+        tenant_id=account.tenant_id,
+        provider_id=account.provider_id,
+        sms_account_id=account.id,
+        customer_address="61499999991",
+        state="auto-reply",
+        ai_enabled=True,
+    )
+    db_session.add(conversation)
+    db_session.flush()
+    ai_message = SmsMessage(
+        tenant_id=account.tenant_id,
+        provider_id=account.provider_id,
+        sms_account_id=account.id,
+        conversation_id=conversation.id,
+        body="Synthetic AI response",
+        direction="outbound",
+        author_type="ai",
+        status="sent",
+    )
+    db_session.add(ai_message)
+    db_session.commit()
+
+    missing_reason = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/escalate",
+        json={},
+        headers=headers,
+    )
+    assert missing_reason.status_code == status.HTTP_409_CONFLICT
+
+    escalated = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/escalate",
+        json={"reason": "Synthetic escalation reason"},
+        headers=headers,
+    )
+    assert escalated.status_code == status.HTTP_200_OK
+    assert escalated.json()["state"] == "escalated"
+    assert escalated.json()["ai_enabled"] is False
+
+    invalid_enable = client.patch(
+        f"/api/admin/sms/conversations/{conversation.id}/controls",
+        json={"ai_enabled": True},
+        headers=headers,
+    )
+    assert invalid_enable.status_code == status.HTTP_409_CONFLICT
+    invalid_release = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/release",
+        json={},
+        headers=headers,
+    )
+    assert invalid_release.status_code == status.HTTP_409_CONFLICT
+
+    note = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/notes",
+        json={"text": "Synthetic internal note"},
+        headers=headers,
+    )
+    assert note.status_code == status.HTTP_201_CREATED
+    assert db_session.query(SmsNote).filter(SmsNote.conversation_id == conversation.id).count() == 1
+
+    knowledge_before = db_session.query(SmsKnowledgeEntry).count()
+    correction = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/corrections",
+        json={
+            "message_id": ai_message.id,
+            "reason": "Synthetic answer was incomplete",
+            "corrected_wording": "Synthetic corrected wording",
+            "contains_dynamic_facts": True,
+        },
+        headers=headers,
+    )
+    assert correction.status_code == status.HTTP_201_CREATED
+    assert correction.json()["knowledge_changed"] is False
+    assert db_session.query(SmsKnowledgeEntry).count() == knowledge_before
+
+    timeline = client.get(
+        f"/api/admin/sms/conversations/{conversation.id}/timeline",
+        headers=headers,
+    )
+    assert timeline.status_code == status.HTTP_200_OK
+    kinds = {item["kind"] for item in timeline.json()}
+    assert {"message", "internal_note", "event"}.issubset(kinds)
+    correction_event = db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id == conversation.id,
+        SmsConversationEvent.type == "ai_correction_recorded",
+    ).one()
+    assert correction_event.meta["contains_dynamic_facts"] is True
+
+
+def test_manual_send_is_idempotent_and_blocked_contacts_fail_closed(
+    client, db_session, setup_sms_test_data
+):
+    headers = setup_sms_test_data["headers"]
+    account = setup_sms_test_data["account_a"]
+    conversation = SmsConversation(
+        tenant_id=account.tenant_id,
+        provider_id=account.provider_id,
+        sms_account_id=account.id,
+        customer_address="61499999992",
+        state="taken-over",
+    )
+    db_session.add(conversation)
+    db_session.commit()
+    payload = {
+        "body": "Synthetic idempotent reply",
+        "client_request_id": "synthetic-request-0001",
+    }
+
+    first = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json=payload,
+        headers=headers,
+    )
+    second = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json=payload,
+        headers=headers,
+    )
+    assert first.status_code == status.HTTP_200_OK
+    assert second.status_code == status.HTTP_200_OK
+    assert first.json()["id"] == second.json()["id"]
+    assert db_session.query(SmsOutboundJob).filter(
+        SmsOutboundJob.message_id == first.json()["id"]
+    ).count() == 1
+
+    blocked = client.patch(
+        f"/api/admin/sms/conversations/{conversation.id}/controls",
+        json={"is_blocked": True},
+        headers=headers,
+    )
+    assert blocked.status_code == status.HTTP_200_OK
+    rejected = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json={
+            "body": "Synthetic blocked reply",
+            "client_request_id": "synthetic-request-0002",
+        },
+        headers=headers,
+    )
+    assert rejected.status_code == status.HTTP_409_CONFLICT
+
+
+def test_unsafe_manual_content_and_direct_knowledge_ingestion_fail_closed(
+    client, db_session, setup_sms_test_data
+):
+    from app.models.curated_memory import CuratedMemory
+
+    headers = setup_sms_test_data["headers"]
+    account = setup_sms_test_data["account_a"]
+    conversation = SmsConversation(
+        tenant_id=account.tenant_id,
+        provider_id=account.provider_id,
+        sms_account_id=account.id,
+        customer_address="61499999993",
+        state="taken-over",
+    )
+    db_session.add(conversation)
+    db_session.commit()
+
+    blocked_send = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/messages",
+        json={
+            "body": "Synthetic system_prompt disclosure attempt",
+            "client_request_id": "synthetic-request-unsafe-0001",
+        },
+        headers=headers,
+    )
+    assert blocked_send.status_code == status.HTTP_409_CONFLICT
+    failed_message = db_session.query(SmsMessage).filter(
+        SmsMessage.conversation_id == conversation.id,
+        SmsMessage.client_request_id == "synthetic-request-unsafe-0001",
+    ).one()
+    assert failed_message.status == "failed"
+    assert db_session.query(SmsOutboundJob).filter(
+        SmsOutboundJob.message_id == failed_message.id
+    ).count() == 0
+
+    knowledge_before = db_session.query(CuratedMemory).count()
+    rejected_knowledge = client.post(
+        f"/api/admin/sms/conversations/{conversation.id}/answer-info-request",
+        json={
+            "question": "Synthetic customer question",
+            "answer": "Synthetic proposed durable answer",
+        },
+        headers=headers,
+    )
+    assert rejected_knowledge.status_code in (status.HTTP_200_OK, status.HTTP_409_CONFLICT)
+    assert db_session.query(CuratedMemory).count() == knowledge_before
+
+
+def test_production_operations_api_disables_destructive_scenario_seeding(
+    client, db_session, setup_sms_test_data
+):
+    headers = setup_sms_test_data["headers"]
+    conversations_before = db_session.query(SmsConversation).count()
+    messages_before = db_session.query(SmsMessage).count()
+
+    response = client.post(
+        "/api/admin/sms/conversations/seed-scenarios",
+        json={"clear_existing": True},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_409_CONFLICT
+    assert db_session.query(SmsConversation).count() == conversations_before
+    assert db_session.query(SmsMessage).count() == messages_before

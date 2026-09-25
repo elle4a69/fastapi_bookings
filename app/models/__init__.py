@@ -76,6 +76,30 @@ from .sms_outbox import SmsOutboundJob, SmsAiJob, SmsConversationEvent, SmsNote
 from .sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
 from .sms_arrival import SmsArrivalSession
 from .sms_chatwoot import SmsChatwootBinding
+from .sms_quick_tool import SmsQuickTool
+
+# Curated Memory model
+from .curated_memory import CuratedMemory, KnowledgeProposal
+
+# Knowledge Graph Projection model
+from .knowledge_projection import KnowledgeGraphProjection
+
+# Tenant Website model
+from .tenant_website import TenantWebsite, init_website_tables
+
+# Client Dispute model
+from .client_dispute import ClientDispute, init_dispute_tables
+
+# Learning Event model
+from .learning_event import LearningEvent
+
+# SMS Bootcamp models
+from .sms_bootcamp import (
+    SmsBootcampRun,
+    SmsBootcampConversation,
+    SmsBootcampMessage,
+    SmsBootcampSettings,
+)
 
 __all__ = [
     "User",
@@ -83,11 +107,20 @@ __all__ = [
     "Provider",
     "Client",
     "Location",
+    "LocationProvider",
+    "LocationService",
+    "LocationCategory",
+    "LocationProduct",
     "Booking",
     "BookingSlotAllocation",
     "AuditLog",
     "Payment",
     "Notification",
+    "NotificationTemplate",
+    "ReminderRule",
+    "NotificationLog",
+    "DeviceToken",
+    "NotificationPreference",
     # Advanced models
     "Tenant",
     "Resource",
@@ -97,26 +130,37 @@ __all__ = [
     "ServiceCategory",
     "ServiceProvider",
     "AddOn",
+    "ServiceAddOn",
     "Product",
     "ServiceProduct",
+    "ProviderCategory",
+    "BookingForm",
     "ServicePackage",
     "PackageStep",
     "OutboxEvent",
     "BookingEvent",
     "BookingEventType",
-    "WebhookDelivery",
     "WaitlistEntry",
     "WaitlistStatus",
-
-    "LocationProvider",
-    "LocationService",
-    "LocationCategory",
-    "LocationProduct",
-    "ServiceAddOn",
-    "ProviderCategory",
-    "BookingForm",
+    "BookingSeries",
+    "ProviderWorkDay",
+    "ProviderSpecialDay",
+    "BlockedTime",
+    "ReservedTime",
+    "AdditionalField",
+    "AdditionalFieldResponse",
+    "Invoice",
+    "InvoiceLine",
+    "PromotionCode",
+    "TaxRate",
+    "Tip",
+    "PaymentProcessorConfig",
+    "WebhookDelivery",
+    "WebhookRegistration",
+    "CalendarNote",
+    "PluginState",
+    "GdprConsent",
     "ManagementReviewRequest",
-    
     # SMS Module
     "SmsAccount",
     "SmsConversation",
@@ -131,4 +175,19 @@ __all__ = [
     "SmsPromptProfile",
     "SmsArrivalSession",
     "SmsChatwootBinding",
+    "SmsQuickTool",
+    "CuratedMemory",
+    "KnowledgeProposal",
+    "KnowledgeGraphProjection",
+    "TenantWebsite",
+    "init_website_tables",
+    "ClientDispute",
+    "init_dispute_tables",
+    "LearningEvent",
+    # SMS Bootcamp
+    "SmsBootcampRun",
+    "SmsBootcampConversation",
+    "SmsBootcampMessage",
+    "SmsBootcampSettings",
 ]
+

@@ -6,7 +6,7 @@ working hours, breaks and are linked to bookings.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Text, JSON
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -31,6 +31,13 @@ class Provider(Base):
     ignore_company_hours = Column(Boolean, default=False, nullable=False)
     image = Column(Text, nullable=True)
     weekly_schedule = Column(JSON, nullable=True)
+
+    # In-call and Out-call routing & scheduling attributes
+    in_call_address = Column(String, nullable=True)
+    out_call_radius_km = Column(Float, default=25.0, nullable=False)
+    base_outcall_surcharge = Column(Numeric(10, 2), default=0.00, nullable=False)
+    per_km_fee = Column(Numeric(10, 2), default=0.00, nullable=False)
+    turnaround_buffer_mins = Column(Integer, default=15, nullable=False)
 
     # Relationships
     tenant = relationship("Tenant")

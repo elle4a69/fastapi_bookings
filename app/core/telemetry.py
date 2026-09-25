@@ -154,7 +154,7 @@ def _sanitize_attribute_value(key: str, val: Any) -> Any:
     # Redact values that look like they contain secrets
     low = s.lower()
     if any(tok in low for tok in (
-        "token=", "key=", "auth=", "secret=", "password=", "bearer ",
+        "token=", "key=", "auth=", "secret=", "password=", "bearer ", "prompt", "completion", "sms_body", "sms-body"
     )):
         return "[REDACTED]"
     if "@" in s and "." in s:          # email-like
@@ -176,8 +176,8 @@ class PrivacySafeLogFilter(logging.Filter):
     """
     _SECRET_PATTERNS = [
         (re.compile(r"(?i)\b(bearer\s+)[a-zA-Z0-9\-\._~\+\/]+=*", re.IGNORECASE), r"\1[REDACTED]"),
-        (re.compile(r"(?i)(authorization|api[-_]?key|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token)\s*[:=]\s*['\"]?[^\s,;'\"&]+", re.IGNORECASE), r"\1=[REDACTED]"),
-        (re.compile(r"(?i)(password|secret|token|api[-_]?key|authorization|signature)['\"]?\s*:\s*['\"][^'\"]+['\"]", re.IGNORECASE), r'\1: "[REDACTED]"'),
+        (re.compile(r"(?i)(authorization|api[-_]?key|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token|prompt|completion|sms[-_]?body)\s*[:=]\s*['\"]?[^\s,;'\"&]+", re.IGNORECASE), r"\1=[REDACTED]"),
+        (re.compile(r"(?i)(password|secret|token|api[-_]?key|authorization|signature|prompt|completion|sms[-_]?body)['\"]?\s*:\s*['\"][^'\"]+['\"]", re.IGNORECASE), r'\1: "[REDACTED]"'),
         (re.compile(r"https?://[^:\s]+:[^@\s]+@", re.IGNORECASE), "https://[REDACTED]@"),
         (re.compile(r"(\b[A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b)"), r"[REDACTED_EMAIL]"),
     ]
@@ -209,7 +209,7 @@ class PrivacySafeLogFilter(logging.Filter):
                 if isinstance(record.args, dict):
                     clean_args = {}
                     for k, v in record.args.items():
-                        if any(s in str(k).lower() for s in ("password", "secret", "token", "auth", "cookie", "key", "signature")):
+                        if any(s in str(k).lower() for s in ("password", "secret", "token", "auth", "cookie", "key", "signature", "prompt", "completion", "sms_body")):
                             clean_args[k] = "[REDACTED]"
                         elif isinstance(v, str):
                             clean_args[k] = self.redact_text(v)
@@ -302,15 +302,21 @@ class PrivacySafeSpanExporter(SpanExporter):
 # ---------------------------------------------------------------------------
 class _LazyTracer:
     def __getattr__(self, name: str) -> Any:
-        return getattr(trace.get_tracer("fastapi-bookings.workers"), name)
+        import os
+        svc = os.getenv("OTEL_SERVICE_NAME", "fastapi-bookings")
+        return getattr(trace.get_tracer(f"{svc}.workers"), name)
 
     def start_as_current_span(self, *args: Any, **kwargs: Any) -> Any:
-        return trace.get_tracer("fastapi-bookings.workers").start_as_current_span(*args, **kwargs)
+        import os
+        svc = os.getenv("OTEL_SERVICE_NAME", "fastapi-bookings")
+        return trace.get_tracer(f"{svc}.workers").start_as_current_span(*args, **kwargs)
 
 
 class _LazyMeter:
     def __getattr__(self, name: str) -> Any:
-        return getattr(metrics.get_meter("fastapi-bookings.workers"), name)
+        import os
+        svc = os.getenv("OTEL_SERVICE_NAME", "fastapi-bookings")
+        return getattr(metrics.get_meter(f"{svc}.workers"), name)
 
 
 tracer = _LazyTracer()
@@ -584,8 +590,10 @@ def init_telemetry(app=None) -> None:
         return
 
     base = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
+    import os
+    service_name = os.getenv("OTEL_SERVICE_NAME", "fastapi-bookings")
     resource = Resource.create({
-        "service.name": "fastapi-bookings",
+        "service.name": service_name,
         "service.namespace": settings.APP_ENV,
         "deployment.environment": settings.APP_ENV,
     })
@@ -746,12 +754,13 @@ def shutdown_telemetry() -> None:
 
 def get_telemetry_status_data() -> Dict[str, Any]:
     """Safe health metadata — never exposes endpoints, secrets, or tokens."""
+    import os
     return {
         "telemetry_enabled": not settings.OTEL_SDK_DISABLED,
         "trace_exporter_active": _tracer_provider is not None,
         "metric_exporter_active": _meter_provider is not None,
         "log_exporter_active": _logger_provider is not None,
-        "service_name": "fastapi-bookings",
+        "service_name": os.getenv("OTEL_SERVICE_NAME", "fastapi-bookings"),
         "environment": settings.APP_ENV,
         "last_export_status": _last_export_status,
         "last_export_timestamp": _last_export_timestamp,

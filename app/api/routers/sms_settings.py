@@ -1,22 +1,26 @@
+import hashlib
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...models.sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
+from ...models.curated_memory import CuratedMemory, KnowledgeProposal
 from ...schemas.sms_settings import (
     SmsKnowledgeEntryCreate, SmsKnowledgeEntryUpdate, SmsKnowledgeEntryResponse,
     SmsPromptProfileCreate, SmsPromptProfileUpdate, SmsPromptProfileResponse
 )
 
-router = APIRouter(prefix="/sms/settings", tags=["sms-settings"])
+router = APIRouter(prefix="/sms", tags=["sms-settings"])
+settings_router = APIRouter(prefix="/settings")
 
 # --- Knowledge Base Endpoints ---
 
-@router.post("/knowledge", response_model=SmsKnowledgeEntryResponse, status_code=status.HTTP_201_CREATED)
+@settings_router.post("/knowledge", response_model=SmsKnowledgeEntryResponse, status_code=status.HTTP_201_CREATED)
 async def create_knowledge_entry(
     payload: SmsKnowledgeEntryCreate,
     tenant: Tenant = Depends(get_current_tenant),
@@ -54,7 +58,7 @@ async def create_knowledge_entry(
     db.refresh(entry)
     return entry
 
-@router.get("/knowledge", response_model=List[SmsKnowledgeEntryResponse])
+@settings_router.get("/knowledge", response_model=List[SmsKnowledgeEntryResponse])
 async def list_knowledge_entries(
     provider_id: Optional[int] = None,
     sms_account_id: Optional[int] = None,
@@ -74,7 +78,7 @@ async def list_knowledge_entries(
         
     return query.order_by(SmsKnowledgeEntry.created_at.desc()).all()
 
-@router.get("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
+@settings_router.get("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
 async def get_knowledge_entry(
     entry_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
@@ -89,7 +93,7 @@ async def get_knowledge_entry(
         raise HTTPException(status_code=404, detail="Knowledge entry not found.")
     return entry
 
-@router.put("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
+@settings_router.put("/knowledge/{entry_id}", response_model=SmsKnowledgeEntryResponse)
 async def update_knowledge_entry(
     entry_id: DatabaseId,
     payload: SmsKnowledgeEntryUpdate,
@@ -131,7 +135,7 @@ async def update_knowledge_entry(
     db.refresh(entry)
     return entry
 
-@router.delete("/knowledge/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@settings_router.delete("/knowledge/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_knowledge_entry(
     entry_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
@@ -150,7 +154,7 @@ async def delete_knowledge_entry(
 
 # --- Prompt Profile Endpoints ---
 
-@router.post("/prompts", response_model=SmsPromptProfileResponse, status_code=status.HTTP_201_CREATED)
+@settings_router.post("/prompts", response_model=SmsPromptProfileResponse, status_code=status.HTTP_201_CREATED)
 async def create_prompt_profile(
     payload: SmsPromptProfileCreate,
     tenant: Tenant = Depends(get_current_tenant),
@@ -193,7 +197,7 @@ async def create_prompt_profile(
     db.refresh(profile)
     return profile
 
-@router.get("/prompts", response_model=List[SmsPromptProfileResponse])
+@settings_router.get("/prompts", response_model=List[SmsPromptProfileResponse])
 async def list_prompt_profiles(
     provider_id: Optional[int] = None,
     sms_account_id: Optional[int] = None,
@@ -210,7 +214,7 @@ async def list_prompt_profiles(
         
     return query.order_by(SmsPromptProfile.created_at.desc()).all()
 
-@router.get("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
+@settings_router.get("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
 async def get_prompt_profile(
     profile_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
@@ -225,7 +229,7 @@ async def get_prompt_profile(
         raise HTTPException(status_code=404, detail="Prompt profile not found.")
     return profile
 
-@router.put("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
+@settings_router.put("/prompts/{profile_id}", response_model=SmsPromptProfileResponse)
 async def update_prompt_profile(
     profile_id: DatabaseId,
     payload: SmsPromptProfileUpdate,
@@ -278,7 +282,7 @@ async def update_prompt_profile(
     db.refresh(profile)
     return profile
 
-@router.delete("/prompts/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+@settings_router.delete("/prompts/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_prompt_profile(
     profile_id: DatabaseId,
     tenant: Tenant = Depends(get_current_tenant),
@@ -293,3 +297,223 @@ async def delete_prompt_profile(
         raise HTTPException(status_code=404, detail="Prompt profile not found.")
     db.delete(profile)
     db.commit()
+
+
+# --- Knowledge Curator Proposals ---
+
+class SmsProposalResolveRequest(BaseModel):
+    action: str = Field(..., description="approve | dismiss | merge | reject")
+    resolution_code: Optional[str] = None
+    target_memory_id: Optional[int] = None
+    category: Optional[str] = None
+    user_query: Optional[str] = None
+    ideal_response: Optional[str] = None
+
+
+def _proposal_to_dict(p: KnowledgeProposal) -> dict:
+    return {
+        "id": p.id,
+        "tenant_id": p.tenant_id,
+        "provider_id": p.provider_id,
+        "proposal_type": p.proposal_type,
+        "status": p.status,
+        "category": p.category,
+        "knowledge_kind": p.knowledge_kind,
+        "authority": p.authority,
+        "user_query": p.user_query,
+        "proposed_response": p.proposed_response,
+        "target_memory_id": p.target_memory_id,
+        "fingerprint": p.fingerprint,
+        "reason_code": p.reason_code,
+        "confidence_score": p.confidence_score,
+        "contains_dynamic_fact": p.contains_dynamic_fact,
+        "requires_review": p.requires_review,
+        "evidence_count": p.evidence_count,
+        "reviewed_by_user_id": p.reviewed_by_user_id,
+        "resolution_code": p.resolution_code,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+        "reviewed_at": p.reviewed_at,
+    }
+
+
+proposals_router = APIRouter(prefix="/knowledge/proposals", tags=["sms-knowledge-proposals"])
+
+
+@proposals_router.get("", response_model=List[dict])
+@proposals_router.get("/", response_model=List[dict])
+async def list_knowledge_proposals(
+    status: Optional[str] = "pending",
+    proposal_type: Optional[str] = None,
+    provider_id: Optional[int] = None,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """List knowledge proposals for the current tenant. Defaults to status='pending'."""
+    query = db.query(KnowledgeProposal).filter(KnowledgeProposal.tenant_id == tenant.id)
+    if status is not None and status.lower() != "all":
+        query = query.filter(KnowledgeProposal.status == status.lower())
+    if proposal_type is not None:
+        query = query.filter(KnowledgeProposal.proposal_type == proposal_type)
+    if provider_id is not None:
+        query = query.filter(KnowledgeProposal.provider_id == provider_id)
+
+    proposals = query.order_by(KnowledgeProposal.created_at.desc()).all()
+    return [_proposal_to_dict(p) for p in proposals]
+
+
+@proposals_router.post("/{proposal_id}/resolve")
+async def resolve_knowledge_proposal(
+    proposal_id: DatabaseId,
+    payload: SmsProposalResolveRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    admin_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Resolve a knowledge proposal with action: approve, dismiss, merge, or reject.
+
+    If approved: safely creates/activates CuratedMemory and SmsKnowledgeEntry for tenant.
+    """
+    proposal = (
+        db.query(KnowledgeProposal)
+        .filter(
+            KnowledgeProposal.id == proposal_id,
+            KnowledgeProposal.tenant_id == tenant.id,
+        )
+        .first()
+    )
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Knowledge proposal not found.")
+
+    action = payload.action.lower().strip()
+    if action not in ("approve", "dismiss", "merge", "reject"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action '{payload.action}'. Allowed actions: approve, dismiss, merge, reject",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    if action == "approve":
+        category = payload.category or proposal.category or "faq"
+        user_query = (payload.user_query if payload.user_query is not None else proposal.user_query) or "General Inquiry"
+        ideal_response = (payload.ideal_response if payload.ideal_response is not None else proposal.proposed_response) or ""
+
+        # Safely create CuratedMemory for the tenant
+        content_hash = hashlib.sha256(f"{user_query}::{ideal_response}".encode("utf-8")).hexdigest()
+        curated = CuratedMemory(
+            tenant_id=tenant.id,
+            provider_id=proposal.provider_id,
+            category=category,
+            user_query=user_query,
+            ideal_response=ideal_response,
+            confidence_score=1.0,
+            knowledge_kind="durable_fact",
+            authority="owner_verified",
+            status="active",
+            conflict_state="clear",
+            content_hash=content_hash,
+            source_reference=f"proposal:{proposal.id}",
+            verified_by_user_id=admin_user.id,
+            last_verified_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(curated)
+        db.flush()
+
+        # Also create approved SmsKnowledgeEntry
+        knowledge_text = f"Q: {user_query}\nA: {ideal_response}" if user_query != "General Inquiry" else ideal_response
+        knowledge_entry = SmsKnowledgeEntry(
+            tenant_id=tenant.id,
+            provider_id=proposal.provider_id,
+            category=category,
+            text=knowledge_text,
+            source=f"proposal:{proposal.id}",
+            status="approved",
+            provenance="info_request" if proposal.proposal_type == "gap" else "manual",
+            approved_at=now,
+            approved_by_id=admin_user.id,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(knowledge_entry)
+
+        proposal.status = "accepted"
+        proposal.resolution_code = payload.resolution_code or "approved"
+        proposal.target_memory_id = curated.id
+        proposal.reviewed_by_user_id = admin_user.id
+        proposal.reviewed_at = now
+        proposal.updated_at = now
+
+    elif action in ("dismiss", "reject"):
+        proposal.status = "dismissed" if action == "dismiss" else "rejected"
+        proposal.resolution_code = payload.resolution_code or action
+        proposal.reviewed_by_user_id = admin_user.id
+        proposal.reviewed_at = now
+        proposal.updated_at = now
+
+    elif action == "merge":
+        target_id = payload.target_memory_id or proposal.target_memory_id
+        if target_id:
+            target_mem = (
+                db.query(CuratedMemory)
+                .filter(
+                    CuratedMemory.id == target_id,
+                    CuratedMemory.tenant_id == tenant.id,
+                )
+                .first()
+            )
+            if not target_mem:
+                raise HTTPException(status_code=404, detail="Target curated memory not found for merge.")
+            if payload.ideal_response:
+                target_mem.ideal_response = payload.ideal_response
+            target_mem.updated_at = now
+            target_mem.last_verified_at = now
+            target_mem.verified_by_user_id = admin_user.id
+            proposal.target_memory_id = target_mem.id
+        else:
+            category = payload.category or proposal.category or "faq"
+            user_query = (payload.user_query if payload.user_query is not None else proposal.user_query) or "General Inquiry"
+            ideal_response = (payload.ideal_response if payload.ideal_response is not None else proposal.proposed_response) or ""
+            content_hash = hashlib.sha256(f"{user_query}::{ideal_response}".encode("utf-8")).hexdigest()
+            curated = CuratedMemory(
+                tenant_id=tenant.id,
+                provider_id=proposal.provider_id,
+                category=category,
+                user_query=user_query,
+                ideal_response=ideal_response,
+                confidence_score=1.0,
+                knowledge_kind="durable_fact",
+                authority="owner_verified",
+                status="active",
+                conflict_state="clear",
+                content_hash=content_hash,
+                source_reference=f"proposal:{proposal.id}",
+                verified_by_user_id=admin_user.id,
+                last_verified_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(curated)
+            db.flush()
+            proposal.target_memory_id = curated.id
+
+        proposal.status = "resolved"
+        proposal.resolution_code = payload.resolution_code or "merged"
+        proposal.reviewed_by_user_id = admin_user.id
+        proposal.reviewed_at = now
+        proposal.updated_at = now
+
+    db.commit()
+    db.refresh(proposal)
+    return {
+        "status": "success",
+        "action": action,
+        "proposal": _proposal_to_dict(proposal),
+    }
+
+
+router.include_router(settings_router)
+router.include_router(proposals_router)

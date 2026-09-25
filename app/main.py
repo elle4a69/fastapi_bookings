@@ -5,6 +5,7 @@ includes all route modules and initializes the database. It also
 exposes simple health and readiness endpoints.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -125,7 +126,17 @@ from .api.routers import (
     sms_settings,
     sms_arrivals,
     sms_chatwoot,
+    chatwoot_agentbot,
+    website,
+    calcom,
+    tenant_modules,
+    client_portal,
+    umbrella_directory,
+    resident_agent,
+    sms_bootcamp,
+    sms_curator,
 )
+
 
 
 # Database tables are managed entirely via Alembic migrations.
@@ -137,7 +148,67 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
+    curator_stop_event = None
+    curator_worker_task = None
+    projection_stop_event = None
+    projection_worker_task = None
+
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            from .services.resident_agent import sentinel_scheduler
+            sentinel_scheduler.start()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Failed starting sentinel scheduler: %s", exc)
+
+        if settings.CURATOR_WORKER_ENABLED:
+            try:
+                from .services.knowledge.curator_worker import start_curator_worker_loop
+                curator_stop_event = asyncio.Event()
+                curator_worker_task = asyncio.create_task(
+                    start_curator_worker_loop(
+                        interval_seconds=settings.CURATOR_WORKER_INTERVAL_SECONDS,
+                        stop_event=curator_stop_event,
+                    )
+                )
+                logging.getLogger(__name__).info("Curator background worker task started")
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed starting curator worker: %s", exc)
+
+        if settings.PROJECTION_WORKER_ENABLED:
+            try:
+                from .services.knowledge.projection_worker import start_projection_worker_loop
+                projection_stop_event = asyncio.Event()
+                projection_worker_task = asyncio.create_task(
+                    start_projection_worker_loop(
+                        interval_seconds=settings.PROJECTION_WORKER_INTERVAL_SECONDS,
+                        stop_event=projection_stop_event,
+                    )
+                )
+                logging.getLogger(__name__).info("Projection background worker task started")
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Failed starting projection worker: %s", exc)
+
     yield
+
+    if projection_stop_event and projection_worker_task:
+        try:
+            projection_stop_event.set()
+            await asyncio.wait_for(projection_worker_task, timeout=5.0)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Projection worker shutdown error: %s", exc)
+
+    if curator_stop_event and curator_worker_task:
+        try:
+            curator_stop_event.set()
+            await asyncio.wait_for(curator_worker_task, timeout=5.0)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Curator worker shutdown error: %s", exc)
+
+    try:
+        from .services.resident_agent import sentinel_scheduler
+        sentinel_scheduler.stop()
+    except Exception:
+        pass
     from .core.telemetry import shutdown_telemetry
     shutdown_telemetry()
 
@@ -246,7 +317,7 @@ async def validation_exception_handler(request, exc: RequestValidationError):
         trace_id = f"{current_span.get_span_context().trace_id:032x}"
         
     response = JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "ok": False,
             "error": {
@@ -316,7 +387,9 @@ app.include_router(search.router)
 app.include_router(ui_config.router)
 app.include_router(forms.router)
 app.include_router(diagnostics.router)
+app.include_router(diagnostics.admin_diag_router)
 app.include_router(diagnostics.public_router)
+app.include_router(diagnostics.readiness_v1_router)
 app.include_router(categories.router)
 app.include_router(resources_router.router)
 app.include_router(addons.router)
@@ -349,6 +422,7 @@ app.include_router(booking_forms.admin_router)
 app.include_router(booking_forms.public_router)
 app.include_router(relationship_management.router)
 app.include_router(discovery.router)
+app.include_router(umbrella_directory.router)
 
 # SMS Module routers
 app.include_router(sms_accounts.router, prefix="/api/admin")
@@ -358,6 +432,15 @@ app.include_router(sms_arrivals.router, prefix="/api/admin")
 app.include_router(sms_chatwoot.router, prefix="/api/admin")
 app.include_router(sms_chatwoot.router, prefix="/api")
 app.include_router(sms_webhooks.router, prefix="/api")
+app.include_router(chatwoot_agentbot.router)
+app.include_router(website.router)
+app.include_router(calcom.router)
+app.include_router(tenant_modules.router)
+app.include_router(client_portal.router)
+app.include_router(resident_agent.router)
+app.include_router(sms_bootcamp.router, prefix="/api/admin/sms/bootcamp", tags=["SMS Bootcamp"])
+app.include_router(sms_curator.router, prefix="/api/admin/sms/curator", tags=["SMS Curator"])
+
 
 
 @app.get("/health", tags=["system"])
@@ -380,6 +463,15 @@ def readiness(db=Depends(get_db)) -> dict:
             detail="Database connectivity failed."
         )
     return {"ok": True}
+
+
+@app.get("/health/granular", tags=["system"])
+@app.get("/readiness", tags=["system"])
+def granular_readiness(db=Depends(get_db)) -> dict:
+    """Return granular readiness check across all major subsystems (Spec 24)."""
+    from app.api.routers.diagnostics import check_granular_system_readiness
+    return check_granular_system_readiness(db)
+
 
 
 @app.get("/version", tags=["system"])

@@ -54,3 +54,30 @@ def test_tenant_isolation():
         
     assert check_rate_limit(tenant_1, limit=10, window=60) == False
     assert check_rate_limit(tenant_2, limit=10, window=60) == True # Tenant 2 is isolated
+
+
+def test_redis_keys_and_budget_keys(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_redis = MagicMock()
+    mock_redis.eval.return_value = 1
+    monkeypatch.setattr("app.services.gateway.policy_router.get_redis_client", lambda: mock_redis)
+
+    tenant_id = "tenant_keys_test"
+    provider_id = "prov_42"
+    period = "2026-09"
+
+    # Enforce budget with provider and period
+    ok = enforce_tenant_budget(tenant_id, cost=2.5, max_budget=10.0, provider_id=provider_id, period=period)
+    assert ok is True
+
+    # Check key passed to Redis eval
+    expected_budget_key = f"fb:budget:{tenant_id}:{provider_id}:{period}"
+    mock_redis.eval.assert_called()
+    assert mock_redis.eval.call_args[0][2] == expected_budget_key
+
+    # Check rate limit key format
+    endpoint = "chat_completion"
+    check_rate_limit(tenant_id, limit=5, window=30, endpoint_or_key=endpoint)
+    expected_ratelimit_key = f"fb:ratelimit:{tenant_id}:{endpoint}"
+    assert mock_redis.eval.call_args[0][2] == expected_ratelimit_key
+

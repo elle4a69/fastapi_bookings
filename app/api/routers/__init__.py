@@ -35,3 +35,9 @@ from . import packages  # noqa: F401
 # needed in future, a complete implementation should be added before
 # re‑enabling this router.
 from . import public_bookings  # noqa: F401
+from . import chatwoot_agentbot  # noqa: F401
+from . import tenant_modules  # noqa: F401
+from . import client_portal  # noqa: F401
+from . import umbrella_directory  # noqa: F401
+from . import resident_agent  # noqa: F401
+

@@ -87,15 +87,15 @@ async def get_current_user(
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> User:
-    if not x_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
-
     """Retrieve the current authenticated user from the X-Token header.
 
     The token must be a valid JWT containing a ``sub`` claim that
     corresponds to a user ID. Scopes the lookup to the active tenant to
     ensure proper multi-tenant boundary isolation.
     """
+    if not x_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
+
     payload = decode_access_token(x_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -111,11 +111,70 @@ async def get_current_user(
     return user
 
 
+def require_role(allowed_roles: list[str]):
+    """Ensure the current user has one of the specified roles.
+
+    'owner' and 'admin' are treated as equivalent for backward compatibility.
+    If 'provider' is required or matched, ensures current_user.provider_id is present.
+    """
+    async def _role_checker(
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        user_role = (current_user.role or "").lower()
+        effective_roles = {r.lower() for r in allowed_roles}
+        if "owner" in effective_roles:
+            effective_roles.add("admin")
+
+        if user_role not in effective_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{current_user.role}' is not authorized to perform this action.",
+            )
+
+        if user_role == "provider" and not current_user.provider_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Provider user account is not linked to an active provider record.",
+            )
+
+        return current_user
+
+    return _role_checker
+
+
+async def get_current_owner(
+    current_user: User = Depends(require_role(["owner"])),
+) -> User:
+    """Ensure the user is an owner (or legacy admin)."""
+    return current_user
+
+
+async def get_current_manager_or_owner(
+    current_user: User = Depends(require_role(["owner", "manager"])),
+) -> User:
+    """Ensure the user is a manager or owner."""
+    return current_user
+
+
+async def get_current_provider_user(
+    current_user: User = Depends(require_role(["provider"])),
+) -> User:
+    """Ensure the user is a provider linked to a provider record."""
+    return current_user
+
+
+async def get_current_staff(
+    current_user: User = Depends(require_role(["owner", "manager", "provider"])),
+) -> User:
+    """Allow any authenticated internal staff member (owner, manager, provider)."""
+    return current_user
+
+
 async def get_current_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Ensure the current user has an administrative role."""
-    if current_user.role not in {"owner", "admin"}:
+    """Ensure the current user has an administrative or management role."""
+    if current_user.role not in {"owner", "admin", "manager"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient privileges")
     return current_user
 
@@ -167,3 +226,59 @@ async def get_public_tenant(
         pass
 
     return tenant
+
+
+async def get_current_client(
+    x_token: Optional[str] = Header(None, alias="X-Token"),
+    db: Session = Depends(get_db),
+    tenant: Tenant = Depends(get_current_tenant),
+) -> Client:
+    """Retrieve the current authenticated client from the X-Token header.
+
+    The token must be a valid JWT containing a ``sub`` claim that corresponds
+    to a client ID within the active tenant.
+    """
+    if not x_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing access token",
+        )
+
+    payload = decode_access_token(x_token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id is not None and int(token_tenant_id) != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token tenant mismatch",
+        )
+
+    try:
+        client_id = int(payload["sub"])
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    client = (
+        db.query(Client)
+        .filter(
+            Client.id == client_id,
+            Client.tenant_id == tenant.id,
+            Client.active == True,
+        )
+        .first()
+    )
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Client not found in this tenant",
+        )
+    return client
+

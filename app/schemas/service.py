@@ -14,6 +14,8 @@ class ServiceBase(BaseModel):
     price: Optional[Decimal] = Field(None, description="Price of the service")
     active: bool = Field(True, description="Whether the service is available for booking")
     is_visible: bool = Field(True, description="Whether the service is visible publicly")
+    allow_in_call: bool = Field(True, description="Whether the service allows in-call booking")
+    allow_out_call: bool = Field(True, description="Whether the service allows out-call booking")
     deposit_amount: Decimal = Field(Decimal("0.0"), description="Required deposit amount")
     tax_rate_id: Optional[int] = Field(None, description="Identifier of the associated tax rate")
     buffer_before: int = Field(0, ge=0, description="Prep buffer in minutes before appointment")
@@ -40,6 +42,8 @@ class ServiceUpdate(BaseModel):
     price: Optional[Decimal] = None
     active: Optional[bool] = None
     is_visible: Optional[bool] = None
+    allow_in_call: Optional[bool] = None
+    allow_out_call: Optional[bool] = None
     deposit_amount: Optional[Decimal] = None
     tax_rate_id: Optional[int] = None
     buffer_before: Optional[int] = Field(None, ge=0)

@@ -1,13 +1,23 @@
-"""Provider CRUD routes."""
-
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone, timedelta, date as date_type
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, get_current_tenant, MAX_DATABASE_ID
+from ..deps import (
+    get_current_admin,
+    get_current_owner,
+    get_current_user,
+    get_db,
+    get_current_tenant,
+    MAX_DATABASE_ID,
+)
 from ...core.pagination import paginate_query, pagination_params
 from ...models.provider import Provider as ProviderModel
 from ...models.tenant import Tenant
+from ...models.booking import Booking
+from ...models.user import User
+from ...core.state_machine import BookingStatus
 from ...schemas.provider import (
     ProviderCreate,
     ProviderListResponse,
@@ -86,7 +96,7 @@ def create_provider(
     provider_in: ProviderCreate,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_owner),
 ) -> dict:
     """Create a new provider."""
     provider_dict = provider_in.model_dump()
@@ -345,7 +355,7 @@ def delete_provider(
     provider_id: str,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_admin),
+    current_user = Depends(get_current_owner),
 ) -> dict:
     """Delete a provider."""
     try:
@@ -367,3 +377,304 @@ def delete_provider(
             return {"ok": True, "data": provider}
     
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
+
+# --- Provider Self-Service Portal Endpoints ---
+
+class ProviderScheduleUpdate(BaseModel):
+    weekly_schedule: Optional[dict] = None
+    workdays: Optional[list[dict]] = None
+    breaks: Optional[list[dict]] = None
+    exceptions: Optional[list[dict]] = None
+
+
+@router.get("/provider/me", tags=["provider-portal"])
+def get_provider_me(
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the logged-in provider's profile, assigned services, work days, and upcoming stats."""
+    provider_id = current_user.provider_id
+    if not provider_id:
+        if current_user.role in {"owner", "admin", "manager"}:
+            provider = db.query(ProviderModel).filter(
+                ProviderModel.tenant_id == tenant.id,
+                ProviderModel.deleted_at.is_(None)
+            ).first()
+        else:
+            provider = None
+        if not provider:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No provider linked to this user account")
+    else:
+        provider = db.query(ProviderModel).filter(
+            ProviderModel.id == provider_id,
+            ProviderModel.tenant_id == tenant.id,
+            ProviderModel.deleted_at.is_(None)
+        ).first()
+        if not provider:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linked provider record not found")
+
+    # Assigned services
+    assigned_services = []
+    for sp in provider.services:
+        if sp.service and not sp.service.deleted_at:
+            assigned_services.append({
+                "id": sp.service.id,
+                "name": sp.service.name,
+                "duration": sp.service.duration,
+                "price": float(sp.service.price) if sp.service.price is not None else 0.0,
+                "description": sp.service.description,
+            })
+
+    # Work days
+    workdays = db.query(ProviderWorkDay).filter(
+        ProviderWorkDay.tenant_id == tenant.id,
+        ProviderWorkDay.provider_id == provider.id
+    ).order_by(ProviderWorkDay.weekday.asc()).all()
+
+    workday_list = [
+        {
+            "id": w.id,
+            "weekday": w.weekday,
+            "start_time": w.start_time,
+            "end_time": w.end_time,
+            "is_working": w.is_working,
+        }
+        for w in workdays
+    ]
+
+    # Stats
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    def _normalize_utc(dt: Optional[datetime]) -> Optional[datetime]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    all_bookings = db.query(Booking).filter(
+        Booking.tenant_id == tenant.id,
+        Booking.provider_id == provider.id
+    ).all()
+
+    upcoming_count = sum(
+        1 for b in all_bookings
+        if b.start_time and _normalize_utc(b.start_time) >= now and b.status not in {BookingStatus.CANCELLED, BookingStatus.COMPLETED}
+    )
+    today_count = sum(
+        1 for b in all_bookings
+        if b.start_time and today_start <= _normalize_utc(b.start_time) < today_end and b.status != BookingStatus.CANCELLED
+    )
+    completed_count = sum(1 for b in all_bookings if b.status == BookingStatus.COMPLETED)
+
+    return {
+        "ok": True,
+        "data": {
+            "provider": {
+                "id": provider.id,
+                "name": provider.name,
+                "email": provider.email,
+                "phone": provider.phone,
+                "color": provider.color,
+                "description": provider.description,
+                "image": provider.thumbnail or provider.image,
+                "in_call_address": provider.in_call_address,
+                "out_call_radius_km": provider.out_call_radius_km,
+                "turnaround_buffer_mins": provider.turnaround_buffer_mins,
+                "weekly_schedule": provider.weekly_schedule,
+            },
+            "services": assigned_services,
+            "work_days": workday_list,
+            "upcoming_stats": {
+                "total_bookings": len(all_bookings),
+                "upcoming_bookings": upcoming_count,
+                "today_bookings": today_count,
+                "completed_bookings": completed_count,
+            }
+        }
+    }
+
+
+@router.get("/provider/me/bookings", tags=["provider-portal"])
+def get_provider_me_bookings(
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    status_filter: Optional[str] = None,
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns bookings assigned exclusively to the current provider."""
+    provider_id = current_user.provider_id
+    if not provider_id:
+        if current_user.role in {"owner", "admin", "manager"}:
+            first_p = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id, ProviderModel.deleted_at.is_(None)).first()
+            provider_id = first_p.id if first_p else None
+        if not provider_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider user is not linked to a provider record")
+
+    query = db.query(Booking).filter(
+        Booking.tenant_id == tenant.id,
+        Booking.provider_id == provider_id
+    )
+    if status_filter:
+        query = query.filter(Booking.status == status_filter)
+    if date_from:
+        query = query.filter(Booking.start_time >= date_from)
+    if date_to:
+        query = query.filter(Booking.start_time <= date_to)
+
+    bookings = query.order_by(Booking.start_time.asc()).all()
+
+    data = []
+    for b in bookings:
+        data.append({
+            "id": b.id,
+            "start_time": b.start_time.isoformat() if b.start_time else None,
+            "end_time": b.end_time.isoformat() if b.end_time else None,
+            "status": b.status,
+            "service": {
+                "id": b.service.id,
+                "name": b.service.name,
+                "duration": b.service.duration,
+                "price": float(b.service.price) if b.service and b.service.price is not None else 0.0,
+            } if b.service else None,
+            "client": {
+                "id": b.client.id,
+                "name": b.client.name,
+                "phone": b.client.phone,
+                "email": b.client.email,
+                "address": f"{b.client.address_line1 or ''} {b.client.city or ''}".strip() if b.client else None,
+            } if b.client else None,
+            "location": {
+                "id": b.location.id,
+                "name": b.location.name,
+                "address": b.location.address,
+            } if b.location else None,
+        })
+    return {"ok": True, "data": data}
+
+
+@router.get("/provider/me/schedule", tags=["provider-portal"])
+def get_provider_me_schedule(
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns current provider's working hours and exceptions."""
+    provider_id = current_user.provider_id
+    if not provider_id:
+        if current_user.role in {"owner", "admin", "manager"}:
+            first_p = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id, ProviderModel.deleted_at.is_(None)).first()
+            provider_id = first_p.id if first_p else None
+        if not provider_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider user is not linked to a provider record")
+
+    provider = db.query(ProviderModel).filter(
+        ProviderModel.id == provider_id,
+        ProviderModel.tenant_id == tenant.id
+    ).first()
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
+    workdays = db.query(ProviderWorkDay).filter(
+        ProviderWorkDay.tenant_id == tenant.id,
+        ProviderWorkDay.provider_id == provider_id
+    ).order_by(ProviderWorkDay.weekday.asc()).all()
+
+    special_days = db.query(ProviderSpecialDay).filter(
+        ProviderSpecialDay.tenant_id == tenant.id,
+        ProviderSpecialDay.provider_id == provider_id
+    ).order_by(ProviderSpecialDay.date.asc()).all()
+
+    return {
+        "ok": True,
+        "data": {
+            "provider_id": provider.id,
+            "provider_name": provider.name,
+            "weekly_schedule": provider.weekly_schedule or {},
+            "workdays": [
+                {
+                    "id": w.id,
+                    "weekday": w.weekday,
+                    "start_time": w.start_time,
+                    "end_time": w.end_time,
+                    "is_working": w.is_working,
+                }
+                for w in workdays
+            ],
+            "exceptions": [
+                {
+                    "id": sd.id,
+                    "date": sd.date.isoformat(),
+                    "is_working": sd.is_working,
+                    "start_time": sd.start_time,
+                    "end_time": sd.end_time,
+                }
+                for sd in special_days
+            ],
+        }
+    }
+
+
+@router.put("/provider/me/schedule", tags=["provider-portal"])
+def update_provider_me_schedule(
+    payload: ProviderScheduleUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Allows provider to update their own working hours and break times."""
+    provider_id = current_user.provider_id
+    if not provider_id:
+        if current_user.role in {"owner", "admin", "manager"}:
+            first_p = db.query(ProviderModel).filter(ProviderModel.tenant_id == tenant.id, ProviderModel.deleted_at.is_(None)).first()
+            provider_id = first_p.id if first_p else None
+        if not provider_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider user is not linked to a provider record")
+
+    provider = db.query(ProviderModel).filter(
+        ProviderModel.id == provider_id,
+        ProviderModel.tenant_id == tenant.id
+    ).first()
+    if not provider:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
+    if payload.weekly_schedule is not None:
+        provider.weekly_schedule = payload.weekly_schedule
+        sync_workdays_from_schedule(db, tenant.id, provider.id, payload.weekly_schedule)
+
+    if payload.workdays is not None:
+        for wd_data in payload.workdays:
+            weekday = wd_data.get("weekday")
+            if weekday is not None:
+                wd = db.query(ProviderWorkDay).filter(
+                    ProviderWorkDay.tenant_id == tenant.id,
+                    ProviderWorkDay.provider_id == provider_id,
+                    ProviderWorkDay.weekday == weekday
+                ).first()
+                if not wd:
+                    wd = ProviderWorkDay(tenant_id=tenant.id, provider_id=provider_id, weekday=weekday)
+                    db.add(wd)
+                if "start_time" in wd_data:
+                    wd.start_time = wd_data["start_time"]
+                if "end_time" in wd_data:
+                    wd.end_time = wd_data["end_time"]
+                if "is_working" in wd_data:
+                    wd.is_working = wd_data["is_working"]
+
+    db.commit()
+    db.refresh(provider)
+
+    return {
+        "ok": True,
+        "message": "Provider schedule updated successfully",
+        "data": {
+            "provider_id": provider.id,
+            "weekly_schedule": provider.weekly_schedule or {},
+        }
+    }

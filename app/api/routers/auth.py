@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, get_current_admin, get_current_tenant
+from ..deps import get_db, get_current_admin, get_current_tenant, get_current_user
 from ...core.config import settings
 from ...core.security import (
     create_access_token,
@@ -21,6 +21,7 @@ from ...core.security import (
 )
 from ...models.user import User
 from ...models.tenant import Tenant
+from ...models.provider import Provider
 from ...schemas.user import UserCreate, UserResponse
 
 
@@ -65,7 +66,11 @@ def admin_login(
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
     
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "provider_id": user.provider_id,
+    })
     return {"ok": True, "data": {"access_token": token, "token_type": "bearer"}}
 
 
@@ -93,6 +98,26 @@ def public_login(
     return {"ok": True, "data": {"access_token": token, "token_type": "bearer"}}
 
 
+@router.get("/admin/auth/me", tags=["auth"])
+@router.get("/admin/me", tags=["auth"])
+def get_auth_me(
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+):
+    """Retrieve details of current authenticated user session."""
+    return {
+        "ok": True,
+        "data": {
+            "id": current_user.id,
+            "login": current_user.login,
+            "role": current_user.role,
+            "provider_id": current_user.provider_id,
+            "tenant_id": current_user.tenant_id,
+            "company": tenant.subdomain,
+        },
+    }
+
+
 @router.post("/admin/users", response_model=UserResponse, tags=["auth"])
 def create_user(
     user_in: UserCreate,
@@ -107,6 +132,19 @@ def create_user(
             detail="User company must match active tenant subdomain."
         )
 
+    # Enforce permissions: only owners can create owner/admin accounts
+    if user_in.role in {"owner", "admin"} and current_user.role not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only owners have permission to create owner accounts.",
+        )
+
+    # If role is provider, validate provider_id if supplied
+    if user_in.provider_id is not None:
+        prov = db.query(Provider).filter(Provider.id == user_in.provider_id, Provider.tenant_id == tenant.id).first()
+        if not prov:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Provider {user_in.provider_id} not found in this tenant.")
+
     # Ensure login is unique within the tenant
     existing = db.query(User).filter(User.tenant_id == tenant.id, User.login == user_in.login).first()
     if existing:
@@ -117,6 +155,7 @@ def create_user(
         login=user_in.login,
         password_hash=get_password_hash(user_in.password),
         role=user_in.role,
+        provider_id=user_in.provider_id,
     )
     db.add(user)
     db.commit()
@@ -128,6 +167,7 @@ def create_user(
             "company": tenant.subdomain,
             "login": user.login,
             "role": user.role,
+            "provider_id": user.provider_id,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
         },

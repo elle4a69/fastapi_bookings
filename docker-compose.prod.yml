@@ -1,0 +1,222 @@
+version: "3.9"
+
+# ==============================================================================
+# FastAPI Bookings — Production Docker Composition (Sections 26, 27, 28)
+#
+# Topology:
+#   - web: FastAPI Application Server (Uvicorn multi-worker)
+#   - curator-worker: LearningEvent Curation Daemon
+#   - projection-worker: Graphiti Knowledge Projection Daemon
+#   - postgres: Primary Relational Data Store (PostgreSQL 16 + pgvector)
+#   - redis: Ephemeral Cache & Distributed Rate Limiter
+#   - neo4j: Temporal Knowledge Graph Engine (Graphiti store)
+#
+# Security & Network Isolation:
+#   - All inter-service traffic is confined to the private internal bridge network
+#     `fastapi_bookings_internal`.
+#   - No database, cache, or graph ports are bound or exposed to the public host.
+#   - Web service binds only to the reverse proxy / internal ingress layer.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Web Application Service (FastAPI)
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_bookings_web
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - APP_ENV=production
+      - PROJECT_NAME=FastAPI Bookings
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      - SECRET_KEY=${SECRET_KEY}
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - FRONTEND_ORIGINS=${FRONTEND_ORIGINS}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLICKSEND_API_USERNAME=${CLICKSEND_API_USERNAME}
+      - CLICKSEND_API_KEY=${CLICKSEND_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://signoz-otel-collector:4318}
+      - GRAPH_KNOWLEDGE_ENABLED=${GRAPH_KNOWLEDGE_ENABLED:-true}
+      - GRAPH_SHADOW_WRITE=${GRAPH_SHADOW_WRITE:-true}
+      - GRAPH_SHADOW_READ=${GRAPH_SHADOW_READ:-true}
+      - CURATOR_WORKER_ENABLED=false
+      - PROJECTION_WORKER_ENABLED=false
+    networks:
+      - fastapi_bookings_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; sys_exit = 0 if urllib.request.urlopen(\"http://127.0.0.1:8000/api/v1/diagnostics/readiness\", timeout=5).getcode() == 200 else 1; import sys; sys.exit(sys_exit)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ----------------------------------------------------------------------------
+  # 2. Curator Background Worker
+  # ----------------------------------------------------------------------------
+  curator-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_bookings_curator_worker
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: ["python", "-m", "app.services.knowledge.curator_worker"]
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CURATOR_WORKER_INTERVAL_SECONDS=5.0
+      - CURATOR_WORKER_ENABLED=true
+    networks:
+      - fastapi_bookings_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 3. Projection Background Worker
+  # ----------------------------------------------------------------------------
+  projection-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_bookings_projection_worker
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: ["python", "-m", "app.services.knowledge.projection_worker"]
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - ASYNC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fastapi_bookings}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PROJECTION_WORKER_INTERVAL_SECONDS=5.0
+      - PROJECTION_WORKER_ENABLED=true
+    networks:
+      - fastapi_bookings_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 4. PostgreSQL (pgvector) Database Service
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: fastapi_bookings_postgres_prod
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-fastapi_bookings}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fastapi_bookings_internal
+    # Zero external port exposure: accessible ONLY via internal container network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-fastapi_bookings}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 5. Redis Ephemeral Cache & State Store
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: fastapi_bookings_redis_prod
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --requirepass \"$${REDIS_PASSWORD}\" --appendonly yes --save 60 1"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - fastapi_bookings_internal
+    # Zero external port exposure: accessible ONLY via internal container network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG || redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 6. Neo4j Temporal Graph Store (Graphiti)
+  # ----------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: fastapi_bookings_neo4j_prod
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_memory_pagecache_size=512M
+      - NEO4J_dbms_memory_heap_initial__size=512M
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - fastapi_bookings_internal
+    # Zero external port exposure: accessible ONLY via internal container network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+# ------------------------------------------------------------------------------
+# Persistent Volume Configuration
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: fastapi_bookings_prod_postgres_data
+  redis_data:
+    name: fastapi_bookings_prod_redis_data
+  neo4j_data:
+    name: fastapi_bookings_prod_neo4j_data
+  neo4j_logs:
+    name: fastapi_bookings_prod_neo4j_logs
+
+# ------------------------------------------------------------------------------
+# Network Topology: Strictly Private Internal Docker Network
+# ------------------------------------------------------------------------------
+networks:
+  fastapi_bookings_internal:
+    name: fastapi_bookings_internal
+    driver: bridge

@@ -24,3 +24,11 @@ dev-dashboard/logs/*.log
 dev-dashboard/pids.json
 # Local scripts / temp
 list_chatwoot_tables.py
+# Worktrees
+worktrees/
+codex-control-centre/frontend/dist/
+codex-control-centre/frontend/node_modules/
+codex-control-centre/storage/
+# Backups and SQL dumps
+backups/
+*.sql

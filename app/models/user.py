@@ -20,11 +20,13 @@ class User(Base):
     login = Column(String, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="owner", nullable=False)
+    provider_id = Column(Integer, ForeignKey("providers.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     tenant = relationship("Tenant")
+    provider = relationship("Provider", foreign_keys=[provider_id])
     audit_logs = relationship("AuditLog", back_populates="user")
 
     def __repr__(self) -> str:

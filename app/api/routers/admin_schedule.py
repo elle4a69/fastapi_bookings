@@ -10,7 +10,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, DatabaseId
+from ..deps import get_current_admin, get_current_staff, get_db, DatabaseId
 from ...models import (
     BlockedTime,
     Provider as ProviderModel,
@@ -64,19 +64,24 @@ def get_location_or_none(db: Session, location_id: DatabaseId | None, tenant_id:
 @router.get("/workdays", response_model=List[ProviderWorkDayOut])
 def list_workdays(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_staff),
 ) -> list[ProviderWorkDay]:
     """Return all provider workday rules."""
-    return db.query(ProviderWorkDay).filter(ProviderWorkDay.tenant_id == current_user.tenant_id).all()
+    query = db.query(ProviderWorkDay).filter(ProviderWorkDay.tenant_id == current_user.tenant_id)
+    if current_user.role == "provider":
+        query = query.filter(ProviderWorkDay.provider_id == current_user.provider_id)
+    return query.all()
 
 
 @router.post("/workdays", response_model=ProviderWorkDayOut, status_code=status.HTTP_201_CREATED)
 def create_workday(
     workday_in: ProviderWorkDayCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_admin),
+    current_user=Depends(get_current_staff),
 ) -> ProviderWorkDay:
     """Create a new provider workday rule."""
+    if current_user.role == "provider" and workday_in.provider_id != current_user.provider_id:
+        raise HTTPException(status_code=403, detail="Cannot manage another provider's schedule")
     if workday_in.provider_id and not get_provider_or_none(db, workday_in.provider_id, current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Provider not found")
     if workday_in.location_id and not get_location_or_none(db, workday_in.location_id, current_user.tenant_id):

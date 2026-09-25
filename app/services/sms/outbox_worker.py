@@ -1,5 +1,6 @@
 import logging
 import traceback
+import uuid
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from ...db.database import SessionLocal
@@ -23,14 +24,20 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
         now = datetime.now(timezone.utc)
         
         # 1. Fetch eligible jobs: PENDING (with no lease or expired lease) or stale PROCESSING (expired lease)
-        jobs = db.query(SmsOutboundJob).filter(
+        query = db.query(SmsOutboundJob).filter(
             SmsOutboundJob.status.in_(["PENDING", "PROCESSING"]),
             SmsOutboundJob.retry_count < 5,
             (
                 ((SmsOutboundJob.status == "PENDING") & ((SmsOutboundJob.lease_expires_at.is_(None)) | (SmsOutboundJob.lease_expires_at < now))) |
                 ((SmsOutboundJob.status == "PROCESSING") & (SmsOutboundJob.lease_expires_at < now))
             )
-        ).limit(10).all()
+        ).order_by(SmsOutboundJob.id.asc()).limit(10)
+
+        is_pg = (db.get_bind().dialect.name == "postgresql") if db.get_bind() else False
+        if is_pg:
+            query = query.with_for_update(skip_locked=True)
+
+        jobs = query.all()
 
         if not jobs:
             return
@@ -39,6 +46,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
         leased_jobs = []
         for job in jobs:
             try:
+                lease_token = str(uuid.uuid4())
+                lease_expires = datetime.now(timezone.utc) + timedelta(minutes=2)
                 # Atomically try to update status from PENDING/stale to PROCESSING
                 rows_updated = db.query(SmsOutboundJob).filter(
                     SmsOutboundJob.id == job.id,
@@ -48,20 +57,24 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     )
                 ).update({
                     "status": "PROCESSING",
-                    "lease_expires_at": datetime.now(timezone.utc) + timedelta(minutes=2)
+                    "lease_token": lease_token,
+                    "lease_expires_at": lease_expires,
                 }, synchronize_session=False)
                 
                 db.commit()
                 if rows_updated > 0:
-                    leased_jobs.append(job.id)
+                    leased_jobs.append((job.id, lease_token))
             except Exception as e:
                 db.rollback()
                 logger.error(f"Failed to acquire lease on SmsOutboundJob {job.id}: {e}")
 
         # 3. Process each leased job in its own transaction
-        for job_id in leased_jobs:
+        for job_id, lease_token in leased_jobs:
             # Re-fetch job in a fresh session block or transaction
-            job = db.query(SmsOutboundJob).filter(SmsOutboundJob.id == job_id).first()
+            job = db.query(SmsOutboundJob).filter(
+                SmsOutboundJob.id == job_id,
+                SmsOutboundJob.lease_token == lease_token,
+            ).first()
             if not job or job.status != "PROCESSING":
                 continue
 
@@ -103,6 +116,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
 
                     job.status = "SUCCESS"
                     job.processed_at = datetime.now(timezone.utc)
+                    job.lease_token = None
+                    job.lease_expires_at = None
                     message.status = "sent"
                     message.chatwoot_message_id = mock_msg_id
                     db.commit()
@@ -112,8 +127,10 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                     db.rollback()
                     job.retry_count += 1
                     job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                    job.lease_token = None
                     if job.retry_count >= 5:
                         job.status = "FAILED"
+                        job.lease_expires_at = None
                         message.status = "failed"
                     else:
                         job.status = "PENDING"
@@ -127,6 +144,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             if not account:
                 logger.error(f"SmsOutboundJob {job.id} refers to non-existent account.")
                 job.status = "FAILED"
+                job.lease_token = None
+                job.lease_expires_at = None
                 job.error_log = "Account record missing."
                 db.commit()
                 continue
@@ -135,6 +154,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             if not account.is_enabled:
                 logger.warning(f"SMS Account {account.id} is disabled. Skipping outbound job {job.id}.")
                 job.status = "FAILED"
+                job.lease_token = None
+                job.lease_expires_at = None
                 job.error_log = "SMS Account is disabled."
                 message.status = "failed"
                 db.commit()
@@ -144,6 +165,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             from .rate_limit_service import check_rate_limit_and_quiet_hours
             if not check_rate_limit_and_quiet_hours(db, account):
                 job.status = "PENDING"
+                job.lease_token = None
                 job.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=1)
                 db.commit()
                 continue
@@ -174,6 +196,8 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 if result.status == "success":
                     job.status = "SUCCESS"
                     job.processed_at = datetime.now(timezone.utc)
+                    job.lease_token = None
+                    job.lease_expires_at = None
                     message.status = "sent"
                     message.provider_message_id = result.provider_message_id
                     logger.info(f"Successfully sent outbound SMS (id={message.id}) via {account.transport_type}")
@@ -184,9 +208,11 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 db.rollback()
                 job.retry_count += 1
                 job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                job.lease_token = None
                 
                 if job.retry_count >= 5:
                     job.status = "FAILED"
+                    job.lease_expires_at = None
                     message.status = "failed"
                     logger.error(f"Permanent failure for SmsOutboundJob {job.id} (retries exhausted): {ex}")
                 else:

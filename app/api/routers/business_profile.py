@@ -7,7 +7,7 @@ and a public endpoint for the portal bootstrap.
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, get_public_tenant, get_current_tenant, get_current_admin
+from ..deps import get_db, get_public_tenant, get_current_tenant, get_current_admin, get_current_owner
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...schemas.business_profile import (
@@ -35,8 +35,8 @@ async def update_business_profile(
     background_tasks: BackgroundTasks,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
-) -> dict:
+    current_user: User = Depends(get_current_owner),
+):
     """Update details of the active tenant business profile (admin endpoint)."""
     update_data = payload.model_dump(exclude_unset=True)
     for required_field in ("name", "timezone", "public_address_visibility", "max_advance_days"):

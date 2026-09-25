@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
@@ -13,7 +13,11 @@ class SmsConversation(Base):
     customer_address = Column(String, nullable=False, index=True)  # E.164 normalized customer phone
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
     state = Column(String, default="auto-reply", nullable=False)  # 'taken-over', 'auto-reply', 'paused'
+    source = Column(String, default="sms", nullable=True)  # 'sms', 'web_chat'
     unread_count = Column(Integer, default=0, nullable=False)
+    is_pinned = Column(Boolean, default=False, nullable=False)
+    is_blocked = Column(Boolean, default=False, nullable=False)
+    ai_enabled = Column(Boolean, default=True, nullable=False)
     last_activity_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Chatwoot fields
