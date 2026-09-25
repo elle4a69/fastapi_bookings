@@ -13,6 +13,7 @@ const ProvidersPage = lazy(() => import("@/pages/admin/catalog/providers"))
 const SchedulingPage = lazy(() => import("@/pages/admin/catalog/scheduling"))
 const ClientsPage = lazy(() => import("@/pages/admin/clients"))
 
+const DashboardPage = lazy(() => import("@/pages/admin/dashboard"))
 const WorkdaysPage = lazy(() => import("@/pages/admin/schedule/workdays"))
 const ExceptionsPage = lazy(() => import("@/pages/admin/schedule/exceptions"))
 const BookingsPage = lazy(() => import("@/pages/admin/bookings"))
@@ -42,14 +43,33 @@ const MessagesPage = lazy(() => import("@/pages/admin/notifications/messages"))
 const TemplatesPage = lazy(() => import("@/pages/admin/notifications/templates"))
 const RemindersPage = lazy(() => import("@/pages/admin/notifications/reminders"))
 const BusinessSettings = lazy(() => import("@/pages/admin/settings/business"))
+const TenantModulesPage = lazy(() => import("@/pages/admin/settings/modules"))
 const WebhooksSettings = lazy(() => import("@/pages/admin/settings/webhooks"))
 const PluginsSettings = lazy(() => import("@/pages/admin/settings/plugins"))
 const GDPRPage = lazy(() => import("@/pages/admin/compliance/gdpr"))
 const AuditLogsPage = lazy(() => import("@/pages/admin/audit"))
 const SystemPage = lazy(() => import("@/pages/admin/system"))
+const TelemetryPage = lazy(() => import("@/pages/admin/telemetry"))
+const ResidentAgentPage = lazy(() => import("@/pages/admin/resident-agent"))
 const PublicBookingPage = lazy(() => import("@/pages/public/booking-page"))
 const PublicUploadPage = lazy(() => import("@/pages/public/upload-page"))
+const WebsiteBuilderPage = lazy(() => import("@/pages/admin/website"))
+const PublicWebsitePage = lazy(() => import("@/pages/public/website-page"))
+const UmbrellaDirectoryPage = lazy(() => import("@/pages/directory/umbrella-directory-page"))
 const LoginPage = lazy(() => import("@/pages/login"))
+
+// Provider self-service portal pages
+const MySchedulePage = lazy(() => import("@/pages/admin/provider/my-schedule"))
+const MyJobsPage = lazy(() => import("@/pages/admin/provider/my-jobs"))
+const MyProfilePage = lazy(() => import("@/pages/admin/provider/my-profile"))
+
+// Client self-service portal & dispute center pages
+const PortalLoginPage = lazy(() => import("@/pages/portal/portal-login"))
+const PortalDashboardPage = lazy(() => import("@/pages/portal/portal-dashboard"))
+
+import { AuthProvider, useAuth } from "@/context/auth-context"
+import { ClientPortalProvider } from "@/context/client-portal-context"
+
 
 const adminRoutes = navigation.flatMap((section) =>
   section.items.flatMap((item) => {
@@ -118,75 +138,131 @@ function RequireAdminSession() {
   return <Outlet />
 }
 
+function AdminDashboardOrSchedule() {
+  const { isProvider } = useAuth()
+  if (isProvider) {
+    return <Navigate to="/admin/my-schedule" replace />
+  }
+  return <DashboardPage />
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route element={<RequireAdminSession />}>
-            <Route element={<AdminLayout />}>
-              {adminRoutes.map((route) => (
-                <Route
-                  key={route.path}
-                  path={route.path}
-                  element={
-                    route.path === '/admin/catalog/categories' ? <CategoriesPage /> :
-                    route.path === '/admin/catalog/locations' ? <LocationsPage /> :
-                    route.path === '/admin/catalog/services' ? <ServicesPage /> :
-                    route.path === '/admin/catalog/providers' ? <ProvidersPage /> :
-                    route.path === '/admin/catalog/scheduling' ? <SchedulingPage /> :
-                    route.path === '/admin/schedule/exceptions' ? <ExceptionsPage /> :
-                    route.path === '/admin/clients' ? <ClientsPage /> :
-                    route.path === '/admin/schedule/workdays' ? <WorkdaysPage /> :
-                    route.path === '/admin/bookings' ? <BookingsPage /> :
-                    route.path === '/admin/calendar' ? <CalendarPage /> :
-                    route.path === '/admin/booking-forms' ? <BookingFormsPage /> :
-                    route.path === '/admin/catalog/add-ons' ? <AddOnsPage /> :
-                    route.path === '/admin/catalog/products' ? <ProductsPage /> :
-                    route.path === '/admin/catalog/packages' ? <PackagesPage /> :
-                    route.path === '/admin/resources' ? <ResourcesPage /> :
-                    route.path === '/admin/relationships' ? <RelationshipsPage /> :
-                    route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
-                    route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
-                    route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
-                    route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
-                    route.path === '/admin/finance/invoices' ? <InvoicesPage /> :
-                    route.path === '/admin/finance/payments' ? <PaymentsPage /> :
-                    route.path === '/admin/finance/promotions' ? <PromotionsPage /> :
-                    route.path === '/admin/reviews' ? <ReviewsPage /> :
-                    route.path === '/admin/media' ? <MediaPage /> :
-                    route.path === '/admin/sms-assistant' ? <SmsAssistantPage /> :
-                    route.path === '/admin/configuration/additional-fields' ? <AdditionalFieldsPage /> :
-                    route.path === '/admin/notifications/messages' ? <MessagesPage /> :
-                    route.path === '/admin/notifications/templates' ? <TemplatesPage /> :
-                    route.path === '/admin/notifications/reminders' ? <RemindersPage /> :
-                    route.path === '/admin/settings/business' ? <BusinessSettings /> :
-                    route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
-                    route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
-                    route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
-                    route.path === '/admin/audit' ? <AuditLogsPage /> :
-                    route.path === '/admin/system' ? <SystemPage /> :
-                    <RoutePlaceholder title={route.title} />
-                  }
-                />
-              ))}
-              <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
-              <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
-              <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
+      <AuthProvider>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<RequireAdminSession />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminDashboardOrSchedule />} />
+                <Route path="/admin/dashboard" element={<AdminDashboardOrSchedule />} />
+                <Route path="/admin/my-schedule" element={<MySchedulePage />} />
+                <Route path="/admin/my-jobs" element={<MyJobsPage />} />
+                <Route path="/admin/my-profile" element={<MyProfilePage />} />
+                {adminRoutes.map((route) => (
+                  <Route
+                    key={route.path}
+                    path={route.path}
+                    element={
+                      route.path === '/admin' ? <AdminDashboardOrSchedule /> :
+                      route.path === '/admin/dashboard' ? <AdminDashboardOrSchedule /> :
+                      route.path === '/admin/catalog/categories' ? <CategoriesPage /> :
+                      route.path === '/admin/catalog/locations' ? <LocationsPage /> :
+                      route.path === '/admin/catalog/services' ? <ServicesPage /> :
+                      route.path === '/admin/catalog/providers' ? <ProvidersPage /> :
+                      route.path === '/admin/catalog/scheduling' ? <SchedulingPage /> :
+                      route.path === '/admin/schedule/exceptions' ? <ExceptionsPage /> :
+                      route.path === '/admin/clients' ? <ClientsPage /> :
+                      route.path === '/admin/schedule/workdays' ? <WorkdaysPage /> :
+                      route.path === '/admin/bookings' ? <BookingsPage /> :
+                      route.path === '/admin/calendar' ? <CalendarPage /> :
+                      route.path === '/admin/booking-forms' ? <BookingFormsPage /> :
+                      route.path === '/admin/catalog/add-ons' ? <AddOnsPage /> :
+                      route.path === '/admin/catalog/products' ? <ProductsPage /> :
+                      route.path === '/admin/catalog/packages' ? <PackagesPage /> :
+                      route.path === '/admin/resources' ? <ResourcesPage /> :
+                      route.path === '/admin/relationships' ? <RelationshipsPage /> :
+                      route.path === '/admin/relationships-matrix' ? <RelationshipsMatrixPage /> :
+                      route.path === '/admin/relationships-tree' ? <RelationshipsTreePage /> :
+                      route.path === '/admin/finance/tax-rates' ? <TaxRatesPage /> :
+                      route.path === '/admin/finance/processors' ? <ProcessorsPage /> :
+                      route.path === '/admin/finance/invoices' ? <InvoicesPage /> :
+                      route.path === '/admin/finance/payments' ? <PaymentsPage /> :
+                      route.path === '/admin/finance/promotions' ? <PromotionsPage /> :
+                      route.path === '/admin/reviews' ? <ReviewsPage /> :
+                      route.path === '/admin/media' ? <MediaPage /> :
+                      route.path === '/admin/sms-assistant' ? <SmsAssistantPage /> :
+                      route.path === '/admin/configuration/additional-fields' ? <AdditionalFieldsPage /> :
+                      route.path === '/admin/notifications/messages' ? <MessagesPage /> :
+                      route.path === '/admin/notifications/templates' ? <TemplatesPage /> :
+                      route.path === '/admin/notifications/reminders' ? <RemindersPage /> :
+                      route.path === '/admin/settings/business' ? <BusinessSettings /> :
+                      route.path === '/admin/settings/modules' ? <TenantModulesPage /> :
+                      route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
+                      route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
+                      route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
+                      route.path === '/admin/audit' ? <AuditLogsPage /> :
+                      route.path === '/admin/system' ? <SystemPage /> :
+                      route.path === '/admin/telemetry' ? <TelemetryPage /> :
+                      route.path === '/admin/resident-agent' ? <ResidentAgentPage /> :
+                      route.path === '/admin/coding-studio' ? <ResidentAgentPage initialTab="coding" /> :
+                      route.path === '/admin/website' ? <WebsiteBuilderPage /> :
+                      <RoutePlaceholder title={route.title} />
+                    }
+                  />
+                ))}
+                <Route path="/admin/resident-agent" element={<ResidentAgentPage />} />
+                <Route path="/admin/coding-studio" element={<ResidentAgentPage initialTab="coding" />} />
+                <Route path="/admin/settings/modules" element={<TenantModulesPage />} />
+                <Route path="/admin/website" element={<WebsiteBuilderPage />} />
+                <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
+
+                <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
+                <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
+                <Route path="/admin/telemetry" element={<TelemetryPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route path="/book/*" element={<PublicBookingPage />} />
-          <Route path="/book" element={<PublicBookingPage />} />
-          <Route path="/booking" element={<PublicBookingPage />} />
-          <Route path="/public/upload" element={<PublicUploadPage />} />
-          <Route path="/book/upload" element={<PublicUploadPage />} />
-          <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
-          <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="*" element={<Navigate to="/404" replace />} />
-        </Routes>
-      </Suspense>
+            <Route
+              path="/portal/login"
+              element={
+                <ClientPortalProvider>
+                  <PortalLoginPage />
+                </ClientPortalProvider>
+              }
+            />
+            <Route
+              path="/portal"
+              element={
+                <ClientPortalProvider>
+                  <PortalDashboardPage />
+                </ClientPortalProvider>
+              }
+            />
+            <Route
+              path="/portal/:subdomain"
+              element={
+                <ClientPortalProvider>
+                  <PortalDashboardPage />
+                </ClientPortalProvider>
+              }
+            />
+            <Route path="/site" element={<PublicWebsitePage />} />
+            <Route path="/site/:subdomain" element={<PublicWebsitePage />} />
+            <Route path="/directory" element={<UmbrellaDirectoryPage />} />
+
+            <Route path="/book/*" element={<PublicBookingPage />} />
+            <Route path="/book" element={<PublicBookingPage />} />
+            <Route path="/booking" element={<PublicBookingPage />} />
+            <Route path="/public/upload" element={<PublicUploadPage />} />
+            <Route path="/book/upload" element={<PublicUploadPage />} />
+            <Route path="/403" element={<ErrorPage code="403" title="Permission denied" />} />
+            <Route path="/404" element={<ErrorPage code="404" title="Page not found" />} />
+            <Route path="/" element={<Navigate to="/admin" replace />} />
+            <Route path="*" element={<Navigate to="/404" replace />} />
+          </Routes>
+        </Suspense>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

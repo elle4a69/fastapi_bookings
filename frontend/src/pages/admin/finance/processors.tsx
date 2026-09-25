@@ -5,7 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { MobilePageShell } from '@/components/ui/mobile-page-shell';
 import { apiClient } from '@/lib/api';
+import { Save, RefreshCw, CreditCard, Banknote, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PaymentProcessorConfig {
@@ -128,54 +130,39 @@ export default function ProcessorsPage() {
     fetchProcessors();
   }, []);
 
-  const saveProcessorConfig = async (
-    provider: string,
-    state: ProcessorFormState,
-    displayName: string
-  ) => {
-    let configJson = '{}';
-    if (provider === 'stripe') {
-      configJson = JSON.stringify({ secret_key: state.secret_key });
-    } else if (provider === 'paypal') {
-      configJson = JSON.stringify({ client_id: state.client_id, client_secret: state.client_secret });
-    } else if (provider === 'offline') {
-      configJson = JSON.stringify({ instructions: state.instructions });
-    }
-
-    const payload = {
-      provider,
-      enabled: state.enabled,
-      display_name: displayName,
-      public_key: provider === 'stripe' ? state.public_key : null,
-      config_json: configJson,
-    };
-
-    if (state.id) {
-      const res: any = await apiClient.put(`/api/admin/payment-processor/configs/${state.id}`, {
-        enabled: payload.enabled,
-        display_name: payload.display_name,
-        public_key: payload.public_key,
-        config_json: payload.config_json,
-      });
-      return res?.id || state.id;
-    } else {
-      const res: any = await apiClient.post('/api/admin/payment-processor/configs', payload);
-      return res?.id || res?.data?.id;
-    }
-  };
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const [stripeId, paypalId, offlineId] = await Promise.all([
-        saveProcessorConfig('stripe', stripeState, 'Stripe'),
-        saveProcessorConfig('paypal', paypalState, 'PayPal'),
-        saveProcessorConfig('offline', offlineState, 'Offline / Cash'),
-      ]);
+      const payloads = [
+        {
+          provider: 'stripe',
+          enabled: stripeState.enabled,
+          display_name: 'Stripe',
+          public_key: stripeState.public_key,
+          config_json: JSON.stringify({ secret_key: stripeState.secret_key }),
+        },
+        {
+          provider: 'paypal',
+          enabled: paypalState.enabled,
+          display_name: 'PayPal',
+          public_key: null,
+          config_json: JSON.stringify({
+            client_id: paypalState.client_id,
+            client_secret: paypalState.client_secret,
+          }),
+        },
+        {
+          provider: 'offline',
+          enabled: offlineState.enabled,
+          display_name: 'Offline Payment',
+          public_key: null,
+          config_json: JSON.stringify({ instructions: offlineState.instructions }),
+        },
+      ];
 
-      if (stripeId) setStripeState((prev) => ({ ...prev, id: stripeId }));
-      if (paypalId) setPaypalState((prev) => ({ ...prev, id: paypalId }));
-      if (offlineId) setOfflineState((prev) => ({ ...prev, id: offlineId }));
+      await Promise.all(
+        payloads.map((p) => apiClient.post('/api/admin/payment-processor/configs', p))
+      );
 
       toast.success('Payment processor configurations saved successfully');
     } catch (error) {
@@ -186,129 +173,165 @@ export default function ProcessorsPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="p-6 text-center text-muted-foreground">Loading...</div>;
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Payment Processors</h1>
-          <p className="text-muted-foreground">Configure payment gateways and methods.</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save All Changes'}
+    <MobilePageShell
+      title="Payment Processors"
+      description="Configure checkout gateways, merchant keys, and cash-on-arrival terms"
+      actions={
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchProcessors}
+            className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation gap-1.5"
+          >
+            <RefreshCw className={isLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation gap-2"
+          >
+            <Save className="h-4 w-4" />
+            <span>{isSaving ? 'Saving...' : 'Save All'}</span>
           </Button>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 min-w-0">
         {/* Stripe Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Stripe</CardTitle>
-                <CardDescription>Credit card processing</CardDescription>
+        <Card className="shadow-xs flex flex-col justify-between">
+          <div>
+            <CardHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 flex items-center justify-center shrink-0">
+                    <CreditCard className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">Stripe</CardTitle>
+                    <CardDescription className="text-xs">Credit & debit cards</CardDescription>
+                  </div>
+                </div>
+                <Switch 
+                  checked={stripeState.enabled}
+                  onCheckedChange={(checked) => setStripeState((prev) => ({ ...prev, enabled: checked }))}
+                  className="touch-manipulation"
+                />
               </div>
-              <Switch 
-                checked={stripeState.enabled}
-                onCheckedChange={(checked) => setStripeState((prev) => ({ ...prev, enabled: checked }))}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Publishable Key</Label>
-              <Input 
-                type="text" 
-                placeholder="pk_test_..."
-                value={stripeState.public_key}
-                onChange={(e) => setStripeState((prev) => ({ ...prev, public_key: e.target.value }))}
-                disabled={!stripeState.enabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Secret Key</Label>
-              <Input 
-                type="password" 
-                placeholder="sk_test_..."
-                value={stripeState.secret_key}
-                onChange={(e) => setStripeState((prev) => ({ ...prev, secret_key: e.target.value }))}
-                disabled={!stripeState.enabled}
-              />
-            </div>
-          </CardContent>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Publishable Key</Label>
+                <Input 
+                  type="text" 
+                  placeholder="pk_live_... or pk_test_..."
+                  value={stripeState.public_key}
+                  onChange={(e) => setStripeState((prev) => ({ ...prev, public_key: e.target.value }))}
+                  disabled={!stripeState.enabled}
+                  className="h-11 min-h-[44px] font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Secret Key</Label>
+                <Input 
+                  type="password" 
+                  placeholder="sk_live_... or sk_test_..."
+                  value={stripeState.secret_key}
+                  onChange={(e) => setStripeState((prev) => ({ ...prev, secret_key: e.target.value }))}
+                  disabled={!stripeState.enabled}
+                  className="h-11 min-h-[44px] font-mono text-xs"
+                />
+              </div>
+            </CardContent>
+          </div>
         </Card>
 
         {/* PayPal Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>PayPal</CardTitle>
-                <CardDescription>PayPal checkout integration</CardDescription>
+        <Card className="shadow-xs flex flex-col justify-between">
+          <div>
+            <CardHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center shrink-0">
+                    <Banknote className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">PayPal</CardTitle>
+                    <CardDescription className="text-xs">PayPal digital wallet</CardDescription>
+                  </div>
+                </div>
+                <Switch 
+                  checked={paypalState.enabled}
+                  onCheckedChange={(checked) => setPaypalState((prev) => ({ ...prev, enabled: checked }))}
+                  className="touch-manipulation"
+                />
               </div>
-              <Switch 
-                checked={paypalState.enabled}
-                onCheckedChange={(checked) => setPaypalState((prev) => ({ ...prev, enabled: checked }))}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Client ID</Label>
-              <Input 
-                type="text" 
-                placeholder="PayPal Client ID"
-                value={paypalState.client_id}
-                onChange={(e) => setPaypalState((prev) => ({ ...prev, client_id: e.target.value }))}
-                disabled={!paypalState.enabled}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Client Secret</Label>
-              <Input 
-                type="password" 
-                placeholder="PayPal Client Secret"
-                value={paypalState.client_secret}
-                onChange={(e) => setPaypalState((prev) => ({ ...prev, client_secret: e.target.value }))}
-                disabled={!paypalState.enabled}
-              />
-            </div>
-          </CardContent>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Client ID</Label>
+                <Input 
+                  type="text" 
+                  placeholder="PayPal Client ID"
+                  value={paypalState.client_id}
+                  onChange={(e) => setPaypalState((prev) => ({ ...prev, client_id: e.target.value }))}
+                  disabled={!paypalState.enabled}
+                  className="h-11 min-h-[44px] font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Client Secret</Label>
+                <Input 
+                  type="password" 
+                  placeholder="PayPal Client Secret"
+                  value={paypalState.client_secret}
+                  onChange={(e) => setPaypalState((prev) => ({ ...prev, client_secret: e.target.value }))}
+                  disabled={!paypalState.enabled}
+                  className="h-11 min-h-[44px] font-mono text-xs"
+                />
+              </div>
+            </CardContent>
+          </div>
         </Card>
 
-        {/* Offline / Cash Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Offline / Cash</CardTitle>
-                <CardDescription>Manual payment processing</CardDescription>
+        {/* Offline Payment Card */}
+        <Card className="shadow-xs flex flex-col justify-between">
+          <div>
+            <CardHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+                    <HelpCircle className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">Cash / Offline</CardTitle>
+                    <CardDescription className="text-xs">Pay in person or wire</CardDescription>
+                  </div>
+                </div>
+                <Switch 
+                  checked={offlineState.enabled}
+                  onCheckedChange={(checked) => setOfflineState((prev) => ({ ...prev, enabled: checked }))}
+                  className="touch-manipulation"
+                />
               </div>
-              <Switch 
-                checked={offlineState.enabled}
-                onCheckedChange={(checked) => setOfflineState((prev) => ({ ...prev, enabled: checked }))}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Payment Instructions</Label>
-              <Textarea 
-                placeholder="e.g. Please pay in cash upon arrival."
-                rows={4}
-                value={offlineState.instructions}
-                onChange={(e) => setOfflineState((prev) => ({ ...prev, instructions: e.target.value }))}
-                disabled={!offlineState.enabled}
-              />
-            </div>
-          </CardContent>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment Instructions</Label>
+                <Textarea 
+                  placeholder="Provide instructions displayed during checkout (e.g. Please pay cash upon arrival)."
+                  value={offlineState.instructions}
+                  onChange={(e) => setOfflineState((prev) => ({ ...prev, instructions: e.target.value }))}
+                  disabled={!offlineState.enabled}
+                  className="min-h-[108px] text-xs resize-y"
+                />
+              </div>
+            </CardContent>
+          </div>
         </Card>
       </div>
-    </div>
+    </MobilePageShell>
   );
 }

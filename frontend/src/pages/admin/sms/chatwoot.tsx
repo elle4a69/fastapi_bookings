@@ -127,7 +127,7 @@ export default function SmsChatwootTab() {
 
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-6 overflow-x-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Chatwoot Integrations</h2>

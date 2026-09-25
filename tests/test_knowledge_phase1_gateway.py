@@ -188,6 +188,7 @@ class TestKnowledgeGateway:
 
     def test_gateway_invalidation_busts_cache(self):
         gateway = KnowledgeGateway()
+        gateway.invalidate(tenant_id=2, provider_id=4)
         query = RetrievalQuery(
             tenant_id=2,
             provider_id=4,

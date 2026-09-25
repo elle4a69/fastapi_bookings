@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Undo2 } from 'lucide-react';
+import { MobilePageShell } from '@/components/ui/mobile-page-shell';
+import { ResponsiveDataTable, type ColumnDef } from '@/components/ui/responsive-data-table';
+import { Undo2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Payment {
@@ -31,6 +26,8 @@ interface Payment {
 export function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const fetchPayments = async () => {
     try {
@@ -69,7 +66,7 @@ export function PaymentsPage() {
       case 'succeeded':
       case 'paid':
       case 'completed':
-        return <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20">Succeeded</Badge>;
+        return <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20">Succeeded</Badge>;
       case 'failed':
         return <Badge variant="destructive">Failed</Badge>;
       case 'refunded':
@@ -79,84 +76,195 @@ export function PaymentsPage() {
     }
   };
 
+  const filteredPayments = payments.filter((p) => {
+    const payCode = p.payment_id || `PAY-${p.id}`;
+    const clientName = p.client_name || (p.booking_id ? `Booking #${p.booking_id}` : 'Direct Client');
+    const invNumber = p.invoice_number || (p.booking_id ? `INV-${p.booking_id}` : '');
+    const matchesSearch =
+      payCode.toLowerCase().includes(search.toLowerCase()) ||
+      clientName.toLowerCase().includes(search.toLowerCase()) ||
+      invNumber.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus =
+      statusFilter === 'all' || (p.status || '').toLowerCase() === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
+  const columns: ColumnDef<Payment>[] = [
+    {
+      id: 'payment_id',
+      header: 'Payment ID',
+      sortable: true,
+      cell: (p) => (
+        <span className="font-mono text-xs font-semibold text-primary">
+          {p.payment_id || `PAY-${p.id}`}
+        </span>
+      ),
+    },
+    {
+      id: 'date',
+      header: 'Transaction Date',
+      sortable: true,
+      cell: (p) => {
+        const txDate = p.transaction_date || p.created_at;
+        return <span className="text-xs text-muted-foreground">{txDate ? new Date(txDate).toLocaleString() : '—'}</span>;
+      },
+    },
+    {
+      id: 'client_name',
+      header: 'Client',
+      sortable: true,
+      cell: (p) => (
+        <span className="font-medium text-foreground">
+          {p.client_name || (p.booking_id ? `Booking #${p.booking_id}` : 'Direct Client')}
+        </span>
+      ),
+    },
+    {
+      id: 'reference',
+      header: 'Invoice / Ref',
+      defaultHidden: true,
+      cell: (p) => (
+        <span className="text-xs text-muted-foreground">
+          {p.invoice_number || (p.booking_id ? `INV-${p.booking_id}` : '—')}
+        </span>
+      ),
+    },
+    {
+      id: 'amount',
+      header: 'Amount',
+      sortable: true,
+      align: 'right',
+      cell: (p) => <span className="font-bold text-foreground">${Number(p.amount || 0).toFixed(2)}</span>,
+    },
+    {
+      id: 'method',
+      header: 'Method',
+      cell: (p) => <span className="text-xs text-muted-foreground">{p.method || 'Credit Card'}</span>,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: (p) => getStatusBadge(p.status),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      align: 'right',
+      hideable: false,
+      cell: (p) => {
+        const isSucceeded = ['succeeded', 'paid', 'completed'].includes((p.status || '').toLowerCase());
+        if (!isSucceeded) return null;
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleRefund(p.id)}
+            className="h-9 min-h-[44px] text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 touch-manipulation gap-1.5"
+            title="Issue Refund"
+          >
+            <Undo2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Refund</span>
+          </Button>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Payments</h1>
-        <Button onClick={fetchPayments}>Refresh</Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Payment ID</TableHead>
-                  <TableHead>Transaction Date</TableHead>
-                  <TableHead>Client Name</TableHead>
-                  <TableHead>Invoice / Booking</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center h-24">Loading...</TableCell>
-                  </TableRow>
-                ) : payments.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center h-24">No payments found.</TableCell>
-                  </TableRow>
-                ) : (
-                  payments.map((payment) => {
-                    const txDate = payment.transaction_date || payment.created_at;
-                    const formattedDate = txDate ? new Date(txDate).toLocaleString() : '—';
-                    const payCode = payment.payment_id || `PAY-${payment.id}`;
-                    const clientName = payment.client_name || (payment.booking_id ? `Booking #${payment.booking_id}` : 'Direct Client');
-                    const invNumber = payment.invoice_number || (payment.booking_id ? `INV-${payment.booking_id}` : '—');
-                    const method = payment.method || 'Credit Card';
-                    const isSucceeded = ['succeeded', 'paid', 'completed'].includes((payment.status || '').toLowerCase());
-
-                    return (
-                      <TableRow key={payment.id}>
-                        <TableCell className="font-medium text-xs font-mono">{payCode}</TableCell>
-                        <TableCell>{formattedDate}</TableCell>
-                        <TableCell>{clientName}</TableCell>
-                        <TableCell>{invNumber}</TableCell>
-                        <TableCell>${Number(payment.amount || 0).toFixed(2)}</TableCell>
-                        <TableCell>{method}</TableCell>
-                        <TableCell>{getStatusBadge(payment.status)}</TableCell>
-                        <TableCell className="text-right">
-                          {isSucceeded && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleRefund(payment.id)}
-                              className="text-orange-500 hover:text-orange-600 hover:bg-orange-50"
-                              title="Issue Refund"
-                            >
-                              <Undo2 className="h-4 w-4 mr-2" />
-                              Refund
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+    <MobilePageShell
+      title="Payments"
+      description="View transaction records, processor receipts, and manage refunds"
+      actions={
+        <Button
+          onClick={fetchPayments}
+          variant="outline"
+          className="h-10 min-h-[44px] w-full sm:w-auto gap-2 touch-manipulation"
+        >
+          <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          <span>Refresh</span>
+        </Button>
+      }
+    >
+      <div className="space-y-4 min-w-0">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:items-center justify-between">
+          <div className="relative flex-1 max-w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search by ID, client, or ref..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-10 min-h-[44px]"
+            />
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[160px] h-10 min-h-[44px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="succeeded">Succeeded</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="refunded">Refunded</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <ResponsiveDataTable
+          data={filteredPayments}
+          columns={columns}
+          keyExtractor={(p) => p.id}
+          isLoading={loading}
+          defaultSort={{ key: 'date', direction: 'desc' }}
+          renderMobileCard={(p) => {
+            const txDate = p.transaction_date || p.created_at;
+            const payCode = p.payment_id || `PAY-${p.id}`;
+            const clientName = p.client_name || (p.booking_id ? `Booking #${p.booking_id}` : 'Direct Client');
+            const isSucceeded = ['succeeded', 'paid', 'completed'].includes((p.status || '').toLowerCase());
+
+            return (
+              <div className="p-3.5 rounded-lg border bg-card text-card-foreground shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-semibold text-primary">{payCode}</span>
+                  {getStatusBadge(p.status)}
+                </div>
+
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground text-sm truncate">{clientName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {txDate ? new Date(txDate).toLocaleString() : '—'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Method: {p.method || 'Credit Card'}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-foreground text-base">
+                      ${Number(p.amount || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                {isSucceeded && (
+                  <div className="flex justify-end pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRefund(p.id)}
+                      className="h-10 min-h-[44px] px-3 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 touch-manipulation gap-1.5"
+                    >
+                      <Undo2 className="h-4 w-4" />
+                      <span>Issue Refund</span>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          }}
+        />
+      </div>
+    </MobilePageShell>
   );
 }
 

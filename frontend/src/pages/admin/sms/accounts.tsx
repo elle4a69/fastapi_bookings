@@ -173,7 +173,7 @@ export default function SmsAccountsTab() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading SMS lines...</div>
           ) : accounts.length === 0 ? (

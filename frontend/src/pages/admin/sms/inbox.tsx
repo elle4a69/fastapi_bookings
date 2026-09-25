@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   MessageSquareText,
   Search,
@@ -14,6 +14,7 @@ import {
   Trash2,
   Bot,
   ChevronLeft,
+  ChevronRight,
   Clock3,
   ClipboardList,
   FileDown,
@@ -21,9 +22,14 @@ import {
   NotebookPen,
   UserRound,
   CircleAlert,
+  PanelRight,
+  Plus,
+  X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { QuickToolsSheet } from "./quick-tools-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +98,220 @@ interface SmsInboxTabProps {
   onNavigate?: (tabId: string) => void;
 }
 
+interface NotesPanelContentProps {
+  conversation: SmsConversation;
+  notes: TimelineItem[];
+  noteText: string;
+  setNoteText: (val: string) => void;
+  onSubmitNote: () => void;
+  submittingNote: boolean;
+  onNavigate?: (tabId: string) => void;
+  onClose?: () => void;
+}
+
+function NotesPanelContent({
+  conversation,
+  notes,
+  noteText,
+  setNoteText,
+  onSubmitNote,
+  submittingNote,
+  onNavigate,
+  onClose,
+}: NotesPanelContentProps) {
+  const statePresentation = conversationStatePresentation(conversation);
+
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-muted/10">
+      {/* Panel Header */}
+      <div className="p-3 border-b flex justify-between items-center bg-card shrink-0">
+        <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+          <NotebookPen className="w-3.5 h-3.5 text-muted-foreground" />
+          <span>Client Context & Notes</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+            {notes.length} note{notes.length === 1 ? "" : "s"}
+          </Badge>
+          {onClose && (
+            <Button
+              size="xs"
+              variant="ghost"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+              onClick={onClose}
+              aria-label="Close notes drawer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Scrollable Context & Notes Content */}
+      <ScrollArea className="flex-1 p-3">
+        <div className="space-y-3">
+          {/* 1. Client Profile Card */}
+          <div className="rounded-lg border bg-card p-3 shadow-2xs space-y-2.5">
+            <div className="flex items-start justify-between gap-1">
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Client Profile
+                </div>
+                <div className="font-bold text-xs text-foreground truncate mt-0.5">
+                  {conversation.client_name || "Unlinked Client"}
+                </div>
+                <div className="text-[11px] font-mono text-muted-foreground mt-0.5">
+                  {conversation.customer_address}
+                </div>
+              </div>
+              {conversation.client_id && (
+                <Button size="xs" variant="ghost" className="h-6 px-1.5 text-[10px] text-primary" asChild>
+                  <a href={`/admin/clients?client_id=${conversation.client_id}`}>
+                    Profile <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </a>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1 pt-1.5 border-t border-border/50">
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                Provider #{conversation.provider_id}
+              </Badge>
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                Line #{conversation.sms_account_id}
+              </Badge>
+              {conversation.client_id && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                  Client #{conversation.client_id}
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+                {statePresentation.label}
+              </Badge>
+            </div>
+          </div>
+
+          {/* 2. Active Booking / Arrival Snippet */}
+          {(conversation.booking_id || conversation.arrival_id || conversation.priority || conversation.sla_due_at) && (
+            <div className="rounded-lg border bg-card p-3 shadow-2xs space-y-2">
+              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Operations Context
+              </div>
+
+              {conversation.booking_id && (
+                <div className="flex items-center justify-between text-xs p-2 rounded-md bg-blue-500/5 border border-blue-500/20">
+                  <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
+                    <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold text-xs">Booking #{conversation.booking_id}</span>
+                  </div>
+                  <Button size="xs" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-700 dark:text-blue-400 hover:text-blue-800" asChild>
+                    <a href={`/admin/bookings?booking_id=${conversation.booking_id}`}>
+                      View <ChevronRight className="w-3 h-3 ml-0.5" />
+                    </a>
+                  </Button>
+                </div>
+              )}
+
+              {conversation.arrival_id && (
+                <div className="flex items-center justify-between text-xs p-2 rounded-md bg-emerald-500/5 border border-emerald-500/20">
+                  <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                    <UserRound className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold text-xs">Arrival #{conversation.arrival_id}</span>
+                  </div>
+                  {onNavigate && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      className="h-5 px-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 hover:text-emerald-800"
+                      onClick={() => onNavigate("arrivals")}
+                    >
+                      Lobby <ChevronRight className="w-3 h-3 ml-0.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {conversation.priority && conversation.priority !== "normal" && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-orange-500/30 text-orange-700 bg-orange-500/10 gap-0.5">
+                    <Flag className="size-2.5" /> Priority: {conversation.priority}
+                  </Badge>
+                )}
+                {conversation.sla_due_at && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-0.5">
+                    <Clock3 className="size-2.5" /> Due {new Date(conversation.sla_due_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Internal Notes Stream */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Internal Notes Stream
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">{notes.length} total</span>
+            </div>
+
+            {notes.length === 0 ? (
+              <div className="text-center py-6 px-3 rounded-lg border border-dashed text-xs text-muted-foreground bg-muted/20">
+                No internal notes yet. Keep track of customer triage details here.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {notes.map((note) => (
+                  <div key={note.id} className="bg-card p-2.5 rounded-lg border shadow-2xs space-y-1">
+                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        {note.author_id ? `Staff #${note.author_id}` : (note.author_type || "Staff")}
+                      </span>
+                      <time className="text-[10px] text-muted-foreground">
+                        {new Date(note.occurred_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </time>
+                    </div>
+                    <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{note.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </ScrollArea>
+
+      {/* 4. Inline Note Composer */}
+      <div className="p-3 border-t bg-card space-y-2 shrink-0">
+        <Textarea
+          value={noteText}
+          onChange={(e) => setNoteText(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              onSubmitNote();
+            }
+          }}
+          placeholder="Add internal agent note... (Ctrl+Enter to save)"
+          rows={2}
+          maxLength={4000}
+          className="min-h-[52px] text-xs resize-none bg-background text-foreground"
+          disabled={submittingNote}
+        />
+        <Button
+          type="button"
+          size="xs"
+          disabled={!noteText.trim() || submittingNote}
+          onClick={onSubmitNote}
+          className="w-full h-7 text-xs font-semibold gap-1 bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          {submittingNote ? "Adding Note..." : "Add Note"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
   const [conversations, setConversations] = useState<SmsConversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -107,6 +327,22 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
   const [editingDraftBody, setEditingDraftBody] = useState("");
   const [pendingActionKey, setPendingActionKey] = useState<string | null>(null);
+
+  // 3-Pane Client Context & Notes Panel State
+  const [showNotesPanel, setShowNotesPanel] = useState(true);
+  const [showNotesMobile, setShowNotesMobile] = useState(false);
+  const [inlineNoteText, setInlineNoteText] = useState("");
+  const [submittingNote, setSubmittingNote] = useState(false);
+
+  // Quick Tools Sheet State
+  const [showQuickTools, setShowQuickTools] = useState(false);
+
+  const handleInsertQuickTool = (text: string) => {
+    setComposeText(prev => (prev ? `${prev} ${text}` : text));
+    if (manualSendAttemptRef.current) {
+      manualSendAttemptRef.current = null;
+    }
+  };
 
   type ActionDialogKind = "note" | "escalate" | "resolve" | "correction";
   const [actionDialog, setActionDialog] = useState<{ kind: ActionDialogKind; messageId?: number } | null>(null);
@@ -127,6 +363,8 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
     setMessages([]);
     setActiveConv(null);
     setComposeText("");
+    setInlineNoteText("");
+    setShowNotesMobile(false);
     setSelectedConversationId(conversationId);
   };
 
@@ -474,6 +712,30 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
     }
   };
 
+  const internalNotes = useMemo(
+    () => messages.filter((m) => m.kind === "internal_note"),
+    [messages],
+  );
+
+  const handleSendInlineNote = async () => {
+    if (!inlineNoteText.trim() || !selectedConversationId || submittingNote) return;
+    const conversationId = selectedConversationId;
+    const textToSend = inlineNoteText.trim();
+    setSubmittingNote(true);
+    try {
+      await apiClient.post(`/api/admin/sms/conversations/${conversationId}/notes`, {
+        text: textToSend,
+      });
+      setInlineNoteText("");
+      toast.success("Internal note added.");
+      await loadMessages(conversationId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add internal note.");
+    } finally {
+      setSubmittingNote(false);
+    }
+  };
+
   // Filter & Sort Conversations (pinned always first)
   const filteredConversations = conversations
     .filter((conversation) => matchesConversationFilter(conversation, filterState, searchQuery))
@@ -693,6 +955,31 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                     <span className="hidden sm:inline">Resume AI</span>
                   </Button>
                 )}
+
+                {/* Desktop Toggle Pane 3 */}
+                <Button
+                  size="xs"
+                  variant={showNotesPanel ? "secondary" : "outline"}
+                  className="h-7 text-[10px] sm:text-xs px-2 gap-1 hidden lg:flex"
+                  onClick={() => setShowNotesPanel((prev) => !prev)}
+                  aria-label={showNotesPanel ? "Collapse notes panel" : "Expand notes panel"}
+                  title={showNotesPanel ? "Collapse notes panel" : "Expand notes panel"}
+                >
+                  <PanelRight className="w-3.5 h-3.5" />
+                  <span>{showNotesPanel ? "Hide Notes" : "Show Notes"}</span>
+                </Button>
+
+                {/* Mobile Drawer Trigger */}
+                <Button
+                  size="xs"
+                  variant="outline"
+                  className="h-7 text-[10px] px-2 gap-1 lg:hidden"
+                  onClick={() => setShowNotesMobile(true)}
+                  aria-label="Open notes drawer"
+                >
+                  <NotebookPen className="w-3.5 h-3.5" />
+                  <span>Notes ({internalNotes.length})</span>
+                </Button>
               </div>
             </div>
 
@@ -788,14 +1075,19 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                     >
                       <div className={`p-3 rounded-lg text-xs leading-relaxed ${
                         isDraft 
-                          ? "bg-indigo-50 border border-indigo-200 text-indigo-950 shadow-xs" 
+                          ? "bg-amber-500/10 border-dashed border border-amber-500/40 text-foreground dark:text-amber-100 shadow-xs" 
                           : isInbound 
                             ? "bg-muted text-foreground" 
                             : "bg-primary text-primary-foreground"
                       }`}>
                         {isDraft && (
-                          <div className="flex items-center gap-1.5 text-[9px] font-semibold text-indigo-700 mb-1.5">
-                            <Sparkles className="w-3 h-3" /> Proposed AI Draft (Awaiting Approval)
+                          <div className="flex items-center justify-between gap-1.5 mb-2">
+                            <Badge variant="outline" className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/40 text-[10px] font-semibold gap-1 py-0.5 px-2">
+                              <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" /> AI Draft
+                            </Badge>
+                            <span className="text-[10px] font-medium text-amber-700/80 dark:text-amber-300/80">
+                              Awaiting human approval
+                            </span>
                           </div>
                         )}
 
@@ -807,24 +1099,24 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                               onChange={(e) => setEditingDraftBody(e.target.value)}
                               rows={3}
                               maxLength={1600}
-                              className="text-xs bg-white text-foreground border-indigo-300"
+                              className="text-xs bg-background text-foreground border-amber-500/40 focus-visible:ring-amber-500"
                             />
                             <div className="flex gap-1.5 justify-end">
                               <Button
                                 size="xs"
                                 variant="outline"
-                                className="h-6 text-[11px] bg-white"
+                                className="h-7 text-[11px]"
                                 onClick={() => setEditingDraftId(null)}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 size="xs"
-                                className="h-6 text-[11px] bg-indigo-600 text-white"
+                                className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1"
                                 onClick={() => handleSaveAndSendEditedDraft(msg.id)}
                                 disabled={pendingActionKey !== null || !editingDraftBody.trim()}
                               >
-                                <Send className="w-3 h-3 mr-1" /> Send Edited
+                                <Send className="w-3 h-3 mr-0.5" /> Approve & Send
                               </Button>
                             </div>
                           </div>
@@ -832,22 +1124,22 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                           <>
                             <p className="whitespace-pre-wrap">{msg.body}</p>
 
-                            {/* AI Draft Action Buttons: Edit, Discard, Send */}
+                            {/* AI Draft Action Buttons: Edit Draft, Discard, Approve & Send */}
                             {isDraft && (
-                              <div className="flex gap-1.5 mt-2.5 border-t border-indigo-200/50 pt-2 justify-end">
+                              <div className="flex gap-1.5 mt-2.5 border-t border-amber-500/20 pt-2 justify-end">
                                 <Button
                                   size="xs"
                                   variant="outline"
-                                  className="bg-white border-indigo-300 text-indigo-700 hover:bg-indigo-50 h-7 text-[11px] gap-1"
+                                  className="bg-background border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 h-7 text-[11px] gap-1 font-semibold"
                                   onClick={() => handleStartEditDraft(msg)}
                                   disabled={pendingActionKey !== null}
                                 >
-                                  <Edit3 className="w-3 h-3" /> Edit
+                                  <Edit3 className="w-3 h-3" /> Edit Draft
                                 </Button>
                                 <Button
                                   size="xs"
                                   variant="outline"
-                                  className="bg-white border-red-200 text-red-600 hover:bg-red-50 h-7 text-[11px] gap-1"
+                                  className="bg-background border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 h-7 text-[11px] gap-1 font-semibold"
                                   onClick={() => handleDiscardDraft(msg.id)}
                                   disabled={pendingActionKey !== null}
                                 >
@@ -855,11 +1147,11 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                                 </Button>
                                 <Button
                                   size="xs"
-                                  className="bg-indigo-600 hover:bg-indigo-700 text-white h-7 text-[11px] gap-1"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-[11px] gap-1 font-semibold shadow-2xs"
                                   onClick={() => handleApproveDraft(msg.id)}
                                   disabled={pendingActionKey !== null}
                                 >
-                                  <Send className="w-3 h-3" /> Send
+                                  <Send className="w-3 h-3" /> Approve & Send
                                 </Button>
                               </div>
                             )}
@@ -890,7 +1182,7 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                     isCurrentContactBlocked
                       ? "Contact is blocked. Unblock to send messages."
                       : activeConv.state === "taken-over"
-                        ? "Type reply..."
+                        ? "Type reply... (Enter or Ctrl+Enter to send)"
                         : "Type reply (sending manually will automatically pause the AI)..."
                   } 
                   value={composeText}
@@ -900,9 +1192,29 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
                       manualSendAttemptRef.current = null;
                     }
                   }}
-                  onKeyDown={e => e.key === "Enter" && handleSend()}
+                  onKeyDown={e => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      handleSend();
+                    } else if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
                   className="flex-1 h-9 text-xs bg-background"
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowQuickTools(true)}
+                  disabled={isCurrentContactBlocked}
+                  title="Quick Tools / Macros"
+                  className="h-9 w-9 text-muted-foreground hover:text-foreground shrink-0"
+                  aria-label="Quick Tools / Macros"
+                >
+                  <Zap className="h-4 w-4" />
+                </Button>
                 <Button size="sm" onClick={handleSend} disabled={isCurrentContactBlocked || sendingMessage || !composeText.trim()} aria-label={sendingMessage ? "Sending message" : "Send manual SMS"}>
                   <Send className="w-4 h-4" />
                 </Button>
@@ -985,6 +1297,39 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
         )}
       </div>
 
+      {/* Pane 3: Persistent Client Context & Internal Notes Panel */}
+      {activeConv && showNotesPanel && (
+        <aside className="w-80 border-l bg-muted/10 hidden lg:flex flex-col shrink-0 overflow-hidden" aria-label="Client context and internal notes">
+          <NotesPanelContent
+            conversation={activeConv}
+            notes={internalNotes}
+            noteText={inlineNoteText}
+            setNoteText={setInlineNoteText}
+            onSubmitNote={handleSendInlineNote}
+            submittingNote={submittingNote}
+            onNavigate={onNavigate}
+          />
+        </aside>
+      )}
+
+      {/* Mobile Notes Drawer */}
+      {activeConv && showNotesMobile && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-xs z-50 flex justify-end lg:hidden" role="dialog" aria-modal="true" aria-label="Internal notes and context">
+          <div className="w-80 max-w-[85%] bg-card h-full border-l shadow-2xl flex flex-col animate-in slide-in-from-right">
+            <NotesPanelContent
+              conversation={activeConv}
+              notes={internalNotes}
+              noteText={inlineNoteText}
+              setNoteText={setInlineNoteText}
+              onSubmitNote={handleSendInlineNote}
+              submittingNote={submittingNote}
+              onNavigate={onNavigate}
+              onClose={() => setShowNotesMobile(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <Dialog
         open={actionDialog !== null}
         onOpenChange={(open) => {
@@ -1051,6 +1396,12 @@ export default function SmsInboxTab({ onNavigate }: SmsInboxTabProps = {}) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <QuickToolsSheet
+        open={showQuickTools}
+        onOpenChange={setShowQuickTools}
+        onInsert={handleInsertQuickTool}
+        customerName={activeConv?.client_name || activeConv?.customer_address}
+      />
     </div>
   );
 }

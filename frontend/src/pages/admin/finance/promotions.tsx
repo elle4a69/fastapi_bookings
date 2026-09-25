@@ -8,9 +8,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Save, Tag } from 'lucide-react';
+import { MobilePageShell, MobileBackButton } from '@/components/ui/mobile-page-shell';
+import { Plus, Save, Tag, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface Service {
   id: string;
@@ -25,7 +25,7 @@ interface Promotion {
   value: number;
   active: boolean;
   expires_at: string;
-  eligible_services: string[]; // array of service IDs
+  eligible_services: string[];
 }
 
 export function PromotionsPage() {
@@ -35,6 +35,7 @@ export function PromotionsPage() {
   const [formData, setFormData] = useState<Partial<Promotion>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -51,23 +52,26 @@ export function PromotionsPage() {
       const sList = Array.isArray(servicesData) ? servicesData : (servicesData?.data || []);
       setPromotions(pList);
       setServices(sList);
-      if (pList.length > 0) {
-        handleSelectPromo(pList[0]);
+      if (pList.length > 0 && !selectedPromoId) {
+        handleSelectPromo(pList[0], false);
       }
     } catch (error) {
-      toast.error('Failed to load data');
+      toast.error('Failed to load promotions data');
       console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectPromo = (promo: Promotion) => {
+  const handleSelectPromo = (promo: Promotion, openMobile = true) => {
     setSelectedPromoId(promo.id);
     setFormData({
       ...promo,
       expires_at: promo.expires_at ? new Date(promo.expires_at).toISOString().split('T')[0] : ''
     });
+    if (openMobile) {
+      setIsMobileDetailOpen(true);
+    }
   };
 
   const handleCreateNew = () => {
@@ -81,6 +85,7 @@ export function PromotionsPage() {
       expires_at: '',
       eligible_services: []
     });
+    setIsMobileDetailOpen(true);
   };
 
   const handleSave = async () => {
@@ -104,6 +109,7 @@ export function PromotionsPage() {
         toast.success('Promotion created successfully');
       }
       fetchData();
+      setIsMobileDetailOpen(false);
     } catch (error) {
       toast.error('Failed to save promotion');
       console.error(error);
@@ -130,98 +136,147 @@ export function PromotionsPage() {
   };
 
   return (
-    <div className="p-6 h-[calc(100vh-4rem)] flex flex-col space-y-6">
-      <div className="flex justify-between items-center shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">Promotions</h1>
-        <Button onClick={handleCreateNew}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Promotion
-        </Button>
-      </div>
-
-      <div className="flex gap-6 flex-1 min-h-0">
-        {/* Master List (Sidebar) */}
-        <Card className="w-1/3 flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle>Active Promotions</CardTitle>
-            <CardDescription>Manage discount codes and offers</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-auto p-0">
-            {loading ? (
-              <div className="p-4 text-center text-muted-foreground">Loading...</div>
-            ) : promotions.length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground">No promotions found.</div>
-            ) : (
-              <div className="flex flex-col">
-                {promotions.map(promo => (
-                  <button
-                    key={promo.id}
-                    onClick={() => handleSelectPromo(promo)}
-                    className={`flex items-start text-left p-4 border-b hover:bg-muted/50 transition-colors ${
-                      selectedPromoId === promo.id ? 'bg-muted border-l-4 border-l-primary' : ''
-                    }`}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-semibold">{promo.name}</span>
-                        {promo.active ? (
-                          <Badge variant="default" className="text-[10px]">Active</Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Tag className="h-3 w-3 mr-1" />
-                        <span className="font-mono">{promo.code}</span>
-                      </div>
-                      <div className="text-sm mt-2">
-                        {promo.discount_type === 'Percentage' ? `${promo.value}% off` : `$${promo.value} off`}
+    <MobilePageShell
+      title="Promotions"
+      description="Create and manage coupon discount codes, percentage deals, and service-level offers"
+      actions={
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchData}
+            className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation gap-1.5"
+          >
+            <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleCreateNew}
+            className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Promotion</span>
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 min-w-0">
+        {/* Master Promotion List */}
+        <div className={`col-span-1 md:col-span-4 ${isMobileDetailOpen ? 'hidden md:block' : 'block'}`}>
+          <Card className="shadow-xs">
+            <CardHeader className="pb-3 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base sm:text-lg">Promo Codes</CardTitle>
+                  <CardDescription className="text-xs">Select code to view details</CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-xs">{promotions.length}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto">
+              {loading ? (
+                <div className="p-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <span>Loading promotions...</span>
+                </div>
+              ) : promotions.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  No promotions found. Click "New Promotion" to create one.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {promotions.map(promo => (
+                    <div
+                      key={promo.id}
+                      onClick={() => handleSelectPromo(promo, true)}
+                      className={`flex items-start text-left p-3.5 sm:p-4 hover:bg-muted/50 transition-colors cursor-pointer touch-manipulation ${
+                        selectedPromoId === promo.id ? 'bg-muted/70 border-l-4 border-l-primary' : ''
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-semibold text-sm truncate text-foreground">{promo.name}</span>
+                          {promo.active ? (
+                            <Badge variant="default" className="text-[10px] shrink-0">Active</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] shrink-0">Inactive</Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <Tag className="h-3 w-3 mr-1 shrink-0" />
+                          <span className="font-mono font-semibold text-primary">{promo.code}</span>
+                        </div>
+                        <div className="text-xs font-medium text-foreground mt-1.5">
+                          {promo.discount_type === 'Percentage' ? `${promo.value}% discount` : `$${promo.value} discount`}
+                        </div>
                       </div>
                     </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Detail View */}
-        <Card className="flex-1 flex flex-col min-h-0">
-          <CardHeader className="shrink-0 border-b">
-            <CardTitle>{selectedPromoId ? 'Edit Promotion' : 'Create Promotion'}</CardTitle>
-          </CardHeader>
-          
-          <ScrollArea className="flex-1">
-            <CardContent className="p-6 space-y-8">
-              <div className="grid grid-cols-2 gap-6">
+        {/* Promotion Detail / Editor View */}
+        <div className={`col-span-1 md:col-span-8 ${isMobileDetailOpen ? 'block' : 'hidden md:block'}`}>
+          <Card className="shadow-xs">
+            <CardHeader className="border-b pb-4">
+              <div className="md:hidden mb-2">
+                <MobileBackButton label="Promotions" onClick={() => setIsMobileDetailOpen(false)} />
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base sm:text-lg">
+                    {selectedPromoId ? `Edit "${formData.name || 'Promotion'}"` : 'Create New Promotion'}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Define discount logic, redemption criteria, and eligible services
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="h-10 min-h-[44px] w-full sm:w-auto touch-manipulation gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  <span>{saving ? 'Saving...' : 'Save Promotion'}</span>
+                </Button>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="p-4 sm:p-6 space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Promotion Name</Label>
+                  <Label htmlFor="promo-name" className="text-xs font-semibold uppercase tracking-wider">Promotion Name</Label>
                   <Input 
-                    id="name" 
-                    placeholder="e.g. Summer Sale" 
+                    id="promo-name" 
+                    placeholder="e.g. Summer Flash Sale" 
                     value={formData.name || ''} 
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="h-11 min-h-[44px]"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="code">Promo Code</Label>
+                  <Label htmlFor="promo-code" className="text-xs font-semibold uppercase tracking-wider">Promo Code</Label>
                   <Input 
-                    id="code" 
+                    id="promo-code" 
                     placeholder="e.g. SUMMER2026" 
-                    className="uppercase font-mono"
+                    className="uppercase font-mono font-bold h-11 min-h-[44px]"
                     value={formData.code || ''} 
                     onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="discountType">Discount Type</Label>
+                  <Label htmlFor="discount-type" className="text-xs font-semibold uppercase tracking-wider">Discount Type</Label>
                   <Select 
                     value={formData.discount_type} 
                     onValueChange={(val: 'Percentage' | 'Fixed Amount') => setFormData({ ...formData, discount_type: val })}
                   >
-                    <SelectTrigger id="discountType">
+                    <SelectTrigger id="discount-type" className="h-11 min-h-[44px]">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -232,84 +287,87 @@ export function PromotionsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="value">Discount Value</Label>
+                  <Label htmlFor="promo-value" className="text-xs font-semibold uppercase tracking-wider">Discount Value</Label>
                   <Input 
-                    id="value" 
+                    id="promo-value" 
                     type="number" 
                     min="0"
                     step="0.01"
-                    value={formData.value || ''} 
+                    value={formData.value ?? ''} 
                     onChange={e => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+                    className="h-11 min-h-[44px]"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="expiresAt">Expiration Date</Label>
+                  <Label htmlFor="promo-expires" className="text-xs font-semibold uppercase tracking-wider">Expiration Date</Label>
                   <Input 
-                    id="expiresAt" 
+                    id="promo-expires" 
                     type="date" 
                     value={formData.expires_at || ''} 
                     onChange={e => setFormData({ ...formData, expires_at: e.target.value })}
+                    className="h-11 min-h-[44px]"
                   />
                 </div>
 
-                <div className="flex items-center space-x-2 pt-8">
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="promo-active" className="text-sm font-medium cursor-pointer">Active</Label>
+                    <p className="text-xs text-muted-foreground">Code is currently redeemable</p>
+                  </div>
                   <Switch 
-                    id="active" 
+                    id="promo-active" 
                     checked={formData.active !== false}
                     onCheckedChange={checked => setFormData({ ...formData, active: checked })}
+                    className="touch-manipulation"
                   />
-                  <Label htmlFor="active">Active Promotion</Label>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex justify-between items-center border-b pb-2">
-                  <div className="space-y-1">
-                    <h3 className="font-medium leading-none">Eligible Services</h3>
-                    <p className="text-sm text-muted-foreground">Select which services this promotion applies to.</p>
+              {/* Service Eligibility Section */}
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs font-semibold uppercase tracking-wider">Eligible Services</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Select which catalog services this discount applies to</p>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="selectAll" 
-                      checked={formData.eligible_services?.length === services.length && services.length > 0}
-                      onCheckedChange={(checked) => toggleAllServices(checked as boolean)}
-                    />
-                    <Label htmlFor="selectAll" className="font-normal cursor-pointer">Select All</Label>
-                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => toggleAllServices((formData.eligible_services?.length || 0) < services.length)}
+                    className="text-xs h-9 min-h-[36px] touch-manipulation"
+                  >
+                    {(formData.eligible_services?.length || 0) === services.length ? 'Deselect All' : 'Select All'}
+                  </Button>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-md border">
-                  {services.length === 0 ? (
-                    <div className="col-span-2 text-sm text-muted-foreground italic">No services available.</div>
-                  ) : (
-                    services.map(service => (
-                      <div key={service.id} className="flex items-center space-x-2">
+                <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-2 bg-muted/10">
+                  {services.map(svc => {
+                    const isChecked = formData.eligible_services?.includes(svc.id) ?? false;
+                    return (
+                      <label 
+                        key={svc.id} 
+                        className="flex items-center space-x-3 p-1.5 rounded hover:bg-muted/40 cursor-pointer touch-manipulation"
+                      >
                         <Checkbox 
-                          id={`service-${service.id}`} 
-                          checked={formData.eligible_services?.includes(service.id) || false}
-                          onCheckedChange={() => toggleService(service.id)}
+                          checked={isChecked}
+                          onCheckedChange={() => toggleService(svc.id)}
+                          className="h-5 w-5 rounded border-muted-foreground"
                         />
-                        <Label htmlFor={`service-${service.id}`} className="font-normal cursor-pointer">
-                          {service.name}
-                        </Label>
-                      </div>
-                    ))
+                        <span className="text-sm font-normal select-none">{svc.name}</span>
+                      </label>
+                    );
+                  })}
+                  {services.length === 0 && (
+                    <p className="text-xs text-muted-foreground p-2">No services found.</p>
                   )}
                 </div>
               </div>
             </CardContent>
-          </ScrollArea>
-          
-          <div className="p-6 border-t mt-auto shrink-0 flex justify-end">
-            <Button onClick={handleSave} disabled={saving}>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? 'Saving...' : 'Save Promotion'}
-            </Button>
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
-    </div>
+    </MobilePageShell>
   );
 }
 

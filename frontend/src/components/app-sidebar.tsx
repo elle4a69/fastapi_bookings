@@ -3,9 +3,12 @@ import {
   ChevronRightIcon,
   Sparkles,
 } from "lucide-react"
+import { useMemo } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 
-import { navigation, type NavItem } from "@/components/navigation"
+import { navigation, providerNavigation, filterNavigationByModules, type NavItem } from "@/components/navigation"
+import { useTenantModules } from "@/context/tenant-modules-context"
+import { useAuth } from "@/context/auth-context"
 import {
   Collapsible,
   CollapsibleContent,
@@ -112,15 +115,27 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
 
 export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar()
+  const { enabledModules } = useTenantModules()
+  const { role, isProvider } = useAuth()
+
+  const filteredNavigation = useMemo(() => {
+    if (isProvider || role === 'provider') {
+      return providerNavigation
+    }
+    return filterNavigationByModules(navigation, enabledModules)
+  }, [isProvider, role, enabledModules])
+
   const closeMobileNavigation = () => {
     if (isMobile) setOpenMobile(false)
   }
+
+  const homePath = isProvider || role === 'provider' ? '/admin/my-schedule' : '/admin'
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar font-sans shadow-sm">
       <SidebarHeader className="border-b border-sidebar-border/60 p-3">
         <NavLink
-          to="/admin"
+          to={homePath}
           onClick={closeMobileNavigation}
           className="flex h-11 items-center gap-3 overflow-hidden rounded-xl px-2 outline-none transition-colors hover:bg-sidebar-accent/50 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
@@ -132,12 +147,14 @@ export function AppSidebar() {
               BookMe Pro
               <Sparkles className="h-3 w-3 text-primary animate-pulse" />
             </span>
-            <span className="block truncate text-[11px] font-medium text-sidebar-foreground/50">Admin workspace</span>
+            <span className="block truncate text-[11px] font-medium text-sidebar-foreground/50">
+              {isProvider || role === 'provider' ? 'Technician Portal' : 'Admin workspace'}
+            </span>
           </span>
         </NavLink>
       </SidebarHeader>
       <SidebarContent className="px-2 py-3 space-y-4">
-        {navigation.map((section) => (
+        {filteredNavigation.map((section) => (
           <SidebarGroup key={section.label} className="p-0">
             <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-sidebar-foreground/50 uppercase px-3 py-1.5">
               {section.label}

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { endAdminSession } from "@/lib/api"
+import { useAuth } from "@/context/auth-context"
 
 type UserMenuProps = {
   compact?: boolean
@@ -21,10 +22,20 @@ type UserMenuProps = {
 
 export function UserMenu({ compact = false, className }: UserMenuProps) {
   const navigate = useNavigate()
+  const { user, role, isProvider } = useAuth()
 
   const handleLogout = () => {
     endAdminSession(navigate)
   }
+
+  const roleLabel =
+    role === 'owner' ? 'Owner / Admin' :
+    role === 'manager' ? 'Manager' :
+    role === 'provider' ? 'Technician / Provider' : role
+
+  const initials = (user?.login || 'Admin')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <DropdownMenu>
@@ -37,30 +48,32 @@ export function UserMenu({ compact = false, className }: UserMenuProps) {
             className,
           )}
         >
-          <Avatar>
-            <AvatarFallback>AU</AvatarFallback>
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs bg-primary/15 text-primary font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <span className="block truncate text-sm font-medium">Admin account</span>
-            <span className="block truncate text-xs text-muted-foreground">Owner / admin</span>
+            <span className="block truncate text-sm font-medium">{user?.login || 'Staff Member'}</span>
+            <span className="block truncate text-xs text-muted-foreground">{roleLabel}</span>
           </span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
         <DropdownMenuLabel>
-          <span className="block text-sm text-foreground">Admin account</span>
-          <span className="font-normal">Owner / admin workspace</span>
+          <span className="block text-sm text-foreground">{user?.login || 'Staff Member'}</span>
+          <span className="font-normal text-xs text-muted-foreground capitalize">{roleLabel} workspace</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => navigate(isProvider ? '/admin/my-profile' : '/admin')}>
             <UserRoundIcon />
-            Account
+            {isProvider ? 'My Profile' : 'Account'}
           </DropdownMenuItem>
-          <DropdownMenuItem>
-            <SettingsIcon />
-            Business settings
-          </DropdownMenuItem>
+          {!isProvider && (
+            <DropdownMenuItem onSelect={() => navigate('/admin/settings/business')}>
+              <SettingsIcon />
+              Business settings
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

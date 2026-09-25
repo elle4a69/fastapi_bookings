@@ -1,0 +1,42 @@
+{
+  "name": "FastAPI Bookings & SMS Assistant",
+  "short_name": "Bookings",
+  "description": "FastAPI Bookings, Customer Arrivals & SMS Assistant",
+  "start_url": "/admin/sms-assistant",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "lang": "en",
+  "scope": "/",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "SMS Inbox",
+      "url": "/admin/sms-assistant",
+      "icons": [{ "src": "/icons/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lobby Arrivals",
+      "url": "/admin/sms-assistant",
+      "icons": [{ "src": "/icons/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

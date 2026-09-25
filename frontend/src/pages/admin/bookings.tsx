@@ -10,20 +10,21 @@ import {
   Ban,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, fetchAllPaginated } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { MobilePageShell } from "@/components/ui/mobile-page-shell";
+import { ResponsiveDataTable, type ColumnDef } from "@/components/ui/responsive-data-table";
 
 interface BookingItem {
   id: string;
@@ -141,171 +142,294 @@ export default function BookingsAdminPage() {
     return true;
   });
 
-  return (
-    <div className="flex-1 space-y-4 p-4 md:p-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+  const columns: ColumnDef<BookingItem>[] = [
+    {
+      id: "datetime",
+      header: "Date / Time",
+      sortable: true,
+      cell: (b) => (
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Manage Bookings</h1>
-          <p className="text-muted-foreground text-xs mt-1">View, filter, and manage real appointments across all providers.</p>
+          <div className="font-semibold text-sm text-foreground">{b.date}</div>
+          <div className="text-xs text-muted-foreground">{b.time}</div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.location.href = '/admin/calendar'}>
-            <CalendarIcon className="w-4 h-4 mr-2" /> Calendar View
+      ),
+    },
+    {
+      id: "client",
+      header: "Client",
+      sortable: true,
+      cell: (b) => (
+        <div>
+          <div className="font-semibold text-sm text-foreground">{b.client}</div>
+          <div className="text-xs text-muted-foreground">#{b.id}</div>
+        </div>
+      ),
+    },
+    {
+      id: "service",
+      header: "Service",
+      sortable: true,
+      cell: (b) => <span className="font-medium text-sm">{b.service}</span>,
+    },
+    {
+      id: "provider",
+      header: "Provider",
+      sortable: true,
+      cell: (b) => <span className="text-sm text-muted-foreground">{b.provider}</span>,
+    },
+    {
+      id: "duration",
+      header: "Duration",
+      defaultHidden: true,
+      cell: (b) => <span className="text-xs text-muted-foreground">{b.duration}</span>,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: (b) => getStatusBadge(b.status),
+    },
+    {
+      id: "price",
+      header: "Price",
+      sortable: true,
+      align: "right",
+      cell: (b) => <span className="font-bold text-foreground text-sm">{b.price}</span>,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      align: "right",
+      hideable: false,
+      cell: (b) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" className="h-8 w-8 min-h-0 min-w-0 p-0 touch-manipulation">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => { setSelectedBooking(b); setDialogOpen(true); }}>
+              View Details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'confirmed')}>
+              Mark Confirmed
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'completed')}>
+              Mark Completed
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'noshow')}>
+              Mark No-show
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-red-600" onClick={() => handleUpdateStatus(b.id, 'cancelled')}>
+              Cancel Booking
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
+
+  return (
+    <MobilePageShell
+      title="Manage Bookings"
+      description="View, filter, and track customer appointments across providers"
+      density="compact"
+      actions={
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={loadData}
+            className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
+          >
+            <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => window.location.href = '/admin/calendar'}
+            className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 text-primary" />
+            <span>Calendar</span>
           </Button>
         </div>
-      </div>
+      }
+    >
+      <div className="space-y-2.5 sm:space-y-3 min-w-0">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
+          <div className="relative flex-1 max-w-full sm:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input 
+              placeholder="Search client, service, ID..." 
+              className="pl-8 h-8 sm:h-9 min-h-0 text-xs sm:text-sm" 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
 
-      <Card className="border shadow-xs">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-            <div className="flex flex-1 flex-wrap items-center gap-2">
-              <div className="relative w-72">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search client, provider, or ID..." 
-                  className="pl-9 h-9 text-xs" 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[150px] h-8 sm:h-9 min-h-0 text-xs sm:text-sm">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="noshow">No Show</SelectItem>
+              </SelectContent>
+            </Select>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] h-9 text-xs">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="noshow">No Show</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button variant="outline" size="sm" className="h-9 text-xs px-3" onClick={() => toast.success("Exporting CSV...")}>
-              <Download className="mr-1.5 h-4 w-4" />
-              Export CSV
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 shrink-0 touch-manipulation gap-1.5 text-xs sm:text-sm" 
+              onClick={() => toast.success("Exporting CSV...")}
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Export</span>
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="rounded-xl border bg-card overflow-hidden shadow-xs">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead>Date / Time</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Service</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead>Duration</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                  Loading bookings...
-                </TableCell>
-              </TableRow>
-            ) : filteredBookings.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                  No bookings found matching your search.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredBookings.map((b) => (
-                <TableRow 
-                  key={b.id} 
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => { setSelectedBooking(b); setDialogOpen(true); }}
-                >
-                  <TableCell>
-                    <div className="font-semibold text-sm">{b.date}</div>
-                    <div className="text-xs text-muted-foreground">{b.time}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-semibold text-sm">{b.client}</div>
-                    <div className="text-xs text-muted-foreground">ID #{b.id}</div>
-                  </TableCell>
-                  <TableCell className="font-medium text-sm">{b.service}</TableCell>
-                  <TableCell className="text-sm">{b.provider}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{b.duration}</TableCell>
-                  <TableCell>{getStatusBadge(b.status)}</TableCell>
-                  <TableCell className="text-right font-bold text-sm">{b.price}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setSelectedBooking(b); setDialogOpen(true); }}>View Details</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'confirmed')}>Mark Confirmed</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'completed')}>Mark Completed</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'noshow')}>Mark No-show</DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600" onClick={() => handleUpdateStatus(b.id, 'cancelled')}>Cancel Booking</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+        <ResponsiveDataTable
+          data={filteredBookings}
+          columns={columns}
+          keyExtractor={(b) => b.id}
+          isLoading={loading}
+          density="compact"
+          onRowClick={(b) => { setSelectedBooking(b); setDialogOpen(true); }}
+          defaultSort={{ key: "datetime", direction: "desc" }}
+          renderMobileCard={(b) => (
+            <div className="p-3.5 rounded-lg border bg-card text-card-foreground shadow-xs space-y-3 touch-manipulation active:bg-accent/40 transition-colors">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-foreground">#{b.id}</span>
+                  <span className="text-xs text-muted-foreground">{b.date} • {b.time}</span>
+                </div>
+                {getStatusBadge(b.status)}
+              </div>
+
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-bold text-base text-foreground">{b.client}</p>
+                  <p className="text-xs font-medium text-primary mt-0.5">{b.service}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Provider: {b.provider}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-foreground text-base">{b.price}</p>
+                  <p className="text-xs text-muted-foreground">{b.duration}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="truncate max-w-[140px]">{b.location}</span>
+                </span>
+
+                <div className="flex items-center gap-1">
+                  {b.clientPhone && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 min-h-[44px] min-w-[44px] touch-manipulation"
+                      title="Call"
+                      asChild
+                    >
+                      <a href={`tel:${b.clientPhone}`}><Phone className="h-4 w-4" /></a>
+                    </Button>
+                  )}
+                  {b.clientEmail && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 min-h-[44px] min-w-[44px] touch-manipulation"
+                      title="Email"
+                      asChild
+                    >
+                      <a href={`mailto:${b.clientEmail}`}><Mail className="h-4 w-4" /></a>
+                    </Button>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px] touch-manipulation">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => { setSelectedBooking(b); setDialogOpen(true); }}>
+                        View Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'confirmed')}>
+                        Mark Confirmed
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'completed')}>
+                        Mark Completed
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(b.id, 'noshow')}>
+                        Mark No-show
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-red-600" onClick={() => handleUpdateStatus(b.id, 'cancelled')}>
+                        Cancel Booking
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </div>
+          )}
+        />
       </div>
 
-      {/* ── Booking Details Centered Dialog ─────────────────── */}
+      {/* Booking Details Centered Dialog / Mobile Sheet */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden rounded-xl">
-          <DialogHeader className="p-6 pb-4 border-b bg-card">
+        <DialogContent className="w-full sm:max-w-lg p-0 overflow-hidden rounded-xl">
+          <DialogHeader className="p-4 sm:p-6 pb-4 border-b bg-card text-left">
             <div className="flex items-center justify-between pr-6">
               <div>
-                <DialogTitle className="text-xl font-bold flex items-center gap-3">
+                <DialogTitle className="text-lg sm:text-xl font-bold flex items-center gap-2">
                   Booking #{selectedBooking?.id}
                   {selectedBooking && getStatusBadge(selectedBooking.status)}
                 </DialogTitle>
-                <DialogDescription className="mt-1">
-                  Scheduled for {selectedBooking?.date} at {selectedBooking?.time}
+                <DialogDescription className="mt-1 text-xs">
+                  {selectedBooking?.date} at {selectedBooking?.time}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
           {selectedBooking && (
-            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-4 max-h-[65vh] overflow-y-auto">
               <Tabs defaultValue="details" className="w-full">
-                <TabsList className="grid grid-cols-3 w-full mb-4">
-                  <TabsTrigger value="details">Appointment</TabsTrigger>
-                  <TabsTrigger value="client">Client Info</TabsTrigger>
-                  <TabsTrigger value="payment">Payment & Notes</TabsTrigger>
+                <TabsList className="grid grid-cols-3 w-full mb-3 h-10">
+                  <TabsTrigger value="details" className="text-xs">Appointment</TabsTrigger>
+                  <TabsTrigger value="client" className="text-xs">Client Info</TabsTrigger>
+                  <TabsTrigger value="payment" className="text-xs">Payment</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="details" className="space-y-4 pt-1">
-                  <div className="grid grid-cols-2 gap-4 p-4 rounded-xl border bg-card/60">
+                <TabsContent value="details" className="space-y-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
                     <div>
                       <span className="text-xs text-muted-foreground block font-medium">Service</span>
-                      <span className="font-semibold text-base mt-0.5 block">{selectedBooking.service}</span>
-                      <span className="text-xs text-muted-foreground mt-1 block">{selectedBooking.duration}</span>
+                      <span className="font-semibold text-sm mt-0.5 block">{selectedBooking.service}</span>
+                      <span className="text-xs text-muted-foreground mt-0.5 block">{selectedBooking.duration}</span>
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground block font-medium">Provider</span>
-                      <span className="font-semibold text-base mt-0.5 block">{selectedBooking.provider}</span>
+                      <span className="font-semibold text-sm mt-0.5 block">{selectedBooking.provider}</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 p-4 rounded-xl border bg-card/60">
+                  <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
                     <div>
                       <span className="text-xs text-muted-foreground block font-medium">Location</span>
-                      <span className="font-semibold text-sm mt-0.5 flex items-center gap-1.5">
-                        <MapPin className="w-4 h-4 text-primary" /> {selectedBooking.location}
+                      <span className="font-semibold text-xs mt-0.5 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-primary shrink-0" /> {selectedBooking.location}
                       </span>
                     </div>
                     <div>
@@ -315,36 +439,36 @@ export default function BookingsAdminPage() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="client" className="space-y-4 pt-1">
-                  <div className="p-4 rounded-xl border bg-card/60 space-y-3">
+                <TabsContent value="client" className="space-y-3 pt-1">
+                  <div className="p-3.5 rounded-lg border bg-muted/20 space-y-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
                         {selectedBooking.client[0]}
                       </div>
-                      <div>
-                        <div className="font-bold text-base">{selectedBooking.client}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm truncate">{selectedBooking.client}</div>
                         <div className="text-xs text-muted-foreground">ID #{selectedBooking.clientId}</div>
                       </div>
                     </div>
                     <Separator />
                     {selectedBooking.clientEmail && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                        <a href={`mailto:${selectedBooking.clientEmail}`} className="text-primary hover:underline">{selectedBooking.clientEmail}</a>
+                      <div className="flex items-center gap-2 text-xs">
+                        <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <a href={`mailto:${selectedBooking.clientEmail}`} className="text-primary hover:underline truncate">{selectedBooking.clientEmail}</a>
                       </div>
                     )}
                     {selectedBooking.clientPhone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="w-4 h-4 text-muted-foreground" />
+                      <div className="flex items-center gap-2 text-xs">
+                        <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
                         <a href={`tel:${selectedBooking.clientPhone}`} className="text-primary hover:underline">{selectedBooking.clientPhone}</a>
                       </div>
                     )}
                   </div>
                 </TabsContent>
 
-                <TabsContent value="payment" className="space-y-4 pt-1">
-                  <div className="p-4 rounded-xl border bg-card/60 space-y-2">
-                    <div className="flex justify-between items-center text-sm">
+                <TabsContent value="payment" className="space-y-3 pt-1">
+                  <div className="p-3.5 rounded-lg border bg-muted/20 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
                       <span className="text-muted-foreground">Service Fee</span>
                       <span className="font-medium">{selectedBooking.price}</span>
                     </div>
@@ -357,7 +481,7 @@ export default function BookingsAdminPage() {
 
                   <div>
                     <span className="text-xs text-muted-foreground block font-medium">Notes</span>
-                    <p className="text-sm bg-muted/30 p-3 rounded-lg border mt-1 min-h-[60px]">
+                    <p className="text-xs bg-muted/30 p-3 rounded-lg border mt-1 min-h-[50px]">
                       {selectedBooking.notes || "No notes provided."}
                     </p>
                   </div>
@@ -366,23 +490,36 @@ export default function BookingsAdminPage() {
             </div>
           )}
 
-          <DialogFooter className="p-4 border-t bg-muted/20 flex items-center justify-between gap-2">
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Close</Button>
-            <div className="flex items-center gap-2">
+          <DialogFooter className="p-3.5 border-t bg-muted/20 flex flex-col-reverse sm:flex-row items-center justify-between gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setDialogOpen(false)}
+              className="h-10 min-h-[44px] w-full sm:w-auto touch-manipulation text-xs"
+            >
+              Close
+            </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {selectedBooking?.status !== 'completed' && (
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleUpdateStatus(selectedBooking!.id, 'completed')}>
+                <Button 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs" 
+                  onClick={() => handleUpdateStatus(selectedBooking!.id, 'completed')}
+                >
                   Complete
                 </Button>
               )}
               {selectedBooking?.status !== 'cancelled' && (
-                <Button variant="destructive" size="sm" onClick={() => handleUpdateStatus(selectedBooking!.id, 'cancelled')}>
-                  Cancel Booking
+                <Button 
+                  variant="destructive" 
+                  className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs" 
+                  onClick={() => handleUpdateStatus(selectedBooking!.id, 'cancelled')}
+                >
+                  Cancel
                 </Button>
               )}
             </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </MobilePageShell>
   );
 }

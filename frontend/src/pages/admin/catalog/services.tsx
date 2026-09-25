@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAutoSave } from '@/hooks/use-auto-save';
 import { AutoSaveStatus } from '@/components/ui/auto-save-status';
+import { MobileBackButton } from '@/components/ui/mobile-page-shell';
 
 import { apiClient } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -791,10 +792,10 @@ export default function ServicesPage() {
           ) : isCategoryCreating || isCategoryEditing ? (
             <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
               <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 md:pb-4 sticky top-0">
-                <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setIsCategoryCreating(false); setIsCategoryEditing(false); }}>
-                    <ArrowLeft className="w-5 h-5" />
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <div className="md:hidden">
+                    <MobileBackButton label="Services" onClick={() => { setIsCategoryCreating(false); setIsCategoryEditing(false); }} />
+                  </div>
                   <div>
                     <CardTitle className="text-2xl font-bold font-heading">
                       {isCategoryCreating ? 'Add New Category' : 'Edit Category'}
@@ -840,10 +841,10 @@ export default function ServicesPage() {
           ) : (
             <Card className="flex-1 flex flex-col h-full overflow-hidden shadow-none md:shadow-sm border-0 md:border py-0 gap-0">
               <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b sticky top-0 p-4 md:p-6">
-                <div className="flex items-center gap-3 flex-1">
-                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => setSelectedCategoryId(null)}>
-                    <ArrowLeft className="w-5 h-5" />
-                  </Button>
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="md:hidden">
+                    <MobileBackButton label="Services" onClick={() => setSelectedCategoryId(null)} />
+                  </div>
                   <div className="flex-1">
                     <CardTitle className="text-xl font-heading">Category Details</CardTitle>
                   </div>
@@ -884,10 +885,10 @@ export default function ServicesPage() {
           ) : isCreating ? (
             <Card className="flex-1 flex flex-col h-full overflow-hidden border-0 shadow-none py-0 gap-0">
               <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b p-4 md:pb-4 sticky top-0">
-                <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
-                    <ArrowLeft className="w-5 h-5" />
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <div className="md:hidden">
+                    <MobileBackButton label="Services" onClick={handleCancel} />
+                  </div>
                   <div>
                     <CardTitle className="text-2xl font-bold font-heading">Add New Service</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">Create a new service offering for your clients</p>
@@ -914,7 +915,7 @@ export default function ServicesPage() {
                   />
                   <p className="text-sm text-muted-foreground">Provide details about what clients can expect</p>
                 </div>
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
                     <Label className="text-base font-semibold">Duration (mins)</Label>
                     <div className="relative">
@@ -951,10 +952,10 @@ export default function ServicesPage() {
           ) : (
             <Card className="flex-1 flex flex-col h-full overflow-hidden shadow-none md:shadow-sm border-0 md:border py-0 gap-0">
               <CardHeader className="flex flex-row items-center justify-between shrink-0 bg-background z-10 border-b sticky top-0 p-4 md:p-6">
-                <div className="flex items-center gap-3 flex-1">
-                  <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={handleCancel}>
-                    <ArrowLeft className="w-5 h-5" />
-                  </Button>
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="md:hidden">
+                    <MobileBackButton label="Services" onClick={handleCancel} />
+                  </div>
                   <div className="flex-1">
                     <CardTitle className="text-xl font-heading">Service Details</CardTitle>
                   </div>
@@ -1028,7 +1029,7 @@ export default function ServicesPage() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="price">Price</Label>
                           <Input 
@@ -1085,7 +1086,7 @@ export default function ServicesPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t">
                         <div className="space-y-2">
                           <Label htmlFor="duration">Duration (mins)</Label>
                           <Input 
@@ -1210,7 +1211,7 @@ export default function ServicesPage() {
                           </div>
                         </div>
                         {formData.has_groups && (
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="min_group_size">Min Group Size</Label>
                               <Input 

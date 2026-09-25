@@ -14,8 +14,7 @@ import {
   CalendarCheck,
   FileText,
   RotateCcw,
-  Edit2,
-  Calendar as CalendarIcon
+  Edit2
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, fetchAllPaginated } from "@/lib/api";
@@ -85,7 +84,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   noshow: <Ban className="w-3.5 h-3.5" />,
 };
 
-const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function fmt12(date: Date) {
@@ -401,7 +400,7 @@ export default function CalendarPage() {
   const [, setLoading] = useState(true);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewType, setViewType] = useState<"month" | "week" | "day">("month");
+  const [viewType, setViewType] = useState<"month" | "workweek" | "week" | "day">("month");
   const [filterProvider, setFilterProvider] = useState("all");
   const [filterLocation, setFilterLocation] = useState("all");
 
@@ -689,7 +688,7 @@ export default function CalendarPage() {
   const navigateDate = (dir: -1 | 1) => {
     const d = new Date(currentDate);
     if (viewType === "month") d.setMonth(d.getMonth() + dir);
-    else if (viewType === "week") d.setDate(d.getDate() + (dir * 7));
+    else if (viewType === "week" || viewType === "workweek") d.setDate(d.getDate() + (dir * 7));
     else d.setDate(d.getDate() + dir);
     setCurrentDate(d);
   };
@@ -697,6 +696,12 @@ export default function CalendarPage() {
   let headingLabel = "";
   if (viewType === "month") {
     headingLabel = `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  } else if (viewType === "workweek") {
+    const start = getStartOfWeek(currentDate);
+    start.setDate(start.getDate() + 1); // Monday
+    const end = new Date(start);
+    end.setDate(end.getDate() + 4); // Friday
+    headingLabel = `${MONTH_NAMES[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`;
   } else if (viewType === "week") {
     const start = getStartOfWeek(currentDate);
     const end = new Date(start);
@@ -714,84 +719,63 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      {/* ── Header ─────────────────────────────────────── */}
-      <div className="px-6 py-4 flex items-center justify-between border-b shrink-0 bg-card">
-        <div className="flex items-center gap-3">
-          <CalendarIcon className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2 h-9" onClick={() => window.location.href = '/admin/finance/payments'}>
-            <FileText className="w-4 h-4" /> Transactions
+      {/* ── Top Bar (Date Navigation, View Mode, Primary Action) ──────────── */}
+      <div className="py-1.5 px-3 sm:px-4 flex items-center justify-between border-b bg-card shrink-0 gap-2 overflow-x-auto no-scrollbar">
+        {/* Left: Date navigation cluster */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 sm:h-8 sm:w-8"
+            onClick={() => navigateDate(-1)}
+            aria-label="Previous date"
+          >
+            <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-9" onClick={() => setAllNotesOpen(true)}>
-            <FileText className="w-4 h-4" /> All Notes ({notes.length})
+          <span className="font-semibold text-xs sm:text-sm md:text-base min-w-[110px] sm:min-w-[160px] text-center truncate">
+            {headingLabel}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 sm:h-8 sm:w-8"
+            onClick={() => navigateDate(1)}
+            aria-label="Next date"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs ml-0.5 sm:ml-1"
+            onClick={() => setCurrentDate(new Date())}
+          >
+            Today
           </Button>
         </div>
-      </div>
 
-      {/* ── Toolbar ──────────────────────────────────────── */}
-      <div className="px-6 py-2.5 flex items-center gap-2 border-b shrink-0 flex-wrap bg-card/50">
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => window.location.href = '/admin/schedule/workdays'}>
-          Edit schedules <ChevronRight className="w-3 h-3" />
-        </Button>
-        <Button size="sm" className="h-8 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white border-0" onClick={() => window.location.href = '/admin/bookings'}>
-          <CalendarCheck className="w-3.5 h-3.5" /> Manage bookings
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => {
-          setNoteDate(new Date().toISOString().split('T')[0]);
-          setCreateNoteOpen(true);
-        }}>
-          <Plus className="w-3.5 h-3.5" /> Add Note / Block Time
-        </Button>
-
-        <div className="flex-1" />
-
-        {/* Provider filter */}
-        <Select value={filterProvider} onValueChange={setFilterProvider}>
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="All Providers" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Providers</SelectItem>
-            {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-
-        {/* Location filter */}
-        <Select value={filterLocation} onValueChange={setFilterLocation}>
-          <SelectTrigger className="h-8 w-[150px] text-xs">
-            <SelectValue placeholder="All Locations" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Locations</SelectItem>
-            {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setFilterDialogOpen(true)}>
-          <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
-        </Button>
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => handleOpenCreateBooking()}>
-          <Plus className="w-3.5 h-3.5" /> New Booking
-        </Button>
-      </div>
-
-      {/* ── View Controls ──────────────────────────────────── */}
-      <div className="px-6 py-2 flex items-center gap-3 border-b shrink-0 bg-background">
-        <div className="flex items-center p-1 bg-muted rounded-lg">
+        {/* Center: View switcher segmented buttons */}
+        <div className="flex items-center p-0.5 sm:p-1 bg-muted rounded-lg shrink-0">
           <Button
             variant={viewType === "month" ? "default" : "ghost"}
             size="sm"
-            className="h-7 px-3 text-xs"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-medium min-h-0"
             onClick={() => setViewType("month")}
           >
             Month
           </Button>
           <Button
+            variant={viewType === "workweek" ? "default" : "ghost"}
+            size="sm"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-medium min-h-0"
+            onClick={() => setViewType("workweek")}
+          >
+            Work Week
+          </Button>
+          <Button
             variant={viewType === "week" ? "default" : "ghost"}
             size="sm"
-            className="h-7 px-3 text-xs"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-medium min-h-0"
             onClick={() => setViewType("week")}
           >
             Week
@@ -799,30 +783,104 @@ export default function CalendarPage() {
           <Button
             variant={viewType === "day" ? "default" : "ghost"}
             size="sm"
-            className="h-7 px-3 text-xs"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs font-medium min-h-0"
             onClick={() => setViewType("day")}
           >
             Day
           </Button>
         </div>
 
-        <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentDate(new Date())}>
-          Today
-        </Button>
-
-        <div className="flex-1" />
-
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDate(-1)}>
-            <ChevronLeft className="w-4 h-4" />
+        {/* Right: Primary action buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 sm:h-8 px-2 sm:px-2.5 text-xs gap-1 font-medium"
+            onClick={() => {
+              setNoteDate(new Date().toISOString().split('T')[0]);
+              setCreateNoteOpen(true);
+            }}
+          >
+            <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Note</span>
           </Button>
-          <span className="font-semibold text-sm min-w-[180px] text-center">{headingLabel}</span>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDate(1)}>
-            <ChevronRight className="w-4 h-4" />
+          <Button
+            size="sm"
+            className="h-7 sm:h-8 px-2.5 sm:px-3 text-xs gap-1 font-medium bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
+            onClick={() => handleOpenCreateBooking()}
+          >
+            <Plus className="w-3.5 h-3.5" /> <span>New Booking</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* ── Filter & Secondary Toolbar ────────────────────────────────────── */}
+      <div className="py-1 px-3 sm:px-4 flex items-center justify-between border-b bg-muted/20 shrink-0 gap-2 overflow-x-auto no-scrollbar">
+        {/* Left: Compact Provider & Location Selects + Filter */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <Select value={filterProvider} onValueChange={setFilterProvider}>
+            <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+              <SelectValue placeholder="All Providers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Providers</SelectItem>
+              {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterLocation} onValueChange={setFilterLocation}>
+            <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+              <SelectValue placeholder="All Locations" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Locations</SelectItem>
+              {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setFilterDialogOpen(true)}
+          >
+            <SlidersHorizontal className="w-3 h-3" /> <span className="hidden sm:inline">Filter</span>
           </Button>
         </div>
 
-        <div className="flex-1" />
+        {/* Right: Secondary action links/buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => window.location.href = '/admin/schedule/workdays'}
+          >
+            <span>Edit schedules</span> <ChevronRight className="w-3 h-3 opacity-60" />
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 px-2 text-xs gap-1 bg-teal-600 hover:bg-teal-700 text-white border-0"
+            onClick={() => window.location.href = '/admin/bookings'}
+          >
+            <CalendarCheck className="w-3 h-3" /> <span className="hidden sm:inline">Manage bookings</span><span className="sm:hidden">Bookings</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => window.location.href = '/admin/finance/payments'}
+          >
+            <FileText className="w-3 h-3" /> <span className="hidden sm:inline">Transactions</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setAllNotesOpen(true)}
+          >
+            <FileText className="w-3 h-3" /> <span>Notes ({notes.length})</span>
+          </Button>
+        </div>
       </div>
 
       {/* ── Calendar Body ────────────────────────────────────── */}
@@ -835,6 +893,22 @@ export default function CalendarPage() {
             filterLocation={filterLocation}
             onSelectBooking={(b) => { setSelectedBooking(b); setViewDialogOpen(true); }}
             onNewBooking={handleOpenCreateBooking}
+          />
+        )}
+        {viewType === "workweek" && (
+          <TimeGrid
+            days={Array.from({ length: 5 }, (_, i) => {
+              const d = getStartOfWeek(currentDate);
+              d.setDate(d.getDate() + 1 + i); // Mon to Fri
+              return d;
+            })}
+            bookings={bookings}
+            onSelectBooking={(b) => { setSelectedBooking(b); setViewDialogOpen(true); }}
+            filterProvider={filterProvider}
+            filterLocation={filterLocation}
+            onUpdateBooking={handleUpdateBookingDate}
+            onNewBooking={handleOpenCreateBooking}
+            onUpdateDuration={handleUpdateDuration}
           />
         )}
         {viewType === "week" && (
@@ -1029,7 +1103,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Service & Provider */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="create_service">Service *</Label>
                 <Select value={formServiceId} onValueChange={setFormServiceId}>
@@ -1052,7 +1126,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Location & Status */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="create_location">Location</Label>
                 <Select value={formLocationId} onValueChange={setFormLocationId}>
@@ -1076,7 +1150,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Date and Time */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="create_date">Date *</Label>
                 <Input id="create_date" type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
@@ -1094,9 +1168,9 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-4 border-t bg-muted/20">
-            <Button variant="outline" onClick={() => setCreateBookingOpen(false)}>Cancel</Button>
-            <Button className="bg-primary text-primary-foreground font-semibold px-6" onClick={handleSaveBooking}>
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-row items-center justify-between gap-3">
+            <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-initial" onClick={() => setCreateBookingOpen(false)}>Cancel</Button>
+            <Button className="bg-primary text-primary-foreground font-semibold px-6 min-h-[44px] flex-1 sm:flex-initial" onClick={handleSaveBooking}>
               Save Booking
             </Button>
           </DialogFooter>
@@ -1111,7 +1185,7 @@ export default function CalendarPage() {
           </DialogHeader>
 
           <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Service *</Label>
                 <Select value={formServiceId} onValueChange={setFormServiceId}>
@@ -1132,7 +1206,7 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Date *</Label>
                 <Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
@@ -1163,9 +1237,9 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-4 border-t bg-muted/20">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-primary text-primary-foreground font-semibold px-6" onClick={handleUpdateBookingSubmit}>
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-row items-center justify-between gap-3">
+            <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-initial" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+            <Button className="bg-primary text-primary-foreground font-semibold px-6 min-h-[44px] flex-1 sm:flex-initial" onClick={handleUpdateBookingSubmit}>
               Save Changes
             </Button>
           </DialogFooter>

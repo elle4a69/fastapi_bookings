@@ -67,22 +67,22 @@ export default function SmsDiagnosticsTab() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4 flex flex-col justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+        <Card className="p-3 sm:p-4 flex flex-col justify-between">
           <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">Pending Sends</span>
-          <span className="text-2xl font-bold mt-2">{jobs.filter(j => j.status === "PENDING" || j.status === "PROCESSING").length}</span>
+          <span className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2">{jobs.filter(j => j.status === "PENDING" || j.status === "PROCESSING").length}</span>
         </Card>
-        <Card className="p-4 flex flex-col justify-between">
+        <Card className="p-3 sm:p-4 flex flex-col justify-between">
           <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">Failed Sends</span>
-          <span className="text-2xl font-bold text-red-500 mt-2">{jobs.filter(j => j.status === "FAILED").length}</span>
+          <span className="text-xl sm:text-2xl font-bold text-red-500 mt-1 sm:mt-2">{jobs.filter(j => j.status === "FAILED").length}</span>
         </Card>
-        <Card className="p-4 flex flex-col justify-between">
+        <Card className="p-3 sm:p-4 flex flex-col justify-between">
           <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">Success Sends</span>
-          <span className="text-2xl font-bold text-emerald-500 mt-2">{jobs.filter(j => j.status === "SUCCESS").length}</span>
+          <span className="text-xl sm:text-2xl font-bold text-emerald-500 mt-1 sm:mt-2">{jobs.filter(j => j.status === "SUCCESS").length}</span>
         </Card>
-        <Card className="p-4 flex flex-col justify-between">
+        <Card className="p-3 sm:p-4 flex flex-col justify-between">
           <span className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">Average Latency</span>
-          <span className="text-2xl font-bold text-blue-500 mt-2">1.8s</span>
+          <span className="text-xl sm:text-2xl font-bold text-blue-500 mt-1 sm:mt-2">1.8s</span>
         </Card>
       </div>
 
@@ -91,7 +91,7 @@ export default function SmsDiagnosticsTab() {
           <CardTitle className="text-sm font-semibold">Outbound Delivery Queue</CardTitle>
           <CardDescription>Live database-backed outbox jobs showing retries and error traces.</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <div className="p-8 text-center text-muted-foreground">Loading queue data...</div>
           ) : jobs.length === 0 ? (

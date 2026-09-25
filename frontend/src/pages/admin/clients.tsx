@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, MoreVertical, X, Eye, ShieldAlert, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, MoreVertical, Eye, ShieldAlert, RefreshCw, Phone, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
@@ -9,13 +9,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MobilePageShell, MobileBackButton } from '@/components/ui/mobile-page-shell';
+import { ResponsiveDataTable, type ColumnDef } from '@/components/ui/responsive-data-table';
 
 interface Client {
   id: string;
@@ -49,12 +49,7 @@ export default function ClientsPage() {
   const [formData, setFormData] = useState<Partial<Client>>({});
   
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  
-  const [filters, setFilters] = useState({
-    name: '',
-    email: '',
-    phone: ''
-  });
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchClients();
@@ -63,10 +58,7 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     setLoading(true);
     try {
-      // The API endpoint seems to return an array or a paginated response.
-      // Adjusting based on typical fastapi_bookings responses.
       const res = await apiClient.get<any>('/api/admin/clients');
-      // If it's a list response
       const data = Array.isArray(res) ? res : (res.data || res.items || []);
       setClients(data);
     } catch {
@@ -151,14 +143,6 @@ export default function ClientsPage() {
     }
   };
 
-  const handleToggleSelectAll = () => {
-    if (selectedIds.length === filteredClients.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredClients.map(c => c.id));
-    }
-  };
-
   const handleToggleSelect = (id: string) => {
     if (selectedIds.includes(id)) {
       setSelectedIds(selectedIds.filter(i => i !== id));
@@ -167,390 +151,413 @@ export default function ClientsPage() {
     }
   };
 
-  const filteredClients = clients.filter(c => 
-    (c.name || '').toLowerCase().includes(filters.name.toLowerCase()) &&
-    (c.email || '').toLowerCase().includes(filters.email.toLowerCase()) &&
-    (c.phone || '').toLowerCase().includes(filters.phone.toLowerCase())
-  );
+  const filteredClients = clients.filter(c => {
+    const q = searchQuery.toLowerCase();
+    return (
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q)
+    );
+  });
+
+  const columns: ColumnDef<Client>[] = [
+    {
+      id: 'select',
+      header: 'Select',
+      hideable: false,
+      cell: (client) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedIds.includes(client.id)}
+            onCheckedChange={() => handleToggleSelect(client.id)}
+            className="h-4 w-4"
+          />
+        </div>
+      ),
+    },
+    {
+      id: 'name',
+      header: 'Name',
+      sortable: true,
+      cell: (client) => (
+        <div>
+          <span className="font-semibold text-foreground text-sm block">{client.name || 'Unnamed Client'}</span>
+          <span className="text-xs text-muted-foreground block md:hidden">{client.email}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'email',
+      header: 'Email',
+      sortable: true,
+      cell: (client) => <span className="text-xs text-muted-foreground">{client.email || '—'}</span>,
+    },
+    {
+      id: 'phone',
+      header: 'Phone',
+      defaultHidden: true,
+      cell: (client) => <span className="text-xs text-muted-foreground">{client.phone || '—'}</span>,
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      cell: (client) => (
+        <Badge variant={client.active ? "default" : "secondary"} className="text-xs">
+          {client.active ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      align: 'right',
+      hideable: false,
+      cell: (client) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 min-h-0 min-w-0 touch-manipulation">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleSelectClient(client)}>
+              <Eye className="h-4 w-4 mr-2" /> View
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { handleSelectClient(client); setIsEditing(true); }}>
+              <Edit className="h-4 w-4 mr-2" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => { 
+                handleSelectClient(client);
+                setIsEditing(true);
+                setFormData({...client, management_approval_required: true});
+              }}
+            >
+              <ShieldAlert className="h-4 w-4 mr-2" /> Restrict
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDelete(client.id)} className="text-destructive">
+              <Trash2 className="h-4 w-4 mr-2" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
 
   return (
-    <div className="flex flex-col h-full overflow-hidden p-4 md:p-6 gap-4 font-sans">
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 shrink-0">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight font-heading">Clients</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Manage your clients and their compliance status.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => toast.info('Export not implemented')} className="min-h-[44px] hidden md:flex"><Search className="w-4 h-4 mr-2" /> Export to CSV</Button>
-          <Button variant="destructive" disabled={selectedIds.length === 0} onClick={handleBulkDelete} className="min-h-[44px]">
-            <Trash2 className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Delete ({selectedIds.length})</span>
+    <MobilePageShell
+      title="Clients"
+      description="Manage client accounts, compliance status, and history"
+      density="compact"
+      actions={
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchClients}
+            className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
+          >
+            <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
-          <Button onClick={handleAddClient} className="min-h-[44px]"><Plus className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Add Client</span></Button>
+          {selectedIds.length > 0 && (
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              onClick={handleBulkDelete} 
+              className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 touch-manipulation gap-1.5 text-xs sm:text-sm"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete ({selectedIds.length})</span>
+            </Button>
+          )}
+          <Button 
+            size="sm" 
+            onClick={handleAddClient} 
+            className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Client</span>
+          </Button>
         </div>
-      </div>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 min-w-0">
+        {/* Main List / Table Area */}
+        <div className={`col-span-1 md:col-span-5 lg:col-span-5 ${selectedClient ? 'hidden md:block' : 'block'}`}>
+          <div className="space-y-2.5 sm:space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search name, email, phone, city..."
+                className="pl-8 h-8 sm:h-9 min-h-0 text-xs sm:text-sm"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
 
-      <div className="flex gap-4 flex-1 overflow-hidden relative">
-        {/* Main Table Area */}
-        <div className={`flex flex-col border rounded-md overflow-hidden bg-background transition-all duration-300 ${selectedClient ? 'hidden md:flex md:w-2/5' : 'flex w-full'}`}>
-          <div className="overflow-auto flex-1">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 sticky top-0 z-10">
-                <tr className="border-b">
-                  <th className="p-3 text-left font-medium w-12">
-                    <Checkbox 
-                      checked={selectedIds.length > 0 && selectedIds.length === filteredClients.length} 
-                      onCheckedChange={handleToggleSelectAll} 
-                    />
-                  </th>
-                  <th className="p-3 text-left font-medium">Name
-                    <Input 
-                      placeholder="Filter..." 
-                      className="h-7 mt-1 text-xs" 
-                      value={filters.name}
-                      onChange={e => setFilters({...filters, name: e.target.value})}
-                    />
-                  </th>
-                  <th className="p-3 text-left font-medium hidden md:table-cell">Email
-                    <Input 
-                      placeholder="Filter..." 
-                      className="h-7 mt-1 text-xs" 
-                      value={filters.email}
-                      onChange={e => setFilters({...filters, email: e.target.value})}
-                    />
-                  </th>
-                  <th className="p-3 text-left font-medium hidden lg:table-cell">Phone
-                    <Input 
-                      placeholder="Filter..." 
-                      className="h-7 mt-1 text-xs" 
-                      value={filters.phone}
-                      onChange={e => setFilters({...filters, phone: e.target.value})}
-                    />
-                  </th>
-                  <th className="p-3 text-left font-medium">Status</th>
-                  <th className="p-3 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({length: 5}).map((_, i) => (
-                    <tr key={i} className="border-b">
-                      <td className="p-3"><Skeleton className="h-4 w-4" /></td>
-                      <td className="p-3"><Skeleton className="h-4 w-32" /></td>
-                      <td className="p-3 hidden md:table-cell"><Skeleton className="h-4 w-32" /></td>
-                      <td className="p-3 hidden lg:table-cell"><Skeleton className="h-4 w-24" /></td>
-                      <td className="p-3"><Skeleton className="h-4 w-16" /></td>
-                      <td className="p-3"><Skeleton className="h-4 w-8 ml-auto" /></td>
-                    </tr>
-                  ))
-                ) : filteredClients.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                      No clients found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredClients.map(client => (
-                    <tr 
-                      key={client.id} 
-                      className={`border-b hover:bg-muted/50 transition-colors ${selectedClient?.id === client.id ? 'bg-muted' : ''}`}
-                    >
-                      <td className="p-3">
-                        <Checkbox 
-                          checked={selectedIds.includes(client.id)}
-                          onCheckedChange={() => handleToggleSelect(client.id)}
-                        />
-                      </td>
-                      <td className="p-3 cursor-pointer font-medium" onClick={() => handleSelectClient(client)}>
-                        {client.name || 'Unnamed Client'}
-                      </td>
-                      <td className="p-3 hidden md:table-cell text-muted-foreground">{client.email}</td>
-                      <td className="p-3 hidden lg:table-cell text-muted-foreground">{client.phone}</td>
-                      <td className="p-3">
-                        <Badge variant={client.active ? "default" : "secondary"}>
-                          {client.active ? "Active" : "Inactive"}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleSelectClient(client)}>
-                              <Eye className="h-4 w-4 mr-2" /> View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { handleSelectClient(client); setIsEditing(true); }}>
-                              <Edit className="h-4 w-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => { 
-                                handleSelectClient(client);
-                                setIsEditing(true);
-                                setFormData({...client, management_approval_required: true});
-                              }}
-                            >
-                              <ShieldAlert className="h-4 w-4 mr-2" /> Restrict
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDelete(client.id)} className="text-destructive">
-                              <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <ResponsiveDataTable
+              data={filteredClients}
+              columns={columns}
+              keyExtractor={(c) => c.id}
+              isLoading={loading}
+              density="compact"
+              onRowClick={handleSelectClient}
+              renderMobileCard={(client) => (
+                <div className="p-3.5 rounded-lg border bg-card text-card-foreground shadow-xs space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-base text-foreground truncate">{client.name || 'Unnamed Client'}</span>
+                    <Badge variant={client.active ? "default" : "secondary"} className="text-xs">
+                      {client.active ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    {client.email && (
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Mail className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{client.email}</span>
+                      </div>
+                    )}
+                    {client.phone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 shrink-0" />
+                        <span>{client.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t text-xs" onClick={e => e.stopPropagation()}>
+                    <label className="flex items-center gap-2 cursor-pointer touch-manipulation">
+                      <Checkbox
+                        checked={selectedIds.includes(client.id)}
+                        onCheckedChange={() => handleToggleSelect(client.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-muted-foreground">Select</span>
+                    </label>
+
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 min-h-[40px] text-xs px-2.5 touch-manipulation"
+                        onClick={() => handleSelectClient(client)}
+                      >
+                        View Details
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            />
           </div>
         </div>
 
         {/* Right Detail Panel */}
         {selectedClient && (
-          <Card className={`flex flex-col overflow-hidden border transition-all duration-300 absolute inset-0 z-50 bg-background md:relative md:z-auto md:w-3/5 h-full rounded-none md:rounded-xl`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 shrink-0 border-b p-4 sticky top-0 bg-background z-10">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden min-h-[44px] min-w-[44px]" onClick={handleClosePanel}>
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <CardTitle className="text-xl font-heading">
-                  {selectedClient.id ? selectedClient.name : 'New Client'}
-                </CardTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center space-x-2 mr-0 md:mr-4">
-                  <Switch 
-                    checked={isEditing} 
-                    onCheckedChange={setIsEditing} 
-                    id="edit-mode"
-                  />
-                  <Label htmlFor="edit-mode" className="hidden md:inline-block">Edit Mode</Label>
+          <div className="col-span-1 md:col-span-7 lg:col-span-7">
+            <Card className="shadow-xs border overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 shrink-0 border-b p-4">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="md:hidden">
+                    <MobileBackButton label="Clients" onClick={handleClosePanel} />
+                  </div>
+                  <CardTitle className="text-lg sm:text-xl font-bold truncate">
+                    {selectedClient.id ? selectedClient.name : 'New Client'}
+                  </CardTitle>
                 </div>
-                <Button variant="ghost" size="icon" onClick={handleClosePanel} className="hidden md:flex min-h-[44px] min-w-[44px]">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-0">
-              <Accordion type="multiple" defaultValue={["profile", "compliance", "history"]} className="w-full">
-                {/* Section 1: Client Profile */}
-                <AccordionItem value="profile" className="px-4">
-                  <AccordionTrigger className="text-lg font-semibold">Client Profile</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Name</Label>
-                        {isEditing ? (
-                          <Input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} />
-                        ) : (
-                          <p className="text-sm py-2 font-medium">{formData.name}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Email</Label>
-                        {isEditing ? (
-                          <Input value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} type="email" />
-                        ) : (
-                          <p className="text-sm py-2"><a href={`mailto:${formData.email}`} className="text-primary hover:underline">{formData.email}</a></p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Phone</Label>
-                        {isEditing ? (
-                          <Input value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                        ) : (
-                          <p className="text-sm py-2"><a href={`tel:${formData.phone}`} className="text-primary hover:underline">{formData.phone}</a></p>
-                        )}
-                      </div>
-                      <div className="space-y-2 flex items-center gap-2 pt-6">
-                        <Switch 
-                          checked={formData.active || false} 
-                          onCheckedChange={v => setFormData({...formData, active: v})} 
-                          disabled={!isEditing}
-                        />
-                        <Label>Active</Label>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Address Line 1</Label>
-                        {isEditing ? <Input value={formData.address_line1 || ''} onChange={e => setFormData({...formData, address_line1: e.target.value})} /> : <p className="text-sm">{formData.address_line1 || '-'}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Address Line 2</Label>
-                        {isEditing ? <Input value={formData.address_line2 || ''} onChange={e => setFormData({...formData, address_line2: e.target.value})} /> : <p className="text-sm">{formData.address_line2 || '-'}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>City</Label>
-                        {isEditing ? <Input value={formData.city || ''} onChange={e => setFormData({...formData, city: e.target.value})} /> : <p className="text-sm">{formData.city || '-'}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>State/Province</Label>
-                        {isEditing ? <Input value={formData.state || ''} onChange={e => setFormData({...formData, state: e.target.value})} /> : <p className="text-sm">{formData.state || '-'}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Postcode</Label>
-                        {isEditing ? <Input value={formData.postcode || ''} onChange={e => setFormData({...formData, postcode: e.target.value})} /> : <p className="text-sm">{formData.postcode || '-'}</p>}
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Country</Label>
-                        {isEditing ? <Input value={formData.country || ''} onChange={e => setFormData({...formData, country: e.target.value})} /> : <p className="text-sm">{formData.country || '-'}</p>}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Timezone</Label>
-                        {isEditing ? (
-                          <Select value={formData.timezone || ''} onValueChange={v => setFormData({...formData, timezone: v})}>
-                            <SelectTrigger><SelectValue placeholder="Select timezone" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="UTC">UTC</SelectItem>
-                              <SelectItem value="America/New_York">America/New_York</SelectItem>
-                              <SelectItem value="Europe/London">Europe/London</SelectItem>
-                              <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
-                              <SelectItem value="Australia/Sydney">Australia/Sydney</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <p className="text-sm py-2">{formData.timezone || 'Not set'}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2 flex items-center gap-2 pt-6">
-                        <Switch 
-                          checked={formData.accepts_marketing || false} 
-                          onCheckedChange={v => setFormData({...formData, accepts_marketing: v})} 
-                          disabled={!isEditing}
-                        />
-                        <Label>Accepts Marketing</Label>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Notes</Label>
-                      {isEditing ? (
-                        <Textarea 
-                          value={formData.notes || ''} 
-                          onChange={e => setFormData({...formData, notes: e.target.value})} 
-                          className="min-h-[100px]"
-                        />
-                      ) : (
-                        <div className="p-3 bg-muted rounded-md min-h-[100px] text-sm whitespace-pre-wrap">
-                          {formData.notes || 'No notes available.'}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center space-x-2">
+                    <Switch 
+                      checked={isEditing} 
+                      onCheckedChange={setIsEditing} 
+                      id="edit-mode"
+                      className="touch-manipulation"
+                    />
+                    <Label htmlFor="edit-mode" className="text-xs cursor-pointer hidden sm:inline-block">Edit Mode</Label>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto">
+                <Accordion type="multiple" defaultValue={["profile", "compliance", "history"]} className="w-full">
+                  {/* Section 1: Client Profile */}
+                  <AccordionItem value="profile" className="px-4">
+                    <AccordionTrigger className="text-base font-semibold">Client Profile</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</Label>
+                          {isEditing ? (
+                            <Input value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className="h-11 min-h-[44px]" />
+                          ) : (
+                            <p className="text-sm py-2 font-medium">{formData.name}</p>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</Label>
+                          {isEditing ? (
+                            <Input value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} type="email" className="h-11 min-h-[44px]" />
+                          ) : (
+                            <p className="text-sm py-2"><a href={`mailto:${formData.email}`} className="text-primary hover:underline">{formData.email}</a></p>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone</Label>
+                          {isEditing ? (
+                            <Input value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} className="h-11 min-h-[44px]" />
+                          ) : (
+                            <p className="text-sm py-2"><a href={`tel:${formData.phone}`} className="text-primary hover:underline">{formData.phone}</a></p>
+                          )}
+                        </div>
+                        <div className="space-y-1.5 flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                          <div>
+                            <Label className="text-sm font-medium">Active Status</Label>
+                            <p className="text-xs text-muted-foreground">Enable or disable client booking privileges</p>
+                          </div>
+                          <Switch 
+                            checked={formData.active || false} 
+                            onCheckedChange={v => setFormData({...formData, active: v})} 
+                            disabled={!isEditing}
+                            className="touch-manipulation"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Address Line 1</Label>
+                          {isEditing ? <Input value={formData.address_line1 || ''} onChange={e => setFormData({...formData, address_line1: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.address_line1 || '-'}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Address Line 2</Label>
+                          {isEditing ? <Input value={formData.address_line2 || ''} onChange={e => setFormData({...formData, address_line2: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.address_line2 || '-'}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">City</Label>
+                          {isEditing ? <Input value={formData.city || ''} onChange={e => setFormData({...formData, city: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.city || '-'}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">State / Province</Label>
+                          {isEditing ? <Input value={formData.state || ''} onChange={e => setFormData({...formData, state: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.state || '-'}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Postcode</Label>
+                          {isEditing ? <Input value={formData.postcode || ''} onChange={e => setFormData({...formData, postcode: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.postcode || '-'}</p>}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Country</Label>
+                          {isEditing ? <Input value={formData.country || ''} onChange={e => setFormData({...formData, country: e.target.value})} className="h-11 min-h-[44px]" /> : <p className="text-sm py-1">{formData.country || '-'}</p>}
+                        </div>
+                      </div>
 
-                {/* Section 2: Compliance Status */}
-                <AccordionItem value="compliance" className="px-4">
-                  <AccordionTrigger className="text-lg font-semibold text-orange-600 dark:text-orange-400">Compliance & Restrictions</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-2">
-                    <div className="flex items-center space-x-2 mb-4 p-3 border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 rounded-md">
-                      <Switch 
-                        checked={formData.management_approval_required || false}
-                        onCheckedChange={v => setFormData({...formData, management_approval_required: v})}
-                        disabled={!isEditing}
-                      />
-                      <Label className="font-semibold text-orange-800 dark:text-orange-300">Management Approval Required</Label>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Restriction Reason</Label>
-                      {isEditing ? (
-                        <Input value={formData.restriction_reason || ''} onChange={e => setFormData({...formData, restriction_reason: e.target.value})} />
-                      ) : (
-                        <p className="text-sm">{formData.restriction_reason || 'None'}</p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Restricted At</Label>
+                      <div className="space-y-1.5 pt-2 border-t">
+                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
                         {isEditing ? (
-                          <Input type="datetime-local" value={formData.restricted_at ? formData.restricted_at.slice(0, 16) : ''} onChange={e => setFormData({...formData, restricted_at: e.target.value ? new Date(e.target.value).toISOString() : null})} />
+                          <Textarea 
+                            value={formData.notes || ''} 
+                            onChange={e => setFormData({...formData, notes: e.target.value})} 
+                            className="min-h-[90px] text-sm"
+                          />
                         ) : (
-                          <p className="text-sm">{formData.restricted_at ? new Date(formData.restricted_at).toLocaleString() : '-'}</p>
+                          <div className="p-3 bg-muted/40 rounded-md min-h-[60px] text-sm whitespace-pre-wrap">
+                            {formData.notes || 'No notes recorded.'}
+                          </div>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        <Label>Restriction Cleared At</Label>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Section 2: Compliance */}
+                  <AccordionItem value="compliance" className="px-4">
+                    <AccordionTrigger className="text-base font-semibold text-orange-600 dark:text-orange-400">Compliance & Restrictions</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-2">
+                      <div className="flex items-center justify-between p-3 border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 rounded-md">
+                        <div>
+                          <Label className="font-semibold text-orange-800 dark:text-orange-300 text-sm">Management Approval Required</Label>
+                          <p className="text-xs text-orange-700 dark:text-orange-400">Client must be approved manually for each appointment</p>
+                        </div>
+                        <Switch 
+                          checked={formData.management_approval_required || false}
+                          onCheckedChange={v => setFormData({...formData, management_approval_required: v})}
+                          disabled={!isEditing}
+                          className="touch-manipulation"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Restriction Reason</Label>
                         {isEditing ? (
-                          <Input type="datetime-local" value={formData.restriction_cleared_at ? formData.restriction_cleared_at.slice(0, 16) : ''} onChange={e => setFormData({...formData, restriction_cleared_at: e.target.value ? new Date(e.target.value).toISOString() : null})} />
+                          <Input value={formData.restriction_reason || ''} onChange={e => setFormData({...formData, restriction_reason: e.target.value})} className="h-11 min-h-[44px]" />
                         ) : (
-                          <p className="text-sm">{formData.restriction_cleared_at ? new Date(formData.restriction_cleared_at).toLocaleString() : '-'}</p>
+                          <p className="text-sm">{formData.restriction_reason || 'None'}</p>
                         )}
                       </div>
-                      <div className="space-y-2">
-                        <Label>Terms Accepted At</Label>
-                        <p className="text-sm py-2 text-muted-foreground">{formData.terms_accepted_at ? new Date(formData.terms_accepted_at).toLocaleString() : 'Not accepted'}</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Privacy Accepted At</Label>
-                        <p className="text-sm py-2 text-muted-foreground">{formData.privacy_accepted_at ? new Date(formData.privacy_accepted_at).toLocaleString() : 'Not accepted'}</p>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
+                    </AccordionContent>
+                  </AccordionItem>
 
-                {/* Section 3: Booking History */}
-                <AccordionItem value="history" className="px-4">
-                  <AccordionTrigger className="text-lg font-semibold">Booking History</AccordionTrigger>
-                  <AccordionContent className="pt-2">
-                    <Tabs defaultValue="upcoming" className="w-full">
-                      <TabsList className="w-full grid grid-cols-3">
-                        <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-                        <TabsTrigger value="past">Past</TabsTrigger>
-                        <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="upcoming" className="p-4 border rounded-md mt-2 min-h-[150px] flex items-center justify-center text-muted-foreground">
-                        <p>No upcoming bookings found.</p>
-                      </TabsContent>
-                      <TabsContent value="past" className="p-4 border rounded-md mt-2 min-h-[150px] flex items-center justify-center text-muted-foreground">
-                        <p>No past bookings found.</p>
-                      </TabsContent>
-                      <TabsContent value="cancelled" className="p-4 border rounded-md mt-2 min-h-[150px] flex items-center justify-center text-muted-foreground">
-                        <p>No cancelled bookings found.</p>
-                      </TabsContent>
-                    </Tabs>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </CardContent>
+                  {/* Section 3: Booking History */}
+                  <AccordionItem value="history" className="px-4">
+                    <AccordionTrigger className="text-base font-semibold">Booking History</AccordionTrigger>
+                    <AccordionContent className="pt-2">
+                      <Tabs defaultValue="upcoming" className="w-full">
+                        <TabsList className="w-full grid grid-cols-3 h-10">
+                          <TabsTrigger value="upcoming" className="text-xs">Upcoming</TabsTrigger>
+                          <TabsTrigger value="past" className="text-xs">Past</TabsTrigger>
+                          <TabsTrigger value="cancelled" className="text-xs">Cancelled</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="upcoming" className="p-4 border rounded-md mt-2 min-h-[100px] flex items-center justify-center text-muted-foreground text-xs">
+                          <p>No upcoming bookings found.</p>
+                        </TabsContent>
+                        <TabsContent value="past" className="p-4 border rounded-md mt-2 min-h-[100px] flex items-center justify-center text-muted-foreground text-xs">
+                          <p>No past bookings found.</p>
+                        </TabsContent>
+                        <TabsContent value="cancelled" className="p-4 border rounded-md mt-2 min-h-[100px] flex items-center justify-center text-muted-foreground text-xs">
+                          <p>No cancelled bookings found.</p>
+                        </TabsContent>
+                      </Tabs>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
 
-            <CardFooter className="flex flex-col md:flex-row justify-between gap-4 border-t p-4 shrink-0 bg-muted/20 sticky bottom-0 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
-              <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                <Button variant="outline" onClick={() => setIsEditing(true)} disabled={isEditing} className="min-h-[44px] flex-1 md:flex-none">
-                  Edit Client
-                </Button>
-                <Button variant="outline" onClick={() => toast.info('New booking form not implemented yet')} className="min-h-[44px] flex-1 md:flex-none">
-                  New Booking
-                </Button>
-                <Button variant="outline" className="min-h-[44px] flex-1 md:flex-none text-orange-600 border-orange-200 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => {
-                  setIsEditing(true);
-                  setFormData({...formData, management_approval_required: true, restricted_at: new Date().toISOString()});
-                }}>
-                  Restrict Client
-                </Button>
-              </div>
-              <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
-                {isEditing ? (
-                  <>
-                    <Button variant="outline" onClick={() => setIsEditing(false)} className="min-h-[44px] flex-1 md:flex-none">Cancel</Button>
-                    <Button onClick={handleSave} className="min-h-[44px] flex-1 md:flex-none">Save Changes</Button>
-                  </>
-                ) : (
-                  <Button variant="destructive" onClick={() => handleDelete(selectedClient.id)} className="min-h-[44px] flex-1 md:flex-none">Delete</Button>
-                )}
-              </div>
-            </CardFooter>
-          </Card>
+              <CardFooter className="flex flex-col sm:flex-row justify-between gap-3 border-t p-4 shrink-0 bg-muted/20">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsEditing(true)} 
+                    disabled={isEditing} 
+                    className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs"
+                  >
+                    Edit Client
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="h-10 min-h-[44px] flex-1 sm:flex-initial text-orange-600 border-orange-200 hover:bg-orange-50 touch-manipulation text-xs" 
+                    onClick={() => {
+                      setIsEditing(true);
+                      setFormData({...formData, management_approval_required: true, restricted_at: new Date().toISOString()});
+                    }}
+                  >
+                    Restrict
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {isEditing ? (
+                    <>
+                      <Button variant="outline" onClick={() => setIsEditing(false)} className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs">Cancel</Button>
+                      <Button onClick={handleSave} className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs">Save Changes</Button>
+                    </>
+                  ) : (
+                    <Button variant="destructive" onClick={() => handleDelete(selectedClient.id)} className="h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs">Delete</Button>
+                  )}
+                </div>
+              </CardFooter>
+            </Card>
+          </div>
         )}
       </div>
-    </div>
+    </MobilePageShell>
   );
 }

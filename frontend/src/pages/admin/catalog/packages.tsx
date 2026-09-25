@@ -322,12 +322,12 @@ export default function PackagesPage() {
               </div>
             </CardHeader>
 
-            <CardContent ref={rightScrollRef} className="flex-1 overflow-y-auto p-6">
+            <CardContent ref={rightScrollRef} className="flex-1 overflow-y-auto p-3 sm:p-6">
               <Accordion type="multiple" defaultValue={['details']} className="space-y-3" onValueChange={handleAccordionChange}>
 
                 <AccordionItem id="acc-svc-details" value="details" className="border rounded-lg bg-card overflow-hidden shadow-sm">
-                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Package Details</AccordionTrigger>
-                  <AccordionContent className="p-6">
+                  <AccordionTrigger className="hover:no-underline font-medium px-4 py-3 sm:px-6 sm:py-4 bg-muted/20">Package Details</AccordionTrigger>
+                  <AccordionContent className="p-3 sm:p-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Name *</Label>
@@ -354,39 +354,39 @@ export default function PackagesPage() {
                 </AccordionItem>
 
                 <AccordionItem id="acc-svc-steps" value="steps" className="border rounded-lg bg-card overflow-hidden shadow-sm">
-                  <AccordionTrigger className="hover:no-underline font-medium px-6 py-4 bg-muted/20">Package Steps ({(formData.steps || []).length})</AccordionTrigger>
-                  <AccordionContent className="p-6">
+                  <AccordionTrigger className="hover:no-underline font-medium px-4 py-3 sm:px-6 sm:py-4 bg-muted/20">Package Steps ({(formData.steps || []).length})</AccordionTrigger>
+                  <AccordionContent className="p-3 sm:p-6">
                     <div className="space-y-3">
                       {(formData.steps || []).map((step, index) => (
-                        <div key={index} className="p-4 border rounded-lg bg-card/45 space-y-3">
+                        <div key={index} className="p-3 sm:p-4 border rounded-lg bg-card/45 space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold text-muted-foreground">Step {index + 1}</span>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeStep(index)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => removeStep(index)}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                           <div className="space-y-2">
                             <Label className="text-xs">Service</Label>
                             <Select value={step.service_id} onValueChange={val => updateStep(index, { service_id: val })}>
-                              <SelectTrigger className="h-9"><SelectValue placeholder="Select service" /></SelectTrigger>
+                              <SelectTrigger className="h-10"><SelectValue placeholder="Select service" /></SelectTrigger>
                               <SelectContent>
                                 {services.map(svc => <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-2">
                               <Label className="text-xs">Offset (days)</Label>
-                              <Input type="number" min={0} value={step.offset_days} className="h-9" onChange={e => updateStep(index, { offset_days: parseInt(e.target.value) || 0 })} />
+                              <Input type="number" min={0} value={step.offset_days} className="h-10" onChange={e => updateStep(index, { offset_days: parseInt(e.target.value) || 0 })} />
                             </div>
                             <div className="space-y-2">
                               <Label className="text-xs">Price ($)</Label>
-                              <Input type="number" min={0} step={0.01} value={step.price} className="h-9" onChange={e => updateStep(index, { price: parseFloat(e.target.value) || 0 })} />
+                              <Input type="number" min={0} step={0.01} value={step.price} className="h-10" onChange={e => updateStep(index, { price: parseFloat(e.target.value) || 0 })} />
                             </div>
                           </div>
                         </div>
                       ))}
-                      <Button variant="outline" size="sm" onClick={addStep} className="w-full" disabled={services.length === 0}>
+                      <Button variant="outline" size="sm" onClick={addStep} className="w-full min-h-[44px]" disabled={services.length === 0}>
                         <Plus className="w-4 h-4 mr-2" /> Add Step
                       </Button>
                       {services.length === 0 && <p className="text-xs text-muted-foreground text-center">Create services first to add steps.</p>}

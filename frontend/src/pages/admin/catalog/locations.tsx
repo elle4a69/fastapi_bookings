@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from "react";
-import { Plus, Search, MapPin, Loader2, Save, Trash2, ArrowLeft, Upload, X, User, Globe, Box, GripVertical, Eye, EyeOff, Circle, CircleSlash } from "lucide-react";
+import { Plus, Search, MapPin, Loader2, Save, Trash2, Upload, X, User, Globe, Box, GripVertical, Eye, EyeOff, Circle, CircleSlash } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useAutoSave } from "@/hooks/use-auto-save";
 import { AutoSaveStatus } from "@/components/ui/auto-save-status";
+import { MobileBackButton } from "@/components/ui/mobile-page-shell";
 
 
 import { Input } from "@/components/ui/input";
@@ -576,10 +577,10 @@ export default function LocationsPage() {
         {selectedLocation || isEditing ? (
           <>
             <div className="flex items-center justify-between border-b px-4 md:px-6 py-4 sticky top-0 bg-background z-10 min-h-[65px]">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => { setSelectedLocation(null); setIsEditing(false); }}>
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
+              <div className="flex items-center gap-2">
+                <div className="md:hidden">
+                  <MobileBackButton label="Locations" onClick={() => { setSelectedLocation(null); setIsEditing(false); }} />
+                </div>
                 <div>
                   <h3 className="text-xl font-semibold font-heading">
                     {isEditing && !selectedLocation ? "New Location" : formData.name || "Unnamed Location"}
@@ -612,7 +613,7 @@ export default function LocationsPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 scroll-smooth" id="details-scroll-container">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6 scroll-smooth" id="details-scroll-container">
               <div className="max-w-3xl mx-auto">
                 <Accordion type="single" collapsible defaultValue="details" className="space-y-2" onValueChange={handleAccordionChange}>
                   

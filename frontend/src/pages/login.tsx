@@ -36,7 +36,8 @@ function requestedAdminPath(state: unknown): unknown {
 export default function LoginPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const tenant = getActiveTenantFromHost()
+  const detectedTenant = getActiveTenantFromHost()
+  const tenant = detectedTenant || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('trycloudflare.com')) ? 'simplydemo' : null)
   const [login, setLogin] = useState("")
   const [password, setPassword] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)

@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { MobilePageShell } from "@/components/ui/mobile-page-shell"
+import { Save } from "lucide-react"
 import { toast } from "sonner"
 
 interface BusinessProfile {
@@ -43,7 +45,6 @@ export default function BusinessSettings() {
   const fetchProfile = async () => {
     try {
       const data = await apiClient.get<any>("/api/admin/business-profile")
-      // Fallback if data is missing some fields
       setProfile({
         name: data.name || "",
         email: data.email || "",
@@ -91,8 +92,9 @@ export default function BusinessSettings() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-[400px] w-full" />
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-48" />
+        <Skeleton className="h-64 w-full" />
       </div>
     )
   }
@@ -100,80 +102,136 @@ export default function BusinessSettings() {
   if (!profile) return null
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Business Profile</h1>
-        <p className="text-muted-foreground">Manage your business details and operational hours.</p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Contact Details</CardTitle>
-          <CardDescription>Basic information about your business shown to customers.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name">Business Name</Label>
-            <Input id="name" value={profile.name} onChange={(e) => updateField("name", e.target.value)} />
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={profile.email} onChange={(e) => updateField("email", e.target.value)} />
+    <MobilePageShell
+      title="Business Profile"
+      description="Manage business contact details, location info, and operational hours"
+      actions={
+        <Button 
+          onClick={handleSave} 
+          disabled={saving}
+          className="h-10 min-h-[44px] w-full sm:w-auto touch-manipulation gap-2"
+        >
+          <Save className="h-4 w-4" />
+          <span>{saving ? "Saving..." : "Save Changes"}</span>
+        </Button>
+      }
+    >
+      <div className="space-y-6">
+        <Card className="shadow-xs">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Contact Details</CardTitle>
+            <CardDescription className="text-xs">
+              Primary details shown on your public booking portal and client emails
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Business Name</Label>
+              <Input 
+                id="name" 
+                value={profile.name} 
+                onChange={(e) => updateField("name", e.target.value)} 
+                className="h-11 min-h-[44px]"
+              />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input id="phone" value={profile.phone} onChange={(e) => updateField("phone", e.target.value)} />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="address">Address</Label>
-            <Input id="address" value={profile.address} onChange={(e) => updateField("address", e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Opening Hours</CardTitle>
-          <CardDescription>Configure your regular weekly schedule.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {profile.openingHours.map((day, i) => (
-              <div key={day.day} className="flex items-center gap-4">
-                <div className="w-32 flex items-center gap-2">
-                  <Switch
-                    checked={day.isOpen}
-                    onCheckedChange={(checked) => updateHours(i, { isOpen: checked })}
-                  />
-                  <Label>{day.day}</Label>
-                </div>
-                <Input
-                  type="time"
-                  className="w-32"
-                  value={day.openTime}
-                  disabled={!day.isOpen}
-                  onChange={(e) => updateHours(i, { openTime: e.target.value })}
-                />
-                <span className="text-muted-foreground">to</span>
-                <Input
-                  type="time"
-                  className="w-32"
-                  value={day.closeTime}
-                  disabled={!day.isOpen}
-                  onChange={(e) => updateHours(i, { closeTime: e.target.value })}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Address</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  value={profile.email} 
+                  onChange={(e) => updateField("email", e.target.value)} 
+                  className="h-11 min-h-[44px]"
                 />
               </div>
-            ))}
-          </div>
-        </CardContent>
-        <CardFooter className="justify-end border-t pt-6">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Changes"}
-          </Button>
-        </CardFooter>
-      </Card>
-    </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="phone" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone Number</Label>
+                <Input 
+                  id="phone" 
+                  value={profile.phone} 
+                  onChange={(e) => updateField("phone", e.target.value)} 
+                  className="h-11 min-h-[44px]"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="address" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Physical Address</Label>
+              <Input 
+                id="address" 
+                value={profile.address} 
+                onChange={(e) => updateField("address", e.target.value)} 
+                className="h-11 min-h-[44px]"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-xs">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Opening Hours</CardTitle>
+            <CardDescription className="text-xs">
+              Set standard business availability for online appointment bookings
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2.5">
+              {profile.openingHours.map((day, i) => (
+                <div 
+                  key={day.day} 
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-lg border bg-card/60 transition-colors"
+                >
+                  <div className="flex items-center justify-between sm:justify-start gap-3 sm:w-40">
+                    <Label className="font-semibold text-sm cursor-pointer">{day.day}</Label>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={day.isOpen}
+                        onCheckedChange={(checked) => updateHours(i, { isOpen: checked })}
+                        className="touch-manipulation"
+                      />
+                      <span className="text-xs text-muted-foreground sm:hidden">
+                        {day.isOpen ? 'Open' : 'Closed'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {day.isOpen ? (
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Input
+                        type="time"
+                        className="flex-1 sm:w-32 h-10 min-h-[44px] text-center"
+                        value={day.openTime}
+                        onChange={(e) => updateHours(i, { openTime: e.target.value })}
+                      />
+                      <span className="text-xs text-muted-foreground px-1 shrink-0">to</span>
+                      <Input
+                        type="time"
+                        className="flex-1 sm:w-32 h-10 min-h-[44px] text-center"
+                        value={day.closeTime}
+                        onChange={(e) => updateHours(i, { closeTime: e.target.value })}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground italic py-1 sm:py-0">
+                      Closed all day
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+          <CardFooter className="justify-end border-t pt-4">
+            <Button 
+              onClick={handleSave} 
+              disabled={saving}
+              className="h-10 min-h-[44px] w-full sm:w-auto touch-manipulation gap-2"
+            >
+              <Save className="h-4 w-4" />
+              <span>{saving ? "Saving..." : "Save Changes"}</span>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    </MobilePageShell>
   )
 }

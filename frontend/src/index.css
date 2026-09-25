@@ -233,3 +233,12 @@
 *:hover::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
+
+/* Hide scrollbar for smooth mobile swipeable rows */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
