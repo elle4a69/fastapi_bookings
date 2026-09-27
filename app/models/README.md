@@ -34,6 +34,13 @@ app/models/
 └── learning_event.py         # Unified LearningEvent capturing human-in-the-loop signals & diffs
 ```
 
+### Phase 1 In-Call / Out-Call Domain Schema & Capability Controls
+- **Tenant**: `allow_in_call` (bool), `allow_out_call` (bool), `travel_charge_origin` (`ALWAYS_FROM_BASE` | `ACTUAL_ORIGIN`).
+- **Provider**: `allow_in_call` (bool), `allow_out_call` (bool). Reuses existing `in_call_address`, `out_call_radius_km`, `base_outcall_surcharge`, `per_km_fee`, `turnaround_buffer_mins`.
+- **Service**: Reuses `allow_in_call`, `allow_out_call`. Adds `outcall_price` (nullable, defaults to `price` if out-call enabled and not specified), `outcall_buffer_before` (int, mins), `outcall_buffer_after` (int, mins).
+- **Location**: `is_client_hidden` (bool, default False) for client-facing address privacy.
+- **Booking**: `service_mode` (`in_call` | `out_call`), and travel snapshot fields `client_suburb`, `client_postcode`, `service_address`, `chargeable_travel_distance_km`, `chargeable_travel_fee`. (Derived operational scheduling windows are not persisted).
+
 ---
 
 ## Multi-Tenant Partitioning Rules
@@ -41,6 +48,7 @@ app/models/
 2. **Compound Indexes**: Standard tables feature compound indexes on `(tenant_id, created_at)` or `(tenant_id, status)` for fast tenant-scoped queries.
 3. **Discrete Slot Allocations**: `booking_slot_allocations` enforces an explicit unique constraint on `(tenant_id, provider_id, slot_time)` to guarantee 100% double-booking prevention.
 4. **Bootcamp Settings Isolation**: `sms_bootcamp_settings` enforces a composite unique constraint on `(tenant_id, provider_id)` allowing both tenant-default and provider-specific assistant personas.
+5. **Capability Hierarchy**: Tenant -> Provider -> Service: children may be more restrictive than parents, never broader.
 
 ---
 

@@ -4,7 +4,7 @@ Represents a service that can be booked. Services are associated
 with providers and determine the duration and cost of an appointment.
 """
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, ForeignKey, Numeric, DateTime
+from sqlalchemy import Boolean, Column, Float, Integer, String, ForeignKey, Numeric, DateTime, event
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -32,6 +32,9 @@ class Service(Base):
     is_visible = Column(Boolean, default=True, nullable=False)
     allow_in_call = Column(Boolean, default=True, nullable=False)
     allow_out_call = Column(Boolean, default=True, nullable=False)
+    outcall_price = Column(Numeric(10, 2), nullable=True)
+    outcall_buffer_before = Column(Integer, default=0, nullable=False)
+    outcall_buffer_after = Column(Integer, default=0, nullable=False)
     deposit_amount = Column(Numeric(10, 2), default=0.0, nullable=False)
     max_advance_days = Column(Integer, nullable=True)
     tax_rate_id = Column(Integer, ForeignKey("tax_rates.id", ondelete="SET NULL"), nullable=True)
@@ -99,5 +102,21 @@ class Service(Base):
     def requirements(self):
         return self.resource_requirements
 
+    @property
+    def effective_outcall_price(self):
+        """Return explicit outcall_price, falling back to price if outcall is allowed."""
+        if self.outcall_price is not None:
+            return self.outcall_price
+        if self.allow_out_call:
+            return self.price
+        return None
+
     def __repr__(self) -> str:
         return f"<Service id={self.id} name={self.name}>"
+
+
+@event.listens_for(Service, "before_insert")
+def _default_service_outcall_price(mapper, connection, target):
+    """Default outcall_price to price if outcall is enabled and outcall_price not explicitly given."""
+    if target.allow_out_call and target.outcall_price is None and target.price is not None:
+        target.outcall_price = target.price

@@ -18,6 +18,11 @@ from ...models.tenant import Tenant
 from ...models.booking import Booking
 from ...models.user import User
 from ...core.state_machine import BookingStatus
+from ...core.capability_validator import (
+    validate_provider_capability_against_tenant,
+    validate_service_capability_against_provider,
+    CapabilityHierarchyError,
+)
 from ...schemas.provider import (
     ProviderCreate,
     ProviderListResponse,
@@ -99,6 +104,11 @@ def create_provider(
     current_user = Depends(get_current_owner),
 ) -> dict:
     """Create a new provider."""
+    try:
+        validate_provider_capability_against_tenant(tenant, provider_in)
+    except CapabilityHierarchyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     provider_dict = provider_in.model_dump()
     provider_dict["tenant_id"] = tenant.id
     provider = ProviderModel(**provider_dict)
@@ -165,11 +175,29 @@ def update_provider(
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
 
+    proposed_in_call = provider_in.allow_in_call if provider_in.allow_in_call is not None else provider.allow_in_call
+    proposed_out_call = provider_in.allow_out_call if provider_in.allow_out_call is not None else provider.allow_out_call
+    dummy_proposed = {"allow_in_call": proposed_in_call, "allow_out_call": proposed_out_call}
+    try:
+        validate_provider_capability_against_tenant(tenant, dummy_proposed)
+    except CapabilityHierarchyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     for field, value in provider_in.model_dump(exclude_unset=True, exclude={"service_ids"}).items():
         setattr(provider, field, value)
 
     if provider_in.service_ids is not None:
         from ...models.service_provider import ServiceProvider
+        from ...models.service import Service
+        # Validate that no assigned service has broader capability than this provider
+        for svc_id in provider_in.service_ids:
+            svc = db.query(Service).filter(Service.id == svc_id, Service.tenant_id == tenant.id).first()
+            if svc:
+                try:
+                    validate_service_capability_against_provider(provider, svc)
+                except CapabilityHierarchyError as exc:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
         provider.services = []
         db.flush()
         provider.services = [ServiceProvider(tenant_id=tenant.id, service_id=svc_id) for svc_id in provider_in.service_ids]

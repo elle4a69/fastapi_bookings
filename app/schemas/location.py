@@ -12,6 +12,7 @@ class LocationBase(BaseModel):
     image: Optional[str] = None
     active: bool = Field(True, description="Whether location is active")
     is_visible: bool = Field(True, description="Whether location is visible")
+    is_client_hidden: bool = Field(False, description="Whether location address is hidden from clients")
 
 
 class LocationCreate(LocationBase):
@@ -28,6 +29,7 @@ class LocationUpdate(BaseModel):
     image: Optional[str] = None
     active: Optional[bool] = None
     is_visible: Optional[bool] = None
+    is_client_hidden: Optional[bool] = None
     provider_ids: Optional[list[int]] = None
     service_ids: Optional[list[int]] = None
     category_ids: Optional[list[int]] = None

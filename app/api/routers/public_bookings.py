@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from ..deps import get_public_tenant, get_db
 from ...models.tenant import Tenant
 from ...core.state_machine import BookingStatus
+from ...core.capability_validator import validate_booking_service_mode, ServiceModeValidationError
 from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
 from ...models.booking import Booking as BookingModel
 from ...schemas.booking import BookingCreate, BookingResponse
@@ -105,6 +106,17 @@ def create_public_booking(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Provider is not eligible for this service",
             )
+
+    # 4.5. Validate booking service_mode against service, provider, and tenant
+    try:
+        validate_booking_service_mode(
+            service_mode=booking_in.service_mode,
+            service=service_obj,
+            provider=provider_obj,
+            tenant=tenant,
+        )
+    except ServiceModeValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     # 5. Resolve or verify client belonging to active tenant
     client_obj = None

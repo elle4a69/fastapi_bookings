@@ -22,6 +22,7 @@ class Location(Base):
     image = Column(String, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
     is_visible = Column(Boolean, default=True, nullable=False)
+    is_client_hidden = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     tenant = relationship("Tenant")

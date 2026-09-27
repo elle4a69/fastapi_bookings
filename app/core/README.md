@@ -14,11 +14,12 @@ The `app/core/` package encapsulates cross-cutting concerns for the application:
 
 ```
 app/core/
-├── config.py            # Global Settings (DATABASE_URL, REDIS_URL, SECRET_KEY, OPENAI_API_KEY, CALCOM_BASE_URL)
-├── redis.py             # Sync & Async Redis connection pools, 'fb:' key formatting, ping healthcheck & fallback
-├── security.py          # Passlib Argon2/Bcrypt hashing, JWT encode/decode routines
-├── state_machine.py     # BookingStatus state machine (pending -> confirmed -> completed / cancelled)
-└── telemetry.py         # OpenTelemetry TracerProvider, MeterProvider, and privacy span processor
+├── config.py                 # Global Settings (DATABASE_URL, REDIS_URL, SECRET_KEY, OPENAI_API_KEY, CALCOM_BASE_URL)
+├── capability_validator.py   # Tenant -> Provider -> Service hierarchy & booking service-mode validators
+├── redis.py                  # Sync & Async Redis connection pools, 'fb:' key formatting, ping healthcheck & fallback
+├── security.py               # Passlib Argon2/Bcrypt hashing, JWT encode/decode routines
+├── state_machine.py          # BookingStatus state machine (pending -> confirmed -> completed / cancelled)
+└── telemetry.py              # OpenTelemetry TracerProvider, MeterProvider, and privacy span processor
 ```
 
 ---

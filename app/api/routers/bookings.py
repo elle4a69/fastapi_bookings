@@ -10,6 +10,7 @@ from ..deps import get_current_admin, get_current_staff, get_current_company, ge
 from ...models.tenant import Tenant
 from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
+from ...core.capability_validator import validate_booking_service_mode, ServiceModeValidationError
 from ...services import scheduling_service, slot_allocation_service
 from ...models.booking import Booking as BookingModel
 from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
@@ -150,6 +151,18 @@ def create_booking(
         provider_ids = {sp.provider_id for sp in service_obj.providers}
         if booking_in.provider_id not in provider_ids:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider is not eligible for this service")
+
+    # 6.5. Validate booking service_mode against service, provider, and tenant
+    try:
+        tenant_obj = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+        validate_booking_service_mode(
+            service_mode=booking_in.service_mode,
+            service=service_obj,
+            provider=provider_obj,
+            tenant=tenant_obj,
+        )
+    except ServiceModeValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     # 7. Atomic Conflict & Buffer Validation
     buf_before = max(15, service_obj.buffer_before if service_obj.buffer_before else 0)

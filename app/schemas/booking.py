@@ -1,11 +1,19 @@
 """Pydantic models for bookings."""
 
 from datetime import datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.state_machine import BookingStatus
+
+
+class ServiceMode(str, Enum):
+    """Appointment delivery mode: in-call (client visits provider/location) or out-call (provider travels to client)."""
+    IN_CALL = "in_call"
+    OUT_CALL = "out_call"
 
 
 class BookingBase(BaseModel):
@@ -20,6 +28,12 @@ class BookingBase(BaseModel):
     end_time: datetime = Field(..., description="End time of the appointment")
     notes: Optional[str] = Field(None, description="Notes attached to the booking")
     idempotency_key: Optional[str] = Field(None, description="Unique idempotency key for preventing duplicate submissions")
+    service_mode: ServiceMode = Field(ServiceMode.IN_CALL, description="Delivery mode: in_call or out_call")
+    client_suburb: Optional[str] = Field(None, description="Client suburb for out-call booking")
+    client_postcode: Optional[str] = Field(None, description="Client postcode for out-call booking")
+    service_address: Optional[str] = Field(None, description="Client street address for out-call booking")
+    chargeable_travel_distance_km: Optional[float] = Field(None, description="Chargeable travel distance in km")
+    chargeable_travel_fee: Optional[Decimal] = Field(None, description="Chargeable travel fee")
 
 
 class BookingCreate(BookingBase):
@@ -33,9 +47,13 @@ class BookingUpdate(BaseModel):
     end_time: Optional[datetime] = None
     status: Optional[BookingStatus] = None
     notes: Optional[str] = None
+    service_mode: Optional[ServiceMode] = None
+    client_suburb: Optional[str] = None
+    client_postcode: Optional[str] = None
+    service_address: Optional[str] = None
+    chargeable_travel_distance_km: Optional[float] = None
+    chargeable_travel_fee: Optional[Decimal] = None
 
-
-from decimal import Decimal
 
 class BookingClientInfo(BaseModel):
     id: int

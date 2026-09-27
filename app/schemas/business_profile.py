@@ -2,6 +2,7 @@
 
 from typing import Optional
 from pydantic import ConfigDict, BaseModel, Field
+from .tenant import TravelChargeOrigin
 
 
 class BusinessProfileBase(BaseModel):
@@ -16,6 +17,12 @@ class BusinessProfileBase(BaseModel):
     latitude: Optional[float] = Field(None, description="Latitude coordinate")
     longitude: Optional[float] = Field(None, description="Longitude coordinate")
     logo_url: Optional[str] = Field(None, description="Business logo image URL")
+    allow_in_call: bool = Field(True, description="Whether business allows in-call bookings")
+    allow_out_call: bool = Field(True, description="Whether business allows out-call bookings")
+    travel_charge_origin: TravelChargeOrigin = Field(
+        TravelChargeOrigin.ALWAYS_FROM_BASE,
+        description="Policy for calculating out-call travel charges",
+    )
 
 
 class BusinessProfileUpdate(BaseModel):
@@ -31,6 +38,9 @@ class BusinessProfileUpdate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
+    allow_in_call: Optional[bool] = None
+    allow_out_call: Optional[bool] = None
+    travel_charge_origin: Optional[TravelChargeOrigin] = None
 
 
 class BusinessProfileOut(BusinessProfileBase):
@@ -54,6 +64,9 @@ class PublicBusinessProfileOut(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
+    allow_in_call: bool = True
+    allow_out_call: bool = True
+    travel_charge_origin: TravelChargeOrigin = TravelChargeOrigin.ALWAYS_FROM_BASE
 
     model_config = ConfigDict(from_attributes=True)
 

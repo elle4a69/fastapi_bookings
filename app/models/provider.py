@@ -33,6 +33,8 @@ class Provider(Base):
     weekly_schedule = Column(JSON, nullable=True)
 
     # In-call and Out-call routing & scheduling attributes
+    allow_in_call = Column(Boolean, default=True, nullable=False)
+    allow_out_call = Column(Boolean, default=True, nullable=False)
     in_call_address = Column(String, nullable=True)
     out_call_radius_km = Column(Float, default=25.0, nullable=False)
     base_outcall_surcharge = Column(Numeric(10, 2), default=0.00, nullable=False)

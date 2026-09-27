@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .resource import ServiceResourceRequirementOut, ServiceResourceRequirementCreate
 
 
@@ -16,6 +16,12 @@ class ServiceBase(BaseModel):
     is_visible: bool = Field(True, description="Whether the service is visible publicly")
     allow_in_call: bool = Field(True, description="Whether the service allows in-call booking")
     allow_out_call: bool = Field(True, description="Whether the service allows out-call booking")
+    outcall_price: Optional[Decimal] = Field(
+        None,
+        description="Out-call price. Defaults to price if out-call is enabled and not explicitly specified.",
+    )
+    outcall_buffer_before: int = Field(0, ge=0, description="Out-call buffer before appointment in minutes")
+    outcall_buffer_after: int = Field(0, ge=0, description="Out-call buffer after appointment in minutes")
     deposit_amount: Decimal = Field(Decimal("0.0"), description="Required deposit amount")
     tax_rate_id: Optional[int] = Field(None, description="Identifier of the associated tax rate")
     buffer_before: int = Field(0, ge=0, description="Prep buffer in minutes before appointment")
@@ -34,6 +40,12 @@ class ServiceCreate(ServiceBase):
     product_ids: Optional[list[int]] = None
     requirements: Optional[list[ServiceResourceRequirementCreate]] = None
 
+    @model_validator(mode="after")
+    def default_outcall_price(self) -> "ServiceCreate":
+        if self.allow_out_call and self.outcall_price is None and self.price is not None:
+            self.outcall_price = self.price
+        return self
+
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -44,6 +56,9 @@ class ServiceUpdate(BaseModel):
     is_visible: Optional[bool] = None
     allow_in_call: Optional[bool] = None
     allow_out_call: Optional[bool] = None
+    outcall_price: Optional[Decimal] = None
+    outcall_buffer_before: Optional[int] = Field(None, ge=0)
+    outcall_buffer_after: Optional[int] = Field(None, ge=0)
     deposit_amount: Optional[Decimal] = None
     tax_rate_id: Optional[int] = None
     buffer_before: Optional[int] = Field(None, ge=0)

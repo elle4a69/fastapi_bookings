@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...core.pagination import paginate_query, pagination_params
+from ...core.capability_validator import (
+    validate_service_capability_against_tenant,
+    validate_service_capability_against_provider,
+    CapabilityHierarchyError,
+)
 from ...models.service import Service as ServiceModel
 from ...models.tenant import Tenant
 from ...schemas.service import (
@@ -81,6 +86,17 @@ def create_service(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new service."""
+    try:
+        validate_service_capability_against_tenant(tenant, service_in)
+        if service_in.provider_ids:
+            from ...models.provider import Provider
+            for prov_id in service_in.provider_ids:
+                prov = db.query(Provider).filter(Provider.id == prov_id, Provider.tenant_id == tenant.id).first()
+                if prov:
+                    validate_service_capability_against_provider(prov, service_in)
+    except CapabilityHierarchyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     service_dict = service_in.model_dump(exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"})
     service_dict["tenant_id"] = tenant.id
     service = ServiceModel(**service_dict)
@@ -137,6 +153,22 @@ def update_service(
     ).first()
     if not service:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found")
+
+    proposed_in_call = service_in.allow_in_call if service_in.allow_in_call is not None else service.allow_in_call
+    proposed_out_call = service_in.allow_out_call if service_in.allow_out_call is not None else service.allow_out_call
+    dummy_proposed = {"allow_in_call": proposed_in_call, "allow_out_call": proposed_out_call}
+    try:
+        validate_service_capability_against_tenant(tenant, dummy_proposed)
+        target_prov_ids = service_in.provider_ids if service_in.provider_ids is not None else [sp.provider_id for sp in service.providers]
+        if target_prov_ids:
+            from ...models.provider import Provider
+            for prov_id in target_prov_ids:
+                prov = db.query(Provider).filter(Provider.id == prov_id, Provider.tenant_id == tenant.id).first()
+                if prov:
+                    validate_service_capability_against_provider(prov, dummy_proposed)
+    except CapabilityHierarchyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     for field, value in service_in.model_dump(exclude_unset=True, exclude={"category_ids", "provider_ids", "addon_ids", "product_ids", "requirements"}).items():
         setattr(service, field, value)
     db.commit()

@@ -6,10 +6,17 @@ within the system. Most domain models reference a ``tenant_id``
 to ensure data isolation between tenants.
 """
 
+import enum
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import Column, DateTime, Integer, String, Float, JSON
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Float, JSON
 from ..db.database import Base
+
+
+class TravelChargeOrigin(str, enum.Enum):
+    ALWAYS_FROM_BASE = "ALWAYS_FROM_BASE"
+    ACTUAL_ORIGIN = "ACTUAL_ORIGIN"
+
 
 CORE_MODULE_KEYS: list[str] = ["dashboard", "calendar", "bookings", "website"]
 
@@ -71,6 +78,11 @@ class Tenant(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     logo_url = Column(String, nullable=True)
+
+    # Capability Controls & Travel Policy
+    allow_in_call = Column(Boolean, default=True, nullable=False)
+    allow_out_call = Column(Boolean, default=True, nullable=False)
+    travel_charge_origin = Column(String, default=TravelChargeOrigin.ALWAYS_FROM_BASE.value, nullable=False)
 
     def get_enabled_modules(self) -> list[str]:
         """Return list of enabled modules for this tenant.

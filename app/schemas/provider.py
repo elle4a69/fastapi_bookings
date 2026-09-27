@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProviderBase(BaseModel):
@@ -20,6 +20,8 @@ class ProviderBase(BaseModel):
     ignore_company_hours: bool = Field(False, description="Whether this provider ignores company-wide working hours")
     image: Optional[str] = Field(None, description="Provider profile image (base64 or URL)")
     weekly_schedule: Optional[dict] = Field(None, description="Provider's 7-day weekly schedule")
+    allow_in_call: bool = Field(True, description="Whether the provider allows in-call appointments")
+    allow_out_call: bool = Field(True, description="Whether the provider allows out-call appointments")
     in_call_address: Optional[str] = Field(None, description="In-call physical address")
     out_call_radius_km: float = Field(25.0, description="Out-call service radius in km")
     base_outcall_surcharge: Decimal = Field(Decimal("0.00"), description="Base surcharge for out-call services")
@@ -45,6 +47,8 @@ class ProviderUpdate(BaseModel):
     image: Optional[str] = None
     weekly_schedule: Optional[dict] = None
     service_ids: Optional[list[int]] = None
+    allow_in_call: Optional[bool] = None
+    allow_out_call: Optional[bool] = None
     in_call_address: Optional[str] = None
     out_call_radius_km: Optional[float] = None
     base_outcall_surcharge: Optional[Decimal] = None
@@ -75,6 +79,8 @@ class ProviderListItem(BaseModel):
     phone: Optional[str] = None
     active: bool = True
     is_visible: bool = True
+    allow_in_call: bool = True
+    allow_out_call: bool = True
     capacity: int = 1
     color: Optional[str] = None
     description: Optional[str] = None
@@ -85,6 +91,11 @@ class ProviderListItem(BaseModel):
     service_ids: list[int] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("allow_in_call", "allow_out_call", mode="before")
+    @classmethod
+    def default_capabilities(cls, v):
+        return True if v is None else bool(v)
 
 
 class ProviderListResponse(BaseModel):

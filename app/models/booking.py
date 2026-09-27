@@ -5,13 +5,20 @@ service at a specific time. The status of a booking follows the
 finite state machine defined in :mod:`..core.state_machine`.
 """
 
+import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text, Index, text
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Index, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
 from ..core.state_machine import BookingStatus
+
+
+class ServiceMode(str, enum.Enum):
+    IN_CALL = "in_call"
+    OUT_CALL = "out_call"
+
 
 
 class Booking(Base):
@@ -40,6 +47,15 @@ class Booking(Base):
     status = Column(Enum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     notes = Column(Text, nullable=True)
     idempotency_key = Column(String, unique=True, nullable=True, index=True)
+
+    # In-Call / Out-Call Delivery & Travel Snapshot
+    service_mode = Column(String, default=ServiceMode.IN_CALL.value, nullable=False)
+    client_suburb = Column(String, nullable=True)
+    client_postcode = Column(String, nullable=True)
+    service_address = Column(String, nullable=True)
+    chargeable_travel_distance_km = Column(Float, nullable=True)
+    chargeable_travel_fee = Column(Numeric(10, 2), nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

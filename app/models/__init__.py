@@ -9,7 +9,7 @@ from .service import Service
 from .provider import Provider
 from .client import Client
 from .location import Location, LocationProvider, LocationService, LocationCategory, LocationProduct, LocationProvider, LocationService, LocationCategory, LocationProduct
-from .booking import Booking
+from .booking import Booking, ServiceMode
 from .booking_slot_allocation import BookingSlotAllocation
 from .audit import AuditLog
 from .payment import Payment
@@ -23,7 +23,8 @@ from .notification import (
 )
 
 # Core domain models
-from .tenant import Tenant
+from .tenant import Tenant, TravelChargeOrigin
+
 from .resource import (
     Resource,
     ServiceResourceRequirement,
