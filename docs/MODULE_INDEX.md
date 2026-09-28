@@ -31,6 +31,7 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `frontend/` | React/Vite SPA & Booking Widget | [App.tsx](file:///F:/Projects/fastapi_bookings/frontend/src/App.tsx), [main.tsx](file:///F:/Projects/fastapi_bookings/frontend/src/main.tsx) | **Active / Production** | [frontend/README.md](file:///F:/Projects/fastapi_bookings/frontend/README.md) |
 | `alembic/` | Schema Migrations | [env.py](file:///F:/Projects/fastapi_bookings/alembic/env.py), [versions/](file:///F:/Projects/fastapi_bookings/alembic/versions/) | **Active / Production** | [docs/ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md) |
 | `contracts/` | OpenAPI Spec & Type Generators | [openapi.json](file:///F:/Projects/fastapi_bookings/openapi.json) | **Active / Supporting** | [docs/ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md) |
+| `app/api/routers/tenant_modules.py` | Tenant Feature Toggles & Modular Architecture | [tenant_modules.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenant_modules.py) | **Active / Production** | [frontend/README.md](file:///F:/Projects/fastapi_bookings/frontend/README.md) |
 
 ---
 
@@ -70,6 +71,12 @@ Long-term tenant knowledge base:
 - Post-conversation transcript analysis (Mem0 pattern: `ADD`, `UPDATE`, `DELETE`, `NOOP`)
 - Strict PII scrubbing (phone, email, credit card, Australian street addresses)
 - Multi-tenant pgvector semantic indexing
+
+### 3.6 Tenant Feature Modules & Simplified Module Controls (`app/api/routers/tenant_modules.py`)
+Authoritative single source of truth for modular toggles per tenant:
+- Controls core optional capabilities: `multiple_providers` (Solo vs. Multi-Staff), `locations` (Single vs. Multi-Location), `categories`, `products`, `addons`.
+- Cleanly simplifies UI, workflows, and intake pipelines across all admin views and public booking without deleting underlying records.
+- Backward-compatible alias synchronization (`multiple_providers` <-> `providers`, `addons` <-> `packages`).
 
 ---
 

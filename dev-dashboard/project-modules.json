@@ -3,17 +3,71 @@
     {
       "name": "fastapi-bookings-backend",
       "label": "FastAPI Bookings Backend",
-      "description": "Core SQLite REST API service handling customer databases, reservation records, forms, and session scheduling.",
-      "working_dir": "F:\\Projects\\fastapi_bookings",
+      "description": "Core REST API service — reservations, forms, scheduling, SMS outbox, AI jobs, and knowledge graph. Requires PostgreSQL, Redis, and Neo4j to be running first.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings",
       "command": "cmd.exe /c start.bat",
       "port": 8000,
       "health_url": "http://127.0.0.1:8000/health"
     },
     {
+      "name": "bookings-frontend",
+      "label": "Bookings Admin UI",
+      "description": "Main Vite + React admin dashboard — booking management, SMS assistant workspace, customer arrivals, and provider portals. Proxies /api to port 8000.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\frontend",
+      "command": "npm run dev",
+      "port": 7070,
+      "health_url": "http://localhost:7070/"
+    },
+    {
+      "name": "docker-stack",
+      "label": "Docker Stack (PostgreSQL + Redis + Neo4j)",
+      "description": "Core infrastructure containers from docker-compose.yml. Starts PostgreSQL 16+pgvector (port 5433), Redis 7 (port 6380), and Neo4j 5 (ports 7474/7687). Must be running before the FastAPI backend.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings",
+      "command": "docker compose up -d",
+      "port": 5433,
+      "health_url": null
+    },
+    {
+      "name": "shorturls-service",
+      "label": "URL Shortener Service",
+      "description": "FastAPI microservice that generates and resolves short booking URLs. Backed by MongoDB (port 27017 via Docker) and exposed on port 8002.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings",
+      "command": "cmd.exe /c start-shorturls.bat",
+      "port": 8002,
+      "health_url": "http://127.0.0.1:8002/health/live"
+    },
+    {
+      "name": "shorturls-mongodb",
+      "label": "MongoDB — URL Shortener DB",
+      "description": "MongoDB 7 container backing the URL Shortener service. Managed by docker-compose in the shortURLs subfolder. Must be running before the URL Shortener service.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\shortURLs",
+      "command": "docker compose up -d db",
+      "port": 27017,
+      "health_url": null
+    },
+    {
+      "name": "sms-assistant-api",
+      "label": "SMS Assistant API",
+      "description": "FastAPI microservice for the SMS AI assistant backend — message routing, AI autopilot, booking actions, and webhook receipts.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\integrations\\\\assistant-ui-v2",
+      "command": "cmd.exe /c start.bat",
+      "port": 8026,
+      "health_url": "http://localhost:8026/"
+    },
+    {
+      "name": "sms-assistant-ui",
+      "label": "SMS Assistant UI",
+      "description": "React frontend for the SMS assistant workspace — conversation inbox, AI mode controls, draft approvals, and bootcamp simulation.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\integrations\\\\assistant-ui-v2",
+      "command": "npm run dev",
+      "port": 5191,
+      "health_url": "http://localhost:5191/"
+    },
+    {
       "name": "bookings-ai-agent",
       "label": "Bookings AI Agent Backend",
       "description": "FastAPI microservice executing autonomous chat responder, SMS gateway, Locanto autoreply bridge, and booking webhooks.",
-      "working_dir": "F:\\Projects\\bookings_ai_agent",
+      "working_dir": "F:\\\\Projects\\\\bookings_ai_agent",
       "command": "cmd.exe /c start-server.bat",
       "port": 5172,
       "health_url": "http://localhost:5172/"
@@ -22,7 +76,7 @@
       "name": "bookings-ai-agent-frontend",
       "label": "Bookings AI Console UI",
       "description": "React dashboard for managing AI settings, onboarding, message approvals, simulation bootcamps, and the public booking form.",
-      "working_dir": "F:\\Projects\\bookings_ai_agent\\frontend",
+      "working_dir": "F:\\\\Projects\\\\bookings_ai_agent\\\\frontend",
       "command": "npm run dev",
       "port": 5173,
       "health_url": "http://localhost:5173/"
@@ -31,7 +85,7 @@
       "name": "locanto-autoreply",
       "label": "Locanto Autoreply Engine",
       "description": "Playwright-powered browser automation that scans the Locanto inbox every 3 minutes and sends AI-generated replies to buyer enquiries.",
-      "working_dir": "F:\\Locanto",
+      "working_dir": "F:\\\\Locanto",
       "command": "node server.js",
       "port": 3033,
       "health_url": "http://localhost:3033/api/ai/messages"
@@ -40,16 +94,44 @@
       "name": "bookings-mapbox-frontend",
       "label": "Bookings UI (Mapbox)",
       "description": "Interactive map dashboard built with React and Mapbox-GL for booking visualization and location management.",
-      "working_dir": "F:\\Projects\\fastapi_bookings\\mapbox",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\mapbox",
       "command": "npm run dev",
       "port": 5180,
       "health_url": "http://localhost:5180/"
     },
     {
+      "name": "signoz",
+      "label": "SigNoz — Observability Stack",
+      "description": "OpenTelemetry-native observability platform. Receives traces, metrics, and logs from the FastAPI backend via OTLP HTTP (port 4318). UI on port 3301. Start with docker compose up -d inside the SigNoz folder.",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\signoz",
+      "command": "docker compose up -d",
+      "port": 3301,
+      "health_url": "http://localhost:3301/"
+    },
+    {
+      "name": "chatwoot-support-desk",
+      "label": "Chatwoot Support Desk",
+      "description": "Omnichannel customer engagement stack and webhook router for managing booking chat threads.",
+      "working_dir": "E:\\\\Projects\\\\chatwoot-source",
+      "command": "pnpm dev",
+      "port": 3000,
+      "health_url": "http://localhost:3000/",
+      "cloud_url": "https://chatwoot-web-208926050296.us-central1.run.app"
+    },
+    {
+      "name": "anti-gravity-engine",
+      "label": "Anti-Gravity Engine",
+      "description": "Orchestration core executing Multi-Agent projects and tasks based on SQLite dependency chains.",
+      "working_dir": "E:\\\\Projects\\\\King of Kings",
+      "command": "py -u anti_gravity_system/cli.py run --continuous",
+      "port": null,
+      "health_url": null
+    },
+    {
       "name": "ngrok-ai-backend-tunnel",
       "label": "Ngrok — AI Backend Tunnel",
       "description": "Public HTTPS tunnel exposing the Bookings AI Agent backend (port 5172) via ngrok for Mobile Message webhooks and external access.",
-      "working_dir": "F:\\Projects\\bookings_ai_agent",
+      "working_dir": "F:\\\\Projects\\\\bookings_ai_agent",
       "command": "ngrok http 5172 --authtoken 2tJLlya0ftTPBgGFIovkpaD8L4o_bLTgxubHoYsKgr5Dz7k7 --url sunbird-premium-titmouse.ngrok-free.app",
       "port": 4040,
       "health_url": "http://127.0.0.1:4040/api/tunnels",
@@ -60,7 +142,7 @@
       "name": "ngrok-frontend-tunnel",
       "label": "Ngrok — Frontend Tunnel",
       "description": "Public HTTPS tunnel exposing the Bookings React UI (port 5173) including the embeddable public booking form at /book.",
-      "working_dir": "F:\\Projects\\bookings_ai_agent\\frontend",
+      "working_dir": "F:\\\\Projects\\\\bookings_ai_agent\\\\frontend",
       "command": "ngrok http 5173 --authtoken 33pnxuXvPkLDdt1roCj7ByWmJXx_4WMvVztZ59wmwYNMKvGLE --url reediest-jayce-heterodoxly.ngrok-free.dev",
       "port": 4041,
       "health_url": "http://127.0.0.1:4041/api/tunnels",
@@ -71,7 +153,7 @@
       "name": "ngrok-locanto-tunnel",
       "label": "Ngrok — Locanto Tunnel",
       "description": "Public HTTPS tunnel exposing the Locanto Autoreply Engine (port 3033).",
-      "working_dir": "F:\\Locanto",
+      "working_dir": "F:\\\\Locanto",
       "command": "ngrok http 3033 --authtoken 3GSxTzSbxu9UKH4FjvVBHswzT2w_7MQUBcSjtVypoQomWNqUN --url whooping-gloating-lullaby.ngrok-free.dev",
       "port": 4042,
       "health_url": "http://127.0.0.1:4042/api/tunnels",
@@ -82,31 +164,12 @@
       "name": "ngrok-devdash-tunnel",
       "label": "Ngrok — Dev Dashboard Tunnel",
       "description": "Public HTTPS tunnel exposing this Bookings Dev Dashboard (port 2310).",
-      "working_dir": "F:\\Projects\\fastapi_bookings\\dev-dashboard",
+      "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\dev-dashboard",
       "command": "ngrok http 2310 --authtoken 3GSykh1A1BLY7dbfUmH53zKzEw3_4hjEWEHbkA1Z7qtLU18ge --url prize-diner-thirteen.ngrok-free.dev",
       "port": 4044,
       "health_url": "http://127.0.0.1:4044/api/tunnels",
       "public_url": "https://prize-diner-thirteen.ngrok-free.dev",
       "enabled": false
-    },
-    {
-      "name": "chatwoot-support-desk",
-      "label": "Chatwoot Support Desk",
-      "description": "Omnichannel customer engagement stack and webhook router for managing booking chat threads.",
-      "working_dir": "E:\\Projects\\chatwoot-source",
-      "command": "pnpm dev",
-      "port": 3000,
-      "health_url": "http://localhost:3000/",
-      "cloud_url": "https://chatwoot-web-208926050296.us-central1.run.app"
-    },
-    {
-      "name": "anti-gravity-engine",
-      "label": "Anti-Gravity Engine",
-      "description": "Orchestration core executing Multi-Agent projects and tasks based on SQLite dependency chains.",
-      "working_dir": "E:\\Projects\\King of Kings",
-      "command": "py -u anti_gravity_system/cli.py run --continuous",
-      "port": null,
-      "health_url": null
     }
   ]
 }

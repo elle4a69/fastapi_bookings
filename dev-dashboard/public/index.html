@@ -528,6 +528,52 @@
       padding: 16px;
       margin-top: 20px;
     }
+
+    /* Docker UI Styles */
+    .filter-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-pill:hover {
+      color: var(--text);
+      border-color: #3b4b66;
+    }
+    .filter-pill.active {
+      background: rgba(79, 70, 229, 0.2);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .badge-group {
+      background: rgba(147, 51, 234, 0.12);
+      color: #c084fc;
+      border: 1px solid rgba(147, 51, 234, 0.25);
+    }
+    .badge-healthy {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .badge-unhealthy {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+    .badge-starting {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--yellow);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -548,6 +594,7 @@
 
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('modules')">⚙️ Modules & Controls</button>
+    <button class="tab-btn" data-tab="docker" onclick="switchTab('docker')">🐳 Docker Containers <span class="badge badge-port" id="docker-tab-count" style="margin-left:6px; font-size:11px;">0/0</span></button>
     <button class="tab-btn" onclick="switchTab('gravity')">🛸 Anti-Gravity Workflows</button>
     <button class="tab-btn" onclick="switchTab('workflow')">🔌 System Workflow</button>
     <button class="tab-btn" onclick="switchTab('briefing')">📖 Workspace Briefing</button>
@@ -556,10 +603,74 @@
   <main>
     <!-- Tab 1: Modules & Controls -->
     <div id="panel-modules" class="tab-panel active">
+      <!-- Quick Docker Status Banner -->
+      <div id="docker-quick-banner" style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">🐳</span>
+          <div>
+            <span style="font-weight: 600; font-size: 14px; color: #fff;">Docker Container Fleet</span>
+            <span id="docker-banner-summary" style="font-size: 12px; color: var(--muted); margin-left: 10px;">Loading container status...</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button onclick="switchTab('docker')" style="background: rgba(79, 70, 229, 0.15); border-color: var(--accent); color: #a5b4fc; padding: 4px 12px; font-size: 12px;">Manage Containers ➜</button>
+        </div>
+      </div>
+
       <div class="modules-list" id="modules-container">
         <!-- Rendered dynamically -->
         <div style="text-align: center; color: var(--muted); padding: 40px;">
           Querying backend processes...
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Docker Containers / Servers -->
+    <div id="panel-docker" class="tab-panel">
+      <!-- Stats Bar -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+        <div class="stat-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;">
+          <div style="font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px;">TOTAL FLEET</div>
+          <div style="font-size: 24px; font-weight: 700; color: #fff; margin-top: 4px;" id="stat-docker-total">0</div>
+        </div>
+        <div class="stat-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;">
+          <div style="font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px;">RUNNING</div>
+          <div style="font-size: 24px; font-weight: 700; color: var(--green); margin-top: 4px;" id="stat-docker-running">0</div>
+        </div>
+        <div class="stat-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;">
+          <div style="font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px;">STOPPED / EXITED</div>
+          <div style="font-size: 24px; font-weight: 700; color: var(--muted); margin-top: 4px;" id="stat-docker-stopped">0</div>
+        </div>
+        <div class="stat-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;">
+          <div style="font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px;">HEALTHY PROBES</div>
+          <div style="font-size: 24px; font-weight: 700; color: var(--cyan); margin-top: 4px;" id="stat-docker-healthy">0 Healthy</div>
+        </div>
+      </div>
+
+      <!-- Controls & Filter Toolbar -->
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;" id="docker-filter-pills">
+          <button class="filter-pill active" onclick="setDockerFilter('all', this)">All (<span id="count-all">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('FastAPI Bookings', this)">FastAPI Bookings (<span id="count-fastapi">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('Chatwoot', this)">Chatwoot (<span id="count-chatwoot">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('SigNoz APM', this)">SigNoz (<span id="count-signoz">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('Agent Memory', this)">Agent Memory (<span id="count-agent-memory">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('ShortURLs', this)">ShortURLs (<span id="count-shorturls">0</span>)</button>
+          <button class="filter-pill" onclick="setDockerFilter('Other', this)">Other (<span id="count-other">0</span>)</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="text" id="docker-search-input" placeholder="🔍 Search containers..." oninput="handleDockerSearch()" style="background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; color: var(--text); outline: none; width: 200px;">
+          <button onclick="refreshDockerContainers(true)" id="btn-refresh-docker" style="background: var(--surface2); border: 1px solid var(--border); padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+            <span id="refresh-spinner">↻</span> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Containers List -->
+      <div class="modules-list" id="docker-containers-container">
+        <div style="text-align: center; color: var(--muted); padding: 40px;">
+          Querying Docker containers...
         </div>
       </div>
     </div>
@@ -707,15 +818,28 @@
     let logsData = {}; // name -> lines array
     let gravityInterval = null;
 
+    // Docker state
+    let dockerContainers = [];
+    let expandedDocker = new Set();
+    let dockerLogsData = {};
+    let currentDockerFilter = 'all';
+    let currentDockerSearch = '';
+
     function switchTab(tabId) {
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       
-      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.textContent.toLowerCase().includes(tabId));
+      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => 
+        (b.getAttribute('data-tab') === tabId) || b.textContent.toLowerCase().includes(tabId)
+      );
       if (targetBtn) targetBtn.classList.add('active');
       
       const panel = document.getElementById(`panel-${tabId}`);
       if (panel) panel.classList.add('active');
+
+      if (tabId === 'docker') {
+        refreshDockerContainers();
+      }
 
       // Manage Anti-Gravity polling interval
       if (tabId === 'gravity') {
@@ -872,7 +996,8 @@
         try {
           const payload = JSON.parse(event.data);
           if (payload.type === 'status') {
-            renderModules(payload.data.modules);
+            if (payload.data.modules) renderModules(payload.data.modules);
+            if (payload.data.docker) renderDockerContainers(payload.data.docker);
           }
         } catch (err) {
           console.error('Error parsing WS message:', err);
@@ -1144,15 +1269,405 @@
       }
     }
 
+    // ==========================================
+    // Docker UI Functions
+    // ==========================================
+
+    function formatPorts(str) {
+      if (!str) return '';
+      const match = str.match(/(\d+)->(\d+)/);
+      if (match) return `${match[1]}→${match[2]}`;
+      const tcp = str.match(/(\d+)\/tcp/);
+      if (tcp) return tcp[1];
+      return str.split(',')[0].trim();
+    }
+
+    function renderDockerContainers(containers) {
+      if (containers) {
+        dockerContainers = containers;
+      }
+      const all = dockerContainers || [];
+
+      // Calculate counts
+      const total = all.length;
+      const running = all.filter(c => c.state === 'running').length;
+      const stopped = total - running;
+      const healthy = all.filter(c => c.health === 'healthy').length;
+
+      // Update stats counters
+      const totalEl = document.getElementById('stat-docker-total');
+      const runningEl = document.getElementById('stat-docker-running');
+      const stoppedEl = document.getElementById('stat-docker-stopped');
+      const healthyEl = document.getElementById('stat-docker-healthy');
+      const tabCountEl = document.getElementById('docker-tab-count');
+      const bannerSummaryEl = document.getElementById('docker-banner-summary');
+
+      if (totalEl) totalEl.textContent = total;
+      if (runningEl) runningEl.textContent = running;
+      if (stoppedEl) stoppedEl.textContent = stopped;
+      if (healthyEl) healthyEl.textContent = `${healthy} Healthy`;
+      if (tabCountEl) {
+        tabCountEl.textContent = `${running}/${total}`;
+        tabCountEl.className = running > 0 ? 'badge badge-status running' : 'badge badge-status';
+      }
+      if (bannerSummaryEl) {
+        bannerSummaryEl.textContent = `${running} of ${total} containers running • ${healthy} healthy`;
+      }
+
+      // Update filter pill counts
+      const countPill = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = all.filter(fn).length;
+      };
+      countPill('count-all', () => true);
+      countPill('count-fastapi', c => c.group === 'FastAPI Bookings');
+      countPill('count-chatwoot', c => c.group === 'Chatwoot');
+      countPill('count-signoz', c => c.group === 'SigNoz APM');
+      countPill('count-agent-memory', c => c.group === 'Agent Memory');
+      countPill('count-shorturls', c => c.group === 'ShortURLs');
+      countPill('count-other', c => c.group === 'Other');
+
+      // Filter containers
+      let filtered = all;
+      if (currentDockerFilter !== 'all') {
+        filtered = filtered.filter(c => c.group === currentDockerFilter);
+      }
+      if (currentDockerSearch) {
+        const q = currentDockerSearch.toLowerCase();
+        filtered = filtered.filter(c => 
+          c.name.toLowerCase().includes(q) ||
+          c.role.toLowerCase().includes(q) ||
+          c.image.toLowerCase().includes(q) ||
+          (c.ports && c.ports.toLowerCase().includes(q))
+        );
+      }
+
+      const containerEl = document.getElementById('docker-containers-container');
+      if (!containerEl) return;
+
+      if (!filtered.length) {
+        containerEl.innerHTML = `
+          <div style="text-align: center; color: var(--muted); padding: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;">
+            No Docker containers match filter "${esc(currentDockerFilter)}" ${currentDockerSearch ? `and search "${esc(currentDockerSearch)}"` : ''}.
+          </div>
+        `;
+        return;
+      }
+
+      const existingCards = containerEl.querySelectorAll('.docker-card');
+      const needsRebuild = existingCards.length !== filtered.length || 
+        Array.from(existingCards).some((card, idx) => card.id !== `docker-card-${filtered[idx].name}`);
+
+      if (needsRebuild) {
+        containerEl.innerHTML = filtered.map(c => buildDockerCardHtml(c)).join('');
+      } else {
+        filtered.forEach(c => updateDockerCardInPlace(c));
+      }
+    }
+
+    function buildDockerCardHtml(c) {
+      const isRunning = c.state === 'running';
+      const isHealthy = c.health === 'healthy';
+      const isUnhealthy = c.health === 'unhealthy';
+      const isStartingHealth = c.health === 'starting';
+
+      let statusClass = 'badge badge-status';
+      if (isRunning) statusClass += ' running';
+      else if (c.state === 'exited' || c.state === 'dead') statusClass += ' error';
+      else if (c.state === 'restarting') statusClass += ' starting';
+
+      let healthBadge = '';
+      if (isHealthy) {
+        healthBadge = `<span class="badge badge-healthy">✓ HEALTHY</span>`;
+      } else if (isUnhealthy) {
+        healthBadge = `<span class="badge badge-unhealthy">⚠ UNHEALTHY</span>`;
+      } else if (isStartingHealth) {
+        healthBadge = `<span class="badge badge-starting">⏳ CHECKING</span>`;
+      }
+
+      const portDisplay = c.ports ? `<span class="badge badge-port" title="${esc(c.ports)}">${esc(formatPorts(c.ports))}</span>` : '';
+      const groupBadge = `<span class="badge badge-group">${esc(c.group)}</span>`;
+
+      const startBtn = !isRunning 
+        ? `<button class="btn-start" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'start', this)">▶ Start</button>`
+        : '';
+
+      const stopBtn = isRunning
+        ? `<button class="btn-stop" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'stop', this)">■ Stop</button>`
+        : '';
+
+      const restartBtn = isRunning
+        ? `<button class="btn-restart" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'restart', this)">↻ Restart</button>`
+        : '';
+
+      const logsBtn = `<button id="docker-logs-btn-${c.name}" onclick="event.stopPropagation(); toggleDockerCard('${c.name}')">📄 Logs</button>`;
+
+      const expanded = expandedDocker.has(c.name);
+      const detailsDisplay = expanded ? 'block' : 'none';
+
+      let logLinesHtml = 'Click "Logs" or expand card to view container logs...';
+      if (dockerLogsData[c.name]) {
+        logLinesHtml = dockerLogsData[c.name].map(line => {
+          let color = 'inherit';
+          if (/exception|error|traceback|critical/i.test(line) || (/fail/i.test(line) && !/failed:\s*0/i.test(line))) color = 'var(--red)';
+          else if (/warn/i.test(line)) color = 'var(--yellow)';
+          else if (/success|online|start|ready/i.test(line)) color = 'var(--green)';
+          return `<div style="color:${color};margin-bottom:2px">${esc(line)}</div>`;
+        }).join('');
+      }
+
+      return `
+        <div class="module-card docker-card ${c.state === 'dead' ? 'state-error' : ''}" id="docker-card-${c.name}">
+          <div class="module-header" onclick="toggleDockerCard('${c.name}')">
+            <div class="module-info">
+              <div class="module-title-row" style="flex-wrap: wrap; gap: 6px;">
+                <span class="module-name">${esc(c.name)}</span>
+                <span class="${statusClass}" id="docker-status-${c.name}">${esc(c.state.toUpperCase())}</span>
+                <span id="docker-health-${c.name}">${healthBadge}</span>
+                ${groupBadge}
+                ${portDisplay}
+                <span class="badge badge-pid" title="Container ID">${esc((c.id || '').substring(0, 12))}</span>
+              </div>
+              <div class="module-desc">
+                <strong style="color: #cbd5e1;">${esc(c.role)}</strong>
+                <span style="color: var(--muted); margin: 0 6px;">•</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);">${esc(c.image)}</span>
+                <span style="color: var(--muted); margin: 0 6px;">•</span>
+                <span style="font-size: 12px; color: var(--muted);">${esc(c.status)}</span>
+              </div>
+            </div>
+            <div class="module-actions" id="docker-actions-${c.name}">
+              ${startBtn}
+              ${stopBtn}
+              ${restartBtn}
+              ${logsBtn}
+              <span id="docker-arrow-${c.name}" style="font-size:14px;color:var(--muted);margin-left:8px">${expanded ? '▲' : '▼'}</span>
+            </div>
+          </div>
+          <div class="module-details" id="docker-details-${c.name}" style="display:${detailsDisplay}">
+            <div class="module-details-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+              <div class="info-block">
+                <span class="info-label">Full Image Tag</span>
+                <span class="info-value" title="${esc(c.image)}" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">${esc(c.image)}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">Container ID</span>
+                <span class="info-value" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">${esc(c.id)}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">Mapped Ports</span>
+                <span class="info-value" style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">${esc(c.ports || 'None mapped to host')}</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">Uptime & Status</span>
+                <span class="info-value" style="font-size: 12px;">${esc(c.status || c.runningFor)}</span>
+              </div>
+            </div>
+            
+            <div class="logs-panel">
+              <div class="logs-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Container Stdout/Stderr (docker logs --tail 150 ${esc(c.name)})</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <select id="docker-lines-${c.name}" onchange="fetchDockerLogs('${c.name}', this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 6px;font-size:11px;">
+                    <option value="50">50 lines</option>
+                    <option value="150" selected>150 lines</option>
+                    <option value="300">300 lines</option>
+                    <option value="500">500 lines</option>
+                  </select>
+                  <label style="cursor: pointer; user-select:none; font-size:10px; display:flex; align-items:center; gap:3px; color:inherit;"><input type="checkbox" id="autoscroll-docker-${c.name}" checked>Auto-scroll</label>
+                  <button onclick="fetchDockerLogs('${c.name}')">↻ Refresh Logs</button>
+                  <button onclick="toggleDockerCard('${c.name}')">Close Panel</button>
+                </div>
+              </div>
+              <div class="logs-content" id="docker-log-content-${c.name}">
+                ${logLinesHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateDockerCardInPlace(c) {
+      const card = document.getElementById(`docker-card-${c.name}`);
+      if (!card) return;
+
+      const isRunning = c.state === 'running';
+      const isHealthy = c.health === 'healthy';
+      const isUnhealthy = c.health === 'unhealthy';
+      const isStartingHealth = c.health === 'starting';
+
+      const statusBadge = document.getElementById(`docker-status-${c.name}`);
+      if (statusBadge) {
+        statusBadge.textContent = c.state.toUpperCase();
+        let statusClass = 'badge badge-status';
+        if (isRunning) statusClass += ' running';
+        else if (c.state === 'exited' || c.state === 'dead') statusClass += ' error';
+        else if (c.state === 'restarting') statusClass += ' starting';
+        statusBadge.className = statusClass;
+      }
+
+      const healthContainer = document.getElementById(`docker-health-${c.name}`);
+      if (healthContainer) {
+        if (isHealthy) {
+          healthContainer.innerHTML = `<span class="badge badge-healthy">✓ HEALTHY</span>`;
+        } else if (isUnhealthy) {
+          healthContainer.innerHTML = `<span class="badge badge-unhealthy">⚠ UNHEALTHY</span>`;
+        } else if (isStartingHealth) {
+          healthContainer.innerHTML = `<span class="badge badge-starting">⏳ CHECKING</span>`;
+        } else {
+          healthContainer.innerHTML = '';
+        }
+      }
+
+      const actionsContainer = document.getElementById(`docker-actions-${c.name}`);
+      if (actionsContainer) {
+        const startBtn = !isRunning 
+          ? `<button class="btn-start" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'start', this)">▶ Start</button>`
+          : '';
+        const stopBtn = isRunning
+          ? `<button class="btn-stop" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'stop', this)">■ Stop</button>`
+          : '';
+        const restartBtn = isRunning
+          ? `<button class="btn-restart" onclick="event.stopPropagation(); executeDockerAction('${c.name}', 'restart', this)">↻ Restart</button>`
+          : '';
+        const logsBtn = `<button id="docker-logs-btn-${c.name}" onclick="event.stopPropagation(); toggleDockerCard('${c.name}')">📄 Logs</button>`;
+        const expanded = expandedDocker.has(c.name);
+
+        actionsContainer.innerHTML = `
+          ${startBtn}
+          ${stopBtn}
+          ${restartBtn}
+          ${logsBtn}
+          <span id="docker-arrow-${c.name}" style="font-size:14px;color:var(--muted);margin-left:8px">${expanded ? '▲' : '▼'}</span>
+        `;
+      }
+
+      const details = document.getElementById(`docker-details-${c.name}`);
+      if (details) {
+        const expanded = expandedDocker.has(c.name);
+        details.style.display = expanded ? 'block' : 'none';
+      }
+    }
+
+    async function executeDockerAction(name, action, btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span style="display:inline-block;animation:spin 1s linear infinite;">↻</span> ${action}...`;
+      }
+      try {
+        const res = await fetch(`/api/docker/containers/${encodeURIComponent(name)}/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          alert(`Docker action failed: ${data.error || 'Unknown error'}`);
+        } else {
+          if (socket && socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'get_status' }));
+          } else {
+            await refreshDockerContainers(true);
+          }
+        }
+      } catch (err) {
+        alert(`Connection error: ${err.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function toggleDockerCard(name) {
+      const details = document.getElementById(`docker-details-${name}`);
+      const arrow = document.getElementById(`docker-arrow-${name}`);
+      if (!details) return;
+
+      if (expandedDocker.has(name)) {
+        expandedDocker.delete(name);
+        details.style.display = 'none';
+        if (arrow) arrow.textContent = '▼';
+      } else {
+        expandedDocker.add(name);
+        details.style.display = 'block';
+        if (arrow) arrow.textContent = '▲';
+        const linesEl = document.getElementById(`docker-lines-${name}`);
+        const lines = linesEl ? linesEl.value : 150;
+        fetchDockerLogs(name, lines);
+      }
+    }
+
+    async function fetchDockerLogs(name, lines = 150) {
+      try {
+        const res = await fetch(`/api/docker/containers/${encodeURIComponent(name)}/logs?lines=${lines}`);
+        if (res.ok) {
+          const d = await res.json();
+          dockerLogsData[name] = d.lines || [];
+          const contentEl = document.getElementById(`docker-log-content-${name}`);
+          if (contentEl) {
+            contentEl.innerHTML = dockerLogsData[name].map(line => {
+              let color = 'inherit';
+              if (/exception|error|traceback|critical/i.test(line) || (/fail/i.test(line) && !/failed:\s*0/i.test(line))) color = 'var(--red)';
+              else if (/warn/i.test(line)) color = 'var(--yellow)';
+              else if (/success|online|start|ready/i.test(line)) color = 'var(--green)';
+              return `<div style="color:${color};margin-bottom:2px">${esc(line)}</div>`;
+            }).join('');
+            const autoscroll = document.getElementById(`autoscroll-docker-${name}`);
+            if (!autoscroll || autoscroll.checked) {
+              contentEl.scrollTop = contentEl.scrollHeight;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching docker logs:', err);
+      }
+    }
+
+    async function refreshDockerContainers(force = false) {
+      const spinner = document.getElementById('refresh-spinner');
+      if (spinner) spinner.style.animation = 'spin 1s linear infinite';
+      try {
+        const res = await fetch(`/api/docker/containers?refresh=${force ? 'true' : 'false'}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.containers) {
+            renderDockerContainers(data.containers);
+          }
+        }
+      } catch (err) {
+        console.error('Error refreshing docker containers:', err);
+      } finally {
+        if (spinner) spinner.style.animation = '';
+      }
+    }
+
+    function setDockerFilter(group, btn) {
+      currentDockerFilter = group;
+      document.querySelectorAll('#docker-filter-pills .filter-pill').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderDockerContainers();
+    }
+
+    function handleDockerSearch() {
+      const input = document.getElementById('docker-search-input');
+      currentDockerSearch = input ? input.value.trim() : '';
+      renderDockerContainers();
+    }
+
     // Auto-refresh logs for open panels
     setInterval(() => {
       expandedModules.forEach(name => {
         fetchLogs(name);
       });
+      expandedDocker.forEach(name => {
+        const linesEl = document.getElementById(`docker-lines-${name}`);
+        const lines = linesEl ? linesEl.value : 150;
+        fetchDockerLogs(name, lines);
+      });
     }, 2000);
 
     window.onload = () => {
       initWebSocket();
+      refreshDockerContainers();
     };
   </script>
 </body>

@@ -67,6 +67,7 @@ def public_bootstrap(
                 "name": tenant.name,
                 "subdomain": tenant.subdomain,
                 "timezone": tenant.timezone or "UTC",
+                "enabled_modules": tenant.get_enabled_modules(),
             },
             "services": [_row_to_dict(row) for row in services],
             "providers": [_row_to_dict(row) for row in providers],

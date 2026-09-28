@@ -56,10 +56,73 @@ Features whose backend audit contract is not yet available—such as escalation 
 
 ---
 
+## Phase 5: Autonomous Booking & Delivery Mode Features
+
+### 1. Public Customer Booking Experience (`/book/:slug`)
+- **Delivery Mode Selector**: Dynamic In-Call vs. Out-Call toggle. Auto-locks mode when a service/provider only supports a single delivery mode; defaults to `"in_call"` when both are available.
+- **Dynamic Pricing**: Seamlessly updates price display across service selection and confirmation based on `outcall_price` vs. base price.
+- **Suburb & Postcode Estimator**: Debounced query to `GET /api/public/travel/suburbs` and estimate calculation via `POST /api/public/travel/estimate` with transit fee breakdown, max-radius compliance badge, and estimation disclaimer.
+- **Checkout & Snapshots**: Requires street address on out-call, calls `POST /api/public/travel/quote` for canonical quote, and submits full snapshot attributes (`service_mode`, `service_address`, `client_suburb`, `client_postcode`, `chargeable_travel_distance_km`, `chargeable_travel_fee`).
+
+### 2. Admin Operations UI
+- **Services Editor (`/admin/catalog/services`)**: In-Call and Out-Call toggles, `outcall_price`, `outcall_buffer_before`, `outcall_buffer_after` inputs, and mobile indicator badges in service catalog list.
+- **Providers Editor (`/admin/catalog/providers`)**: Provider-level In-Call and Out-Call capability switches with automated persistence.
+- **Locations Editor (`/admin/catalog/locations` & `/admin/catalog/providers`)**: `is_client_hidden` toggle allowing clinics to designate discreet/private locations where the street address is hidden from public booking cards until appointment confirmation.
+- **Admin Bookings & Calendar (`/admin/bookings`, `/admin/calendar`)**: Real-time itinerary conflict indicators (`has_itinerary_conflict`), transit warning banners, and out-call destination badges across list, month grid, week timegrid, and appointment inspection dialogs.
+
+---
+
+## Simplified Module Controls — Settings > Modules (`/admin/settings/modules`)
+
+`Settings > Modules` serves as the authoritative single location where optional features are toggled for each tenant. Disabling a module cleanly removes its controls, filters, accordions, and workflows across the entire application while preserving underlying data.
+
+### 5 Standardized Core Module Controls
+1. **Multiple Service Providers (`multiple_providers`)** (alias: `providers`):
+   - **Enabled (Multi-Provider)**: Displays provider navigation, staff selectors, calendar provider filters, workday staff selector sidebars, exception assignment dropdowns, service provider assignment accordions, and SMS provider instruction tabs.
+   - **Disabled (Solo Mode)**: Exactly one default provider remains active. Multi-provider UI elements disappear across catalog, calendar, workday schedule, exceptions, service editor, and SMS settings. Public booking auto-selects the default provider and skips the provider selection tab.
+2. **Multiple Locations (`locations`)**:
+   - **Enabled (Multi-Location)**: Full branch management, location filter dropdowns in calendar, location selectors in booking and exception forms.
+   - **Disabled (Single Location)**: Exactly one default location remains active. Location filters and selectors are removed from calendar, exceptions, and booking intake forms.
+3. **Categories (`categories`)**:
+   - **Enabled**: Service grouping with category tabs, category management in navigation, and category assignment accordions.
+   - **Disabled**: Flat service list without category chips, category accordions, or category navigation.
+4. **Products (`products`)**:
+   - **Enabled**: Products catalog, service product assignment, and upsells in checkout.
+   - **Disabled**: Completely hidden from navigation, service forms, and booking intake.
+5. **Add-ons (`addons`)** (alias: `packages`):
+   - **Enabled**: Service add-ons and extra options during service booking.
+   - **Disabled**: Hidden from navigation, service forms, and booking intake wizard tabs.
+
+### Solo Provider & Primary Location Configuration — Settings > Business Profile (`/admin/settings/business`)
+When either the **Multiple Service Providers** or **Multiple Locations** modules are disabled, the system provides dedicated configuration panels directly inside **Settings > Business Profile**:
+- **Operator Name Field**: Labeled `"Business / Operator / Owner Name"` to reflect solo practitioner and business identity.
+- **Solo Service Provider Panel** (active when `!multipleProvidersEnabled`):
+  - Practitioner Name with instant `"Sync with Operator Name"` action.
+  - Direct Email, Phone, and In-Call Studio physical address (with `"Use Business Address"` shortcut).
+  - Bio / Professional Description for public appointment cards.
+  - Delivery mode switches: **Allow In-Call Studio Bookings** and **Allow Out-Call Mobile Bookings**.
+  - Out-Call travel parameters: Out-Call Radius (km), Base Surcharge ($), Per-KM Fee ($), and Turnaround / Travel Buffer (mins).
+  - Directly saved to `PUT /api/admin/providers/{id}`.
+- **Primary Location Panel** (active when `!locationsEnabled`):
+  - Primary Location / Branch Name.
+  - Structured Physical Address breakdown: Street Address, City / Suburb, State / Province, and Postal Code (with `"Use Business Address"` shortcut).
+  - Timezone selector with comprehensive Australian and international IANA options.
+  - **Discreet / Private Location Toggle** (`is_client_hidden`): Hides full street address from the public booking directory until appointment confirmation.
+  - Directly saved to `PUT /api/admin/locations/{id}`.
+- **Unified & Granular Persistence**: Changes can be saved individually via section buttons or in one atomic batch via the primary `"Save All Changes"` action.
+- **Redundant Operating Hours Removed**: Business-level operating hours are removed from business settings to establish provider schedules and workdays as the single source of truth for availability.
+
+---
+
+
 ## Development & Build Commands
 ```bash
 # Start frontend development server on port 7070
 npm run dev
+
+# Run unit tests via Node test runner
+npm test
+node --experimental-strip-types --test src/components/navigation-modules.test.ts
 
 # Run production TypeScript type-check and bundle build
 npm run build

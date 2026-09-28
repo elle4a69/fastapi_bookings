@@ -3,7 +3,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import net from 'net';
 import axios from 'axios';
@@ -235,17 +235,172 @@ async function getModuleRuntime(mod) {
   };
 }
 
-// Get status of all modules in parallel with deduplication
+// Docker Container Management & Monitoring
+const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
+
+function enrichContainer(c) {
+  const name = c.Names || c.name || '';
+  let group = 'Other';
+  let role = 'Container Service';
+
+  if (name.includes('fastapi-bookings') || name === 'fastapi_bookings') {
+    group = 'FastAPI Bookings';
+    if (name.includes('postgres')) role = 'PostgreSQL 16 + pgvector Database';
+    else if (name.includes('redis')) role = 'Redis 7 Cache & Task Queue';
+    else if (name.includes('neo4j')) role = 'Neo4j 5 Graph Database';
+    else role = 'FastAPI Application Container';
+  } else if (name.includes('shorturls')) {
+    group = 'ShortURLs';
+    if (name.includes('db')) role = 'MongoDB 7 Document Database';
+    else role = 'ShortURL Service';
+  } else if (name.includes('agent-memory')) {
+    group = 'Agent Memory';
+    if (name.includes('graphiti')) role = 'Graphiti Temporal Knowledge Graph';
+    else if (name.includes('neo4j')) role = 'Agent Memory Neo4j Knowledge Store';
+    else role = 'Agent Memory Service';
+  } else if (name.includes('chatwoot')) {
+    group = 'Chatwoot';
+    if (name.includes('rails')) role = 'Chatwoot Web & API Server';
+    else if (name.includes('sidekiq')) role = 'Chatwoot Background Worker';
+    else if (name.includes('redis')) role = 'Chatwoot Redis Cache & PubSub';
+    else if (name.includes('postgres')) role = 'Chatwoot PostgreSQL Database';
+    else if (name.includes('base')) role = 'Chatwoot Base Init Container';
+    else role = 'Chatwoot Service';
+  } else if (name.includes('signoz')) {
+    group = 'SigNoz APM';
+    if (name.includes('clickhousekeeper')) role = 'ClickHouse Keeper Raft Consensus';
+    else if (name.includes('clickhouse-user-scripts')) role = 'ClickHouse Schema Script Runner';
+    else if (name.includes('clickhouse')) role = 'ClickHouse Columnar Telemetry DB';
+    else if (name.includes('metastore')) role = 'SigNoz Metastore PostgreSQL';
+    else if (name.includes('ingester')) role = 'OTel Collector & Metrics Ingester';
+    else if (name.includes('migrator')) role = 'SigNoz Schema Migration Tool';
+    else if (name.includes('signoz')) role = 'SigNoz Web UI & Query Service';
+    else role = 'SigNoz Telemetry Component';
+  }
+
+  let health = 'none';
+  if (c.HealthStatus && c.HealthStatus !== 'none') {
+    health = c.HealthStatus;
+  } else if (c.Status && c.Status.includes('(healthy)')) {
+    health = 'healthy';
+  } else if (c.Status && c.Status.includes('(unhealthy)')) {
+    health = 'unhealthy';
+  } else if (c.Status && c.Status.includes('(health: starting)')) {
+    health = 'starting';
+  }
+
+  return {
+    id: c.ID,
+    name: name,
+    image: c.Image,
+    state: c.State || 'unknown',
+    status: c.Status || '',
+    health: health,
+    ports: c.Ports || '',
+    runningFor: c.RunningFor || '',
+    createdAt: c.CreatedAt || '',
+    command: c.Command || '',
+    group,
+    role
+  };
+}
+
+let cachedContainers = null;
+let lastDockerFetch = 0;
+const DOCKER_CACHE_TTL_MS = 2500;
+
+async function getDockerContainers(force = false) {
+  const now = Date.now();
+  if (!force && cachedContainers && (now - lastDockerFetch < DOCKER_CACHE_TTL_MS)) {
+    return cachedContainers;
+  }
+  return new Promise((resolve) => {
+    execFile('docker', ['ps', '-a', '--format', '{{json .}}'], { encoding: 'utf8', timeout: 6000 }, (err, stdout) => {
+      if (err) {
+        return resolve(cachedContainers || []);
+      }
+      try {
+        const lines = (stdout || '').trim().split('\n').filter(Boolean);
+        const raw = lines.map(line => {
+          try { return JSON.parse(line); } catch { return null; }
+        }).filter(Boolean);
+
+        const enriched = raw.map(enrichContainer);
+        const groupOrder = ['FastAPI Bookings', 'ShortURLs', 'Agent Memory', 'Chatwoot', 'SigNoz APM', 'Other'];
+        enriched.sort((a, b) => {
+          const gA = groupOrder.indexOf(a.group);
+          const gB = groupOrder.indexOf(b.group);
+          const idxA = gA === -1 ? 99 : gA;
+          const idxB = gB === -1 ? 99 : gB;
+          if (idxA !== idxB) return idxA - idxB;
+          if (a.state === 'running' && b.state !== 'running') return -1;
+          if (a.state !== 'running' && b.state === 'running') return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        cachedContainers = enriched;
+        lastDockerFetch = Date.now();
+        resolve(enriched);
+      } catch (parseErr) {
+        console.error('Error parsing docker output:', parseErr);
+        resolve(cachedContainers || []);
+      }
+    });
+  });
+}
+
+async function runDockerAction(name, action) {
+  if (!CONTAINER_NAME_REGEX.test(name)) {
+    return { ok: false, error: 'Invalid container name format' };
+  }
+  if (!['start', 'stop', 'restart'].includes(action)) {
+    return { ok: false, error: 'Invalid action. Allowed: start, stop, restart' };
+  }
+  return new Promise((resolve) => {
+    execFile('docker', [action, name], { encoding: 'utf8', timeout: 30000 }, async (err, stdout, stderr) => {
+      if (err) {
+        return resolve({ ok: false, error: (stderr || stdout || err.message).trim() });
+      }
+      cachedContainers = null;
+      lastDockerFetch = 0;
+      await sleep(600);
+      await getDockerContainers(true);
+      resolve({ ok: true, name, action, output: (stdout || '').trim() });
+    });
+  });
+}
+
+async function getDockerLogs(name, maxLines = 150) {
+  if (!CONTAINER_NAME_REGEX.test(name)) {
+    return { ok: false, error: 'Invalid container name format' };
+  }
+  const linesToFetch = Math.min(Math.max(1, Number(maxLines) || 150), 1000);
+  return new Promise((resolve) => {
+    execFile('docker', ['logs', '--tail', String(linesToFetch), name], { encoding: 'utf8', timeout: 10000 }, (err, stdout, stderr) => {
+      const combined = (stdout || '') + '\n' + (stderr || '');
+      const lines = combined.split(/\r?\n/).filter(Boolean).slice(-linesToFetch);
+      if (err && lines.length === 0) {
+        return resolve({ ok: false, error: err.message, lines: [] });
+      }
+      resolve({ ok: true, name, lines });
+    });
+  });
+}
+
+// Get status of all modules and docker containers in parallel with deduplication
 let statusRefreshInFlight = null;
 async function getFullStatus() {
   if (statusRefreshInFlight) return statusRefreshInFlight;
   statusRefreshInFlight = (async () => {
     loadConfig();
-    const promises = (modulesConfig.modules || []).map(mod => getModuleRuntime(mod));
-    const statuses = await Promise.all(promises);
+    const [modules, docker] = await Promise.all([
+      Promise.all((modulesConfig.modules || []).map(mod => getModuleRuntime(mod))),
+      getDockerContainers()
+    ]);
     return {
       generatedAt: new Date().toISOString(),
-      modules: statuses
+      modules,
+      docker
     };
   })();
   try {
@@ -402,6 +557,43 @@ app.get('/api/anti-gravity/state', async (req, res) => {
     const cmd = `python -c "import sys; sys.path.append(r'e:\\Projects\\King of Kings'); from anti_gravity_system.storage.database import DatabaseManager; import json; db = DatabaseManager(); print(json.dumps({'projects': db.get_all_projects(), 'sub_projects': db.get_all_sub_projects(), 'tasks': db.get_all_tasks(), 'logs': db.get_latest_logs(30)}, default=str))"`;
     const { stdout } = await execAsync(cmd);
     res.json(JSON.parse(stdout));
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Docker endpoints
+app.get('/api/docker/containers', async (req, res) => {
+  try {
+    const containers = await getDockerContainers(req.query.refresh === 'true');
+    res.json({ ok: true, generatedAt: new Date().toISOString(), containers });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/docker/containers/:name/:action', async (req, res) => {
+  try {
+    const { name, action } = req.params;
+    const result = await runDockerAction(name, action);
+    await broadcastStatus();
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/docker/containers/:name/logs', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const result = await getDockerLogs(name, req.query.lines);
+    if (!result.ok) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
