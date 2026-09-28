@@ -135,6 +135,8 @@ from .api.routers import (
     resident_agent,
     sms_bootcamp,
     sms_curator,
+    travel,
+    itinerary,
 )
 
 
@@ -440,6 +442,10 @@ app.include_router(client_portal.router)
 app.include_router(resident_agent.router)
 app.include_router(sms_bootcamp.router, prefix="/api/admin/sms/bootcamp", tags=["SMS Bootcamp"])
 app.include_router(sms_curator.router, prefix="/api/admin/sms/curator", tags=["SMS Curator"])
+app.include_router(travel.router, prefix="/api/public")
+app.include_router(travel.router, prefix="/api")
+app.include_router(itinerary.router, prefix="/api/admin")
+app.include_router(itinerary.router, prefix="/api")
 
 
 

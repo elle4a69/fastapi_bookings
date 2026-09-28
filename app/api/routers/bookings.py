@@ -12,6 +12,7 @@ from ...core.pagination import paginate_query, pagination_params
 from ...core.state_machine import BookingStatus, is_valid_transition
 from ...core.capability_validator import validate_booking_service_mode, ServiceModeValidationError
 from ...services import scheduling_service, slot_allocation_service
+from ...services.booking.itinerary_service import recalculate_provider_itinerary
 from ...models.booking import Booking as BookingModel
 from ...models import Service, Provider, Client, Location, BlockedTime, ReservedTime
 from ...services.outbox_service import create_outbox_event
@@ -240,6 +241,15 @@ def create_booking(
             "status": booking.status,
         }
         create_outbox_event(db, "booking.created", payload, tenant_id=current_user.tenant_id)
+
+        # Trigger dynamic itinerary recalculation
+        if booking.start_time:
+            recalculate_provider_itinerary(
+                db,
+                provider_id=booking.provider_id,
+                target_date=booking.start_time.date(),
+            )
+
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -311,6 +321,9 @@ def update_booking(
     if current_user.role == "provider" and booking.provider_id != current_user.provider_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another provider's booking")
     update_data = booking_in.model_dump(exclude_unset=True)
+    orig_date = booking.start_time.date() if booking.start_time else None
+    orig_provider_id = booking.provider_id
+
     # Validate status transitions if provided
     if "status" in update_data:
         new_status = update_data["status"]
@@ -319,8 +332,19 @@ def update_booking(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot transition from {booking.status} to {new_status}",
             )
+        if new_status == BookingStatus.CANCELLED:
+            slot_allocation_service.release_allocations_for_booking(db, booking.id)
+            scheduling_service.release_resources(db, booking=booking, commit=False)
+
     for field, value in update_data.items():
         setattr(booking, field, value)
+
+    # Recalculate dynamic itinerary if relevant attributes changed
+    if booking.start_time:
+        recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=booking.start_time.date())
+    if orig_date and orig_date != (booking.start_time.date() if booking.start_time else None):
+        recalculate_provider_itinerary(db, provider_id=orig_provider_id, target_date=orig_date)
+
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -351,6 +375,11 @@ def confirm_booking(
         "status": booking.status
     }
     create_outbox_event(db, "booking.confirmed", payload, tenant_id=booking.tenant_id)
+
+    # Trigger dynamic itinerary recalculation
+    if booking.start_time:
+        recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=booking.start_time.date())
+
     db.commit()
     db.refresh(booking)
     return {"ok": True, "data": booking}
@@ -388,6 +417,7 @@ def start_booking(
 
 
 @router.post("/bookings/{booking_id}/cancel", response_model=BookingResponse, tags=["bookings"])
+@router.patch("/bookings/{booking_id}/cancel", response_model=BookingResponse, tags=["bookings"])
 def cancel_booking(
     booking_id: DatabaseId,
     db: Session = Depends(get_db),
@@ -403,8 +433,14 @@ def cancel_booking(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status transition")
     # Update status and release slot allocations and resources
     booking.status = BookingStatus.CANCELLED
+    db.flush()
     slot_allocation_service.release_allocations_for_booking(db, booking.id)
     scheduling_service.release_resources(db, booking=booking, commit=False)
+
+    # Trigger dynamic itinerary recalculation
+    if booking.start_time:
+        recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=booking.start_time.date())
+
     payload = {
         "id": booking.id,
         "client_id": booking.client_id,
@@ -512,6 +548,7 @@ def reschedule_booking(
         )
 
     # Change status and atomically update slot allocations and resources
+    orig_date = booking.start_time.date() if booking.start_time else None
     booking.status = BookingStatus.RESCHEDULED
     buf_before = max(15, booking.service.buffer_before if booking.service else 15)
     buf_after = max(15, booking.service.buffer_after if booking.service else 15)
@@ -527,6 +564,12 @@ def reschedule_booking(
         )
         scheduling_service.release_resources(db, booking=booking, commit=False)
         scheduling_service.allocate_resources(db, booking=booking, commit=False)
+
+        # Trigger dynamic itinerary recalculation
+        new_date = reschedule_in.new_start.date()
+        recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=new_date)
+        if orig_date and orig_date != new_date:
+            recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=orig_date)
 
         payload = {
             "id": booking.id,

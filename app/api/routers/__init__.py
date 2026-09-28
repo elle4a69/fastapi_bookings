@@ -40,4 +40,6 @@ from . import tenant_modules  # noqa: F401
 from . import client_portal  # noqa: F401
 from . import umbrella_directory  # noqa: F401
 from . import resident_agent  # noqa: F401
+from . import travel  # noqa: F401
+from . import itinerary  # noqa: F401
 

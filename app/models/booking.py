@@ -7,8 +7,9 @@ finite state machine defined in :mod:`..core.state_machine`.
 
 import enum
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Index, text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Index, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -55,6 +56,18 @@ class Booking(Base):
     service_address = Column(String, nullable=True)
     chargeable_travel_distance_km = Column(Float, nullable=True)
     chargeable_travel_fee = Column(Numeric(10, 2), nullable=True)
+
+    # Phase 4: Dynamic Itinerary & Conflict Sentinel
+    has_itinerary_conflict = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    itinerary_conflict = Column(Text, nullable=True)
+
+    @property
+    def itinerary_conflict_reason(self) -> Optional[str]:
+        return self.itinerary_conflict
+
+    @itinerary_conflict_reason.setter
+    def itinerary_conflict_reason(self, val: Optional[str]) -> None:
+        self.itinerary_conflict = val
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

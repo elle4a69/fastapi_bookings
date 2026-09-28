@@ -34,6 +34,8 @@ class BookingBase(BaseModel):
     service_address: Optional[str] = Field(None, description="Client street address for out-call booking")
     chargeable_travel_distance_km: Optional[float] = Field(None, description="Chargeable travel distance in km")
     chargeable_travel_fee: Optional[Decimal] = Field(None, description="Chargeable travel fee")
+    has_itinerary_conflict: bool = Field(False, description="Whether booking has an operational itinerary collision")
+    itinerary_conflict: Optional[str] = Field(None, description="Operational itinerary conflict reason")
 
 
 class BookingCreate(BookingBase):
@@ -53,6 +55,8 @@ class BookingUpdate(BaseModel):
     service_address: Optional[str] = None
     chargeable_travel_distance_km: Optional[float] = None
     chargeable_travel_fee: Optional[Decimal] = None
+    has_itinerary_conflict: Optional[bool] = None
+    itinerary_conflict: Optional[str] = None
 
 
 class BookingClientInfo(BaseModel):
