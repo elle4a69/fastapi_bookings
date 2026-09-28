@@ -36,6 +36,8 @@ interface Provider {
   description?: string;
   active: boolean;
   is_visible: boolean;
+  allow_in_call?: boolean;
+  allow_out_call?: boolean;
   capacity?: number;
   color?: string;
   avatar?: string;
@@ -162,6 +164,7 @@ export default function ProvidersPage() {
     phone: '',
     contact_person: '',
     timezone: 'Australia/Melbourne',
+    is_client_hidden: false,
   });
 
   const { saveState, triggerSave, retry } = useAutoSave({
@@ -179,6 +182,8 @@ export default function ProvidersPage() {
         color: updatedData.color || null,
         description: updatedData.description || null,
         ignore_company_hours: updatedData.ignore_company_hours ?? false,
+        allow_in_call: updatedData.allow_in_call ?? true,
+        allow_out_call: updatedData.allow_out_call ?? false,
       };
 
       // Collection responses deliberately omit large base64 images.  Do not
@@ -337,6 +342,8 @@ export default function ProvidersPage() {
       name: 'New Provider',
       active: true,
       is_visible: true,
+      allow_in_call: true,
+      allow_out_call: false,
       ignore_company_hours: false,
       capacity: 1,
       color: '#34bbf1',
@@ -677,6 +684,8 @@ console.warn("Backend delete error:", err);
         color: updatedProvider.color || null,
         description: updatedProvider.description || null,
         ignore_company_hours: updatedProvider.ignore_company_hours ?? false,
+        allow_in_call: updatedProvider.allow_in_call ?? true,
+        allow_out_call: updatedProvider.allow_out_call ?? false,
         weekly_schedule: updatedProvider.weekly_schedule,
       };
       
@@ -868,7 +877,8 @@ console.warn('Failed to update special day slot', err);
                   address: "",
                   phone: "",
                   contact_person: "",
-                  timezone: "Australia/Melbourne"
+                  timezone: "Australia/Melbourne",
+                  is_client_hidden: false,
                 });
               }} 
               className="min-h-[44px] min-w-[44px] shrink-0" 
@@ -941,7 +951,8 @@ console.warn('Failed to update special day slot', err);
                             address: loc.address || "",
                             phone: loc.phone || "",
                             contact_person: loc.contact_person || "",
-                            timezone: loc.timezone || "Australia/Melbourne"
+                            timezone: loc.timezone || "Australia/Melbourne",
+                            is_client_hidden: loc.is_client_hidden ?? false,
                           });
                         }}
                       >
@@ -1169,6 +1180,22 @@ console.warn('Failed to update special day slot', err);
                     if (selectedLocationId) triggerLocSave(next);
                   }}
                   placeholder="e.g. 123 Main St"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                <div>
+                  <Label htmlFor="loc-is-hidden" className="font-medium cursor-pointer">Discreet / Private Location</Label>
+                  <p className="text-xs text-muted-foreground">Hide exact address from public booking cards until confirmed</p>
+                </div>
+                <Switch
+                  id="loc-is-hidden"
+                  checked={locationFormData.is_client_hidden ?? false}
+                  onCheckedChange={(checked) => {
+                    const next = { ...locationFormData, is_client_hidden: checked };
+                    setLocationFormData(next);
+                    if (selectedLocationId) triggerLocSave(next);
+                  }}
                 />
               </div>
 
@@ -1500,6 +1527,38 @@ console.warn("Shortener API offline:", err);
                           >
                             Copy Link
                           </Button>
+                        </div>
+                      </div>
+
+                      {/* 7. Delivery Capabilities */}
+                      <div className="space-y-4 pt-4 border-t">
+                        <div>
+                          <Label className="font-semibold text-sm">Delivery Capabilities</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Toggle whether this provider offers in-call appointments, mobile out-call services, or both.</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                            <div>
+                              <Label htmlFor="provider_in_call" className="font-medium cursor-pointer">In-Call Services</Label>
+                              <p className="text-xs text-muted-foreground">Available at studio/salon locations</p>
+                            </div>
+                            <Switch
+                              id="provider_in_call"
+                              checked={selectedProvider.allow_in_call ?? true}
+                              onCheckedChange={(checked) => handleProviderChange('allow_in_call', checked, true)}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                            <div>
+                              <Label htmlFor="provider_out_call" className="font-medium cursor-pointer">Out-Call / Mobile</Label>
+                              <p className="text-xs text-muted-foreground">Available to travel to client locations</p>
+                            </div>
+                            <Switch
+                              id="provider_out_call"
+                              checked={selectedProvider.allow_out_call ?? false}
+                              onCheckedChange={(checked) => handleProviderChange('allow_out_call', checked, true)}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>

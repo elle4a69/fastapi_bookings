@@ -11,7 +11,9 @@ import {
   Phone,
   Mail,
   MapPin,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle,
+  Car
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, fetchAllPaginated } from "@/lib/api";
@@ -43,6 +45,14 @@ interface BookingItem {
   price: string;
   location: string;
   notes: string;
+  service_mode?: string;
+  service_address?: string;
+  client_suburb?: string;
+  client_postcode?: string;
+  chargeable_travel_distance_km?: number;
+  chargeable_travel_fee?: number;
+  has_itinerary_conflict?: boolean;
+  itinerary_conflict?: string;
 }
 
 const getStatusBadge = (status: string) => {
@@ -106,7 +116,15 @@ export default function BookingsAdminPage() {
           status: (b.status || "confirmed").toLowerCase(),
           price: b.service?.price ? `$${Number(b.service.price).toFixed(2)}` : "$0.00",
           location: b.location?.name || "Main Branch",
-          notes: b.notes || ""
+          notes: b.notes || "",
+          service_mode: b.service_mode || "in_call",
+          service_address: b.service_address || "",
+          client_suburb: b.client_suburb || "",
+          client_postcode: b.client_postcode || "",
+          chargeable_travel_distance_km: b.chargeable_travel_distance_km,
+          chargeable_travel_fee: b.chargeable_travel_fee,
+          has_itinerary_conflict: Boolean(b.has_itinerary_conflict),
+          itinerary_conflict: b.itinerary_conflict || "",
         };
       });
 
@@ -151,6 +169,11 @@ export default function BookingsAdminPage() {
         <div>
           <div className="font-semibold text-sm text-foreground">{b.date}</div>
           <div className="text-xs text-muted-foreground">{b.time}</div>
+          {b.has_itinerary_conflict && (
+            <Badge variant="destructive" className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] px-1.5 py-0 mt-1 flex items-center gap-1 w-fit">
+              <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-600" /> Conflict
+            </Badge>
+          )}
         </div>
       ),
     },
@@ -169,7 +192,16 @@ export default function BookingsAdminPage() {
       id: "service",
       header: "Service",
       sortable: true,
-      cell: (b) => <span className="font-medium text-sm">{b.service}</span>,
+      cell: (b) => (
+        <div>
+          <span className="font-medium text-sm block">{b.service}</span>
+          {b.service_mode === "out_call" && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 mt-0.5 text-primary border-primary/30 flex items-center gap-1 w-fit">
+              <Car className="w-2.5 h-2.5 shrink-0" /> Out-Call
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       id: "provider",
@@ -405,6 +437,16 @@ export default function BookingsAdminPage() {
 
           {selectedBooking && (
             <div className="p-4 sm:p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+              {selectedBooking.has_itinerary_conflict && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <span className="font-bold text-sm block">Transit Travel Conflict Detected</span>
+                    <p className="mt-0.5">{selectedBooking.itinerary_conflict || "This out-call appointment has insufficient transit buffer relative to the provider's adjacent schedule."}</p>
+                  </div>
+                </div>
+              )}
+
               <Tabs defaultValue="details" className="w-full">
                 <TabsList className="grid grid-cols-3 w-full mb-3 h-10">
                   <TabsTrigger value="details" className="text-xs">Appointment</TabsTrigger>
@@ -413,6 +455,30 @@ export default function BookingsAdminPage() {
                 </TabsList>
 
                 <TabsContent value="details" className="space-y-3 pt-1">
+                  {selectedBooking.service_mode === "out_call" && (
+                    <div className="p-3.5 rounded-lg border border-primary/20 bg-primary/5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs flex items-center gap-1.5 text-primary">
+                          <Car className="w-3.5 h-3.5" /> Out-Call (Mobile) Service
+                        </span>
+                        {selectedBooking.chargeable_travel_fee !== undefined && (
+                          <span className="text-xs font-semibold text-emerald-600">
+                            Travel Fee: ${Number(selectedBooking.chargeable_travel_fee).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Destination: </span>
+                        {selectedBooking.service_address || `${selectedBooking.client_suburb || ""} ${selectedBooking.client_postcode || ""}`.trim() || "Address not provided"}
+                      </div>
+                      {selectedBooking.chargeable_travel_distance_km !== undefined && (
+                        <div className="text-[11px] text-muted-foreground">
+                          Estimated transit distance: {selectedBooking.chargeable_travel_distance_km} km
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
                     <div>
                       <span className="text-xs text-muted-foreground block font-medium">Service</span>

@@ -36,6 +36,7 @@ interface Location {
   timezone?: string;
   active?: boolean;
   is_visible?: boolean;
+  is_client_hidden?: boolean;
   provider_ids?: string[];
   service_ids?: string[];
   category_ids?: string[];
@@ -271,6 +272,7 @@ export default function LocationsPage() {
       contact_person: location.contact_person || "",
       image: location.image || "",
       timezone: location.timezone || "Australia/Melbourne",
+      is_client_hidden: location.is_client_hidden ?? false,
       provider_ids: (location.provider_ids || []).map(String),
       service_ids: (location.service_ids || []).map(String),
       category_ids: (location.category_ids || []).map(String),
@@ -293,6 +295,7 @@ export default function LocationsPage() {
       contact_person: "",
       image: "",
       timezone: "Australia/Melbourne",
+      is_client_hidden: false,
       provider_ids: [],
       service_ids: [],
       category_ids: [],
@@ -660,6 +663,25 @@ export default function LocationsPage() {
                             className="pl-10 min-h-[40px]"
                           />
                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                        <div>
+                          <Label htmlFor="loc-is-hidden" className="font-medium cursor-pointer text-sm">Discreet / Private Location</Label>
+                          <p className="text-xs text-muted-foreground">Hide full street address from public booking cards until appointment confirmation</p>
+                        </div>
+                        <Switch
+                          id="loc-is-hidden"
+                          checked={formData.is_client_hidden ?? false}
+                          onCheckedChange={(checked) => {
+                            const updated = { ...formData, is_client_hidden: checked };
+                            setFormData(updated);
+                            if (selectedLocation) {
+                              triggerSave(updated, true);
+                            }
+                          }}
+                          disabled={!isEditing}
+                        />
                       </div>
 
                       <div className="grid gap-2">

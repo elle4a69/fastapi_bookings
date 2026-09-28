@@ -11,7 +11,12 @@ import {
   Building,
   Check,
   PlusCircle,
-  ShoppingBag
+  ShoppingBag,
+  Car,
+  MapPin,
+  Navigation,
+  AlertTriangle,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -33,6 +38,9 @@ interface ServiceItem {
   provider_ids?: (number | string)[];
   category_ids?: (number | string)[];
   addon_ids?: (number | string)[];
+  allow_in_call?: boolean;
+  allow_out_call?: boolean;
+  outcall_price?: number;
 }
 
 interface ProviderItem {
@@ -40,6 +48,8 @@ interface ProviderItem {
   name: string;
   email?: string;
   service_ids?: (number | string)[];
+  allow_in_call?: boolean;
+  allow_out_call?: boolean;
 }
 
 interface LocationItem {
@@ -180,6 +190,25 @@ export default function PublicBookingPage() {
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
+  // Module status
+  const [tenantModules, setTenantModules] = useState<Record<string, boolean>>({});
+
+  const isModuleEnabled = useCallback((key: string): boolean => {
+    if (!tenantModules || Object.keys(tenantModules).length === 0) return true;
+    if (key === 'multiple_providers' || key === 'providers') {
+      return tenantModules['multiple_providers'] ?? tenantModules['providers'] ?? true;
+    }
+    if (key === 'addons' || key === 'packages') {
+      return tenantModules['addons'] ?? tenantModules['packages'] ?? true;
+    }
+    return tenantModules[key] ?? true;
+  }, [tenantModules]);
+
+  const multipleProvidersEnabled = isModuleEnabled('multiple_providers');
+  const locationsEnabled = isModuleEnabled('locations');
+  const productsEnabled = isModuleEnabled('products');
+  const addonsEnabled = isModuleEnabled('addons');
+
   // Lock status (from form predefined_values or URL params)
   const [isLocationLocked, setIsLocationLocked] = useState(false);
   const [isProviderLocked, setIsProviderLocked] = useState(false);
@@ -196,6 +225,19 @@ export default function PublicBookingPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<any>(null);
+
+  // Service delivery mode & travel estimation state
+  const [serviceMode, setServiceMode] = useState<"in_call" | "out_call">("in_call");
+  const [suburbQuery, setSuburbQuery] = useState("");
+  const [suburbResults, setSuburbResults] = useState<Array<{ suburb: string; state: string; postcode: string }>>([]);
+  const [isSearchingSuburbs, setIsSearchingSuburbs] = useState(false);
+  const [selectedSuburb, setSelectedSuburb] = useState<string>("");
+  const [selectedPostcode, setSelectedPostcode] = useState<string>("");
+  const [travelEstimate, setTravelEstimate] = useState<any | null>(null);
+  const [estimatingTravel, setEstimatingTravel] = useState(false);
+  const [serviceAddress, setServiceAddress] = useState<string>("");
+  const [travelQuote, setTravelQuote] = useState<any | null>(null);
+  const [quotingTravel, setQuotingTravel] = useState(false);
 
   // ── Iframe postMessage Handshake for widget.js ──────────────────────
   useEffect(() => {
@@ -288,6 +330,12 @@ export default function PublicBookingPage() {
 
       setFormData(matched);
 
+      // Extract tenant enabled modules from public bootstrap
+      const bootTenantModules = bootData?.tenant?.enabled_modules || {};
+      setTenantModules(bootTenantModules);
+      const isProvDisabled = bootTenantModules['multiple_providers'] === false || bootTenantModules['providers'] === false;
+      const isLocDisabled = bootTenantModules['locations'] === false;
+
       // Extract predefined values from backend setup or URL parameters
       const pv = matched.predefined_values || {};
       const paramLocId = searchParams.get("location_id") ?? (pv.location_id != null ? String(pv.location_id) : null);
@@ -305,6 +353,9 @@ export default function PublicBookingPage() {
           setIsLocationLocked(true);
         }
       }
+      if (!activeLoc && isLocDisabled && locationsArr.length > 0) {
+        activeLoc = locationsArr[0];
+      }
 
       if (paramProvId && paramProvId !== "none" && paramProvId !== "null") {
         const found = providersArr.find((p: ProviderItem) => normId(p.id) === normId(paramProvId));
@@ -312,6 +363,9 @@ export default function PublicBookingPage() {
           activeProv = found;
           setIsProviderLocked(true);
         }
+      }
+      if (!activeProv && isProvDisabled && providersArr.length > 0) {
+        activeProv = providersArr[0];
       }
 
       // Filter eligible services for active provider ON LOAD
@@ -345,6 +399,18 @@ export default function PublicBookingPage() {
   useEffect(() => {
     loadData();
   }, [formSlug, loadData]);
+
+  useEffect(() => {
+    if (!multipleProvidersEnabled && !selectedProvider && allProviders.length > 0) {
+      setSelectedProvider(allProviders[0]);
+    }
+  }, [multipleProvidersEnabled, selectedProvider, allProviders]);
+
+  useEffect(() => {
+    if (!locationsEnabled && !selectedLocation && allLocations.length > 0) {
+      setSelectedLocation(allLocations[0]);
+    }
+  }, [locationsEnabled, selectedLocation, allLocations]);
 
   
 
@@ -492,7 +558,7 @@ export default function PublicBookingPage() {
       if (enabledModules[modId] === false) return;
 
       if (modId === "location") {
-        if (!locLocked && availableLocations.length > 0) {
+        if (locationsEnabled && !locLocked && availableLocations.length > 0) {
           tabs.push({ id: "location", label: "Select Location" });
         }
       } else if (modId === "service") {
@@ -500,15 +566,15 @@ export default function PublicBookingPage() {
           tabs.push({ id: "service", label: "Select Service" });
         }
       } else if (modId === "provider") {
-        if (!provLocked && availableProviders.length > 0) {
+        if (multipleProvidersEnabled && !provLocked && availableProviders.length > 0) {
           tabs.push({ id: "provider", label: "Select Provider" });
         }
       } else if (modId === "addons") {
-        if (compAddons.length > 0) {
+        if (addonsEnabled && compAddons.length > 0) {
           tabs.push({ id: "addons", label: "Add-ons" });
         }
       } else if (modId === "products") {
-        if (allProducts.length > 0) {
+        if (productsEnabled && allProducts.length > 0) {
           tabs.push({ id: "products", label: "Products" });
         }
       } else if (modId === "datetime") {
@@ -544,10 +610,107 @@ export default function PublicBookingPage() {
       setActiveTabIndex(Math.min(activeTabIndex, wizardTabs.length - 1));
     }
   }, [wizardTabs.length, activeTabIndex, completedBooking]);
+  const supportsInCall = (!selectedService || selectedService.allow_in_call !== false) &&
+    (!selectedProvider || (selectedProvider as any).allow_in_call !== false);
+
+  const supportsOutCall = (!selectedService || selectedService.allow_out_call !== false) &&
+    (!selectedProvider || (selectedProvider as any).allow_out_call !== false);
+
+  const canChooseMode = supportsInCall && supportsOutCall;
+
+  useEffect(() => {
+    if (supportsInCall && supportsOutCall) {
+      if (!serviceMode) setServiceMode("in_call");
+    } else if (supportsOutCall && !supportsInCall) {
+      setServiceMode("out_call");
+    } else if (supportsInCall && !supportsOutCall) {
+      setServiceMode("in_call");
+    }
+  }, [supportsInCall, supportsOutCall, selectedService, selectedProvider]);
+
+  const getServiceActivePrice = (svc: ServiceItem | null, mode: "in_call" | "out_call"): number => {
+    if (!svc) return 0;
+    if (mode === "out_call" && svc.outcall_price != null && !isNaN(Number(svc.outcall_price))) {
+      return Number(svc.outcall_price);
+    }
+    return Number(svc.price) || 0;
+  };
+
+  useEffect(() => {
+    if (!suburbQuery || suburbQuery.trim().length < 2) {
+      setSuburbResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingSuburbs(true);
+      try {
+        const res: any = await apiClient.get(`/api/public/travel/suburbs?q=${encodeURIComponent(suburbQuery.trim())}`);
+        const items = Array.isArray(res) ? res : res?.data || [];
+        setSuburbResults(items);
+      } catch (err) {
+        console.warn("Error looking up suburbs:", err);
+      } finally {
+        setIsSearchingSuburbs(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [suburbQuery]);
+
+  const handleSelectSuburb = async (suburbName: string, postcode?: string) => {
+    setSelectedSuburb(suburbName);
+    if (postcode) setSelectedPostcode(postcode);
+    setSuburbResults([]);
+    setSuburbQuery(`${suburbName}${postcode ? ` (${postcode})` : ""}`);
+
+    const provId = selectedProvider ? Number(normId(selectedProvider.id)) : (availableProviders.length > 0 ? Number(normId(availableProviders[0].id)) : null);
+    if (!provId) return;
+
+    setEstimatingTravel(true);
+    try {
+      const res: any = await apiClient.post("/api/public/travel/estimate", {
+        provider_id: provId,
+        suburb: suburbName,
+        postcode: postcode || null,
+      });
+      const data = res?.data || res;
+      setTravelEstimate(data);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to estimate travel fee");
+    } finally {
+      setEstimatingTravel(false);
+    }
+  };
+
+  const handleFetchExactQuote = async (addressOverride?: string) => {
+    const addr = (addressOverride || serviceAddress || "").trim();
+    if (!addr || addr.length < 5) return;
+
+    const provId = selectedProvider ? Number(normId(selectedProvider.id)) : (availableProviders.length > 0 ? Number(normId(availableProviders[0].id)) : null);
+    if (!provId) return;
+
+    setQuotingTravel(true);
+    try {
+      const res: any = await apiClient.post("/api/public/travel/quote", {
+        provider_id: provId,
+        service_address: addr,
+      });
+      const data = res?.data || res;
+      setTravelQuote(data);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to calculate exact travel quote");
+    } finally {
+      setQuotingTravel(false);
+    }
+  };
+
   const currentTab = wizardTabs[activeTabIndex] || wizardTabs[0];
 
   const handleSelectService = (svc: ServiceItem) => {
     setSelectedService(svc);
+    setTravelEstimate(null);
+    setTravelQuote(null);
 
     if (!isProviderLocked) {
       const validProviders = allProviders.filter(prov =>
@@ -621,6 +784,17 @@ export default function PublicBookingPage() {
       return;
     }
 
+    if (serviceMode === "out_call") {
+      if (!serviceAddress || serviceAddress.trim().length < 5) {
+        toast.error("Please provide your street address for this out-call appointment.");
+        return;
+      }
+      if (travelQuote && !travelQuote.within_radius) {
+        toast.error(travelQuote.reason || "The destination address exceeds the provider's maximum travel radius.");
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const [hours, mins] = selectedTime.split(':').map(Number);
@@ -637,13 +811,19 @@ export default function PublicBookingPage() {
         client_email: clientEmail || null,
         client_phone: clientPhone || null,
         service_id: Number(normId(selectedService.id)),
-        provider_id: selectedProvider ? Number(normId(selectedProvider.id)) : null,
-        location_id: selectedLocation?.id ? Number(normId(selectedLocation.id)) : null,
+        provider_id: selectedProvider ? Number(normId(selectedProvider.id)) : (allProviders[0] ? Number(normId(allProviders[0].id)) : null),
+        location_id: selectedLocation?.id ? Number(normId(selectedLocation.id)) : (allLocations[0]?.id ? Number(normId(allLocations[0].id)) : null),
         start_time: start.toISOString(),
         end_time: end.toISOString(),
         notes: bookingNotes || null,
         addon_ids: selectedAddonIds.map((id) => Number(normId(id))),
-        product_ids: selectedProductIds.map((id) => Number(normId(id)))
+        product_ids: selectedProductIds.map((id) => Number(normId(id))),
+        service_mode: serviceMode,
+        client_suburb: selectedSuburb || null,
+        client_postcode: selectedPostcode || null,
+        service_address: serviceMode === "out_call" ? serviceAddress.trim() : null,
+        chargeable_travel_distance_km: serviceMode === "out_call" ? (travelQuote?.distance_km ?? travelEstimate?.distance_km ?? null) : null,
+        chargeable_travel_fee: serviceMode === "out_call" ? (travelQuote ? Number(travelQuote.travel_fee) : (travelEstimate ? Number(travelEstimate.travel_fee) : null)) : null,
       };
 
       const bookingRes: any = await apiClient.post("/api/public/bookings", payload);
@@ -656,7 +836,10 @@ export default function PublicBookingPage() {
         date: selectedDate,
         time: selectedTime,
         clientName,
-        clientEmail
+        clientEmail,
+        serviceMode,
+        serviceAddress: serviceMode === "out_call" ? serviceAddress.trim() : null,
+        travelFee: serviceMode === "out_call" ? (travelQuote ? Number(travelQuote.travel_fee) : (travelEstimate ? Number(travelEstimate.travel_fee) : 0)) : 0,
       });
 
       const outcomeIndex = wizardTabs.findIndex(t => t.id === "outcome");
@@ -790,9 +973,126 @@ export default function PublicBookingPage() {
             <Badge variant="outline" className="text-xs font-semibold">{availableServices.length} Options</Badge>
           </div>
 
+          {/* Delivery Mode: In-Call vs Out-Call Selector */}
+          {canChooseMode && (
+            <div className="flex p-1 bg-muted/80 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => setServiceMode("in_call")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  serviceMode === "in_call"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Building className="w-4 h-4 text-primary" /> In-Call (At Clinic)
+              </button>
+              <button
+                type="button"
+                onClick={() => setServiceMode("out_call")}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  serviceMode === "out_call"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Car className="w-4 h-4 text-primary" /> Out-Call (We Travel to You)
+              </button>
+            </div>
+          )}
+          {!canChooseMode && supportsOutCall && !supportsInCall && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-xs text-foreground font-medium">
+              <Car className="w-4 h-4 text-primary" />
+              <span>Delivery Mode: <strong>Out-Call Only</strong> (Mobile provider travels to your address)</span>
+            </div>
+          )}
+          {!canChooseMode && supportsInCall && !supportsOutCall && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-xs text-muted-foreground font-medium">
+              <Building className="w-4 h-4 text-primary" />
+              <span>Delivery Mode: <strong>In-Call Only</strong> (At provider location)</span>
+            </div>
+          )}
+
+          {/* Suburb / Postcode Travel Estimator for Out-Call */}
+          {serviceMode === "out_call" && (
+            <div className="space-y-2 p-3.5 rounded-xl border bg-muted/30">
+              <Label className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                <Navigation className="w-3.5 h-3.5 text-primary" /> Suburb / Travel Fee Estimator
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Enter your suburb or postcode to estimate out-call travel fees before checkout.
+              </p>
+              <div className="relative">
+                <Input
+                  placeholder="Type suburb name (e.g. Bondi, Parramatta) or postcode..."
+                  value={suburbQuery}
+                  onChange={(e) => {
+                    setSuburbQuery(e.target.value);
+                    if (selectedSuburb && e.target.value !== selectedSuburb) {
+                      setSelectedSuburb("");
+                      setTravelEstimate(null);
+                    }
+                  }}
+                  className="h-9 text-xs pr-8 bg-background"
+                />
+                {isSearchingSuburbs && (
+                  <div className="absolute right-2.5 top-2.5 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {suburbResults.length > 0 && (
+                <div className="border rounded-lg bg-popover shadow-md overflow-hidden max-h-40 overflow-y-auto divide-y z-20">
+                  {suburbResults.map((sub, idx) => (
+                    <div
+                      key={`${sub.suburb}-${sub.postcode}-${idx}`}
+                      onClick={() => handleSelectSuburb(sub.suburb, sub.postcode)}
+                      className="p-2 text-xs hover:bg-muted cursor-pointer flex justify-between items-center"
+                    >
+                      <span className="font-semibold text-foreground">{sub.suburb}, {sub.state}</span>
+                      <Badge variant="outline" className="text-[10px]">{sub.postcode}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {estimatingTravel && (
+                <div className="text-xs text-muted-foreground flex items-center gap-2 py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Calculating travel estimate...
+                </div>
+              )}
+
+              {travelEstimate && (
+                <div className="mt-2 space-y-1.5 text-xs p-2.5 rounded-lg border bg-background">
+                  <div className="flex justify-between items-center font-bold text-foreground">
+                    <span>Estimated Travel Fee ({travelEstimate.distance_km} km)</span>
+                    <span className="text-primary font-mono text-sm">${Number(travelEstimate.travel_fee).toFixed(2)}</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground flex justify-between">
+                    <span>Base Surcharge: ${Number(travelEstimate.base_surcharge).toFixed(2)}</span>
+                    <span>Distance Fee: ${Number(travelEstimate.distance_fee).toFixed(2)}</span>
+                  </div>
+                  {!travelEstimate.within_radius && (
+                    <div className="p-2 rounded bg-destructive/10 text-destructive text-[11px] font-semibold flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      {travelEstimate.reason || "Destination exceeds provider's maximum radius."}
+                    </div>
+                  )}
+                  {travelEstimate.disclaimer && (
+                    <div className="text-[10px] text-muted-foreground/80 italic pt-1 border-t">
+                      {travelEstimate.disclaimer}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-3 max-h-[300px] overflow-y-auto pr-1">
             {availableServices.map((svc) => {
               const isSelected = selectedService && String(selectedService.id) === String(svc.id);
+              const activePrice = getServiceActivePrice(svc, serviceMode);
               return (
                 <div
                   key={svc.id}
@@ -807,7 +1107,12 @@ export default function PublicBookingPage() {
                     <div className="font-bold text-foreground text-sm">{svc.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
                       <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {svc.duration} mins</span>
-                      {svc.price && <span className="font-semibold text-emerald-600">${Number(svc.price).toFixed(2)}</span>}
+                      <span className="font-semibold text-emerald-600">
+                        ${activePrice.toFixed(2)}
+                        {serviceMode === "out_call" && svc.outcall_price != null && (
+                          <span className="text-[10px] text-muted-foreground ml-1 font-normal">(out-call)</span>
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary text-white border-primary" : ""}`}>
@@ -1105,6 +1410,25 @@ export default function PublicBookingPage() {
             </div>
           )}
 
+          {serviceMode === "out_call" && (
+            <div className="space-y-1.5 p-3 rounded-xl bg-primary/5 border border-primary/20">
+              <Label htmlFor="pub_service_address" className="text-xs font-bold flex items-center gap-1.5 text-primary">
+                <MapPin className="w-3.5 h-3.5" /> Out-Call Appointment Street Address *
+              </Label>
+              <Input
+                id="pub_service_address"
+                placeholder="e.g. 123 Main Street, Suite 4, Bondi NSW 2026"
+                value={serviceAddress}
+                onChange={(e) => setServiceAddress(e.target.value)}
+                onBlur={() => handleFetchExactQuote()}
+                className="h-10 bg-background"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Please enter the exact street address where your provider will arrive.
+              </p>
+            </div>
+          )}
+
           {!wizardTabs.some(t => t.id === "intake") && (
             <div className="space-y-1.5">
               <Label htmlFor="pub_notes" className="text-xs font-semibold">Special Requests / Notes</Label>
@@ -1147,9 +1471,10 @@ export default function PublicBookingPage() {
               <span className="font-bold text-foreground text-sm">{selectedService?.name || "Selected Service"}</span>
               <span className="font-bold text-emerald-600 text-sm">
                 ${(
-                  (Number(selectedService?.price) || 0) +
+                  getServiceActivePrice(selectedService, serviceMode) +
                   selectedAddonsList.reduce((acc, a) => acc + (Number(a.price) || 0), 0) +
-                  selectedProductsList.reduce((acc, p) => acc + (Number(p.price) || 0), 0)
+                  selectedProductsList.reduce((acc, p) => acc + (Number(p.price) || 0), 0) +
+                  (serviceMode === "out_call" ? (travelQuote ? Number(travelQuote.travel_fee) : (travelEstimate ? Number(travelEstimate.travel_fee) : 0)) : 0)
                 ).toFixed(2)}
               </span>
             </div>
@@ -1160,6 +1485,72 @@ export default function PublicBookingPage() {
               <div><span className="font-semibold text-foreground">Date:</span> {selectedDate}</div>
               <div><span className="font-semibold text-foreground">Time:</span> {selectedTime} ({totalDuration} mins)</div>
             </div>
+
+            {serviceMode === "out_call" && (
+              <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Car className="w-4 h-4 text-primary" /> Delivery Mode
+                  </span>
+                  <Badge className="bg-primary/10 text-primary border-primary/20">Out-Call (Mobile)</Badge>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="checkout_service_address" className="text-[11px] font-semibold text-muted-foreground">
+                      Service Address:
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => handleFetchExactQuote()}
+                      className="text-[10px] text-primary hover:underline font-medium"
+                    >
+                      {quotingTravel ? "Calculating..." : "Recalculate Travel"}
+                    </button>
+                  </div>
+                  <Input
+                    id="checkout_service_address"
+                    value={serviceAddress}
+                    onChange={(e) => setServiceAddress(e.target.value)}
+                    onBlur={() => handleFetchExactQuote()}
+                    placeholder="Enter street address for out-call..."
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+
+                {travelQuote && (
+                  <div className="space-y-1 text-[11px] pt-1 border-t">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Travel Distance:</span>
+                      <span className="font-medium text-foreground">{travelQuote.distance_km} km</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Travel Fee:</span>
+                      <span className="font-semibold text-primary">${Number(travelQuote.travel_fee).toFixed(2)}</span>
+                    </div>
+                    {!travelQuote.within_radius && (
+                      <div className="p-1.5 rounded bg-destructive/10 text-destructive text-[10px] font-semibold flex items-center gap-1 mt-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        {travelQuote.reason || "Address exceeds provider's maximum radius"}
+                      </div>
+                    )}
+                    {travelQuote.disclaimer && (
+                      <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">{travelQuote.disclaimer}</p>
+                    )}
+                  </div>
+                )}
+                {!travelQuote && travelEstimate && (
+                  <div className="space-y-1 text-[11px] pt-1 border-t">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Estimated Travel ({travelEstimate.distance_km} km):</span>
+                      <span className="font-semibold text-primary">${Number(travelEstimate.travel_fee).toFixed(2)}</span>
+                    </div>
+                    {travelEstimate.disclaimer && (
+                      <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">{travelEstimate.disclaimer}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {selectedAddonsList.length > 0 && (
               <div className="border-t pt-2">
@@ -1237,6 +1628,17 @@ export default function PublicBookingPage() {
               <span className="text-muted-foreground block">Date & Time</span>
               <span className="font-semibold text-primary">{completedBooking.date} at {completedBooking.time}</span>
             </div>
+            {completedBooking.serviceMode === "out_call" && (
+              <div className="pt-1 border-t">
+                <span className="text-muted-foreground block">Delivery Mode</span>
+                <span className="font-semibold text-foreground">Out-Call to {completedBooking.serviceAddress || "Client Address"}</span>
+                {completedBooking.travelFee > 0 && (
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    Includes travel fee: ${Number(completedBooking.travelFee).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <Button

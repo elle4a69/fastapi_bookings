@@ -14,7 +14,9 @@ import {
   CalendarCheck,
   FileText,
   RotateCcw,
-  Edit2
+  Edit2,
+  AlertTriangle,
+  Car
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient, fetchAllPaginated } from "@/lib/api";
@@ -27,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTenantModules } from "@/context/tenant-modules-context";
 
 const HOUR_HEIGHT = 64;
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 7); // 7am to 8pm
@@ -41,6 +44,14 @@ interface ApiBooking {
   end_time: string;
   status: string;
   notes?: string | null;
+  service_mode?: string;
+  service_address?: string;
+  client_suburb?: string;
+  client_postcode?: string;
+  chargeable_travel_distance_km?: number;
+  chargeable_travel_fee?: number;
+  has_itinerary_conflict?: boolean;
+  itinerary_conflict?: string;
   client?: { id: number; name: string; email?: string; phone?: string } | null;
   provider?: { id: number; name: string; email?: string; color?: string } | null;
   service?: { id: number; name: string; duration: number; price?: number } | null;
@@ -65,6 +76,14 @@ interface CalendarBooking {
   location: string;
   locationId?: number;
   notes: string;
+  service_mode?: string;
+  service_address?: string;
+  client_suburb?: string;
+  client_postcode?: string;
+  chargeable_travel_distance_km?: number;
+  chargeable_travel_fee?: number;
+  has_itinerary_conflict?: boolean;
+  itinerary_conflict?: string;
   raw: ApiBooking;
 }
 
@@ -190,9 +209,11 @@ function MonthGrid({
                         <div
                           key={b.id}
                           onClick={(e) => { e.stopPropagation(); onSelectBooking(b); }}
-                          className={`w-full text-left rounded px-1.5 py-1 text-[11px] font-medium truncate leading-tight transition-all hover:scale-[1.01] hover:shadow-xs flex items-center gap-1 shadow-2xs
-                            ${STATUS_PILL[b.status] || "bg-primary text-white"}`}
+                          className={`w-full text-left rounded px-1.5 py-1 text-[11px] font-medium truncate leading-tight transition-all hover:scale-[1.01] hover:shadow-xs flex items-center gap-1 shadow-2xs ${
+                            b.has_itinerary_conflict ? "ring-1 ring-amber-400 font-semibold " : ""
+                          }${STATUS_PILL[b.status] || "bg-primary text-white"}`}
                         >
+                          {b.has_itinerary_conflict && <AlertTriangle className="w-3 h-3 text-amber-300 shrink-0" />}
                           <span className="shrink-0 font-bold">{fmt12(b.date)}</span>
                           <span className="truncate">{b.client}</span>
                           <span className="ml-auto shrink-0">{STATUS_ICON[b.status]}</span>
@@ -336,15 +357,24 @@ function TimeGrid({
                             e.currentTarget.style.opacity = '1';
                           }}
                           onClick={(e) => { e.stopPropagation(); onSelectBooking(b); }}
-                          className={`absolute left-1 right-1 rounded-lg p-2 text-xs overflow-hidden cursor-grab active:cursor-grabbing transition-all hover:shadow-md shadow-xs group/block
-                            ${STATUS_PILL[b.status] || "bg-primary text-white"}`}
+                          className={`absolute left-1 right-1 rounded-lg p-2 text-xs overflow-hidden cursor-grab active:cursor-grabbing transition-all hover:shadow-md shadow-xs group/block ${
+                            b.has_itinerary_conflict ? "ring-2 ring-amber-400 " : ""
+                          }${STATUS_PILL[b.status] || "bg-primary text-white"}`}
                           style={{ top: `${topPx}px`, height: `${Math.max(28, heightPx - 2)}px` }}
                         >
                           <div className="font-bold pointer-events-none truncate flex items-center justify-between">
-                            <span>{fmt12(b.date)} · {b.client}</span>
+                            <span className="truncate flex items-center gap-1">
+                              {b.has_itinerary_conflict && <AlertTriangle className="w-3.5 h-3.5 text-amber-300 shrink-0 animate-pulse" />}
+                              {fmt12(b.date)} · {b.client}
+                            </span>
                             <span className="shrink-0">{STATUS_ICON[b.status]}</span>
                           </div>
-                          <div className="text-[10px] opacity-90 truncate pointer-events-none mt-0.5">{b.service} ({b.duration}m)</div>
+                          <div className="text-[10px] opacity-90 truncate pointer-events-none mt-0.5 flex items-center justify-between">
+                            <span>{b.service} ({b.duration}m)</span>
+                            {b.has_itinerary_conflict && (
+                              <span className="bg-amber-950/70 text-amber-300 px-1 rounded text-[9px] font-bold">Transit Conflict</span>
+                            )}
+                          </div>
 
                           {/* Grab handle for duration resize */}
                           {onUpdateDuration && (
@@ -391,6 +421,7 @@ function TimeGrid({
 
 // ─── Main Calendar Page ───────────────────────────────────────────────────────────
 export default function CalendarPage() {
+  const { multipleProvidersEnabled, locationsEnabled } = useTenantModules();
   const [bookings, setBookings] = useState<CalendarBooking[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
@@ -485,6 +516,14 @@ export default function CalendarPage() {
           location: b.location?.name || "Main Branch",
           locationId: b.location_id || undefined,
           notes: b.notes || "",
+          service_mode: b.service_mode || "in_call",
+          service_address: b.service_address || "",
+          client_suburb: b.client_suburb || "",
+          client_postcode: b.client_postcode || "",
+          chargeable_travel_distance_km: b.chargeable_travel_distance_km,
+          chargeable_travel_fee: b.chargeable_travel_fee,
+          has_itinerary_conflict: Boolean(b.has_itinerary_conflict),
+          itinerary_conflict: b.itinerary_conflict || "",
           raw: b
         };
       });
@@ -817,25 +856,29 @@ export default function CalendarPage() {
       <div className="py-1 px-3 sm:px-4 flex items-center justify-between border-b bg-muted/20 shrink-0 gap-2 overflow-x-auto no-scrollbar">
         {/* Left: Compact Provider & Location Selects + Filter */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <Select value={filterProvider} onValueChange={setFilterProvider}>
-            <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
-              <SelectValue placeholder="All Providers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Providers</SelectItem>
-              {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {multipleProvidersEnabled && (
+            <Select value={filterProvider} onValueChange={setFilterProvider}>
+              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+                <SelectValue placeholder="All Providers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Providers</SelectItem>
+                {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
 
-          <Select value={filterLocation} onValueChange={setFilterLocation}>
-            <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
-              <SelectValue placeholder="All Locations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {locationsEnabled && (
+            <Select value={filterLocation} onValueChange={setFilterLocation}>
+              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+                <SelectValue placeholder="All Locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Locations</SelectItem>
+                {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
 
           <Button
             variant="outline"
@@ -960,6 +1003,16 @@ export default function CalendarPage() {
 
           {selectedBooking && (
             <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {selectedBooking.has_itinerary_conflict && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <span className="font-bold text-sm block">Transit Travel Conflict Detected</span>
+                    <p className="mt-0.5">{selectedBooking.itinerary_conflict || "This out-call appointment has insufficient transit buffer relative to the provider's adjacent schedule."}</p>
+                  </div>
+                </div>
+              )}
+
               <Tabs defaultValue="details" className="w-full">
                 <TabsList className="grid grid-cols-3 w-full mb-4">
                   <TabsTrigger value="details">Appointment</TabsTrigger>
@@ -968,6 +1021,30 @@ export default function CalendarPage() {
                 </TabsList>
 
                 <TabsContent value="details" className="space-y-4 pt-1">
+                  {selectedBooking.service_mode === "out_call" && (
+                    <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs flex items-center gap-1.5 text-primary">
+                          <Car className="w-3.5 h-3.5" /> Out-Call (Mobile) Service
+                        </span>
+                        {selectedBooking.chargeable_travel_fee !== undefined && (
+                          <span className="text-xs font-semibold text-emerald-600">
+                            Travel Fee: ${Number(selectedBooking.chargeable_travel_fee).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Destination: </span>
+                        {selectedBooking.service_address || `${selectedBooking.client_suburb || ""} ${selectedBooking.client_postcode || ""}`.trim() || "Address not provided"}
+                      </div>
+                      {selectedBooking.chargeable_travel_distance_km !== undefined && (
+                        <div className="text-[11px] text-muted-foreground">
+                          Estimated transit distance: {selectedBooking.chargeable_travel_distance_km} km
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4 p-4 rounded-xl border bg-card/60">
                     <div>
                       <Label className="text-xs text-muted-foreground">Service</Label>
@@ -1114,28 +1191,32 @@ export default function CalendarPage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="create_provider">Provider *</Label>
-                <Select value={formProviderId} onValueChange={setFormProviderId}>
-                  <SelectTrigger id="create_provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
-                  <SelectContent>
-                    {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {multipleProvidersEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="create_provider">Provider *</Label>
+                  <Select value={formProviderId} onValueChange={setFormProviderId}>
+                    <SelectTrigger id="create_provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                    <SelectContent>
+                      {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {/* Location & Status */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="create_location">Location</Label>
-                <Select value={formLocationId} onValueChange={setFormLocationId}>
-                  <SelectTrigger id="create_location"><SelectValue placeholder="Select location" /></SelectTrigger>
-                  <SelectContent>
-                    {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {locationsEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="create_location">Location</Label>
+                  <Select value={formLocationId} onValueChange={setFormLocationId}>
+                    <SelectTrigger id="create_location"><SelectValue placeholder="Select location" /></SelectTrigger>
+                    <SelectContent>
+                      {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="create_status">Status</Label>
@@ -1195,15 +1276,17 @@ export default function CalendarPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Provider *</Label>
-                <Select value={formProviderId} onValueChange={setFormProviderId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {multipleProvidersEnabled && (
+                <div className="space-y-2">
+                  <Label>Provider *</Label>
+                  <Select value={formProviderId} onValueChange={setFormProviderId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1284,16 +1367,18 @@ export default function CalendarPage() {
               <Label htmlFor="note_date">Date *</Label>
               <Input id="note_date" type="date" value={noteDate} onChange={e => setNoteDate(e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="note_provider">Provider</Label>
-              <Select value={noteProviderId} onValueChange={setNoteProviderId}>
-                <SelectTrigger id="note_provider"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Providers</SelectItem>
-                  {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            {multipleProvidersEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="note_provider">Provider</Label>
+                <Select value={noteProviderId} onValueChange={setNoteProviderId}>
+                  <SelectTrigger id="note_provider"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Providers</SelectItem>
+                    {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="note_text">Note / Block Details *</Label>
               <Textarea id="note_text" placeholder="e.g. Clinic closed for staff holiday..." value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} />

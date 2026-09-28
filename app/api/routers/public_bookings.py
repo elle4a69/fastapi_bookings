@@ -19,6 +19,7 @@ from ...models import Service, Provider, Client, Location, BlockedTime, Reserved
 from ...models.booking import Booking as BookingModel
 from ...schemas.booking import BookingCreate, BookingResponse
 from ...services import scheduling_service, slot_allocation_service
+from ...services.booking.itinerary_service import recalculate_provider_itinerary
 from ...services.outbox_service import create_outbox_event
 
 logger = logging.getLogger(__name__)
@@ -272,7 +273,13 @@ def create_public_booking(
             "end_time": booking.end_time.isoformat() if booking.end_time else None,
             "status": booking.status,
         }
-        create_outbox_event(db, "booking.created", payload, tenant_id=tenant.id)
+        # Trigger dynamic itinerary recalculation
+        if booking.start_time:
+            recalculate_provider_itinerary(
+                db,
+                provider_id=booking.provider_id,
+                target_date=booking.start_time.date(),
+            )
 
         # Commit entire atomic transaction
         db.commit()

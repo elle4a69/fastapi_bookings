@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useTenantModules } from '@/context/tenant-modules-context';
 
 // Data Types
 interface Service {
@@ -35,6 +36,11 @@ interface Service {
   duration: number;
   buffer_before: number;
   buffer_after: number;
+  allow_in_call?: boolean;
+  allow_out_call?: boolean;
+  outcall_price?: number | null;
+  outcall_buffer_before?: number;
+  outcall_buffer_after?: number;
   fixed_start_times: string;
   max_advance_days: number;
   min_group_size: number;
@@ -139,6 +145,8 @@ function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: {
 }
 
 export default function ServicesPage() {
+  const { multipleProvidersEnabled, categoriesEnabled, productsEnabled, addonsEnabled } = useTenantModules();
+
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -159,6 +167,16 @@ export default function ServicesPage() {
   const [categoryFormData, setCategoryFormData] = useState<{ name: string; description: string; active: boolean }>({ name: "", description: "", active: true });
   const [isCategoryEditing, setIsCategoryEditing] = useState(false);
   const [isCategoryCreating, setIsCategoryCreating] = useState(false);
+
+  // If categories are disabled, force rightPaneType to service
+  useEffect(() => {
+    if (!categoriesEnabled && rightPaneType === "category") {
+      setRightPaneType("service");
+      setSelectedCategoryId(null);
+      setIsCategoryCreating(false);
+      setIsCategoryEditing(false);
+    }
+  }, [categoriesEnabled, rightPaneType]);
 
   const [newEntityDialog, setNewEntityDialog] = useState<{type: string, open: boolean}>({type: '', open: false});
   const [newEntityName, setNewEntityName] = useState('');
@@ -209,6 +227,11 @@ export default function ServicesPage() {
     duration: 60,
     buffer_before: 0,
     buffer_after: 0,
+    allow_in_call: true,
+    allow_out_call: false,
+    outcall_price: null,
+    outcall_buffer_before: 0,
+    outcall_buffer_after: 0,
     fixed_start_times: '',
     max_advance_days: 30,
     min_group_size: 1,
@@ -274,7 +297,10 @@ export default function ServicesPage() {
     setIsCreating(true);
     setIsEditing(true);
     setSelectedServiceId(null);
-    setFormData(defaultFormData);
+    const initialProviderIds = (!multipleProvidersEnabled && providers.length > 0)
+      ? [String(providers[0].id)]
+      : [];
+    setFormData({ ...defaultFormData, provider_ids: initialProviderIds });
     setOpenSection('details');
   };
 
@@ -283,6 +309,9 @@ export default function ServicesPage() {
     setIsCreating(false);
     setIsEditing(true);
     setOpenSection('details');
+    const resolvedProviderIds = (!multipleProvidersEnabled && providers.length > 0 && (!svc.provider_ids || svc.provider_ids.length === 0))
+      ? [String(providers[0].id)]
+      : (svc.provider_ids || []);
     setFormData({
       name: svc.name || '',
       description: svc.description || '',
@@ -294,13 +323,18 @@ export default function ServicesPage() {
       duration: svc.duration || 60,
       buffer_before: svc.buffer_before || 0,
       buffer_after: svc.buffer_after || 0,
+      allow_in_call: svc.allow_in_call ?? true,
+      allow_out_call: svc.allow_out_call ?? false,
+      outcall_price: svc.outcall_price ?? null,
+      outcall_buffer_before: svc.outcall_buffer_before ?? 0,
+      outcall_buffer_after: svc.outcall_buffer_after ?? 0,
       fixed_start_times: svc.fixed_start_times || '',
       max_advance_days: svc.max_advance_days || 30,
       min_group_size: svc.min_group_size || 1,
       max_group_size: svc.max_group_size || 1,
       has_groups: (svc.max_group_size || 1) > 1,
       category_ids: svc.category_ids || [],
-      provider_ids: svc.provider_ids || [],
+      provider_ids: resolvedProviderIds,
       addon_ids: svc.addon_ids || [],
       product_ids: svc.product_ids || [],
       requirements: svc.requirements || [],
@@ -327,15 +361,22 @@ export default function ServicesPage() {
       return null;
     }
 
+    const payload = { ...formData };
+    if (!multipleProvidersEnabled && providers.length > 0) {
+      if (!payload.provider_ids || payload.provider_ids.length === 0) {
+        payload.provider_ids = [String(providers[0].id)];
+      }
+    }
+
     try {
       if (isCreating) {
-        const newSvc = await apiClient.post<Service>('/api/admin/services', formData);
+        const newSvc = await apiClient.post<Service>('/api/admin/services', payload);
         setServices(prev => [...prev, newSvc]);
         toast.success('Service created successfully');
         handleSelectService(newSvc);
         return newSvc;
       } else if (selectedServiceId) {
-        const updatedSvc = await apiClient.put<Service>(`/api/admin/services/${selectedServiceId}`, formData);
+        const updatedSvc = await apiClient.put<Service>(`/api/admin/services/${selectedServiceId}`, payload);
         setServices(prev => prev.map(s => s.id === selectedServiceId ? updatedSvc : s));
         toast.success('Service updated successfully');
         handleSelectService(updatedSvc);
@@ -541,21 +582,23 @@ export default function ServicesPage() {
       {/* Left Pane - Master List */}
       <div className={`md:w-[35%] flex flex-col gap-4 border-r md:pr-4 transition-all duration-300 ${selectedServiceId || isCreating ? 'hidden md:flex' : 'flex w-full'}`}>
         <div className="flex gap-2 items-center px-4 md:px-0">
-          <Button 
-            variant="outline" 
-            size="icon" 
-            onClick={() => {
-              setRightPaneType("category");
-              if (!isCategoryCreating) setIsCategoryCreating(true);
-              if (!isCategoryEditing) setIsCategoryEditing(true);
-              setSelectedCategoryId(null);
-              setCategoryFormData({ name: "New Category", description: "", active: true });
-            }} 
-            className="min-h-[44px] min-w-[44px] shrink-0" 
-            title="Add Category"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
+          {categoriesEnabled && (
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={() => {
+                setRightPaneType("category");
+                if (!isCategoryCreating) setIsCategoryCreating(true);
+                if (!isCategoryEditing) setIsCategoryEditing(true);
+                setSelectedCategoryId(null);
+                setCategoryFormData({ name: "New Category", description: "", active: true });
+              }} 
+              className="min-h-[44px] min-w-[44px] shrink-0" 
+              title="Add Category"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
+          )}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3.5 md:top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -586,6 +629,76 @@ export default function ServicesPage() {
             ))
           ) : filteredServices.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">No services found</div>
+          ) : !categoriesEnabled ? (
+            /* Simplified Flat Service List when Categories disabled */
+            <div className={isListView ? "space-y-2" : "grid grid-cols-2 gap-2"}>
+              {filteredServices.map(svc => (
+                <div 
+                  key={svc.id}
+                  draggable
+                  onDragStart={(e) => handleDragStartService(e, svc.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDropService(e, svc.id)}
+                  onClick={() => {
+                    setRightPaneType("service");
+                    handleSelectService(svc);
+                  }}
+                  className={`p-3 rounded-xl hover:scale-[1.01] hover:shadow-md flex flex-col justify-center border transition-all duration-200 cursor-pointer ${
+                    selectedServiceId === svc.id 
+                      ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20' 
+                      : 'border-border bg-card/50 hover:bg-muted/30 hover:border-border/60 dark:bg-card dark:border-border/60'
+                  }`}
+                >
+                  <div className="flex gap-3 items-start min-w-0 w-full relative pr-[56px]">
+                    {svc.image ? (
+                      <img src={svc.image} alt={svc.name} className="w-10 h-10 object-cover rounded-lg shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center text-muted-foreground shrink-0"><ImageIcon className="w-4 h-4 opacity-20"/></div>
+                    )}
+                    <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
+                      <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        ${svc.price} &bull; {svc.duration} mins
+                        {svc.allow_out_call && <span className="ml-1 text-[10px] text-primary font-medium">&bull; Mobile</span>}
+                      </div>
+                    </div>
+                    <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
+                      <div 
+                        className="cursor-grab active:cursor-grabbing text-muted-foreground/45 hover:text-muted-foreground p-0.5"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <GripVertical className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleToggleActive(svc)} 
+                          className="p-0.5 hover:bg-muted rounded transition-colors"
+                          title={svc.active ? 'Deactivate service' : 'Activate service'}
+                        >
+                          {svc.active ? (
+                            <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                          ) : (
+                            <CircleSlash className="w-3.5 h-3.5 text-rose-500" />
+                          )}
+                        </button>
+                        <button 
+                          disabled={!svc.active}
+                          onClick={() => svc.active && updateServiceQuick(svc.id, { is_visible: !svc.is_visible })} 
+                          className={`p-0.5 rounded transition-colors ${svc.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
+                          title={!svc.active ? 'Deactivated' : (svc.is_visible ? 'Hide' : 'Show')}
+                        >
+                          {svc.is_visible && svc.active ? (
+                            <Eye className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               {categories.filter(c => groupedServices[c.id]).map((cat) => (
@@ -660,7 +773,10 @@ export default function ServicesPage() {
                           )}
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
                             <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
-                            <div className="text-xs text-muted-foreground mt-0.5">${svc.price} &bull; {svc.duration} mins</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              ${svc.price} &bull; {svc.duration} mins
+                              {svc.allow_out_call && <span className="ml-1 text-[10px] text-primary font-medium">&bull; Mobile</span>}
+                            </div>
                           </div>
                           <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
                             <div 
@@ -736,7 +852,10 @@ export default function ServicesPage() {
                           )}
                           <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
                             <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
-                            <div className="text-xs text-muted-foreground mt-0.5">${svc.price} &bull; {svc.duration} mins</div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              ${svc.price} &bull; {svc.duration} mins
+                              {svc.allow_out_call && <span className="ml-1 text-[10px] text-primary font-medium">&bull; Mobile</span>}
+                            </div>
                           </div>
                           <div className="absolute top-0 right-0 h-full flex flex-col justify-between items-end pb-0.5 pr-0.5">
                             <div 
@@ -1133,6 +1252,103 @@ export default function ServicesPage() {
                           />
                         </div>
                       </div>
+
+                      {/* Delivery Modes & Out-Call Settings */}
+                      <div className="space-y-4 pt-4 border-t">
+                        <div>
+                          <h4 className="font-semibold text-sm">Delivery Modes</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">Specify whether this service can be booked in-studio, as mobile out-call, or both.</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                            <div>
+                              <Label htmlFor="allow_in_call" className="font-medium cursor-pointer">In-Call Service</Label>
+                              <p className="text-xs text-muted-foreground">Client travels to provider location</p>
+                            </div>
+                            <Switch
+                              id="allow_in_call"
+                              checked={formData.allow_in_call ?? true}
+                              onCheckedChange={(checked) => {
+                                const next = { ...formData, allow_in_call: checked };
+                                setFormData(next);
+                                triggerSave(next, true);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                            <div>
+                              <Label htmlFor="allow_out_call" className="font-medium cursor-pointer">Out-Call / Mobile</Label>
+                              <p className="text-xs text-muted-foreground">Provider travels to client address</p>
+                            </div>
+                            <Switch
+                              id="allow_out_call"
+                              checked={formData.allow_out_call ?? false}
+                              onCheckedChange={(checked) => {
+                                const next = { ...formData, allow_out_call: checked };
+                                setFormData(next);
+                                triggerSave(next, true);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
+                        </div>
+
+                        {formData.allow_out_call && (
+                          <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
+                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out-Call Pricing & Travel Buffers</h5>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="outcall_price">Out-Call Price ($)</Label>
+                                <Input
+                                  id="outcall_price"
+                                  type="number"
+                                  placeholder={String(formData.price || 0)}
+                                  value={formData.outcall_price ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
+                                    const next = { ...formData, outcall_price: val };
+                                    setFormData(next);
+                                    triggerSave(next);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                                <p className="text-[10px] text-muted-foreground">Blank = base price (${formData.price})</p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="outcall_buffer_before">Travel Buffer Before (mins)</Label>
+                                <Input
+                                  id="outcall_buffer_before"
+                                  type="number"
+                                  value={formData.outcall_buffer_before ?? 0}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    const next = { ...formData, outcall_buffer_before: val };
+                                    setFormData(next);
+                                    triggerSave(next);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="outcall_buffer_after">Travel Buffer After (mins)</Label>
+                                <Input
+                                  id="outcall_buffer_after"
+                                  type="number"
+                                  value={formData.outcall_buffer_after ?? 0}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    const next = { ...formData, outcall_buffer_after: val };
+                                    setFormData(next);
+                                    triggerSave(next);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
 
@@ -1249,181 +1465,189 @@ export default function ServicesPage() {
                   </AccordionItem>
 
                   {/* Service Categories */}
-                  <AccordionItem id="acc-categories" value="categories" className="border rounded-lg px-4 bg-card">
-                    <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {categories.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No categories available.</p>
-                      )}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {categories.map(c => {
-                          const isLinked = formData.category_ids.includes(c.id);
-                          return (
-                            <div
-                              key={c.id}
-                              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
-                                isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
-                              }`}
-                            >
-                              {c.image ? (
-                                <img src={c.image} alt={c.name} className="w-8 h-8 object-cover rounded-md shrink-0" />
-                              ) : (
-                                <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                                  <span className="text-xs font-bold text-primary">{c.name[0]?.toUpperCase()}</span>
+                  {categoriesEnabled && (
+                    <AccordionItem id="acc-categories" value="categories" className="border rounded-lg px-4 bg-card">
+                      <AccordionTrigger className="hover:no-underline">Service Categories</AccordionTrigger>
+                      <AccordionContent className="pt-2 pb-4 space-y-3">
+                        {categories.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No categories available.</p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {categories.map(c => {
+                            const isLinked = formData.category_ids.includes(c.id);
+                            return (
+                              <div
+                                key={c.id}
+                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                                  isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
+                                }`}
+                              >
+                                {c.image ? (
+                                  <img src={c.image} alt={c.name} className="w-8 h-8 object-cover rounded-md shrink-0" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                    <span className="text-xs font-bold text-primary">{c.name[0]?.toUpperCase()}</span>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{c.name}</p>
+                                  {c.description && <p className="text-[10px] text-muted-foreground truncate">{c.description}</p>}
                                 </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{c.name}</p>
-                                {c.description && <p className="text-[10px] text-muted-foreground truncate">{c.description}</p>}
+                                <Switch
+                                  checked={isLinked}
+                                  disabled={!isEditing}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.category_ids || [];
+                                    const updated = checked ? [...current, c.id] : current.filter(id => id !== c.id);
+                                    const next = { ...formData, category_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                />
                               </div>
-                              <Switch
-                                checked={isLinked}
-                                disabled={!isEditing}
-                                onCheckedChange={(checked) => {
-                                  const current = formData.category_ids || [];
-                                  const updated = checked ? [...current, c.id] : current.filter(id => id !== c.id);
-                                  const next = { ...formData, category_ids: updated };
-                                  setFormData(next);
-                                  triggerSave(next, true);
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {isEditing && (
-                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/categories', 'categories')}>
-                          <Plus className="w-4 h-4 mr-2" /> Add Category
-                        </Button>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
+                            );
+                          })}
+                        </div>
+                        {isEditing && (
+                          <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/categories', 'categories')}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Category
+                          </Button>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
 
                   {/* Service Providers */}
-                  <AccordionItem id="acc-providers" value="providers" className="border rounded-lg px-4 bg-card">
-                    <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-4 space-y-3">
-                      <p className="text-xs text-muted-foreground italic">
-                        Note: If no providers are selected, this service will be available with all providers by default.
-                      </p>
-                      {providers.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No providers available.</p>
-                      )}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {providers.map(p => {
-                          const isLinked = formData.provider_ids.includes(p.id);
-                          return (
-                            <div
-                              key={p.id}
-                              className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
-                                isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
-                              }`}
-                            >
-                              <Avatar className="h-8 w-8 shrink-0 border" style={{ backgroundColor: p.color || '#e2e8f0' }}>
-                                <AvatarImage src={p.avatar || p.image} alt={p.name} className="object-cover" />
-                                <AvatarFallback className="text-xs font-bold bg-transparent text-white">
-                                  {p.name ? p.name[0].toUpperCase() : 'P'}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{p.name}</p>
-                                {p.email && <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>}
+                  {multipleProvidersEnabled && (
+                    <AccordionItem id="acc-providers" value="providers" className="border rounded-lg px-4 bg-card">
+                      <AccordionTrigger className="hover:no-underline">Service Providers</AccordionTrigger>
+                      <AccordionContent className="pt-2 pb-4 space-y-3">
+                        <p className="text-xs text-muted-foreground italic">
+                          Note: If no providers are selected, this service will be available with all providers by default.
+                        </p>
+                        {providers.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No providers available.</p>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {providers.map(p => {
+                            const isLinked = formData.provider_ids.includes(p.id);
+                            return (
+                              <div
+                                key={p.id}
+                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${
+                                  isLinked ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-card/50'
+                                }`}
+                              >
+                                <Avatar className="h-8 w-8 shrink-0 border" style={{ backgroundColor: p.color || '#e2e8f0' }}>
+                                  <AvatarImage src={p.avatar || p.image} alt={p.name} className="object-cover" />
+                                  <AvatarFallback className="text-xs font-bold bg-transparent text-white">
+                                    {p.name ? p.name[0].toUpperCase() : 'P'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{p.name}</p>
+                                  {p.email && <p className="text-[10px] text-muted-foreground truncate">{p.email}</p>}
+                                </div>
+                                <Switch
+                                  checked={isLinked}
+                                  disabled={!isEditing}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.provider_ids || [];
+                                    const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
+                                    const next = { ...formData, provider_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                />
                               </div>
-                              <Switch
-                                checked={isLinked}
-                                disabled={!isEditing}
-                                onCheckedChange={(checked) => {
-                                  const current = formData.provider_ids || [];
-                                  const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
-                                  const next = { ...formData, provider_ids: updated };
-                                  setFormData(next);
-                                  triggerSave(next, true);
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {isEditing && (
-                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/providers', 'providers')}>
-                          <Plus className="w-4 h-4 mr-2" /> Add Provider
-                        </Button>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
+                            );
+                          })}
+                        </div>
+                        {isEditing && (
+                          <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/providers', 'providers')}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Provider
+                          </Button>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
 
                   {/* Products */}
-                  <AccordionItem id="acc-products" value="products" className="border rounded-lg px-4 bg-card">
-                    <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {products.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No products available.</p>
-                      )}
-                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {products.map(p => (
-                          <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                            <Label className="font-normal truncate flex-1">{p.name}</Label>
-                            <div className="flex items-center gap-3 shrink-0 pl-4">
-                              <span className="text-xs font-medium text-foreground w-14 text-right">${p.price || '0.00'}</span>
-                              <Switch
-                                checked={formData.product_ids.includes(p.id)}
-                                disabled={!isEditing}
-                                onCheckedChange={(checked) => {
-                                  const current = formData.product_ids || [];
-                                  const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
-                                  const next = { ...formData, product_ids: updated };
-                                  setFormData(next);
-                                  triggerSave(next, true);
-                                }}
-                              />
+                  {productsEnabled && (
+                    <AccordionItem id="acc-products" value="products" className="border rounded-lg px-4 bg-card">
+                      <AccordionTrigger className="hover:no-underline">Products</AccordionTrigger>
+                      <AccordionContent className="pt-2 pb-4 space-y-3">
+                        {products.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No products available.</p>
+                        )}
+                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {products.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                              <Label className="font-normal truncate flex-1">{p.name}</Label>
+                              <div className="flex items-center gap-3 shrink-0 pl-4">
+                                <span className="text-xs font-medium text-foreground w-14 text-right">${p.price || '0.00'}</span>
+                                <Switch
+                                  checked={formData.product_ids.includes(p.id)}
+                                  disabled={!isEditing}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.product_ids || [];
+                                    const updated = checked ? [...current, p.id] : current.filter(id => id !== p.id);
+                                    const next = { ...formData, product_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                      {isEditing && (
-                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/products', 'products')}>
-                          <Plus className="w-4 h-4 mr-2" /> Add Product
-                        </Button>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
+                          ))}
+                        </div>
+                        {isEditing && (
+                          <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/products', 'products')}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Product
+                          </Button>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
 
                   {/* Add-ons */}
-                  <AccordionItem id="acc-addons" value="addons" className="border rounded-lg px-4 bg-card">
-                    <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
-                    <AccordionContent className="pt-2 pb-4 space-y-3">
-                      {addons.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No add-ons available.</p>
-                      )}
-                      <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
-                        {addons.map(a => (
-                          <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
-                            <Label className="font-normal truncate flex-1">{a.name}</Label>
-                            <div className="flex items-center gap-3 shrink-0 pl-4">
-                              {a.duration != null && a.duration > 0 && <span className="text-xs text-muted-foreground">+{a.duration} mins</span>}
-                              <span className="text-xs font-medium text-foreground w-14 text-right">${a.price || '0.00'}</span>
-                              <Switch
-                                checked={formData.addon_ids.includes(a.id)}
-                                disabled={!isEditing}
-                                onCheckedChange={(checked) => {
-                                  const current = formData.addon_ids || [];
-                                  const updated = checked ? [...current, a.id] : current.filter(id => id !== a.id);
-                                  const next = { ...formData, addon_ids: updated };
-                                  setFormData(next);
-                                  triggerSave(next, true);
-                                }}
-                              />
+                  {addonsEnabled && (
+                    <AccordionItem id="acc-addons" value="addons" className="border rounded-lg px-4 bg-card">
+                      <AccordionTrigger className="hover:no-underline">Add-ons</AccordionTrigger>
+                      <AccordionContent className="pt-2 pb-4 space-y-3">
+                        {addons.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No add-ons available.</p>
+                        )}
+                        <div className="flex flex-col gap-1 border rounded-lg overflow-hidden divide-y divide-border/40">
+                          {addons.map(a => (
+                            <div key={a.id} className="flex items-center justify-between p-2.5 bg-card/30 hover:bg-muted/10 transition-colors">
+                              <Label className="font-normal truncate flex-1">{a.name}</Label>
+                              <div className="flex items-center gap-3 shrink-0 pl-4">
+                                {a.duration != null && a.duration > 0 && <span className="text-xs text-muted-foreground">+{a.duration} mins</span>}
+                                <span className="text-xs font-medium text-foreground w-14 text-right">${a.price || '0.00'}</span>
+                                <Switch
+                                  checked={formData.addon_ids.includes(a.id)}
+                                  disabled={!isEditing}
+                                  onCheckedChange={(checked) => {
+                                    const current = formData.addon_ids || [];
+                                    const updated = checked ? [...current, a.id] : current.filter(id => id !== a.id);
+                                    const next = { ...formData, addon_ids: updated };
+                                    setFormData(next);
+                                    triggerSave(next, true);
+                                  }}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                      {isEditing && (
-                        <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
-                          <Plus className="w-4 h-4 mr-2" /> Add Add-on
-                        </Button>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
+                          ))}
+                        </div>
+                        {isEditing && (
+                          <Button variant="outline" size="sm" onClick={() => handleSaveAndNavigate('/admin/catalog/add-ons', 'addons')}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Add-on
+                          </Button>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  )}
                 </Accordion>
               </CardContent>
 
