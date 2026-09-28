@@ -34,6 +34,9 @@ import {
   LockIcon,
   AlertCircleIcon,
   LayersIcon,
+  TagsIcon,
+  ShoppingBagIcon,
+  CheckCircle2Icon,
 } from "lucide-react"
 
 // Map icon strings to Lucide components
@@ -51,6 +54,9 @@ const ICON_MAP: Record<string, any> = {
   FileInput: FileInputIcon,
   Star: StarIcon,
   CalendarClock: CalendarClockIcon,
+  Tags: TagsIcon,
+  ShoppingBag: ShoppingBagIcon,
+  Sparkles: SparklesIcon,
 }
 
 export default function TenantModulesPage() {
@@ -60,17 +66,30 @@ export default function TenantModulesPage() {
   const [quotaModalOpen, setQuotaModalOpen] = useState<boolean>(false)
   const [tierPending, setTierPending] = useState<boolean>(false)
 
-  const categories = useMemo(() => {
-    if (!modulesData) return ["all"]
-    const cats = Array.from(new Set(modulesData.modules.map((m) => m.category)))
-    return ["all", ...cats]
+  // Deduplicate aliases so only standardized keys appear in the UI
+  const displayModules = useMemo(() => {
+    if (!modulesData) return []
+    const hasMultipleProviders = modulesData.modules.some((m) => m.key === "multiple_providers")
+    const hasAddons = modulesData.modules.some((m) => m.key === "addons")
+    return modulesData.modules.filter((m) => {
+      if (hasMultipleProviders && m.key === "providers") return false
+      if (hasAddons && m.key === "packages") return false
+      return true
+    })
   }, [modulesData])
 
+  const categories = useMemo(() => {
+    if (displayModules.length === 0) return ["all"]
+    const cats = Array.from(new Set(displayModules.map((m) => m.category)))
+    return ["all", ...cats]
+  }, [displayModules])
+
   const filteredModules = useMemo(() => {
-    if (!modulesData) return []
-    if (activeCategory === "all") return modulesData.modules
-    return modulesData.modules.filter((m) => m.category.toLowerCase() === activeCategory.toLowerCase())
-  }, [modulesData, activeCategory])
+    if (displayModules.length === 0) return []
+    if (activeCategory === "all") return displayModules
+    return displayModules.filter((m) => m.category.toLowerCase() === activeCategory.toLowerCase())
+  }, [displayModules, activeCategory])
+
 
   const handleToggle = async (module: TenantModuleInfo, nextValue: boolean) => {
     if (module.is_core && !nextValue) {
@@ -320,10 +339,62 @@ export default function TenantModulesPage() {
                   </div>
                 </CardHeader>
 
-                <CardContent className="px-4 pb-4 flex-1">
-                  <CardDescription className="text-xs leading-relaxed text-muted-foreground line-clamp-3">
+                <CardContent className="px-4 pb-4 flex-1 space-y-3">
+                  <CardDescription className="text-xs leading-relaxed text-muted-foreground">
                     {mod.description}
                   </CardDescription>
+
+                  {/* Mode Behavior Callout for Core Controls */}
+                  {mod.key === "multiple_providers" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{mod.enabled ? "Multi-provider staff management active" : "Solo Mode active: 1 default provider (staff UI hidden)"}</span>
+                    </div>
+                  )}
+                  {mod.key === "locations" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{mod.enabled ? "Multi-branch & location selectors active" : "Single Location mode: selectors hidden"}</span>
+                    </div>
+                  )}
+                  {mod.key === "categories" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{mod.enabled ? "Service categorization active" : "Flat service list: category tabs hidden"}</span>
+                    </div>
+                  )}
+                  {mod.key === "products" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{mod.enabled ? "Retail product sales active" : "Products hidden throughout the app"}</span>
+                    </div>
+                  )}
+                  {mod.key === "addons" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{mod.enabled ? "Service add-on upsells active" : "Direct booking: add-on steps hidden"}</span>
+                    </div>
+                  )}
                 </CardContent>
 
                 <CardFooter className="p-4 pt-3 border-t border-border/40 flex items-center justify-between bg-muted/10">

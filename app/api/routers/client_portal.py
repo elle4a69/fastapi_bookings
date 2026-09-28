@@ -22,6 +22,8 @@ from ...core.redis import get_redis_client
 from ...core.security import create_access_token
 from ...core.state_machine import BookingStatus
 from ...db.database import get_db
+from ...services import slot_allocation_service
+from ...services.booking.itinerary_service import recalculate_provider_itinerary
 from ...models.booking import Booking
 from ...models.client import Client
 from ...models.client_dispute import ClientDispute
@@ -459,6 +461,10 @@ def client_cancel_booking(
     if payload and payload.reason:
         reason_line = f"Client cancellation reason: {payload.reason.strip()}"
         booking.notes = f"{booking.notes}\n{reason_line}" if booking.notes else reason_line
+
+    slot_allocation_service.release_allocations_for_booking(db, booking.id)
+    if booking.start_time:
+        recalculate_provider_itinerary(db, provider_id=booking.provider_id, target_date=booking.start_time.date())
 
     db.commit()
     return {"ok": True, "message": "Booking cancelled successfully."}

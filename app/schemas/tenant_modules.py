@@ -50,3 +50,15 @@ class UpdateTenantTierRequest(BaseModel):
 
     tier: str = Field(..., description="Target tier: 'starter', 'growth', or 'unlimited'")
     addon_quota: Optional[int] = Field(None, description="Optional custom quota override")
+
+
+class UpdateTenantModulesRequest(BaseModel):
+    """Request payload to update tenant modules or tier in bulk."""
+
+    enabled_modules: Optional[List[str]] = Field(None, description="Complete list of enabled module keys")
+    modules: Optional[dict[str, bool]] = Field(None, description="Key-value mapping of module keys to enabled state")
+    module_key: Optional[str] = Field(None, description="Optional single module key to toggle")
+    enabled: Optional[bool] = Field(None, description="Optional target state when module_key is specified")
+    tier: Optional[str] = Field(None, description="Optional subscription tier update")
+    addon_quota: Optional[int] = Field(None, description="Optional quota override")
+

@@ -19,7 +19,7 @@ export interface TenantModulesData {
   modules: TenantModuleInfo[]
 }
 
-interface TenantModulesContextType {
+export interface TenantModulesContextType {
   modulesData: TenantModulesData | null
   enabledModules: string[]
   loading: boolean
@@ -27,6 +27,17 @@ interface TenantModulesContextType {
   refreshModules: () => Promise<void>
   toggleModule: (moduleKey: string, enabled: boolean) => Promise<{ ok: boolean; message: string }>
   updateTier: (tier: string, quota?: number) => Promise<{ ok: boolean; message?: string }>
+  isModuleEnabled: (moduleKey: string) => boolean
+  multipleProvidersEnabled: boolean
+  locationsEnabled: boolean
+  categoriesEnabled: boolean
+  productsEnabled: boolean
+  addonsEnabled: boolean
+  hasMultipleProviders: boolean
+  hasLocations: boolean
+  hasCategories: boolean
+  hasProducts: boolean
+  hasAddons: boolean
 }
 
 const TenantModulesContext = createContext<TenantModulesContextType | null>(null)
@@ -37,10 +48,14 @@ const DEFAULT_FALLBACK_MODULES = [
   "calendar",
   "bookings",
   "website",
-  "sms_assistant",
-  "locations",
+  "multiple_providers",
   "providers",
+  "locations",
+  "categories",
+  "products",
+  "addons",
   "packages",
+  "sms_assistant",
   "finance_invoicing",
   "media",
   "booking_forms",
@@ -77,6 +92,26 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
     }
     return modulesData.modules.filter((m) => m.enabled).map((m) => m.key)
   }, [modulesData])
+
+  const isModuleEnabled = useCallback(
+    (moduleKey: string): boolean => {
+      const k = moduleKey.toLowerCase()
+      if (k === "multiple_providers" || k === "providers") {
+        return enabledModules.some((m) => m.toLowerCase() === "multiple_providers" || m.toLowerCase() === "providers")
+      }
+      if (k === "addons" || k === "packages") {
+        return enabledModules.some((m) => m.toLowerCase() === "addons" || m.toLowerCase() === "packages")
+      }
+      return enabledModules.some((m) => m.toLowerCase() === k)
+    },
+    [enabledModules]
+  )
+
+  const multipleProvidersEnabled = useMemo(() => isModuleEnabled("multiple_providers"), [isModuleEnabled])
+  const locationsEnabled = useMemo(() => isModuleEnabled("locations"), [isModuleEnabled])
+  const categoriesEnabled = useMemo(() => isModuleEnabled("categories"), [isModuleEnabled])
+  const productsEnabled = useMemo(() => isModuleEnabled("products"), [isModuleEnabled])
+  const addonsEnabled = useMemo(() => isModuleEnabled("addons"), [isModuleEnabled])
 
   const toggleModule = useCallback(
     async (moduleKey: string, enabled: boolean): Promise<{ ok: boolean; message: string }> => {
@@ -122,8 +157,33 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
       refreshModules,
       toggleModule,
       updateTier,
+      isModuleEnabled,
+      multipleProvidersEnabled,
+      locationsEnabled,
+      categoriesEnabled,
+      productsEnabled,
+      addonsEnabled,
+      hasMultipleProviders: multipleProvidersEnabled,
+      hasLocations: locationsEnabled,
+      hasCategories: categoriesEnabled,
+      hasProducts: productsEnabled,
+      hasAddons: addonsEnabled,
     }),
-    [modulesData, enabledModules, loading, error, refreshModules, toggleModule, updateTier]
+    [
+      modulesData,
+      enabledModules,
+      loading,
+      error,
+      refreshModules,
+      toggleModule,
+      updateTier,
+      isModuleEnabled,
+      multipleProvidersEnabled,
+      locationsEnabled,
+      categoriesEnabled,
+      productsEnabled,
+      addonsEnabled,
+    ]
   )
 
   return (
@@ -140,3 +200,4 @@ export function useTenantModules(): TenantModulesContextType {
   }
   return ctx
 }
+

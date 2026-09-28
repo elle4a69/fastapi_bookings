@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { CalendarOff, Clock, Trash2, Plus, Loader2 } from 'lucide-react';
+import { useTenantModules } from '@/context/tenant-modules-context';
 
 interface Location {
   id: string;
@@ -48,6 +49,7 @@ interface ReservedTime {
 }
 
 export default function ExceptionsPage() {
+  const { multipleProvidersEnabled, locationsEnabled } = useTenantModules();
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [reservedTimes, setReservedTimes] = useState<ReservedTime[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -86,6 +88,9 @@ export default function ExceptionsPage() {
       setReservedTimes(reservedData);
       setProviders(providersList);
       setLocations(locationsList);
+      if (providersList.length > 0 && !newBlockProvider) {
+        setNewBlockProvider(providersList[0].id);
+      }
     } catch (error) {
       toast.error('Failed to load schedule exceptions');
       console.error(error);
@@ -95,7 +100,10 @@ export default function ExceptionsPage() {
   };
 
   const handleAddBlockedTime = async () => {
-    if (!newBlockProvider || !newBlockDate || !newBlockStart || !newBlockEnd) {
+    const effectiveProvider = (multipleProvidersEnabled ? newBlockProvider : (newBlockProvider || providers[0]?.id)) || '';
+    const effectiveLocation = locationsEnabled ? (newBlockLocation === 'none' ? null : newBlockLocation) : null;
+
+    if (!effectiveProvider || !newBlockDate || !newBlockStart || !newBlockEnd) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -107,8 +115,8 @@ export default function ExceptionsPage() {
       const endDateTime = new Date(`${newBlockDate}T${newBlockEnd}`).toISOString();
 
       const newBlock = await apiClient.post<BlockedTime>('/api/admin/schedule/blocked-times', {
-        provider_id: newBlockProvider,
-        location_id: newBlockLocation === 'none' ? null : newBlockLocation,
+        provider_id: effectiveProvider,
+        location_id: effectiveLocation,
         start_time: startDateTime,
         end_time: endDateTime,
         reason: newBlockReason,
@@ -120,7 +128,7 @@ export default function ExceptionsPage() {
       setIsDialogOpen(false);
       
       // Reset form
-      setNewBlockProvider('');
+      setNewBlockProvider(providers[0]?.id || '');
       setNewBlockLocation('none');
       setNewBlockDate('');
       setNewBlockStart('');
@@ -225,33 +233,37 @@ export default function ExceptionsPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="provider" className="text-right">Staff</Label>
-                      <Select value={newBlockProvider} onValueChange={setNewBlockProvider}>
-                        <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Select staff member" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {providers.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="location" className="text-right">Location</Label>
-                      <Select value={newBlockLocation} onValueChange={setNewBlockLocation}>
-                        <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="All locations (Optional)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">All locations</SelectItem>
-                          {locations.map(l => (
-                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {multipleProvidersEnabled && (
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="provider" className="text-right">Staff</Label>
+                        <Select value={newBlockProvider} onValueChange={setNewBlockProvider}>
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Select staff member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {providers.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {locationsEnabled && (
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="location" className="text-right">Location</Label>
+                        <Select value={newBlockLocation} onValueChange={setNewBlockLocation}>
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="All locations (Optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">All locations</SelectItem>
+                            {locations.map(l => (
+                              <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="date" className="text-right">Date</Label>
                       <Input 
@@ -312,8 +324,8 @@ export default function ExceptionsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Location</TableHead>
+                      {multipleProvidersEnabled && <TableHead>Provider</TableHead>}
+                      {locationsEnabled && <TableHead>Location</TableHead>}
                       <TableHead>Start</TableHead>
                       <TableHead>End</TableHead>
                       <TableHead>Reason</TableHead>
@@ -328,8 +340,12 @@ export default function ExceptionsPage() {
                       
                       return (
                         <TableRow key={block.id}>
-                          <TableCell className="font-medium">{block.provider_name || provider?.name || 'Unknown'}</TableCell>
-                          <TableCell>{block.location_name || location?.name || 'All Locations'}</TableCell>
+                          {multipleProvidersEnabled && (
+                            <TableCell className="font-medium">{block.provider_name || provider?.name || 'Unknown'}</TableCell>
+                          )}
+                          {locationsEnabled && (
+                            <TableCell>{block.location_name || location?.name || 'All Locations'}</TableCell>
+                          )}
                           <TableCell>{formatDate(block.start_time)}</TableCell>
                           <TableCell>{formatDate(block.end_time)}</TableCell>
                           <TableCell>{block.reason || '-'}</TableCell>
@@ -375,7 +391,7 @@ export default function ExceptionsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Provider</TableHead>
+                      {multipleProvidersEnabled && <TableHead>Provider</TableHead>}
                       <TableHead>Service</TableHead>
                       <TableHead>Client</TableHead>
                       <TableHead>Start</TableHead>
@@ -388,7 +404,9 @@ export default function ExceptionsPage() {
                   <TableBody>
                     {reservedTimes.map((res) => (
                       <TableRow key={res.id}>
-                        <TableCell className="font-medium">{res.provider_name}</TableCell>
+                        {multipleProvidersEnabled && (
+                          <TableCell className="font-medium">{res.provider_name}</TableCell>
+                        )}
                         <TableCell>{res.service_name}</TableCell>
                         <TableCell>{res.client_name}</TableCell>
                         <TableCell>{formatDate(res.start_time)}</TableCell>

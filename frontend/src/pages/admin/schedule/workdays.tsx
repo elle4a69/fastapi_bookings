@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { User, Save, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowLeft } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTenantModules } from '@/context/tenant-modules-context';
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -49,6 +50,7 @@ const getStartOfWeek = (date: Date) => {
 };
 
 export default function WorkdaysPage() {
+  const { multipleProvidersEnabled } = useTenantModules();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -285,55 +287,59 @@ export default function WorkdaysPage() {
 
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-65px)] md:gap-6 p-4 md:p-6 font-sans">
-      <Card className={`md:w-[35%] flex flex-col h-full rounded-xl transition-all duration-300 border-border/50 shadow-sm bg-card/50 backdrop-blur-sm ${selectedProvider ? 'hidden md:flex' : 'flex w-full'}`}>
-        <CardHeader className="p-4 md:p-6 pb-4">
-          <CardTitle className="text-xl flex items-center gap-2 font-heading">
-            <User className="h-5 w-5" />
-            Staff
-          </CardTitle>
-          <CardDescription>Select a provider to manage their schedule</CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 p-0">
-          <ScrollArea className="h-full">
-            <div className="flex flex-col gap-2 p-4 pt-0">
-              {providers.map((provider) => (
-                <button
-                  key={provider.id}
-                  onClick={() => handleSelectProvider(provider)}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-200 hover:scale-[1.01] hover:shadow-md border min-h-[60px] ${
-                    selectedProvider?.id === provider.id ? 'bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary font-medium' : 'text-muted-foreground bg-card hover:bg-accent/30 border-transparent hover:border-border/60'
-                  }`}
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    {provider.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="truncate">
-                    <div className={selectedProvider?.id === provider.id ? 'text-foreground' : ''}>
-                      {provider.name}
+      {multipleProvidersEnabled && (
+        <Card className={`md:w-[35%] flex flex-col h-full rounded-xl transition-all duration-300 border-border/50 shadow-sm bg-card/50 backdrop-blur-sm ${selectedProvider ? 'hidden md:flex' : 'flex w-full'}`}>
+          <CardHeader className="p-4 md:p-6 pb-4">
+            <CardTitle className="text-xl flex items-center gap-2 font-heading">
+              <User className="h-5 w-5" />
+              Staff
+            </CardTitle>
+            <CardDescription>Select a provider to manage their schedule</CardDescription>
+          </CardHeader>
+          <CardContent className="flex-1 p-0">
+            <ScrollArea className="h-full">
+              <div className="flex flex-col gap-2 p-4 pt-0">
+                {providers.map((provider) => (
+                  <button
+                    key={provider.id}
+                    onClick={() => handleSelectProvider(provider)}
+                    className={`flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all duration-200 hover:scale-[1.01] hover:shadow-md border min-h-[60px] ${
+                      selectedProvider?.id === provider.id ? 'bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary font-medium' : 'text-muted-foreground bg-card hover:bg-accent/30 border-transparent hover:border-border/60'
+                    }`}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      {provider.name.charAt(0).toUpperCase()}
                     </div>
+                    <div className="truncate">
+                      <div className={selectedProvider?.id === provider.id ? 'text-foreground' : ''}>
+                        {provider.name}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {providers.length === 0 && (
+                  <div className="text-center text-muted-foreground py-8">
+                    No staff members found
                   </div>
-                </button>
-              ))}
-              {providers.length === 0 && (
-                <div className="text-center text-muted-foreground py-8">
-                  No staff members found
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className={`md:w-[65%] flex flex-col h-full border-0 md:border md:border-border/50 shadow-none md:shadow-sm bg-card/50 backdrop-blur-sm transition-all duration-300 absolute inset-0 z-50 md:relative md:z-auto bg-background md:bg-transparent rounded-none md:rounded-xl ${selectedProvider ? 'flex w-full' : 'hidden md:flex'}`}>
+      <Card className={`${multipleProvidersEnabled ? 'md:w-[65%]' : 'w-full'} flex flex-col h-full border border-border/50 shadow-sm bg-card/50 backdrop-blur-sm transition-all duration-300 ${multipleProvidersEnabled ? (selectedProvider ? 'flex w-full' : 'hidden md:flex') : 'flex w-full'} rounded-xl`}>
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 pb-4 gap-4 border-b sticky top-0 bg-background/95 z-10 shrink-0">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => setSelectedProvider(null)}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
+            {multipleProvidersEnabled && (
+              <Button variant="ghost" size="icon" className="md:hidden shrink-0 min-h-[44px] min-w-[44px]" onClick={() => setSelectedProvider(null)}>
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            )}
             <div>
               <CardTitle className="text-xl flex items-center gap-2 font-heading">
                 <Calendar className="h-5 w-5" />
-                Weekly Schedule {selectedProvider ? `- ${selectedProvider.name}` : ''}
+                {multipleProvidersEnabled && selectedProvider ? `Weekly Schedule - ${selectedProvider.name}` : 'Weekly Schedule'}
               </CardTitle>
               <CardDescription className="hidden md:block">Configure working days and specific hours</CardDescription>
             </div>

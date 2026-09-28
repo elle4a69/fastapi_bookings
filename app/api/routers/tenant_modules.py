@@ -4,7 +4,7 @@ Exposes endpoints for viewing, toggling, and managing active tenant modules,
 subscription tiers, and add-on quotas.
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -17,9 +17,10 @@ from ...schemas.tenant_modules import (
     ToggleModuleRequest,
     ToggleModuleResponse,
     UpdateTenantTierRequest,
+    UpdateTenantModulesRequest,
 )
 
-router = APIRouter(prefix="/api/admin/tenant/modules", tags=["tenant-modules"])
+router = APIRouter(tags=["tenant-modules"])
 
 MODULE_CATALOG = [
     # Core Modules (Always enabled, cannot be toggled off)
@@ -55,7 +56,64 @@ MODULE_CATALOG = [
         "is_core": True,
         "icon": "Globe",
     },
-    # Add-on Modules (Switchable based on subscription tier & quota)
+    # 5 Core Module Controls
+    {
+        "key": "multiple_providers",
+        "name": "Multiple Service Providers",
+        "description": "Support multi-provider staff scheduling and assignment controls. When disabled, the business runs as a solo practice with a single default provider, simplifying workflows everywhere.",
+        "category": "Operations",
+        "is_core": False,
+        "icon": "UserRoundCog",
+    },
+    {
+        "key": "providers",
+        "name": "Staff & Service Providers",
+        "description": "Legacy alias for Multiple Service Providers.",
+        "category": "Operations",
+        "is_core": False,
+        "icon": "UserRoundCog",
+    },
+    {
+        "key": "locations",
+        "name": "Locations",
+        "description": "Manage multiple physical branches, locations, rooms, and location-specific resources. When disabled, the business operates from a single default location.",
+        "category": "Operations",
+        "is_core": False,
+        "icon": "MapPin",
+    },
+    {
+        "key": "categories",
+        "name": "Categories",
+        "description": "Group services into categorized sections and tabs. When disabled, services are presented in a streamlined flat list without category management.",
+        "category": "Catalog",
+        "is_core": False,
+        "icon": "Tags",
+    },
+    {
+        "key": "products",
+        "name": "Products",
+        "description": "Retail and digital product catalog with inventory. When disabled, product options, tabs, and navigation are removed.",
+        "category": "Catalog",
+        "is_core": False,
+        "icon": "ShoppingBag",
+    },
+    {
+        "key": "addons",
+        "name": "Add-ons",
+        "description": "Optional service extras and upsells selectable during booking. When disabled, services book directly without add-on steps.",
+        "category": "Catalog",
+        "is_core": False,
+        "icon": "Sparkles",
+    },
+    {
+        "key": "packages",
+        "name": "Packages & Service Bundles",
+        "description": "Sell and manage prepaid bundles, multi-session packages, and promotional deals.",
+        "category": "Catalog",
+        "is_core": False,
+        "icon": "Gift",
+    },
+    # Other Add-ons
     {
         "key": "sms_assistant",
         "name": "SMS Assistant & AI Triage",
@@ -63,30 +121,6 @@ MODULE_CATALOG = [
         "category": "Communication",
         "is_core": False,
         "icon": "MessageSquareText",
-    },
-    {
-        "key": "locations",
-        "name": "Multi-Location Support",
-        "description": "Manage multiple physical branches, locations, rooms, and location-specific resources.",
-        "category": "Operations",
-        "is_core": False,
-        "icon": "MapPin",
-    },
-    {
-        "key": "providers",
-        "name": "Staff & Service Providers",
-        "description": "Support multi-provider staff scheduling, individual working hours, and commissions.",
-        "category": "Operations",
-        "is_core": False,
-        "icon": "UserRoundCog",
-    },
-    {
-        "key": "packages",
-        "name": "Packages & Service Bundles",
-        "description": "Sell and manage prepaid bundles, multi-session packages, and promotional deals.",
-        "category": "Sales",
-        "is_core": False,
-        "icon": "Gift",
     },
     {
         "key": "finance_invoicing",
@@ -134,7 +168,15 @@ MODULE_CATALOG = [
 def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
     """Build response model from tenant model and catalog."""
     enabled_keys = set(tenant.get_enabled_modules())
-    used_addons = len([k for k in enabled_keys if k not in CORE_MODULE_KEYS])
+    
+    # Count unique functional addons so aliased keys don't consume extra quota
+    unique_addon_keys = set()
+    for k in enabled_keys:
+        if k in CORE_MODULE_KEYS:
+            continue
+        canon_key = "multiple_providers" if k in ("multiple_providers", "providers") else ("addons" if k in ("addons", "packages") else k)
+        unique_addon_keys.add(canon_key)
+    used_addons = len(unique_addon_keys)
 
     if tenant.subscription_tier == "unlimited":
         available_addons = 999
@@ -163,7 +205,8 @@ def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
     )
 
 
-@router.get("", response_model=TenantModulesResponse)
+@router.get("/api/admin/tenant/modules", response_model=TenantModulesResponse)
+@router.get("/api/admin/tenant-modules", response_model=TenantModulesResponse)
 def get_tenant_modules(
     tenant: Tenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_admin),
@@ -172,7 +215,8 @@ def get_tenant_modules(
     return _build_modules_response(tenant)
 
 
-@router.post("/toggle", response_model=ToggleModuleResponse)
+@router.post("/api/admin/tenant/modules/toggle", response_model=ToggleModuleResponse)
+@router.post("/api/admin/tenant-modules/toggle", response_model=ToggleModuleResponse)
 def toggle_tenant_module(
     payload: ToggleModuleRequest,
     tenant: Tenant = Depends(get_current_tenant),
@@ -201,11 +245,26 @@ def toggle_tenant_module(
             detail=f"Core module '{catalog_entry['name']}' ({payload.module_key}) cannot be disabled.",
         )
 
-    current_enabled = tenant.get_enabled_modules()
-    current_addons = [m for m in current_enabled if m not in CORE_MODULE_KEYS]
+    current_enabled = set(tenant.get_enabled_modules())
+
+    # Map aliases
+    target_keys = {payload.module_key}
+    if payload.module_key in ("multiple_providers", "providers"):
+        target_keys = {"multiple_providers", "providers"}
+    elif payload.module_key in ("addons", "packages"):
+        target_keys = {"addons", "packages"}
+
+    # Count unique active addons
+    current_addons = {
+        ("multiple_providers" if k in ("multiple_providers", "providers") else ("addons" if k in ("addons", "packages") else k))
+        for k in current_enabled
+        if k not in CORE_MODULE_KEYS
+    }
+
+    canon_target = "multiple_providers" if payload.module_key in ("multiple_providers", "providers") else ("addons" if payload.module_key in ("addons", "packages") else payload.module_key)
 
     # Validate against quota when enabling an add-on
-    if payload.enabled and payload.module_key not in current_enabled:
+    if payload.enabled and canon_target not in current_addons:
         if tenant.subscription_tier != "unlimited" and len(current_addons) >= tenant.addon_quota:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,15 +275,13 @@ def toggle_tenant_module(
             )
 
     # Compute new list of enabled modules
+    new_set = set(current_enabled)
     if payload.enabled:
-        if payload.module_key not in current_enabled:
-            new_modules = list(current_enabled) + [payload.module_key]
-        else:
-            new_modules = list(current_enabled)
+        new_set.update(target_keys)
     else:
-        new_modules = [m for m in current_enabled if m != payload.module_key]
+        new_set.difference_update(target_keys)
 
-    tenant.enabled_modules = new_modules
+    tenant.enabled_modules = list(new_set)
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
@@ -236,7 +293,8 @@ def toggle_tenant_module(
     )
 
 
-@router.put("/tier", response_model=TenantModulesResponse)
+@router.put("/api/admin/tenant/modules/tier", response_model=TenantModulesResponse)
+@router.put("/api/admin/tenant-modules/tier", response_model=TenantModulesResponse)
 def update_tenant_tier(
     payload: UpdateTenantTierRequest,
     tenant: Tenant = Depends(get_current_tenant),
@@ -267,3 +325,81 @@ def update_tenant_tier(
     db.refresh(tenant)
 
     return _build_modules_response(tenant)
+
+
+@router.put("/api/admin/tenant/modules", response_model=TenantModulesResponse)
+@router.put("/api/admin/tenant-modules", response_model=TenantModulesResponse)
+def put_tenant_modules(
+    payload: UpdateTenantModulesRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> TenantModulesResponse:
+    """Update enabled modules or tier in bulk via PUT."""
+    if current_user.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only business owners have permission to manage tenant modules.",
+        )
+
+    if payload.tier:
+        tier = payload.tier.lower()
+        if tier not in {"starter", "growth", "unlimited"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid subscription tier '{payload.tier}'.",
+            )
+        tenant.subscription_tier = tier
+        if payload.addon_quota is not None:
+            tenant.addon_quota = payload.addon_quota
+        else:
+            default_quotas = {"starter": 0, "growth": 3, "unlimited": 999}
+            tenant.addon_quota = default_quotas[tier]
+
+    current_enabled = set(tenant.get_enabled_modules())
+
+    if payload.enabled_modules is not None:
+        target_keys = set(payload.enabled_modules)
+        # Ensure core modules cannot be turned off
+        target_keys.update(CORE_MODULE_KEYS)
+        # Synchronize aliases
+        if "multiple_providers" in target_keys or "providers" in target_keys:
+            target_keys.update(["multiple_providers", "providers"])
+        if "addons" in target_keys or "packages" in target_keys:
+            target_keys.update(["addons", "packages"])
+        tenant.enabled_modules = list(target_keys)
+
+    elif payload.modules is not None:
+        for k, enabled in payload.modules.items():
+            aliases = {k}
+            if k in ("multiple_providers", "providers"):
+                aliases = {"multiple_providers", "providers"}
+            elif k in ("addons", "packages"):
+                aliases = {"addons", "packages"}
+            if enabled:
+                current_enabled.update(aliases)
+            else:
+                current_enabled.difference_update(aliases)
+        current_enabled.update(CORE_MODULE_KEYS)
+        tenant.enabled_modules = list(current_enabled)
+
+    elif payload.module_key is not None:
+        enabled = payload.enabled if payload.enabled is not None else True
+        aliases = {payload.module_key}
+        if payload.module_key in ("multiple_providers", "providers"):
+            aliases = {"multiple_providers", "providers"}
+        elif payload.module_key in ("addons", "packages"):
+            aliases = {"addons", "packages"}
+        if enabled:
+            current_enabled.update(aliases)
+        else:
+            current_enabled.difference_update(aliases)
+        current_enabled.update(CORE_MODULE_KEYS)
+        tenant.enabled_modules = list(current_enabled)
+
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+
+    return _build_modules_response(tenant)
+

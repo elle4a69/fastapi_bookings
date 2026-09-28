@@ -77,19 +77,19 @@ export const navigation: NavSection[] = [
           { title: "Location Resources", url: "/admin/resources", moduleKey: "locations" },
         ],
       },
-      { title: "Providers", url: "/admin/catalog/providers", icon: UserRoundCogIcon, moduleKey: "providers" },
-      { title: "Scheduling", url: "/admin/catalog/scheduling", icon: CalendarClockIcon, moduleKey: "providers" },
+      { title: "Providers", url: "/admin/catalog/providers", icon: UserRoundCogIcon, moduleKey: "multiple_providers" },
+      { title: "Scheduling", url: "/admin/catalog/scheduling", icon: CalendarClockIcon, moduleKey: "multiple_providers" },
       { title: "Services", url: "/admin/catalog/services", icon: BriefcaseBusinessIcon },
-      { title: "Categories", url: "/admin/catalog/categories", icon: TagsIcon },
-      { title: "Add-ons", url: "/admin/catalog/add-ons", icon: SparklesIcon },
-      { title: "Products", url: "/admin/catalog/products", icon: ShoppingBagIcon },
+      { title: "Categories", url: "/admin/catalog/categories", icon: TagsIcon, moduleKey: "categories" },
+      { title: "Add-ons", url: "/admin/catalog/add-ons", icon: SparklesIcon, moduleKey: "addons" },
+      { title: "Products", url: "/admin/catalog/products", icon: ShoppingBagIcon, moduleKey: "products" },
       { title: "Packages", url: "/admin/catalog/packages", icon: GiftIcon, moduleKey: "packages" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { title: "Relationships", url: "/admin/relationships", icon: GitBranchIcon, moduleKey: "providers" },
+      { title: "Relationships", url: "/admin/relationships", icon: GitBranchIcon, moduleKey: "multiple_providers" },
       {
         title: "Schedule",
         icon: CalendarClockIcon,
@@ -175,6 +175,17 @@ export const navigation: NavSection[] = [
   },
 ]
 
+export function isKeyActive(key: string, moduleSet: Set<string>): boolean {
+  const k = key.toLowerCase()
+  if (k === "multiple_providers" || k === "providers") {
+    return moduleSet.has("multiple_providers") || moduleSet.has("providers")
+  }
+  if (k === "addons" || k === "packages") {
+    return moduleSet.has("addons") || moduleSet.has("packages")
+  }
+  return moduleSet.has(k)
+}
+
 /**
  * Filter navigation sections and items based on the tenant's active module keys.
  * If a section or item has a moduleKey that is not enabled, it is omitted.
@@ -192,7 +203,7 @@ export function filterNavigationByModules(
   return sections
     .filter((section) => {
       // If the section as a whole requires a module, ensure it's enabled
-      if (section.moduleKey && !moduleSet.has(section.moduleKey.toLowerCase())) {
+      if (section.moduleKey && !isKeyActive(section.moduleKey, moduleSet)) {
         return false
       }
       return true
@@ -200,7 +211,7 @@ export function filterNavigationByModules(
     .map((section) => {
       const filteredItems = section.items
         .filter((item) => {
-          if (item.moduleKey && !moduleSet.has(item.moduleKey.toLowerCase())) {
+          if (item.moduleKey && !isKeyActive(item.moduleKey, moduleSet)) {
             return false
           }
           return true
@@ -208,7 +219,7 @@ export function filterNavigationByModules(
         .map((item) => {
           if (!item.children) return item
           const filteredChildren = item.children.filter((child) => {
-            if (child.moduleKey && !moduleSet.has(child.moduleKey.toLowerCase())) {
+            if (child.moduleKey && !isKeyActive(child.moduleKey, moduleSet)) {
               return false
             }
             return true
@@ -227,4 +238,5 @@ export function filterNavigationByModules(
     })
     .filter((section) => section.items.length > 0)
 }
+
 

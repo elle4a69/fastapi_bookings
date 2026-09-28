@@ -291,3 +291,45 @@ def test_update_tenant_tier_and_quota(client, starter_tenant_and_owner):
     )
     assert res_enable.status_code == status.HTTP_200_OK
     assert "locations" in res_enable.json()["enabled_modules"]
+
+
+def test_get_and_put_tenant_modules_standardized(client, unlimited_tenant_and_owner):
+    """Test GET and PUT /api/admin/tenant-modules with the 5 core module controls."""
+    tenant, owner, headers = unlimited_tenant_and_owner
+
+    # 1. GET /api/admin/tenant-modules
+    res_get = client.get("/api/admin/tenant-modules", headers=headers)
+    assert res_get.status_code == status.HTTP_200_OK, res_get.text
+    data_get = res_get.json()
+    module_keys = {m["key"] for m in data_get["modules"]}
+
+    for required_key in ["multiple_providers", "locations", "categories", "products", "addons"]:
+        assert required_key in module_keys, f"Missing required module key: {required_key}"
+
+    # 2. PUT /api/admin/tenant-modules with bulk enabled_modules
+    res_put = client.put(
+        "/api/admin/tenant-modules",
+        json={"enabled_modules": ["multiple_providers", "categories", "products"]},
+        headers=headers,
+    )
+    assert res_put.status_code == status.HTTP_200_OK, res_put.text
+    data_put = res_put.json()
+    active_keys = {m["key"] for m in data_put["modules"] if m["enabled"]}
+    assert "multiple_providers" in active_keys
+    assert "providers" in active_keys  # alias synchronized
+    assert "categories" in active_keys
+    assert "products" in active_keys
+    assert "locations" not in active_keys
+
+    # 3. POST toggle with alias check
+    res_toggle = client.post(
+        "/api/admin/tenant-modules/toggle",
+        json={"module_key": "multiple_providers", "enabled": False},
+        headers=headers,
+    )
+    assert res_toggle.status_code == status.HTTP_200_OK
+    res_after = client.get("/api/admin/tenant-modules", headers=headers).json()
+    active_after = {m["key"] for m in res_after["modules"] if m["enabled"]}
+    assert "multiple_providers" not in active_after
+    assert "providers" not in active_after
+

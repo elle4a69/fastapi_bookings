@@ -24,6 +24,10 @@ ADDON_MODULE_KEYS: list[str] = [
     "sms_assistant",
     "locations",
     "providers",
+    "multiple_providers",
+    "categories",
+    "products",
+    "addons",
     "packages",
     "finance_invoicing",
     "media",
@@ -101,6 +105,16 @@ class Tenant(Base):
 
         active = set(self.enabled_modules)
         active.update(CORE_MODULE_KEYS)
+
+        # Synchronize aliases
+        if "providers" in active:
+            active.add("multiple_providers")
+        if "multiple_providers" in active:
+            active.add("providers")
+        if "packages" in active:
+            active.add("addons")
+        if "addons" in active:
+            active.add("packages")
 
         # Preserve standard order followed by any custom keys
         ordered = [k for k in ALL_MODULE_KEYS if k in active]
