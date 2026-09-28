@@ -58,7 +58,7 @@ def upgrade() -> None:
             op.execute(
                 sa.text(
                     "UPDATE services SET outcall_price = price "
-                    "WHERE (allow_out_call = 1 OR allow_out_call = true) AND outcall_price IS NULL"
+                    "WHERE allow_out_call IS TRUE AND outcall_price IS NULL"
                 )
             )
         except Exception:

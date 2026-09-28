@@ -54,8 +54,12 @@ def check_slot_overlaps(
         if b_end.tzinfo is None:
             b_end = b_end.replace(tzinfo=timezone.utc)
 
-        buf_before = max(15, b.service.buffer_before) if (b.service and b.service.buffer_before) else 0
-        buf_after = max(15, b.service.buffer_after) if (b.service and b.service.buffer_after) else 0
+        if getattr(b, "service_mode", None) == "out_call":
+            buf_before = getattr(b.service, "outcall_buffer_before", 0) if b.service else 15
+            buf_after = getattr(b.service, "outcall_buffer_after", 0) if b.service else 15
+        else:
+            buf_before = max(15, b.service.buffer_before) if (b.service and b.service.buffer_before) else 0
+            buf_after = max(15, b.service.buffer_after) if (b.service and b.service.buffer_after) else 0
         blocked_start = b_start - timedelta(minutes=buf_before)
         blocked_end = b_end + timedelta(minutes=buf_after)
 

@@ -19,6 +19,7 @@ node_modules/
 
 # Databases
 *.db
+!app/services/routing/data/au_postcodes.db
 # Dev Dashboard logs and pids
 dev-dashboard/logs/*.log
 dev-dashboard/pids.json

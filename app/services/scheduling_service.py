@@ -46,9 +46,14 @@ def compute_availability(
     start_time: datetime,
     end_time: datetime,
     desired_duration: Optional[int] = None,
+    service_mode: str = "in_call",
+    client_suburb: Optional[str] = None,
+    service_address: Optional[str] = None,
+    client_postcode: Optional[str] = None,
 ) -> List[dict]:
     """Compute available timezone-aware UTC slots for a service.
 
+    Supports in-call and Phase 3 out-call backward-chaining availability.
     Scans day-by-day in the UTC search window [start_time, end_time] and returns
     all valid time slots matching provider working rules, overrides, and resource availability.
     """
@@ -160,32 +165,12 @@ def compute_availability(
             if working_start >= working_end:
                 continue
 
-            # Step 5: Determine candidate slot starts
             duration_minutes = desired_duration or service.duration
             if duration_minutes <= 0:
                 continue
             duration = timedelta(minutes=duration_minutes)
 
-            candidate_starts: List[datetime] = []
-            if service.fixed_start_times:
-                for time_str in service.fixed_start_times.split(','):
-                    time_str = time_str.strip()
-                    if not time_str:
-                        continue
-                    h, m = map(int, time_str.split(':'))
-                    slot_start = datetime.combine(current_date, time(h, m)).replace(tzinfo=timezone.utc)
-                    if slot_start >= working_start and slot_start + duration <= working_end:
-                        candidate_starts.append(slot_start)
-            else:
-                current_slot = working_start
-                while current_slot + duration <= working_end:
-                    candidate_starts.append(current_slot)
-                    current_slot += timedelta(minutes=15)
-
-            if not candidate_starts:
-                continue
-
-            # Step 6: Query overlapping constraints once per day/provider for peak high-performance
+            # Query overlapping constraints once per day/provider for peak high-performance
             now_utc = datetime.now(timezone.utc)
             margin_start = working_start - timedelta(hours=4)
             margin_end = working_end + timedelta(hours=4)
@@ -224,6 +209,47 @@ def compute_availability(
                 )
                 .all()
             )
+
+            # Phase 3 Out-Call Operational Window Engine
+            if service_mode == "out_call":
+                from .booking.availability_service import evaluate_outcall_day_slots
+                dest = service_address or client_suburb or client_postcode
+                outcall_slots = evaluate_outcall_day_slots(
+                    db,
+                    prov=prov,
+                    service=service,
+                    current_date=current_date,
+                    working_start=working_start,
+                    working_end=working_end,
+                    duration_minutes=duration_minutes,
+                    active_bookings=active_bookings,
+                    provider_blocked=provider_blocked,
+                    active_reservations=active_reservations,
+                    destination=dest,
+                    location=location,
+                )
+                results.extend(outcall_slots)
+                continue
+
+            # In-Call Candidate slot evaluation (100% backward-compatible)
+            candidate_starts: List[datetime] = []
+            if service.fixed_start_times:
+                for time_str in service.fixed_start_times.split(','):
+                    time_str = time_str.strip()
+                    if not time_str:
+                        continue
+                    h, m = map(int, time_str.split(':'))
+                    slot_start = datetime.combine(current_date, time(h, m)).replace(tzinfo=timezone.utc)
+                    if slot_start >= working_start and slot_start + duration <= working_end:
+                        candidate_starts.append(slot_start)
+            else:
+                current_slot = working_start
+                while current_slot + duration <= working_end:
+                    candidate_starts.append(current_slot)
+                    current_slot += timedelta(minutes=15)
+
+            if not candidate_starts:
+                continue
 
             for slot_start in candidate_starts:
                 slot_end = slot_start + duration
