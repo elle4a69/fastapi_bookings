@@ -6,9 +6,16 @@ generation/execution, and conversational AI advisory with web research.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
+
+try:
+    from openai import AsyncOpenAI
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
 
 from .code_auditor import code_auditor
 from .telemetry_sentinel import telemetry_sentinel
@@ -20,6 +27,32 @@ from .skill_library import skill_library
 from .alert_dispatcher import alert_dispatcher
 
 logger = logging.getLogger(__name__)
+
+_ADVISORY_SYSTEM_PROMPT = """\
+You are the Resident Agent — an expert autonomous software engineer and architect \
+embedded inside the FastAPI Bookings platform.
+
+Platform context:
+- Python FastAPI backend (SQLAlchemy, Alembic, Pydantic v2, async)
+- React 19 + Vite + TypeScript frontend (Tailwind, Radix UI / shadcn)
+- Multi-tenant SaaS: tenants, providers, locations, resources, services, bookings
+- SMS outbox (Twilio), real-time voice, OpenTelemetry → SigNoz, Stripe payments
+- Monorepo: app/, frontend/, codex-control-centre/, signoz/, mapbox/, shortURLs/
+- Autonomous monitoring via Resident Agent (health score, sentinel scheduler, \
+remediation planner, fix executor)
+- Governance rules enforced via AGENTS.md: scope discipline, no secrets in logs, \
+no blanket git staging, no destructive actions without explicit approval
+
+Your role in this conversation:
+- Answer the user's technical or architectural question directly and concisely
+- Cite relevant files or services when helpful (e.g. app/services/sms/, \
+app/api/routers/)
+- When relevant, suggest the smallest safe change rather than a full redesign
+- Flag any AGENTS.md constraints that apply
+- If web research results are provided, synthesise them into your answer
+- Format your response in clean markdown with headers and code blocks where useful
+"""
+
 
 
 class ResidentAgentEngine:
@@ -202,13 +235,16 @@ class ResidentAgentEngine:
         enable_web_research: bool = True,
         domain: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Conversational AI advisory endpoint with internet research and best-practice proposals."""
+        """Conversational AI advisory endpoint — calls GPT-4o with project context,
+        web research results, and local skill citations. Falls back to a structured
+        template response if the OpenAI key is absent or the call fails."""
         await event_broker.publish(
             "thought",
             f"Analyzing advisory inquiry: '{prompt[:100]}...'",
             title="Advisory Request Received",
         )
 
+        # ── 1. Web research ──────────────────────────────────────────────────
         research_data = None
         if enable_web_research:
             await event_broker.publish(
@@ -218,31 +254,100 @@ class ResidentAgentEngine:
             )
             research_data = await web_researcher.research(query=prompt, domain=domain)
 
-        # Synthesize advisory recommendations
         recommendations: List[str] = []
         if research_data:
             recommendations.extend(research_data.get("recommendations", []))
 
-        analysis = (
-            f"Based on repository architecture and guidelines in AGENTS.md, here is the architectural strategy for your inquiry:\n\n"
-            f"• Scope Discipline: Isolate service modifications strictly within relevant domain packages (app/services/).\n"
-            f"• Concurrency & Locking: Use transactional row leases when coordinating multi-worker outbox or calendar tasks.\n"
-            f"• Privacy & Telemetry: Ensure customer PII and credential secrets are strictly redacted from logs and tracing attributes.\n"
-        )
-
-        # Extract or discover matching skills from local library
-        skills = []
+        # ── 2. Local skill citations ─────────────────────────────────────────
+        skills: List[Any] = []
         if research_data and research_data.get("skills"):
             skills = research_data["skills"]
         else:
             skills = skill_library.find_relevant_skills(prompt, top_k=3)
 
-        if skills:
-            analysis += "\n\nReferenced Engineering Skills (Local Library C:\\Users\\Frank\\skills):\n"
-            for sk in skills:
-                analysis += f"• **{sk['name']}**: {sk['description']}\n"
+        # ── 3. LLM advisory call ─────────────────────────────────────────────
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        try:
+            from app.core.config import settings as _settings
+            api_key = api_key or getattr(_settings, "OPENAI_API_KEY", "") or ""
+        except Exception:
+            pass
 
-        advisory_response = {
+        analysis: str
+        if _OPENAI_AVAILABLE and api_key:
+            await event_broker.publish(
+                "step",
+                {"step": "llm_synthesis", "model": "gpt-4o"},
+                title="Synthesising Advisory with GPT-4o",
+            )
+            try:
+                # Build a rich user message including research context
+                user_parts: List[str] = [f"**User question:** {prompt}"]
+
+                if research_data and research_data.get("summary"):
+                    user_parts.append(
+                        f"\n**Web research summary:**\n{research_data['summary']}"
+                    )
+                if research_data and research_data.get("sources"):
+                    src_lines = "\n".join(
+                        f"- {s}" for s in research_data["sources"][:5]
+                    )
+                    user_parts.append(f"\n**Sources consulted:**\n{src_lines}")
+                if recommendations:
+                    rec_lines = "\n".join(f"- {r}" for r in recommendations[:5])
+                    user_parts.append(
+                        f"\n**Curated best-practice recommendations:**\n{rec_lines}"
+                    )
+                if skills:
+                    skill_lines = "\n".join(
+                        f"- **{sk['name']}**: {sk['description']}" for sk in skills[:3]
+                    )
+                    user_parts.append(
+                        f"\n**Relevant local engineering skills:**\n{skill_lines}"
+                    )
+                if self._active_issues:
+                    active = list(self._active_issues.values())[:3]
+                    issue_lines = "\n".join(
+                        f"- [{i['severity']}] {i['title']}" for i in active
+                    )
+                    user_parts.append(
+                        f"\n**Currently active system issues:**\n{issue_lines}"
+                    )
+
+                user_message = "\n".join(user_parts)
+
+                client = AsyncOpenAI(api_key=api_key)
+                completion = await client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": _ADVISORY_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_message},
+                    ],
+                    temperature=0.3,
+                    max_tokens=1500,
+                )
+                analysis = completion.choices[0].message.content or ""
+                logger.info(
+                    "Advisory GPT-4o call succeeded — %d prompt tokens, %d completion tokens",
+                    completion.usage.prompt_tokens if completion.usage else 0,
+                    completion.usage.completion_tokens if completion.usage else 0,
+                )
+            except Exception as exc:
+                logger.warning("GPT-4o advisory call failed (%s); using fallback template.", exc)
+                analysis = self._fallback_advisory_template(prompt, skills)
+        else:
+            if not api_key:
+                logger.info("OPENAI_API_KEY not set — advisory using fallback template.")
+            analysis = self._fallback_advisory_template(prompt, skills)
+
+        # ── 4. Publish completion ────────────────────────────────────────────
+        await event_broker.publish(
+            "thought",
+            "Advisory synthesis complete.",
+            title="Advisory Response Ready",
+        )
+
+        return {
             "prompt": prompt,
             "web_research_enabled": enable_web_research,
             "research_summary": research_data.get("summary") if research_data else None,
@@ -256,13 +361,24 @@ class ResidentAgentEngine:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-        await event_broker.publish(
-            "thought",
-            "Advisory synthesis complete.",
-            title="Advisory Response Ready",
-        )
+    # ── helpers ──────────────────────────────────────────────────────────────
 
-        return advisory_response
+    @staticmethod
+    def _fallback_advisory_template(prompt: str, skills: List[Any]) -> str:
+        """Structured fallback used when the LLM is unavailable."""
+        lines = [
+            "Based on repository architecture and guidelines in AGENTS.md, here is the architectural strategy for your inquiry:",
+            "",
+            "• **Scope Discipline**: Isolate service modifications strictly within relevant domain packages (`app/services/`).",
+            "• **Concurrency & Locking**: Use transactional row leases when coordinating multi-worker outbox or calendar tasks.",
+            "• **Privacy & Telemetry**: Ensure customer PII and credential secrets are strictly redacted from logs and tracing attributes.",
+        ]
+        if skills:
+            lines.append("\n\n**Referenced Engineering Skills (Local Library `C:\\Users\\Frank\\skills`):**")
+            for sk in skills:
+                lines.append(f"• **{sk['name']}**: {sk['description']}")
+        lines.append("\n> ⚠️ *GPT-4o advisory unavailable — set `OPENAI_API_KEY` in `.env` to enable live AI responses.*")
+        return "\n".join(lines)
 
 
 # Global resident agent engine singleton

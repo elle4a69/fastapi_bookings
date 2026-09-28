@@ -48,6 +48,8 @@ def build_bootcamp_instructions(
     custom_notes: Optional[str] = None,
     system_prompt_template: Optional[str] = None,
     style_profile: Optional[Dict[str, int]] = None,
+    business_name: str = "Booking Services",
+    provider_name: Optional[str] = None,
 ) -> str:
     bootcamp_core_safety = (
         "Immutable Platform Safety Rules:\n"
@@ -64,7 +66,23 @@ def build_bootcamp_instructions(
         "Never claim a booking is confirmed."
     )
 
-    tenant_policy = system_prompt_template or f"You are {agent_name}, a helpful and professional booking assistant."
+    traits_list = [f"{k.capitalize()}: {v}/5" for k, v in (style_profile or {}).items()]
+    traits_str = ", ".join(traits_list) if traits_list else "Professional: 4/5, Warm: 4/5"
+    p_name = provider_name or agent_name
+    placeholders = {
+        "agent_name": agent_name,
+        "traits": traits_str,
+        "business_name": business_name,
+        "provider_name": p_name,
+    }
+
+    if system_prompt_template:
+        rendered = system_prompt_template
+        for k, v in placeholders.items():
+            rendered = rendered.replace(f"{{{k}}}", str(v))
+        tenant_policy = rendered
+    else:
+        tenant_policy = f"You are {agent_name}, a helpful and professional booking assistant for {business_name}."
 
     builder = (
         UnifiedPromptBuilder()
@@ -147,9 +165,34 @@ def generate_bootcamp_tori_reply(
         openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
         client = OpenAI(api_key=openai_key)
 
+        if not settings_data and resolved_db and resolved_tenant_id:
+            from ...models.sms_bootcamp import SmsBootcampSettings
+            query = resolved_db.query(SmsBootcampSettings).filter(SmsBootcampSettings.tenant_id == resolved_tenant_id)
+            if resolved_provider_id is not None:
+                query = query.filter(SmsBootcampSettings.provider_id == resolved_provider_id)
+            else:
+                query = query.filter(SmsBootcampSettings.provider_id.is_(None))
+            settings_obj = query.first()
+            if not settings_obj and resolved_provider_id is not None:
+                settings_obj = (
+                    resolved_db.query(SmsBootcampSettings)
+                    .filter(SmsBootcampSettings.tenant_id == resolved_tenant_id, SmsBootcampSettings.provider_id.is_(None))
+                    .first()
+                )
+            if settings_obj:
+                settings_data = {
+                    "agent_name": settings_obj.agent_name,
+                    "model": getattr(settings_obj, "model", "gpt-4o-mini") or "gpt-4o-mini",
+                    "role_description": getattr(settings_obj, "role_description", None),
+                    "custom_training_notes": settings_obj.training_notes or settings_obj.custom_training_notes,
+                    "system_prompt_template": settings_obj.system_prompt_template,
+                    "learned_facts": getattr(settings_obj, "learned_facts", None),
+                }
+
         agent_name = (settings_data or {}).get("agent_name", "Tori")
-        custom_notes = (settings_data or {}).get("custom_training_notes")
+        custom_notes = (settings_data or {}).get("training_notes") or (settings_data or {}).get("custom_training_notes")
         system_template = (settings_data or {}).get("system_prompt_template")
+        configured_model = (settings_data or {}).get("model") or os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini")
 
         bootcamp_core_safety = (
             "Immutable Platform Safety Rules:\n"
@@ -166,7 +209,93 @@ def generate_bootcamp_tori_reply(
             "Never claim a booking is confirmed."
         )
 
-        tenant_policy = system_template or f"You are {agent_name}, a helpful and professional booking assistant."
+        services = []
+        provider = None
+        business_name = "Booking Services"
+        if resolved_db and resolved_tenant_id:
+            from ...models.service import Service
+            from ...models.provider import Provider
+            from ...models.tenant import Tenant
+
+            t_obj = resolved_db.query(Tenant).filter(Tenant.id == resolved_tenant_id).first()
+            if t_obj and t_obj.name:
+                business_name = t_obj.name
+
+            if resolved_provider_id:
+                provider = (
+                    resolved_db.query(Provider)
+                    .filter(Provider.id == resolved_provider_id, Provider.tenant_id == resolved_tenant_id)
+                    .first()
+                )
+                from ...models.service_provider import ServiceProvider
+                services = (
+                    resolved_db.query(Service)
+                    .join(ServiceProvider, ServiceProvider.service_id == Service.id)
+                    .filter(
+                        Service.tenant_id == resolved_tenant_id,
+                        Service.active.is_(True),
+                        ServiceProvider.provider_id == resolved_provider_id,
+                        ServiceProvider.tenant_id == resolved_tenant_id,
+                    )
+                    .all()
+                )
+            else:
+                services = (
+                    resolved_db.query(Service)
+                    .filter(Service.tenant_id == resolved_tenant_id, Service.active.is_(True))
+                    .all()
+                )
+
+        provider_name = provider.name if provider else agent_name
+        traits_list = [f"{k.capitalize()}: {v}/5" for k, v in (style_profile or {}).items()]
+        traits_str = ", ".join(traits_list) if traits_list else "Professional: 4/5, Warm: 4/5"
+
+        def _safe_render_template(tpl: str) -> str:
+            replacements = {
+                "agent_name": agent_name,
+                "traits": traits_str,
+                "business_name": business_name,
+                "provider_name": provider_name,
+            }
+            res = tpl
+            for k, v in replacements.items():
+                res = res.replace(f"{{{k}}}", str(v))
+            return res
+
+        tenant_policy = None
+        if system_template:
+            tenant_policy = _safe_render_template(system_template)
+        elif resolved_db and resolved_tenant_id:
+            from ...models.sms_knowledge import SmsPromptProfile
+            if resolved_provider_id:
+                prov_profile = (
+                    resolved_db.query(SmsPromptProfile)
+                    .filter(
+                        SmsPromptProfile.tenant_id == resolved_tenant_id,
+                        SmsPromptProfile.provider_id == resolved_provider_id,
+                        SmsPromptProfile.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if prov_profile and prov_profile.system_prompt:
+                    tenant_policy = _safe_render_template(prov_profile.system_prompt)
+
+            if not tenant_policy:
+                global_profile = (
+                    resolved_db.query(SmsPromptProfile)
+                    .filter(
+                        SmsPromptProfile.tenant_id == resolved_tenant_id,
+                        SmsPromptProfile.provider_id.is_(None),
+                        SmsPromptProfile.sms_account_id.is_(None),
+                        SmsPromptProfile.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if global_profile and global_profile.system_prompt:
+                    tenant_policy = _safe_render_template(global_profile.system_prompt)
+
+        if not tenant_policy:
+            tenant_policy = f"You are {agent_name}, a helpful and professional booking assistant for {business_name}."
 
         builder = (
             UnifiedPromptBuilder(tenant_id=resolved_tenant_id, provider_id=resolved_provider_id)
@@ -178,6 +307,9 @@ def generate_bootcamp_tori_reply(
                 custom_notes=custom_notes,
             )
         )
+        if services:
+            builder.with_structured_config(provider=provider, services=services)
+
         if active_retrieval_result:
             builder.with_retrieval_result(active_retrieval_result).with_spec_54(True)
 
@@ -196,7 +328,7 @@ def generate_bootcamp_tori_reply(
             messages.append({"role": role, "content": item.get("text", "")})
 
         response = client.chat.completions.create(
-            model=os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini"),
+            model=configured_model,
             messages=messages,
             temperature=0.7,
             max_tokens=250,

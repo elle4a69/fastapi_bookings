@@ -50,7 +50,7 @@ frontend/src/pages/admin/sms/
     - Rounded auto-expanding textarea (`rounded-2xl px-3.5 py-1.5 text-[13px] min-h-[38px] max-h-32 leading-snug`) with auto-grow capped at 128px height.
     - Compact circular green send button (`h-[38px] w-[38px]` with `h-3.5 w-3.5` `<Send />` icon) supporting `Cmd+Enter` / `Ctrl+Enter`.
   - Mode-aware bottom 5-button toolbar (`showBottomToolbar?: boolean`, default `mode !== "bootcamp"`): Renders `AI On/Off`, `Tools` (`QuickToolsSheet`), `Booking` (deep-linking), `Pin/Unpin`, and `Block/Unblock` in Live SMS mode while cleanly suppressing the toolbar in Bootcamp mode.
-  - AI Correction Flag Modal: Dialog prompting for correction reason and corrected ideal wording, submitting ground-truth evidence to learning queues without mutating durable knowledge.
+  - AI Correction Flag Modal: Dialog prompting for correction reason and corrected ideal wording. Permits immediate saving when ideal wording is provided (with automatic fallback to `"Manual response correction"` if reason is omitted), updates message text locally and dispatches to learning queue endpoints, all styled with application primary theme tokens (`bg-primary`, `text-primary-foreground`).
 - **Dedicated Assistant Messages Replica ([`assistant-messages-page.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/assistant-messages-page.tsx))**: Standalone 1:1 replica of Assistant UI's `MobileInboxView` with complete dark-theme and semantic-token compliance. Features a mobile-first centered card layout (`max-w-3xl bg-card text-card-foreground border-x border-border shadow-md`), compact list header with search and action pills (`px-3 py-2`), global Catch-up refresh button, global AI toggle pill, and Train toggle pill. In active conversation mode, seamlessly embeds `<AssistantThreadPanel mode="live" ... />` wired to live SMS endpoints and draft review actions.
 - **Live Inbox ([`inbox.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/inbox.tsx))**: Full 3-pane triage workspace matching Assistant UI layout conventions. Features Pane 1 (searchable, state-filtered conversation list), Pane 2 (timeline stream with AI draft card moderation, audit events, manual composer with quick-tools trigger `<Zap />`, and `Cmd+Enter`/`Ctrl+Enter` dispatch), and Pane 3 (persistent right client context, linked booking/arrival snippet, chronological internal notes stream, and inline note composer). Supports desktop collapse/expand toggle and responsive mobile overlay drawer.
 - **Quick Tools Bottom Sheet ([`quick-tools-sheet.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/quick-tools-sheet.tsx))**: Bottom sheet overlay providing 5 programmable macro buttons (with long-press customization up to 8 chars) and real-time calendar availability inspection grouped by day and service duration (15m–90m). Selecting any macro or slot automatically pastes text into the composer and closes the sheet.
@@ -58,10 +58,10 @@ frontend/src/pages/admin/sms/
 - **Triage Queue ([`triage-tab.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/triage-tab.tsx))**: Human-in-the-loop draft triage workspace consuming `GET /api/admin/sms/conversations/drafts/queue`. Displays customer speech bubbles for inbound inquiry context, amber-dashed proposed AI drafts with character/segment counters, individual approve (`/messages/{id}/approve`), discard (`/messages/{id}/discard`), inline editing with single-turn review (`/drafts/{id}/review`), and multi-select bulk discard (`/drafts/bulk/discard`) with audited reasons.
 - **Dedicated Assistant Bootcamp Page ([`assistant-bootcamp-page.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/assistant-bootcamp-page.tsx))**: Faithful 1:1 reproduction of Assistant UI's `BootcampView.tsx` with a responsive 3-column layout:
   - **Header Toolbar**: Title **"Tori Boot Camp"**, subtitle *"Simulated only · paced updates · no SMS or bookings"*, run status pill (`running` [emerald], `paused` [amber], `failed` [red], `completed`/`stopped` [slate], `idle`), action buttons (`Start`, `Pause`, `Resume`, `Stop`, `Reset`), "Bootcamp Settings" shortcut button (opens the isolated settings sheet or navigates to settings), and real-time notice banner.
-  - **Left Column (Personas & Turn Controls)**: Header with dynamic thread counter, select all/clear controls, mobile-responsive persona selector for screens `< lg`, scrollable list of 12 persona cards (`cranky-carl`, `sarcastic-sam`, `deadpan-dave`, `passive-paul`, `happy-harry`, `nervous-neil`, `time-waster-terry`, `chatty-charlie`, `budget-bob`, `curious-colin`, `discreet-dominic`, `pushy-pete`) with category badges, description snippets, selection checkboxes, active thread highlights (`border-indigo-500 bg-indigo-500/10`), warning icons (`AlertTriangle`) when handoff is required, and turns slider (range 2 to 12, default 5) with live numerical readout.
-  - **Middle Column (Interactive Conversation Stream)**: Embeds the unified `<AssistantThreadPanel mode="bootcamp" ... />`, rendering authentic bubble styling, live thinking pulse animation during turn processing, the high-visibility red Information Request Accordion for ground-truth learning capture (`POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond`), AI Correction Flagging (`POST /api/admin/sms/bootcamp/conversations/{id}/corrections`), and staff manual prompt injection.
+  - **Left Column (Personas & Turn Controls)**: Header with dynamic thread counter, select all/clear controls, mobile-responsive persona selector for screens `< lg`, scrollable list of 12 persona cards (`cranky-carl`, `sarcastic-sam`, `deadpan-dave`, `passive-paul`, `happy-harry`, `nervous-neil`, `time-waster-terry`, `chatty-charlie`, `budget-bob`, `curious-colin`, `discreet-dominic`, `pushy-pete`) with category badges, description snippets, selection checkboxes, active thread highlights (`border-primary bg-primary/10`), warning icons (`AlertTriangle`) when handoff is required, compact inline turns-per-thread slider (`Turns/Thread: (X)`), segmented 3-button autonomy level group (`L1 Review`, `L2 Semi`, `L3 Full`), and compact test scenario selector.
+  - **Middle Column (Interactive Conversation Stream)**: Embeds the unified `<AssistantThreadPanel mode="bootcamp" ... />`, rendering authentic bubble styling with primary theme tokens, live thinking pulse animation during turn processing, the high-visibility red Information Request Accordion for ground-truth learning capture (`POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond`), AI Correction Flagging (`POST /api/admin/sms/bootcamp/conversations/{id}/corrections`), and staff manual prompt injection.
   - **Right Column (Style Laboratory)**: Calibrate Tori's behavioral persona across 8 sliders (0 to 5 scale, step 1): `Flirtiness`, `Cheerfulness`, `Wit`, `Sarcasm`, `Warmth`, `Directness`, `Chattiness`, `Patience`. Values affect Boot Camp only until deliberately applied. Features **"Apply to Tori"** (`Save` icon) posting to `/api/admin/sms/bootcamp/profile/apply` and **"Undo"** (`Undo2` icon) posting to `/api/admin/sms/bootcamp/profile/undo`.
-  - **Live Simulation Pacing & Polling**: Paces multi-turn simulated exchanges and polls `GET /api/admin/sms/bootcamp/runs/latest` every 2.5 seconds when active.
+  - **Live Authentic Backend Wiring & Polling**: Connects directly to backend `POST /api/admin/sms/bootcamp/runs` and polls `GET /api/admin/sms/bootcamp/runs/latest` every 2.5 seconds. Directly maps backend conversation UUIDs, messages, draft statuses, and handoff flags into the active workspace, ensuring seamless real interaction. Cleanly eliminates any artificial or hardcoded prefixing (e.g. "We really care about taking great care of you!").
 - **Isolated Bootcamp Settings ([`bootcamp-settings-tab.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/bootcamp-settings-tab.tsx))**:
   Clean settings view completely isolated from FastAPI Bookings's main business settings:
   - **Agent Configuration**: Agent name (default "Tori"), synthetic model identifier (`gpt-4o-mini`, etc.), and active role description.
@@ -69,6 +69,8 @@ frontend/src/pages/admin/sms/
   - **Training & Reference Data**: Custom training notes and learned facts editor captured during bootcamp information requests.
   - **Behavioral Settings Preview**: Readout comparing current active calibration vs prior applied profile across the 8 style dimensions.
   - **Save & Reset Actions**: Consumes `GET /api/admin/sms/bootcamp/settings` and `PUT /api/admin/sms/bootcamp/settings` with sandboxed fallback.
+  - **Partial Profile Safety**: API and local-storage settings are normalized against `DEFAULT_STYLE_PROFILE`; missing persona traits render as safe defaults rather than crashing the preview.
+- **RAG & Prompts settings ([`settings.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/settings.tsx))**: Tenant-wide and provider-scoped prompt/knowledge editors. The shared dialog layout ([`settings-dialog-layout.ts`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/settings-dialog-layout.ts)) is desktop-wide, constrained to the viewport, scrolls its form body, and provides fixed-size, vertically resizable textareas with their own scrollbars for long facts and system instructions.
 - **Scenario Simulator ([`simulator.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/simulator.tsx))**: Dedicated test bench for synthetic webhook turns and scenario fixtures. Scenario creation is deliberately absent from the live inbox.
 
 ---
@@ -269,48 +271,43 @@ Client sends SMS ("I'm here in bay 4")
 
 ### 9. Assistant Bootcamp Simulation & Information Request Learning Loop
 
-1. **Persona Selection, Multi-Turn Setup & Run Configuration**:
-   - Operators select from 12 distinct customer personas covering diverse customer behaviors (`cranky-carl`, `sarcastic-sam`, `deadpan-dave`, `passive-paul`, `happy-harry`, `nervous-neil`, `time-waster-terry`, `chatty-charlie`, `budget-bob`, `curious-colin`, `discreet-dominic`, `pushy-pete`).
-   - The turns slider sets conversation depth from 2 to 12 turns (default: 5 turns).
-   - **Autonomy Level Selector (Spec 37)**: Compact 3-option segmented control (`Level 1`, `Level 2`, `Level 3`):
-     - `Level 1` (Review Every Turn): Tori generates unsent drafts on every turn, pausing the thread until operator approval/editing.
-     - `Level 2` (Semi-Autonomous, Default): Automatically dispatches replies, pausing only on handoffs and knowledge gaps.
-     - `Level 3` (Full Simulation): Fully autonomous multi-turn execution without human intervention.
-   - **Scenario Pack Selector (Specs 33, 34)**: Dropdown consuming `GET /api/admin/sms/bootcamp/scenarios` allowing "All Scenarios" (balanced test distribution) or targeted scenario testing (e.g., *Pricing Enquiry*, *Unavailable Slot Negotiation*, *Booking Reschedule*, *Late Arrival Notice*, *Unknown Personal Preference*, *Impatient Client*, *Refund Policy Exception*).
-   - Thread list indicates turn progression (`Turn X/Y`) and status (`idle`, `running`, `paused`, `completed`, `needs_handoff`).
-
-2. **Style Laboratory Calibration**:
-   - Calibrates 8 personality traits on a 0 to 5 scale: `Flirtiness`, `Cheerfulness`, `Wit`, `Sarcasm`, `Warmth`, `Directness`, `Chattiness`, and `Patience`.
-   - Sliders dynamically reshape Tori's wording in real-time simulated exchanges without modifying production settings until explicitly saved.
-   - **Apply to Tori**: Posts to `/api/admin/sms/bootcamp/profile/apply` and stores the active calibration for undo.
-   - **Undo**: Posts to `/api/admin/sms/bootcamp/profile/undo` to restore previous calibration.
-
-3. **Multi-Thread Simulated Execution**:
-   - Clicking **Start** initiates multi-turn exchanges across all selected personas, dispatching payload `{ persona_ids, max_turns, style_profile, autonomy_level, scenario_ids }` to `POST /api/admin/sms/bootcamp/runs`.
+1. **Provider Scoping & Toolbar Controls**:
+   - The Bootcamp toolbar provides a **Provider Selector** dropdown populated dynamically from `/api/admin/providers`.
+   - Selecting a provider scopes the entire Bootcamp context: run creation (`provider_id`), conversation threads, Style Lab traits, settings loading/saving, and active prompt assembly.
    - Run status is prominently tracked via the header Status Pill (`running` [emerald], `paused` [amber], `failed` [red], `completed`/`stopped` [slate]).
-   - Includes real-time simulation controls: **Pause**, **Resume**, **Stop**, and **Reset** (clearing all run threads via `DELETE /api/admin/sms/bootcamp/runs`).
-   - Automatic polling and pacing executes every 2.5 seconds against `GET /api/admin/sms/bootcamp/runs/latest`.
+   - **Active Run Controls**: Clicking **Pause**, **Resume**, or **Stop** issues `POST /api/admin/sms/bootcamp/runs/{run_id}/control` with `{ operation: "pause" | "resume" | "stop" }` using the active run ID. Server errors are surfaced immediately via `toast.error` instead of silently simulating success.
 
-4. **Unified Thread Panel & Tori Information Request Workflow**:
-   - The middle column of Bootcamp embeds the shared `<AssistantThreadPanel mode="bootcamp" ... />`, replicating the exact look, feel, timeline bubbles, composer, and bottom toolbar used in the live Messages tab.
-   - When a persona probes an unconfirmed policy, refund exception, or technical equipment specification (such as `cranky-carl` requesting an exception for a same-day no-show or `curious-colin` requesting autoclave spore testing specs), Tori flags the thread with `needsHandoff: true`.
-   - The thread workspace triggers the high-visibility red **Information Request Accordion** (`bg-red-700 hover:bg-red-800 text-white`) displaying the knowledge gap prompt.
-   - Operators input the ground-truth business fact into the staff answer textarea and click *"Send reply and save learning"*.
-   - Frontend calls `POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond` with `{ information: answer }`.
-   - Tori absorbs the lesson fact, clears the handoff state, retries the response incorporating the newly learned fact, and resumes multi-turn simulation.
+2. **Persona Selection, Multi-Turn Setup & Multiple Scenarios**:
+   - Operators select from 12 distinct customer personas covering diverse customer behaviors (`cranky-carl`, `sarcastic-sam`, `deadpan-dave`, `passive-paul`, `happy-harry`, `nervous-neil`, `time-waster-terry`, `chatty-charlie`, `budget-bob`, `curious-colin`, `discreet-dominic`, `pushy-pete`).
+   - **Scenario Catalogs & Multiple Scenarios per Persona**: Conversations are indexed and keyed by `conversationId` rather than `personaId`. Selecting multiple scenarios alongside personas generates distinct parallel conversations per scenario without collision.
+   - **Turns per Thread**: Sleek horizontal inline row pairing the label and live numeric readout (`Turns/Thread: (X)`) directly with the range slider (`accent-primary`, min 2, max 12, default 5).
+   - **Autonomy Level Selector**: Ultra-compact segmented 3-button bar (`L1 Review`, `L2 Semi`, `L3 Full`).
+     - `L1 Review` (Review Every Turn): Pauses on drafts for operator sign-off.
+     - `L2 Semi` (Semi-Autonomous, Default): Automatically dispatches replies, pausing on handoffs and knowledge gaps.
+     - `L3 Full` (Full Simulation): Fully autonomous execution across all turns.
 
-5. **AI Correction Flagging & In-Place Learning Loop**:
-   - Sent AI responses in Bootcamp display the **Flag** icon button.
-   - Clicking Flag opens the AI Correction Flag Modal, allowing operators to enter the correction reason and corrected ideal wording.
-   - Submissions post to `POST /api/admin/sms/bootcamp/conversations/{id}/corrections` with `{ message_id, reason, corrected_wording }`, triggering `toast.success("Correction saved to learning queue")` and updating the message text in place within the simulated thread.
+3. **Style Laboratory Calibration & Persistence**:
+   - Calibrates 8 personality traits on a 0 to 5 scale: `Flirtiness`, `Cheerfulness`, `Wit`, `Sarcasm`, `Warmth`, `Directness`, `Chattiness`, and `Patience`.
+   - On component mount or provider selection change, the active style profile is fetched from `GET /api/admin/sms/bootcamp/profile?provider_id={id}`.
+   - **Apply to Tori**: Posts `{ styleProfile: values, provider_id: selectedProviderId }` to `/api/admin/sms/bootcamp/profile/apply`.
+   - **Undo**: Posts `{ provider_id: selectedProviderId }` to `/api/admin/sms/bootcamp/profile/undo` to revert to previous calibration.
+
+4. **Bootcamp Settings & Model Configuration (`BootcampSettingsTab`)**:
+   - Dedicated provider-scoped settings interface persisting `agent_name`, `model` (e.g. `gpt-4o-mini`, `gpt-4o`), `role_description`, `training_notes`, and `learned_facts`.
+   - Supports prompt template placeholders: `{agent_name}`, `{traits}`, `{business_name}`, and `{provider_name}` with quick-insert badge buttons.
+   - Automatically synchronizes with provider selection and handles server response errors with explicit error toasts.
+
+5. **Unified Thread Panel & Tori Information Request Workflow**:
+   - The middle column of Bootcamp embeds the shared `<AssistantThreadPanel mode="bootcamp" ... />`.
+   - When a persona probes an unconfirmed policy or boundary, Tori flags `needsHandoff: true`.
+   - The thread workspace triggers the high-visibility red **Information Request Accordion** (`bg-red-700 hover:bg-red-800 text-white`).
+   - Submitting an answer calls `POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond` with `{ information: answer }`, which creates reviewable knowledge proposals, logs learning events with provider scoping, generates Tori's reply, and clears the handoff state.
 
 6. **Draft Turn Progression in Level 1 & Staff Injection**:
-   - In Level 1 autonomy, Tori generates draft responses rendered as interactive draft cards in `<AssistantThreadPanel mode="bootcamp" ... />`.
-   - **Approve Draft**: Clicking "Send" dispatches `action: 'approve'` to `POST /api/admin/sms/bootcamp/conversations/{id}/drafts/{message_id}/review`, marks the message as sent, and advances the simulation to the next customer turn.
-   - **Edit & Send Draft**: Operators can modify the draft text inline before approval; submitting calls the review endpoint with the edited content, saving learning diffs and advancing the turn.
+   - In Level 1 autonomy, Tori generates draft responses rendered as interactive draft cards.
+   - **Approve Draft**: Dispatches `action: 'approve'` to `POST /api/admin/sms/bootcamp/conversations/{id}/drafts/{message_id}/review`, transitions the draft to sent, updates local state, and advances the simulation to the next turn via `BOOTCAMP_RUNNER.advance_turn`.
    - **Discard Draft**: Discarding marks the draft as discarded and stops the thread.
-   - Staff can inject custom messages directly into the simulated exchange using the composer (`Cmd+Enter` / `Ctrl+Enter` or green send button), posting to `POST /api/admin/sms/bootcamp/conversations/{id}/messages`.
-   - Quick Tools sheet (`Zap` button) allows testing macro inserts and calendar slot proposals directly in simulation.
+   - **Edit & Send Draft**: Submits edited draft text, saving learning diffs and advancing the turn.
 
 7. **Sandbox Isolation & Safety**:
    - All Bootcamp conversations, runs, and settings are strictly sandboxed.
@@ -386,4 +383,7 @@ npx oxlint src/pages/admin/sms
 
 # Run focused operations-list regression tests
 node --experimental-strip-types --test src/pages/admin/sms/operations-state.test.ts
+
+# Run SMS prompt/knowledge dialog layout regression tests
+node --experimental-strip-types --test src/pages/admin/sms/settings-dialog-layout.test.ts
 ```

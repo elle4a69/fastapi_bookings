@@ -119,8 +119,12 @@ class SmsBootcampSettings(Base):
     active_style_profile = Column(JSON, nullable=False, default=dict)
     previous_style_profile = Column(JSON, nullable=True)
     agent_name = Column(String(64), nullable=False, default="Tori")
+    model = Column(String(64), nullable=False, default="gpt-4o-mini")
+    role_description = Column(Text, nullable=True)
     system_prompt_template = Column(Text, nullable=True)
     custom_training_notes = Column(Text, nullable=True)
+    training_notes = Column(Text, nullable=True)
+    learned_facts = Column(Text, nullable=True)
 
     updated_at = Column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now, nullable=False)
 

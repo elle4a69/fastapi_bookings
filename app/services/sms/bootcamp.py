@@ -656,6 +656,7 @@ class BootcampRunner:
         sync: bool = False,
         autonomy_level: int = 2,
         scenario_ids: Optional[List[str]] = None,
+        provider_id: Optional[int] = None,
     ) -> str:
         available = {p["id"]: p for p in PERSONAS}
         selected = [available[pid] for pid in persona_ids if pid in available]
@@ -677,6 +678,7 @@ class BootcampRunner:
         run = SmsBootcampRun(
             id=run_id,
             tenant_id=tenant_id,
+            provider_id=provider_id,
             status="running",
             selected_personas=[p["id"] for p in selected],
             selected_scenarios=scenario_ids if scenario_ids else None,
@@ -709,6 +711,7 @@ class BootcampRunner:
                 id=conv_id,
                 run_id=run_id,
                 tenant_id=tenant_id,
+                provider_id=provider_id,
                 persona_id=persona["id"],
                 persona_name=persona["name"],
                 scenario_id=scenario["id"] if scenario else None,
@@ -893,6 +896,7 @@ class BootcampRunner:
                 profile,
                 scenario=scenario,
                 tenant_id=tenant_id,
+                provider_id=getattr(conv, "provider_id", None),
                 db=db,
             )
 
@@ -1052,3 +1056,122 @@ class BootcampRunner:
             conv.status = "completed"
             conv.updated_at = utc_now()
             db.commit()
+
+    def advance_turn(
+        self,
+        db: Session,
+        conv: SmsBootcampConversation,
+        run: SmsBootcampRun,
+    ) -> None:
+        """Advance a single conversation by one turn following draft approval."""
+        next_turn = conv.current_turn + 1
+        if next_turn > run.max_turns:
+            conv.status = "completed"
+            conv.updated_at = utc_now()
+            db.commit()
+            return
+
+        available = {p["id"]: p for p in PERSONAS}
+        persona = available.get(conv.persona_id)
+        if not persona:
+            conv.status = "completed"
+            conv.updated_at = utc_now()
+            db.commit()
+            return
+
+        scenario = SCENARIOS_BY_ID.get(conv.scenario_id) if conv.scenario_id else None
+
+        messages = (
+            db.query(SmsBootcampMessage)
+            .filter(
+                SmsBootcampMessage.conversation_id == conv.id,
+                SmsBootcampMessage.tenant_id == conv.tenant_id,
+            )
+            .order_by(SmsBootcampMessage.created_at)
+            .all()
+        )
+        history = [{"id": m.id, "role": m.role, "text": m.text, "meta": m.meta} for m in messages]
+
+        seed = scenario.get("initial_prompt") if scenario else None
+        customer_reply = _call_generate_persona(self.generate_persona, persona, history, seed, scenario=scenario)
+        cust_msg = SmsBootcampMessage(
+            id=str(uuid.uuid4()),
+            conversation_id=conv.id,
+            tenant_id=conv.tenant_id,
+            role="persona",
+            text=customer_reply.strip(),
+            meta={"turn": next_turn, "scenario_id": conv.scenario_id},
+            created_at=utc_now(),
+        )
+        db.add(cust_msg)
+        db.flush()
+
+        updated_history = list(history)
+        updated_history.append({"id": cust_msg.id, "role": "persona", "text": customer_reply.strip(), "meta": cust_msg.meta})
+
+        profile = run.style_profile or DEFAULT_STYLE_PROFILE
+        tori_reply, handoff_reason = _call_generate_tori(
+            self.generate_tori,
+            updated_history,
+            profile,
+            scenario=scenario,
+            tenant_id=conv.tenant_id,
+            provider_id=conv.provider_id,
+            db=db,
+        )
+
+        conv.current_turn = next_turn
+        if run.autonomy_level == 1:
+            reply_text = tori_reply.strip() if tori_reply.strip() else "Thank you for reaching out. How can I help you today?"
+            tori_msg = SmsBootcampMessage(
+                id=str(uuid.uuid4()),
+                conversation_id=conv.id,
+                tenant_id=conv.tenant_id,
+                role="tori",
+                text=reply_text,
+                meta={"status": "draft", "turn": next_turn, "scenario_id": conv.scenario_id},
+                created_at=utc_now(),
+            )
+            db.add(tori_msg)
+            conv.status = "waiting_approval"
+        elif run.autonomy_level == 2:
+            if handoff_reason:
+                conv.status = "handoff"
+                conv.needs_handoff = True
+                conv.handoff_reason = handoff_reason
+            else:
+                if tori_reply.strip():
+                    tori_msg = SmsBootcampMessage(
+                        id=str(uuid.uuid4()),
+                        conversation_id=conv.id,
+                        tenant_id=conv.tenant_id,
+                        role="tori",
+                        text=tori_reply.strip(),
+                        meta={"status": "sent", "turn": next_turn, "scenario_id": conv.scenario_id},
+                        created_at=utc_now(),
+                    )
+                    db.add(tori_msg)
+                if next_turn >= run.max_turns:
+                    conv.status = "completed"
+                else:
+                    conv.status = "running"
+        else:
+            if tori_reply.strip():
+                tori_msg = SmsBootcampMessage(
+                    id=str(uuid.uuid4()),
+                    conversation_id=conv.id,
+                    tenant_id=conv.tenant_id,
+                    role="tori",
+                    text=tori_reply.strip(),
+                    meta={"status": "sent", "turn": next_turn, "scenario_id": conv.scenario_id},
+                    created_at=utc_now(),
+                )
+                db.add(tori_msg)
+            if next_turn >= run.max_turns:
+                conv.status = "completed"
+            else:
+                conv.status = "running"
+
+        conv.updated_at = utc_now()
+        db.commit()
+

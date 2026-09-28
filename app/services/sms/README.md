@@ -877,9 +877,12 @@ Mounted under `/api/admin/sms/bootcamp`:
 | `PUT` | `/api/admin/sms/bootcamp/settings` | Updates isolated Bootcamp agent configuration. | Admin / Tenant |
 
 ### Multi-Tenant & Simulation Isolation
-- All database queries and operations enforce `tenant_id == tenant.id`.
-- Zero live external network calls: offline simulation handles personas, clarification ladders, and knowledge gap triggers deterministically.
-- SMS dispatch and live carrier outbox jobs are completely bypassed during Bootcamp runs.
+### Authentic Runtime Convergence & Dialogue Pipeline
+Bootcamp dialogue generation in `bootcamp_service.py` is architecturally unified with the production `ai_orchestrator.py` message pipeline:
+- **Global Prompts & Policies**: When executing with tenant context, Bootcamp loads `SmsPromptProfile` (active global system prompt) and `SmsBootcampSettings` (style profile and custom training notes) directly from the database.
+- **Provider & Services Configuration**: Active `Service` and `Provider` records are loaded and mounted via `UnifiedPromptBuilder.with_structured_config(provider, services)`.
+- **Knowledge Retrieval**: Calls `knowledge_gateway.retrieve(...)` matching production (epistemic curator, Graphiti episodic memory, Redis epoch cache, provider rules).
+- **Clean Dialogue**: All artificial and hardcoded prefixes (such as "We really care about taking great care of you!") are eliminated. Agent dialogue reflects authentic tenant policy, knowledge, and calibrated style traits without boilerplate prefixes.
 
 ### Verification Commands
 
@@ -949,6 +952,101 @@ Import Summary: 1 prompts upserted, 6 policies upserted, 180 style examples impo
 & ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_import_assistant_ui.py -v
 ```
 
+---
 
+## 14. Persisted & Provider-Scoped Bootcamp Engine (Bootcamp Repair Brief Contracts)
 
+### Purpose & Scope
+
+The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped training and alignment playground. It enables operators to calibrate agent style traits, fine-tune system prompts, review draft responses, and resolve knowledge gaps across simulated customer personas and scenario packs without live carrier SMS or calendar mutations.
+
+### Key Architecture & Contracts
+
+1. **Provider Scoping & Tenant Isolation**:
+   - Every Bootcamp run, conversation, message, settings record, and learning event is strictly validated and scoped to `tenant_id` and optional `provider_id`.
+   - The helper `_validate_provider_id(db, tenant_id, provider_id)` enforces tenant boundaries, rejecting foreign or non-existent provider IDs with `404 Not Found`.
+   - Active services provided in prompt context are filtered strictly through the `ServiceProvider` junction table for the resolved provider, preventing cross-provider catalog leakage.
+
+2. **Settings Persistence & Dual Alias Support**:
+   - `SmsBootcampSettings` persists `agent_name`, `model` (default `gpt-4o-mini`), `role_description`, `system_prompt_template`, `custom_training_notes`, `training_notes`, and `learned_facts`.
+   - The settings endpoints (`GET` and `PUT /api/admin/sms/bootcamp/settings`) emit and accept both snake_case and camelCase aliases (e.g. `role_description` & `roleDescription`, `training_notes` & `trainingNotes`, `learned_facts` & `learnedFacts`, `provider_id` & `providerId`), and support wrapper shapes (`{ data: settings }` or direct JSON).
+
+3. **Style Lab Persistence & Undo Lifecycle**:
+   - `POST /api/admin/sms/bootcamp/profile/apply` accepts `{ styleProfile, provider_id }`, `{ data: { profile } }`, or direct traits, normalizes them against the 8 canonical dimensions, stores previous calibration into `previous_style_profile`, and updates `active_style_profile`.
+   - `POST /api/admin/sms/bootcamp/profile/undo` reverts the active profile to `previous_style_profile` cleanly.
+   - `GET /api/admin/sms/bootcamp/profile` loads persisted profile state for the selected provider or tenant default upon mount or provider switch.
+
+4. **Dynamic Model & Template Prompt Assembly**:
+   - The configured `model` in `SmsBootcampSettings` directly drives the OpenAI client completion request (`client.chat.completions.create(model=configured_model, ...)`).
+   - System prompt template placeholders `{agent_name}`, `{traits}`, `{business_name}`, and `{provider_name}` are safely rendered without `KeyError`, falling back gracefully to defaults.
+
+5. **Execution Controls & Draft Review Lifecycle**:
+   - `POST /api/admin/sms/bootcamp/runs/{run_id}/control` accepts `{ operation: "pause" | "resume" | "stop" }`, updating run status and cascading stopped states to running conversations.
+   - Draft approval via `POST /api/admin/sms/bootcamp/conversations/{id}/drafts/{message_id}/review` transitions draft messages to `"sent"`, updates wording if edited, returns `{"success": True, "conversation": ...}`, and calls `BOOTCAMP_RUNNER.advance_turn` to progress the simulation to the next customer turn. Discarding halts the conversation thread.
+
+6. **Information Request Resolution**:
+   - `POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond` ingests the operator's ground-truth fact into `KnowledgeProposal` (`proposal_type="gap"`), creates an authoritative `LearningEvent` (`event_type="knowledge_answer"`), generates Tori's response, clears handoff state, and marks the conversation completed.
+
+### Verification & Testing Commands
+
+```powershell
+# Run the complete Bootcamp test suite:
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py -v
+
+# Run the complete regression check across Bootcamp, UI Controls, and Prompt Builder:
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_sms_assistant_ui_controls.py tests/test_sms_prompt_builder.py -v
+```
+
+---
+
+## 15. Booking Facade & Autonomous Travel Tools (`booking_facade.py`)
+
+### Purpose & Scope
+
+The `booking_facade.py` module exposes narrow, provider/tenant-isolated tools callable by the AI dialogue engine and SMS prompt builder during customer interactions. It bridges conversational intent to the core scheduling and travel domains without exposing raw database tables or allowing arbitrary parameter selection.
+
+### Key Tools & Contracts
+
+1. **`check_availability(db, tenant_id, provider_id, service_id, target_date, service_mode, client_suburb)`**:
+   - **In-Call Mode (`service_mode="in_call"`)**: Queries `find_available_slots` to return available appointment start times at the provider's clinic/studio location.
+   - **Out-Call / Mobile Mode (`service_mode="out_call"`)**: Leverages `find_operational_slots` to compute valid operational window slots accounting for provider origin, destination suburb transit time, transit buffers before/after, and adjacent appointments.
+   - **Return Shape**:
+     ```json
+     {
+       "date": "2026-03-30",
+       "service_mode": "out_call",
+       "slots": ["10:00", "11:30", "14:00"],
+       "note": "Slots account for travel time to Bondi Beach."
+     }
+     ```
+
+2. **`quote_travel(db, tenant_id, provider_id, client_suburb, client_address)`**:
+   - Evaluates provider and service out-call eligibility, geocoding coordinates against the provider's home base.
+   - **Suburb-Level Estimate**: When only `client_suburb` is provided, calculates estimated travel distance and fee breakdown with `is_estimate=True`.
+   - **Exact Address Quote**: When `client_address` is provided, performs point-to-point transit calculation with `is_estimate=False`.
+   - **Return Shape**:
+     ```json
+     {
+       "provider_id": 1,
+       "distance_km": 12.5,
+       "travel_fee": 35.0,
+       "base_surcharge": 10.0,
+       "distance_fee": 25.0,
+       "is_estimate": true,
+       "within_radius": true,
+       "destination_address": "Bondi Beach, NSW",
+       "disclaimer": "Final travel fee calculated at checkout based on exact street address."
+     }
+     ```
+
+3. **OpenAI Function Calling Schema (`SMS_TOOLS`)**:
+   - Declared in `ai_orchestrator.py` and tested in `tests/test_sms_prompt_builder.py`.
+   - Strictly enforces JSON Schema types, enum bounds (`["in_call", "out_call"]`), and documentation guidelines for LLM agent function calling.
+
+### Verification & Testing Commands
+
+```powershell
+# Run SMS prompt builder and booking facade test suite:
+python -m pytest tests/test_sms_prompt_builder.py -v
+```
 

@@ -10,8 +10,12 @@ from sqlalchemy.orm import sessionmaker
 from app.api.routers.sms_bootcamp import BOOTCAMP_RUNNER
 from app.core.security import create_access_token
 from app.models.curated_memory import KnowledgeProposal
+from app.models.learning_event import LearningEvent
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.models.provider import Provider
+from app.models.service import Service
+from app.models.service_provider import ServiceProvider
 from app.models.sms_bootcamp import (
     SmsBootcampConversation,
     SmsBootcampMessage,
@@ -829,4 +833,525 @@ def test_persona_and_scenario_combination(client, synthetic_bootcamp_data):
     combined_reply = generate_bootcamp_persona_reply(persona, [], seed=None, scenario=scenario)
     assert "Chatty Charlie" in combined_reply
     assert "Pricing Enquiry" in combined_reply
+
+
+# ==============================================================================
+# BOOTCAMP REPAIR BRIEF VERIFICATION TESTS
+# ==============================================================================
+
+
+def test_bootcamp_settings_get_put_field_mapping_and_reload(client, synthetic_bootcamp_data):
+    """Verify settings GET/PUT field mapping, camel/snake casing, and persisted reload."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    # 1. Initial GET returns defaults with both snake_case and camelCase aliases
+    res = client.get("/api/admin/sms/bootcamp/settings", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    settings_data = res.json()
+    assert settings_data["model"] == "gpt-4o-mini"
+    assert "role_description" in settings_data
+    assert "roleDescription" in settings_data
+    assert "training_notes" in settings_data
+    assert "trainingNotes" in settings_data
+    assert "learned_facts" in settings_data
+    assert "learnedFacts" in settings_data
+    assert "active_profile" in settings_data
+    assert "activeProfile" in settings_data
+
+    # 2. PUT with custom values (snake_case)
+    update_payload = {
+        "model": "gpt-4o",
+        "role_description": "Friendly simulated receptionist",
+        "training_notes": "Never book consultations after 4 PM.",
+        "learned_facts": "Keypad code for front door is 1234.",
+        "agent_name": "Tori Pro",
+    }
+    put_res = client.put("/api/admin/sms/bootcamp/settings", json=update_payload, headers=headers)
+    assert put_res.status_code == status.HTTP_200_OK
+    updated = put_res.json()
+    assert updated["model"] == "gpt-4o"
+    assert updated["role_description"] == "Friendly simulated receptionist"
+    assert updated["training_notes"] == "Never book consultations after 4 PM."
+    assert updated["learned_facts"] == "Keypad code for front door is 1234."
+    assert updated["agent_name"] == "Tori Pro"
+
+    # 3. Reload via GET to prove persistence
+    reload_res = client.get("/api/admin/sms/bootcamp/settings", headers=headers)
+    assert reload_res.status_code == status.HTTP_200_OK
+    reloaded = reload_res.json()
+    assert reloaded["model"] == "gpt-4o"
+    assert reloaded["roleDescription"] == "Friendly simulated receptionist"
+    assert reloaded["trainingNotes"] == "Never book consultations after 4 PM."
+    assert reloaded["learnedFacts"] == "Keypad code for front door is 1234."
+
+    # 4. PUT with camelCase payload
+    camel_payload = {
+        "model": "gpt-4o-mini",
+        "roleDescription": "Updated camelCase role",
+        "trainingNotes": "Updated camelCase notes",
+        "learnedFacts": "Updated camelCase facts",
+    }
+    put_camel = client.put("/api/admin/sms/bootcamp/settings", json=camel_payload, headers=headers)
+    assert put_camel.status_code == status.HTTP_200_OK
+    assert put_camel.json()["role_description"] == "Updated camelCase role"
+    assert put_camel.json()["training_notes"] == "Updated camelCase notes"
+    assert put_camel.json()["learned_facts"] == "Updated camelCase facts"
+
+
+def test_style_profile_load_apply_undo_lifecycle(client, synthetic_bootcamp_data):
+    """Verify Style Lab values load, apply with correct shape, and undo correctly."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    # 1. GET initial profile
+    get_res = client.get("/api/admin/sms/bootcamp/profile", headers=headers)
+    assert get_res.status_code == status.HTTP_200_OK
+    profile_data = get_res.json()
+    assert profile_data["can_undo"] is False
+
+    # 2. POST /profile/apply with non-default traits
+    new_traits = {
+        "flirtiness": 5,
+        "cheerfulness": 5,
+        "wit": 4,
+        "sarcasm": 2,
+        "warmth": 4,
+        "directness": 3,
+        "chattiness": 3,
+        "patience": 5,
+    }
+    apply_res = client.post(
+        "/api/admin/sms/bootcamp/profile/apply",
+        json={"styleProfile": new_traits},
+        headers=headers,
+    )
+    assert apply_res.status_code == status.HTTP_200_OK
+    applied = apply_res.json()
+    assert applied["active_profile"]["flirtiness"] == 5
+    assert applied["can_undo"] is True
+    assert applied["previous_profile"] is not None
+
+    # 3. Apply again with nested data: { profile: ... } format (defensive payload unwrapping)
+    second_traits = dict(new_traits)
+    second_traits["flirtiness"] = 2
+    apply_nested = client.post(
+        "/api/admin/sms/bootcamp/profile/apply",
+        json={"data": {"profile": second_traits}},
+        headers=headers,
+    )
+    assert apply_nested.status_code == status.HTTP_200_OK
+    assert apply_nested.json()["active_profile"]["flirtiness"] == 2
+    assert apply_nested.json()["previous_profile"]["flirtiness"] == 5
+
+    # 4. POST /profile/undo reverts to previous profile
+    undo_res = client.post("/api/admin/sms/bootcamp/profile/undo", json={}, headers=headers)
+    assert undo_res.status_code == status.HTTP_200_OK
+    reverted = undo_res.json()
+    assert reverted["active_profile"]["flirtiness"] == 5
+    assert reverted["can_undo"] is False
+
+
+def test_provider_scoping_isolation(client, synthetic_bootcamp_data, db_session):
+    """Verify provider scoping and strict multi-tenant isolation."""
+    data = synthetic_bootcamp_data
+    tenant_a = data["tenant_a"]
+    tenant_b = data["tenant_b"]
+
+    # Create Provider A and Provider B under Tenant A
+    prov_a = Provider(tenant_id=tenant_a.id, name="Dr. Alice Smith", active=True)
+    prov_b = Provider(tenant_id=tenant_a.id, name="Dr. Bob Jones", active=True)
+    # Create Provider C under Tenant B
+    prov_c = Provider(tenant_id=tenant_b.id, name="Dr. Carol Foreign", active=True)
+    db_session.add_all([prov_a, prov_b, prov_c])
+    db_session.flush()
+
+    headers_a = _auth_headers(tenant_a, data["admin_a"])
+
+    # 1. Validating provider_id against foreign tenant returns 404
+    foreign_res = client.get(
+        f"/api/admin/sms/bootcamp/settings?provider_id={prov_c.id}",
+        headers=headers_a,
+    )
+    assert foreign_res.status_code == status.HTTP_404_NOT_FOUND
+
+    non_existent = client.get(
+        "/api/admin/sms/bootcamp/settings?provider_id=999999",
+        headers=headers_a,
+    )
+    assert non_existent.status_code == status.HTTP_404_NOT_FOUND
+
+    # 2. Update Provider A settings specifically
+    update_a = {
+        "provider_id": prov_a.id,
+        "agent_name": "Alice Assistant",
+        "model": "gpt-4o",
+        "role_description": "Exclusive assistant for Dr. Alice",
+    }
+    put_a = client.put("/api/admin/sms/bootcamp/settings", json=update_a, headers=headers_a)
+    assert put_a.status_code == status.HTTP_200_OK
+    assert put_a.json()["agent_name"] == "Alice Assistant"
+    assert put_a.json()["provider_id"] == prov_a.id
+
+    # 3. Provider B settings remain default / isolated
+    get_b = client.get(
+        f"/api/admin/sms/bootcamp/settings?provider_id={prov_b.id}",
+        headers=headers_a,
+    )
+    assert get_b.status_code == status.HTTP_200_OK
+    assert get_b.json()["agent_name"] == "Tori"  # Not Alice Assistant!
+    assert get_b.json()["model"] == "gpt-4o-mini"
+
+    # 4. Starting a run with provider_id stores provider_id on run and conversations
+    run_payload = {
+        "persona_ids": ["happy-harry"],
+        "turns": 1,
+        "provider_id": prov_a.id,
+        "sync": True,
+        "autonomy_level": 3,
+    }
+    run_res = client.post("/api/admin/sms/bootcamp/runs", json=run_payload, headers=headers_a)
+    assert run_res.status_code == status.HTTP_200_OK
+    run_info = run_res.json()
+    assert run_info["provider_id"] == prov_a.id
+    assert run_info["conversations"][0]["provider_id"] == prov_a.id
+
+
+def test_mocked_openai_request_construction_and_prompt_assembly(
+    synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify configured model, rendered placeholders, and scoped service data in OpenAI call."""
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import generate_bootcamp_tori_reply
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    # 1. Setup Providers and Services
+    prov_target = Provider(tenant_id=tenant.id, name="Dr. Target Specialist", active=True)
+    prov_other = Provider(tenant_id=tenant.id, name="Dr. Other", active=True)
+    db_session.add_all([prov_target, prov_other])
+    db_session.flush()
+
+    srv_target = Service(
+        tenant_id=tenant.id,
+        name="Specialized Target Therapy",
+        price=150.0,
+        duration=60,
+        active=True,
+    )
+    srv_other = Service(
+        tenant_id=tenant.id,
+        name="Unrelated Other Treatment",
+        price=90.0,
+        duration=30,
+        active=True,
+    )
+    db_session.add_all([srv_target, srv_other])
+    db_session.flush()
+
+    # Link srv_target to prov_target only
+    link = ServiceProvider(
+        service_id=srv_target.id,
+        provider_id=prov_target.id,
+        tenant_id=tenant.id,
+    )
+    db_session.add(link)
+
+    # 2. Add provider-scoped settings with custom prompt and model
+    settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov_target.id,
+        agent_name="Concierge Zoe",
+        model="gpt-4o",
+        system_prompt_template="Welcome to {business_name}! I am {agent_name} assisting {provider_name}. Traits: {traits}.",
+    )
+    db_session.add(settings)
+
+    # 3. Create run & conversation for prov_target
+    run = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov_target.id,
+        status="running",
+        selected_personas=["happy-harry"],
+        max_turns=3,
+        style_profile=DEFAULT_STYLE_PROFILE,
+    )
+    db_session.add(run)
+    db_session.flush()
+
+    conv = SmsBootcampConversation(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        run_id=run.id,
+        provider_id=prov_target.id,
+        persona_id="happy-harry",
+        persona_name="Happy Harry",
+        status="running",
+        current_turn=1,
+    )
+    db_session.add(conv)
+    db_session.flush()
+
+    msg = SmsBootcampMessage(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        conversation_id=conv.id,
+        role="persona",
+        text="Hello! What services do you offer?",
+    )
+    db_session.add(msg)
+    db_session.commit()
+
+    # 4. Mock OpenAI client to verify arguments passed
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "We offer Specialized Target Therapy!"
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 5. Execute generate_bootcamp_tori_reply
+    reply, _ = generate_bootcamp_tori_reply(
+        history=[{"role": msg.role, "text": msg.text}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov_target.id,
+    )
+
+    assert "Specialized Target Therapy" in reply
+
+    # 6. Verify OpenAI completion call kwargs
+    mock_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_client.chat.completions.create.call_args[1]
+
+    # Model matches configured_model
+    assert call_kwargs["model"] == "gpt-4o"
+
+    # Messages contain rendered system prompt
+    system_msg = next(m["content"] for m in call_kwargs["messages"] if m.get("role") == "system")
+    assert "Concierge Zoe" in system_msg
+    assert "Dr. Target Specialist" in system_msg
+    assert "Specialized Target Therapy" in system_msg
+    # Other provider's service must NOT leak into the scoped prompt
+    assert "Unrelated Other Treatment" not in system_msg
+
+
+def test_run_controls_pause_resume_stop(client, synthetic_bootcamp_data):
+    """Verify POST /runs/{run_id}/control with pause, resume, and stop operations."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    # 1. Create a run
+    payload = {
+        "persona_ids": ["nervous-neil"],
+        "turns": 3,
+        "autonomy_level": 2,
+    }
+    create_res = client.post("/api/admin/sms/bootcamp/runs", json=payload, headers=headers)
+    assert create_res.status_code == status.HTTP_200_OK
+    run_id = create_res.json()["id"]
+
+    # 2. Pause
+    pause_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "pause"},
+        headers=headers,
+    )
+    assert pause_res.status_code == status.HTTP_200_OK
+    assert pause_res.json()["status"] == "paused"
+
+    # 3. Resume
+    resume_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "resume"},
+        headers=headers,
+    )
+    assert resume_res.status_code == status.HTTP_200_OK
+    assert resume_res.json()["status"] == "running"
+
+    # 4. Stop
+    stop_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "stop"},
+        headers=headers,
+    )
+    assert stop_res.status_code == status.HTTP_200_OK
+    assert stop_res.json()["status"] == "stopped"
+
+    # 5. Invalid operation returns 400 or 422
+    bad_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "explode"},
+        headers=headers,
+    )
+    assert bad_res.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
+def test_level_1_draft_approval_advance_and_discard(client, synthetic_bootcamp_data):
+    """Verify Level-1 Review Every Turn draft approval advances turn and discard halts thread."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    # 1. Create Level 1 run
+    payload = {
+        "persona_ids": ["happy-harry"],
+        "turns": 3,
+        "sync": True,
+        "autonomy_level": 1,
+    }
+    create_res = client.post("/api/admin/sms/bootcamp/runs", json=payload, headers=headers)
+    assert create_res.status_code == status.HTTP_200_OK
+    run_data = create_res.json()
+    assert run_data["status"] == "waiting_approval"
+
+    conv = run_data["conversations"][0]
+    conv_id = conv["id"]
+    assert conv["status"] == "waiting_approval"
+
+    # Last message should be a draft
+    draft_msg = conv["messages"][-1]
+    assert draft_msg["status"] == "draft"
+    draft_id = draft_msg["id"]
+
+    # 2. Approve draft
+    approve_res = client.post(
+        f"/api/admin/sms/bootcamp/conversations/{conv_id}/drafts/{draft_id}/review",
+        json={"action": "approve"},
+        headers=headers,
+    )
+    assert approve_res.status_code == status.HTTP_200_OK
+    appr_data = approve_res.json()
+    assert appr_data.get("success") is True or appr_data.get("ok") is True
+
+    # Check conversation has advanced to turn 2
+    updated_conv = appr_data["conversation"]
+    assert (updated_conv.get("current_turn") or updated_conv.get("currentTurn")) == 2
+    # The approved draft is now sent
+    approved_item = next(m for m in updated_conv["messages"] if str(m["id"]) == str(draft_id))
+    assert approved_item["status"] == "sent"
+
+    # 3. Next message in Level 1 should be the new turn customer message and next draft
+    assert len(updated_conv["messages"]) >= 3
+
+    # 4. Discard draft stops the conversation
+    new_draft = updated_conv["messages"][-1]
+    if new_draft["status"] == "draft":
+        discard_res = client.post(
+            f"/api/admin/sms/bootcamp/conversations/{conv_id}/drafts/{new_draft['id']}/review",
+            json={"action": "discard"},
+            headers=headers,
+        )
+        assert discard_res.status_code == status.HTTP_200_OK
+        assert discard_res.json()["conversation"]["status"] == "stopped"
+
+
+def test_information_request_resolution_lifecycle(client, synthetic_bootcamp_data, db_session):
+    """Verify answering an information request resolves handoff, generates Tori reply, and logs learning event."""
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+    headers = _auth_headers(tenant, data["admin_a"])
+
+    prov = Provider(tenant_id=tenant.id, name="Dr. Knowledge Target", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    run = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        status="waiting_approval",
+        selected_personas=["pushy-pete"],
+        max_turns=3,
+        style_profile=DEFAULT_STYLE_PROFILE,
+    )
+    db_session.add(run)
+    db_session.flush()
+
+    conv = SmsBootcampConversation(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        run_id=run.id,
+        provider_id=prov.id,
+        persona_id="pushy-pete",
+        persona_name="Pushy Pete",
+        status="handoff",
+        needs_handoff=True,
+        handoff_reason="Customer asks about cancellation policy for same-day appointments",
+        current_turn=1,
+    )
+    db_session.add(conv)
+    db_session.flush()
+
+    seed_msg = SmsBootcampMessage(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        conversation_id=conv.id,
+        role="persona",
+        text="What is your cancellation policy?",
+    )
+    db_session.add(seed_msg)
+    db_session.commit()
+
+    # Respond to information request
+    respond_payload = {
+        "information": "Same day cancellations require 4 hours advance notice for full credit.",
+    }
+    res = client.post(
+        f"/api/admin/sms/bootcamp/conversations/{conv.id}/information-request/respond",
+        json=respond_payload,
+        headers=headers,
+    )
+    assert res.status_code == status.HTTP_200_OK
+    res_data = res.json()
+    assert res_data.get("success") is True or res_data.get("status") == "success"
+
+    updated_conv = res_data["conversation"]
+    assert updated_conv.get("needs_handoff") is False or updated_conv.get("needsHandoff") is False
+    assert updated_conv["status"] in ("running", "waiting_approval", "completed")
+
+    # Verify KnowledgeProposal and LearningEvent are recorded with prov.id
+    proposals = db_session.query(KnowledgeProposal).filter_by(tenant_id=tenant.id, provider_id=prov.id).all()
+    assert len(proposals) >= 1
+    assert "Same day cancellations" in proposals[0].proposed_response
+
+    events = db_session.query(LearningEvent).filter_by(tenant_id=tenant.id, provider_id=prov.id).all()
+    assert len(events) >= 1
+    assert events[0].event_type == "knowledge_answer"
+
+
+def test_multiple_scenarios_for_one_persona(client, synthetic_bootcamp_data):
+    """Verify that multiple scenarios for a single persona produce distinct conversations."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    payload = {
+        "persona_ids": ["cranky-carl"],
+        "scenario_ids": ["pricing_enquiry", "location_enquiry"],
+        "turns": 2,
+        "sync": True,
+        "autonomy_level": 3,
+    }
+    res = client.post("/api/admin/sms/bootcamp/runs", json=payload, headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+    run_data = res.json()
+
+    conversations = run_data["conversations"]
+    assert len(conversations) == 2
+
+    # Both are cranky-carl
+    assert (conversations[0].get("persona_id") or conversations[0].get("personaId")) == "cranky-carl"
+    assert (conversations[1].get("persona_id") or conversations[1].get("personaId")) == "cranky-carl"
+
+    # Distinct scenario IDs and distinct conversation IDs
+    scenarios = {(c.get("scenario_id") or c.get("scenarioId")) for c in conversations}
+    assert scenarios == {"pricing_enquiry", "location_enquiry"}
+
+    conv_ids = {c["id"] for c in conversations}
+    assert len(conv_ids) == 2
+
 

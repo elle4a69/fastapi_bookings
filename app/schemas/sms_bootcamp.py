@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -53,6 +53,7 @@ class BootcampRunCreate(BaseModel):
     sync: Optional[bool] = Field(False)
     autonomy_level: int = Field(2, alias="autonomyLevel", ge=1, le=3)
     scenario_ids: Optional[List[str]] = Field(None, alias="scenarioIds")
+    provider_id: Optional[int] = Field(None, alias="providerId")
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -87,14 +88,25 @@ class BootcampDraftReviewCreate(BaseModel):
 
 class BootcampSettingsUpdate(BaseModel):
     agent_name: Optional[str] = Field(None, alias="agentName")
-    custom_training_notes: Optional[str] = Field(None, alias="customTrainingNotes")
+    model: Optional[str] = None
+    role_description: Optional[str] = Field(None, alias="roleDescription")
     system_prompt_template: Optional[str] = Field(None, alias="systemPromptTemplate")
+    custom_training_notes: Optional[str] = Field(None, alias="customTrainingNotes")
+    training_notes: Optional[str] = Field(None, alias="trainingNotes")
+    learned_facts: Optional[Union[str, List[Any]]] = Field(None, alias="learnedFacts")
+    active_profile: Optional[Dict[str, Any]] = Field(None, alias="activeProfile")
+    active_style_profile: Optional[Dict[str, Any]] = Field(None, alias="activeStyleProfile")
+    previous_profile: Optional[Dict[str, Any]] = Field(None, alias="previousProfile")
+    previous_style_profile: Optional[Dict[str, Any]] = Field(None, alias="previousStyleProfile")
+    provider_id: Optional[int] = Field(None, alias="providerId")
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
 
 class BootcampProfileApply(BaseModel):
     style_profile: Optional[Dict[str, Any]] = Field(None, alias="styleProfile")
+    profile: Optional[Dict[str, Any]] = None
+    provider_id: Optional[int] = Field(None, alias="providerId")
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -123,6 +135,8 @@ class BootcampMessageResponse(BaseModel):
 class BootcampConversationResponse(BaseModel):
     id: str
     run_id: str = Field(..., alias="runId")
+    tenant_id: Optional[int] = Field(None, alias="tenantId")
+    provider_id: Optional[int] = Field(None, alias="providerId")
     persona_id: str = Field(..., alias="personaId")
     persona_name: str = Field(..., alias="personaName")
     scenario_id: Optional[str] = Field(None, alias="scenarioId")
@@ -140,6 +154,8 @@ class BootcampConversationResponse(BaseModel):
 class BootcampRunResponse(BaseModel):
     id: str
     status: str
+    tenant_id: Optional[int] = Field(None, alias="tenantId")
+    provider_id: Optional[int] = Field(None, alias="providerId")
     selected_personas: List[str] = Field(..., alias="selectedPersonaIds")
     selected_scenarios: Optional[List[str]] = Field(None, alias="selectedScenarios")
     autonomy_level: int = Field(2, alias="autonomyLevel")
@@ -156,11 +172,18 @@ class BootcampRunResponse(BaseModel):
 class BootcampSettingsResponse(BaseModel):
     id: Optional[int] = None
     tenant_id: int = Field(..., alias="tenantId")
+    provider_id: Optional[int] = Field(None, alias="providerId")
     active_style_profile: Dict[str, int] = Field(..., alias="activeStyleProfile")
     previous_style_profile: Optional[Dict[str, int]] = Field(None, alias="previousStyleProfile")
+    active_profile: Optional[Dict[str, int]] = Field(None, alias="activeProfile")
+    previous_profile: Optional[Dict[str, int]] = Field(None, alias="previousProfile")
     agent_name: str = Field("Tori", alias="agentName")
+    model: str = Field("gpt-4o-mini", alias="model")
+    role_description: Optional[str] = Field(None, alias="roleDescription")
     system_prompt_template: Optional[str] = Field(None, alias="systemPromptTemplate")
     custom_training_notes: Optional[str] = Field(None, alias="customTrainingNotes")
+    training_notes: Optional[str] = Field(None, alias="trainingNotes")
+    learned_facts: Optional[str] = Field(None, alias="learnedFacts")
     updated_at: Optional[datetime] = Field(None, alias="updatedAt")
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)

@@ -12,6 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTenantModules } from "@/context/tenant-modules-context";
+import {
+  KNOWLEDGE_EDITOR_CLASS,
+  PROMPT_EDITOR_CLASS,
+  SMS_SETTINGS_DIALOG_BODY_CLASS,
+  SMS_SETTINGS_DIALOG_CLASS,
+} from "./settings-dialog-layout";
 
 interface KnowledgeEntry {
   id: number;
@@ -67,6 +74,7 @@ interface PromptProfile {
 }
 
 export default function SmsSettingsTab() {
+  const { multipleProvidersEnabled } = useTenantModules();
   const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
   const [prompts, setPrompts] = useState<PromptProfile[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
@@ -390,19 +398,23 @@ export default function SmsSettingsTab() {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="global_prompts" className="w-full">
-        <TabsList className="flex w-full overflow-x-auto no-scrollbar gap-1 p-1 bg-muted/40 rounded-lg h-auto sm:grid sm:grid-cols-5">
+        <TabsList className={`flex w-full overflow-x-auto no-scrollbar gap-1 p-1 bg-muted/40 rounded-lg h-auto sm:grid ${multipleProvidersEnabled ? 'sm:grid-cols-5' : 'sm:grid-cols-3'}`}>
           <TabsTrigger value="global_prompts" className="text-xs whitespace-nowrap shrink-0">
             <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Global Prompt
           </TabsTrigger>
-          <TabsTrigger value="provider_prompts" className="text-xs whitespace-nowrap shrink-0">
-            <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Provider Instructions
-          </TabsTrigger>
+          {multipleProvidersEnabled && (
+            <TabsTrigger value="provider_prompts" className="text-xs whitespace-nowrap shrink-0">
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Provider Instructions
+            </TabsTrigger>
+          )}
           <TabsTrigger value="shared_knowledge" className="text-xs whitespace-nowrap shrink-0">
             <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Shared Knowledge
           </TabsTrigger>
-          <TabsTrigger value="provider_knowledge" className="text-xs whitespace-nowrap shrink-0">
-            <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Provider Knowledge
-          </TabsTrigger>
+          {multipleProvidersEnabled && (
+            <TabsTrigger value="provider_knowledge" className="text-xs whitespace-nowrap shrink-0">
+              <BookOpen className="w-3.5 h-3.5 mr-1.5" /> Provider Knowledge
+            </TabsTrigger>
+          )}
           <TabsTrigger value="curator_proposals" className="text-xs whitespace-nowrap shrink-0">
             <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-500" /> Curator Proposals
             {proposals.length > 0 && (
@@ -476,71 +488,73 @@ export default function SmsSettingsTab() {
         </TabsContent>
 
         {/* Provider Prompts Content */}
-        <TabsContent value="provider_prompts" className="space-y-4 pt-3">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-base font-bold tracking-tight">Provider Instructions</h3>
-              <p className="text-muted-foreground text-xs">AI instructions and persona overrides tailored to specific providers.</p>
+        {multipleProvidersEnabled && (
+          <TabsContent value="provider_prompts" className="space-y-4 pt-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-base font-bold tracking-tight">Provider Instructions</h3>
+                <p className="text-muted-foreground text-xs">AI instructions and persona overrides tailored to specific providers.</p>
+              </div>
+              <Button size="sm" onClick={handleOpenCreateProviderPrompt}>
+                <Plus className="w-4 h-4 mr-2" /> Add Provider Instructions
+              </Button>
             </div>
-            <Button size="sm" onClick={handleOpenCreateProviderPrompt}>
-              <Plus className="w-4 h-4 mr-2" /> Add Provider Instructions
-            </Button>
-          </div>
 
-          <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              {loading ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">Loading prompts...</div>
-              ) : providerPrompts.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">No Provider Instructions defined.</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Profile Name</TableHead>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>System Prompt Preview</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {providerPrompts.map((p) => {
-                      const providerName = providers.find(prov => prov.id === p.provider_id)?.name || `Provider #${p.provider_id}`;
-                      return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-semibold">{p.name}</TableCell>
-                          <TableCell className="font-medium text-blue-600">{providerName}</TableCell>
-                          <TableCell className="max-w-md truncate text-xs text-muted-foreground font-mono">{p.system_prompt}</TableCell>
-                          <TableCell>
-                            {p.is_active ? (
-                              <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">Active</Badge>
-                            ) : (
-                              <Badge variant="secondary">Inactive</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right space-x-1">
-                            {!p.is_active && (
-                              <Button variant="ghost" size="icon" className="text-emerald-500" onClick={() => handleSetActivePrompt(p)} title="Set Active">
-                                <Check className="w-3.5 h-3.5" />
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                {loading ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">Loading prompts...</div>
+                ) : providerPrompts.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">No Provider Instructions defined.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Profile Name</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>System Prompt Preview</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {providerPrompts.map((p) => {
+                        const providerName = providers.find(prov => prov.id === p.provider_id)?.name || `Provider #${p.provider_id}`;
+                        return (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-semibold">{p.name}</TableCell>
+                            <TableCell className="font-medium text-blue-600">{providerName}</TableCell>
+                            <TableCell className="max-w-md truncate text-xs text-muted-foreground font-mono">{p.system_prompt}</TableCell>
+                            <TableCell>
+                              {p.is_active ? (
+                                <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">Active</Badge>
+                              ) : (
+                                <Badge variant="secondary">Inactive</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              {!p.is_active && (
+                                <Button variant="ghost" size="icon" className="text-emerald-500" onClick={() => handleSetActivePrompt(p)} title="Set Active">
+                                  <Check className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenEditProviderPrompt(p)}>
+                                <Edit2 className="w-3.5 h-3.5" />
                               </Button>
-                            )}
-                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditProviderPrompt(p)}>
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDeletePrompt(p.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDeletePrompt(p.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Shared Knowledge Content */}
         <TabsContent value="shared_knowledge" className="space-y-4 pt-3">
@@ -624,79 +638,81 @@ export default function SmsSettingsTab() {
         </TabsContent>
 
         {/* Provider Knowledge Content */}
-        <TabsContent value="provider_knowledge" className="space-y-4 pt-3">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-base font-bold tracking-tight">Provider Knowledge Base</h3>
-              <p className="text-muted-foreground text-xs">Knowledge facts enjected into RAG contexts for specific providers.</p>
+        {multipleProvidersEnabled && (
+          <TabsContent value="provider_knowledge" className="space-y-4 pt-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-base font-bold tracking-tight">Provider Knowledge Base</h3>
+                <p className="text-muted-foreground text-xs">Knowledge facts enjected into RAG contexts for specific providers.</p>
+              </div>
+              <Button size="sm" onClick={handleOpenCreateProviderKnowledge}>
+                <Plus className="w-4 h-4 mr-2" /> Add Provider Fact
+              </Button>
             </div>
-            <Button size="sm" onClick={handleOpenCreateProviderKnowledge}>
-              <Plus className="w-4 h-4 mr-2" /> Add Provider Fact
-            </Button>
-          </div>
 
-          <Card>
-            <CardContent className="p-0 overflow-x-auto">
-              {loading ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">Loading knowledge entries...</div>
-              ) : providerKnowledge.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">No provider-specific facts stored.</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Fact Content</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Origin</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {providerKnowledge.map((entry) => {
-                      const providerName = providers.find(prov => prov.id === entry.provider_id)?.name || `Provider #${entry.provider_id}`;
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">{entry.category}</Badge>
-                          </TableCell>
-                          <TableCell className="font-medium text-blue-600">{providerName}</TableCell>
-                          <TableCell className="max-w-md truncate text-xs font-mono">{entry.text}</TableCell>
-                          <TableCell className="text-xs">{entry.source || "Manual Entry"}</TableCell>
-                          <TableCell className="capitalize text-xs text-muted-foreground">{entry.provenance}</TableCell>
-                          <TableCell>
-                            {entry.status === "approved" ? (
-                              <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Approved</Badge>
-                            ) : entry.status === "proposed" ? (
-                              <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">Proposed</Badge>
-                            ) : (
-                              <Badge variant="secondary">{entry.status}</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right space-x-1">
-                            {entry.status === "proposed" && (
-                              <Button variant="ghost" size="icon" className="text-emerald-500" onClick={() => handleApproveKnowledge(entry.id)}>
-                                <Check className="w-3.5 h-3.5" />
+            <Card>
+              <CardContent className="p-0 overflow-x-auto">
+                {loading ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">Loading knowledge entries...</div>
+                ) : providerKnowledge.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">No provider-specific facts stored.</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Fact Content</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Origin</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {providerKnowledge.map((entry) => {
+                        const providerName = providers.find(prov => prov.id === entry.provider_id)?.name || `Provider #${entry.provider_id}`;
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">{entry.category}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium text-blue-600">{providerName}</TableCell>
+                            <TableCell className="max-w-md truncate text-xs font-mono">{entry.text}</TableCell>
+                            <TableCell className="text-xs">{entry.source || "Manual Entry"}</TableCell>
+                            <TableCell className="capitalize text-xs text-muted-foreground">{entry.provenance}</TableCell>
+                            <TableCell>
+                              {entry.status === "approved" ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Approved</Badge>
+                              ) : entry.status === "proposed" ? (
+                                <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">Proposed</Badge>
+                              ) : (
+                                <Badge variant="secondary">{entry.status}</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              {entry.status === "proposed" && (
+                                <Button variant="ghost" size="icon" className="text-emerald-500" onClick={() => handleApproveKnowledge(entry.id)}>
+                                  <Check className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" onClick={() => handleOpenEditProviderKnowledge(entry)}>
+                                <Edit2 className="w-3.5 h-3.5" />
                               </Button>
-                            )}
-                            <Button variant="ghost" size="icon" onClick={() => handleOpenEditProviderKnowledge(entry)}>
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDeleteKnowledge(entry.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                              <Button variant="ghost" size="icon" className="text-red-500" onClick={() => handleDeleteKnowledge(entry.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
         {/* Knowledge Curator Proposals Content */}
         <TabsContent value="curator_proposals" className="space-y-4 pt-3">
           <div className="flex justify-between items-center">
@@ -925,14 +941,14 @@ export default function SmsSettingsTab() {
 
       {/* Knowledge Form Dialog */}
       <Dialog open={knowDialogOpen} onOpenChange={setKnowDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={SMS_SETTINGS_DIALOG_CLASS}>
           <DialogHeader>
             <DialogTitle>
               {editingEntry ? "Edit Fact" : `Add ${knowDialogOpenType === "provider" ? "Provider" : "Shared"} Fact`}
             </DialogTitle>
             <DialogDescription>Knowledge base facts inform AI responses.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 my-2 text-xs">
+          <div className={`${SMS_SETTINGS_DIALOG_BODY_CLASS} space-y-4 my-2 text-xs`}>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Category</Label>
@@ -974,7 +990,12 @@ export default function SmsSettingsTab() {
 
             <div className="space-y-1">
               <Label>Fact Content *</Label>
-              <Textarea placeholder="Explain the fact in clear, simple wording..." value={knowText} onChange={e => setKnowText(e.target.value)} className="min-h-[120px]" />
+              <Textarea
+                placeholder="Explain the fact in clear, simple wording..."
+                value={knowText}
+                onChange={e => setKnowText(e.target.value)}
+                className={KNOWLEDGE_EDITOR_CLASS}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -986,14 +1007,14 @@ export default function SmsSettingsTab() {
 
       {/* Prompt Form Dialog */}
       <Dialog open={promptDialogOpen} onOpenChange={setPromptDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className={SMS_SETTINGS_DIALOG_CLASS}>
           <DialogHeader>
             <DialogTitle>
               {editingPrompt ? "Edit Prompt Profile" : `Create ${promptDialogOpenType === "provider" ? "Provider Instructions" : "Global System Prompt"}`}
             </DialogTitle>
             <DialogDescription>Define system directives for SMS bots.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 my-2 text-xs">
+          <div className={`${SMS_SETTINGS_DIALOG_BODY_CLASS} space-y-4 my-2 text-xs`}>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Profile Name *</Label>
@@ -1019,7 +1040,12 @@ export default function SmsSettingsTab() {
 
             <div className="space-y-1">
               <Label>System Prompt *</Label>
-              <Textarea placeholder="You are an assistant. Always remain helpful..." value={promptText} onChange={e => setPromptText(e.target.value)} className="min-h-[220px] font-mono text-[11px]" />
+              <Textarea
+                placeholder="You are an assistant. Always remain helpful..."
+                value={promptText}
+                onChange={e => setPromptText(e.target.value)}
+                className={PROMPT_EDITOR_CLASS}
+              />
             </div>
           </div>
           <DialogFooter>

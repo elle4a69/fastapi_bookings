@@ -41,8 +41,12 @@ from app.services.sms.bootcamp_service import (
 )
 from app.services.sms.ai_orchestrator import call_openai_chat_completions
 
+from decimal import Decimal
+from app.models.tenant import TravelChargeOrigin
+from app.models.schedule import ProviderWorkDay
+from app.services.routing.geocoding import register_test_location, clear_test_locations
+from app.services.sms.booking_facade import check_availability, quote_travel, SMS_TOOLS
 
-# ---------------------------------------------------------------------------
 # Test 1: Layer order precedence
 # ---------------------------------------------------------------------------
 def test_layer_order_precedence():
@@ -643,3 +647,142 @@ async def test_integration_with_ai_orchestrator_and_bootcamp_service(db_session)
     assert "Warmth 4/5" in bootcamp_instructions
     assert "Wit 3/5" in bootcamp_instructions
     assert "Always confirm duration before finalizing." in bootcamp_instructions
+
+
+# ---------------------------------------------------------------------------
+# Test 8: Booking Facade Tools (check_availability & quote_travel)
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_booking_facade_check_availability_and_quote_travel(db_session):
+    """Verify check_availability and quote_travel in app/services/sms/booking_facade.py."""
+    clear_test_locations()
+    register_test_location("Sydney CBD", (-33.8688, 151.2093))
+    register_test_location("Bondi", (-33.8915, 151.2767))
+
+    try:
+        # 1. Setup tenant, provider, and service
+        tenant = Tenant(
+            name="Facade Test Tenant",
+            subdomain="facadetest",
+            allow_in_call=True,
+            allow_out_call=True,
+            travel_charge_origin=TravelChargeOrigin.ALWAYS_FROM_BASE.value,
+            address="Sydney CBD",
+            latitude=-33.8688,
+            longitude=151.2093,
+        )
+        db_session.add(tenant)
+        db_session.flush()
+
+        provider = Provider(
+            tenant_id=tenant.id,
+            name="Dr. Mobile Facade",
+            allow_in_call=True,
+            allow_out_call=True,
+            in_call_address="Sydney CBD",
+            out_call_radius_km=30.0,
+            base_outcall_surcharge=Decimal("25.00"),
+            per_km_fee=Decimal("2.50"),
+            turnaround_buffer_mins=15,
+            active=True,
+        )
+        db_session.add(provider)
+        db_session.flush()
+
+        for weekday in range(7):
+            wd = ProviderWorkDay(
+                tenant_id=tenant.id,
+                provider_id=provider.id,
+                weekday=weekday,
+                start_time="09:00",
+                end_time="17:00",
+                is_working=True,
+            )
+            db_session.add(wd)
+        db_session.flush()
+
+        service = Service(
+            tenant_id=tenant.id,
+            name="Consultation",
+            duration=30,
+            price=120.0,
+            allow_in_call=True,
+            allow_out_call=True,
+        )
+        db_session.add(service)
+        db_session.flush()
+
+        sp = ServiceProvider(
+            tenant_id=tenant.id,
+            provider_id=provider.id,
+            service_id=service.id,
+        )
+        db_session.add(sp)
+        db_session.commit()
+
+        now = datetime.now(timezone.utc)
+        target_date = (now + timedelta(days=2)).replace(hour=10, minute=0, second=0, microsecond=0)
+
+        # A. check_availability for in_call
+        in_call_slots = check_availability(
+            db=db_session,
+            provider_id=provider.id,
+            service_id=service.id,
+            date=target_date,
+            service_mode="in_call",
+        )
+        assert len(in_call_slots) > 0
+        first_in = in_call_slots[0]
+        assert first_in["service_id"] == service.id
+        assert first_in["provider_id"] == provider.id
+        assert first_in["service_mode"] == "in_call"
+        assert "start" in first_in
+        assert "end" in first_in
+
+        # B. check_availability for out_call with client_suburb
+        out_call_slots = check_availability(
+            db=db_session,
+            provider_id=provider.id,
+            service_id=service.id,
+            date=target_date,
+            service_mode="out_call",
+            client_suburb="Bondi",
+        )
+        assert len(out_call_slots) > 0
+        first_out = out_call_slots[0]
+        assert first_out["service_mode"] == "out_call"
+        assert "operational_window" in first_out
+        assert first_out["operational_window"]["inbound_travel_minutes"] >= 0
+
+        # C. quote_travel with suburb estimate
+        suburb_quote = await quote_travel(
+            db=db_session,
+            tenant_id=tenant.id,
+            provider_id=provider.id,
+            suburb="Bondi",
+        )
+        assert suburb_quote["provider_id"] == provider.id
+        assert suburb_quote["suburb"] == "Bondi"
+        assert suburb_quote["is_estimate"] is True
+        assert suburb_quote["chargeable_travel_fee"] >= 25.0
+        assert "estimate" in suburb_quote["disclaimer"].lower()
+
+        # D. quote_travel with exact service address
+        exact_quote = await quote_travel(
+            db=db_session,
+            tenant_id=tenant.id,
+            provider_id=provider.id,
+            service_address="Bondi",
+        )
+        assert exact_quote["is_estimate"] is False
+        assert exact_quote["destination"] == "Bondi"
+        assert exact_quote["chargeable_distance_km"] > 0
+        assert exact_quote["chargeable_travel_fee"] >= 25.0
+
+        # E. SMS_TOOLS structure validation
+        tool_names = [t["function"]["name"] for t in SMS_TOOLS]
+        assert "check_availability" in tool_names
+        assert "quote_travel" in tool_names
+    finally:
+        clear_test_locations()
+

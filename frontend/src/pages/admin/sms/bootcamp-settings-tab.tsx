@@ -83,42 +83,91 @@ Cancellations accepted with at least 24 hours notice.`,
   },
 };
 
+type BootcampSettingsInput = Partial<Omit<BootcampSettingsData, "active_profile" | "previous_profile">> & {
+  active_profile?: Partial<BootcampStyleProfile> | null;
+  previous_profile?: Partial<BootcampStyleProfile> | null;
+};
+
+/**
+ * API and local-storage settings can predate the style-profile fields. Always
+ * hydrate them before rendering so a partial persona profile cannot crash the
+ * behavioral-preview map.
+ */
+export function normalizeBootcampSettings(settings?: BootcampSettingsInput | null): BootcampSettingsData {
+  return {
+    ...DEFAULT_BOOTCAMP_SETTINGS,
+    ...settings,
+    active_profile: {
+      ...DEFAULT_STYLE_PROFILE,
+      ...(settings?.active_profile ?? {}),
+    },
+    previous_profile: settings?.previous_profile
+      ? { ...DEFAULT_STYLE_PROFILE, ...settings.previous_profile }
+      : null,
+  };
+}
+
 const STORAGE_KEY = "fastapi_bookings_bootcamp_settings_v1";
 
 interface BootcampSettingsTabProps {
   onBackToBootcamp?: () => void;
+  initialProviderId?: number | null;
 }
 
-export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettingsTabProps) {
+export default function BootcampSettingsTab({ onBackToBootcamp, initialProviderId = null }: BootcampSettingsTabProps) {
+  const [providers, setProviders] = useState<{ id: number; name: string }[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<number | null>(initialProviderId);
   const [settings, setSettings] = useState<BootcampSettingsData>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const storageKey = initialProviderId ? `${STORAGE_KEY}_prov_${initialProviderId}` : STORAGE_KEY;
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
-        return { ...DEFAULT_BOOTCAMP_SETTINGS, ...JSON.parse(saved) };
+        return normalizeBootcampSettings(JSON.parse(saved));
       }
     } catch {
       // Fallback
     }
-    return DEFAULT_BOOTCAMP_SETTINGS;
+    return normalizeBootcampSettings(DEFAULT_BOOTCAMP_SETTINGS);
   });
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const promptRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch settings from API on mount
+  // Fetch providers list on mount
+  useEffect(() => {
+    let isMounted = true;
+    apiClient
+      .get<any>("/api/admin/providers")
+      .then((res) => {
+        if (!isMounted) return;
+        const list = Array.isArray(res) ? res : res?.data ?? [];
+        setProviders(list);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch settings from API on mount and whenever selectedProviderId changes
   useEffect(() => {
     let isMounted = true;
     const fetchSettings = async () => {
       setLoading(true);
       try {
-        const res = await apiClient.get<BootcampSettingsData>("/api/admin/sms/bootcamp/settings");
+        const url = selectedProviderId !== null
+          ? `/api/admin/sms/bootcamp/settings?provider_id=${selectedProviderId}`
+          : "/api/admin/sms/bootcamp/settings";
+        const res = await apiClient.get<any>(url);
         if (isMounted && res) {
-          setSettings(res);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(res));
+          const normalizedSettings = normalizeBootcampSettings(res);
+          setSettings(normalizedSettings);
+          const storageKey = selectedProviderId ? `${STORAGE_KEY}_prov_${selectedProviderId}` : STORAGE_KEY;
+          localStorage.setItem(storageKey, JSON.stringify(normalizedSettings));
         }
-      } catch {
-        // Fall back to local storage or defaults silently in sandboxed mode
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to load Bootcamp settings from server");
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -127,20 +176,23 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedProviderId]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      try {
-        await apiClient.put("/api/admin/sms/bootcamp/settings", { data: settings });
-      } catch {
-        // If server endpoint is mock/unmounted, sandbox local persistence still works
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      const payload = {
+        ...settings,
+        provider_id: selectedProviderId,
+      };
+      const res = await apiClient.put<any>("/api/admin/sms/bootcamp/settings", payload);
+      const normalized = res ? normalizeBootcampSettings(res) : settings;
+      setSettings(normalized);
+      const storageKey = selectedProviderId ? `${STORAGE_KEY}_prov_${selectedProviderId}` : STORAGE_KEY;
+      localStorage.setItem(storageKey, JSON.stringify(normalized));
       toast.success("Bootcamp settings saved successfully");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -149,7 +201,8 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
   const handleReset = () => {
     if (window.confirm("Reset all Bootcamp settings to defaults?")) {
       setSettings(DEFAULT_BOOTCAMP_SETTINGS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_BOOTCAMP_SETTINGS));
+      const storageKey = selectedProviderId ? `${STORAGE_KEY}_prov_${selectedProviderId}` : STORAGE_KEY;
+      localStorage.setItem(storageKey, JSON.stringify(DEFAULT_BOOTCAMP_SETTINGS));
       toast.info("Bootcamp settings reset to factory defaults");
     }
   };
@@ -196,7 +249,7 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
               Back
             </Button>
           )}
-          <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary">
             <Bot className="h-5 w-5" />
           </div>
           <div>
@@ -212,7 +265,25 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-center">
+        <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+          {providers.length > 0 && (
+            <div className="flex items-center gap-1.5 mr-1">
+              <span className="text-xs text-muted-foreground font-medium">Provider:</span>
+              <select
+                value={selectedProviderId ?? ""}
+                onChange={(e) => setSelectedProviderId(e.target.value ? Number(e.target.value) : null)}
+                className="h-8 text-xs rounded-md border border-slate-200 dark:border-slate-800 bg-background px-2 py-1 font-medium text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+              >
+                <option value="">Tenant Global</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <Button
             type="button"
             variant="outline"
@@ -230,7 +301,7 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
             size="sm"
             onClick={handleSave}
             disabled={loading || saving}
-            className="h-8 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs"
+            className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
           >
             <Save className="h-3.5 w-3.5" />
             {saving ? "Saving..." : "Save Settings"}
@@ -244,7 +315,7 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <BrainCircuit className="h-4 w-4 text-indigo-500" />
+                <BrainCircuit className="h-4 w-4 text-primary" />
                 Agent Configuration
               </CardTitle>
               <Badge variant="secondary" className="text-[10px]">
@@ -309,7 +380,7 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
                 <Sliders className="h-4 w-4 text-purple-500" />
                 Behavioral Settings Preview
               </CardTitle>
-              <Badge variant="outline" className="text-[10px] text-indigo-600 border-indigo-200 bg-indigo-50 dark:bg-indigo-950 dark:text-indigo-300">
+              <Badge variant="outline" className="text-[10px] text-primary border-primary/20 bg-primary/10">
                 Style Lab Sync
               </Badge>
             </div>
@@ -328,8 +399,10 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
 
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
               {styleDimensions.map(({ key, label, color }) => {
-                const activeVal = settings.active_profile[key] ?? 0;
-                const prevVal = settings.previous_profile ? settings.previous_profile[key] ?? 0 : null;
+                const activeProfile = settings?.active_profile ?? DEFAULT_STYLE_PROFILE;
+                const previousProfile = settings?.previous_profile;
+                const activeVal = activeProfile?.[key] ?? 0;
+                const prevVal = previousProfile?.[key] ?? null;
                 return (
                   <div key={key} className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 last:border-0">
                     <span className="font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -338,12 +411,12 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
                     </span>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <span className="font-mono font-bold text-primary">
                           {activeVal} / 5
                         </span>
                         <div className="w-12 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-indigo-600 rounded-full transition-all"
+                            className="h-full bg-primary rounded-full transition-all"
                             style={{ width: `${(activeVal / 5) * 100}%` }}
                           />
                         </div>
@@ -358,8 +431,8 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
               })}
             </div>
 
-            <div className="rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 text-[11px] text-indigo-900 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900 flex items-start gap-2">
-              <Info className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+            <div className="rounded-lg bg-primary/5 p-2.5 text-[11px] text-primary border border-primary/20 flex items-start gap-2">
+              <Info className="h-4 w-4 shrink-0 text-primary mt-0.5" />
               <span>
                 To tune these personality sliders with immediate feedback against customer personas, visit the Style Laboratory in Boot Camp.
               </span>
@@ -388,14 +461,14 @@ export default function BootcampSettingsTab({ onBackToBootcamp }: BootcampSettin
         <CardContent className="space-y-2.5 text-xs">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-semibold text-slate-500">Insert tag:</span>
-            {["agent_name", "traits", "business_name"].map((varName) => (
+            {["agent_name", "traits", "business_name", "provider_name"].map((varName) => (
               <Button
                 key={varName}
                 type="button"
                 variant="outline"
                 size="xs"
                 onClick={() => insertVariable(varName)}
-                className="h-6 text-[10px] font-mono gap-1 border-dashed hover:border-indigo-400 hover:text-indigo-600"
+                className="h-6 text-[10px] font-mono gap-1 border-dashed hover:border-primary hover:text-primary"
               >
                 + &#123;{varName}&#125;
               </Button>

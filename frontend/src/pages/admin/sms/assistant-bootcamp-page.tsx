@@ -404,6 +404,7 @@ export interface BootcampConversation {
   id: string;
   personaId: string;
   personaName: string;
+  scenarioId?: string;
   currentTurn: number;
   maxTurns: number;
   status: "idle" | "running" | "paused" | "completed" | "needs_handoff";
@@ -485,7 +486,10 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     "happy-harry",
     "curious-colin"
   ]);
-  const [activePersonaId, setActivePersonaId] = useState<string>("cranky-carl");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>("bootcamp-conv-cranky-carl");
+  const [activeRunId, setActiveRunId] = useState<number | null>(null);
+  const [providers, setProviders] = useState<{ id: number; name: string }[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null);
   const [turns, setTurns] = useState<number>(5);
   const [notice, setNotice] = useState<{ type: "info" | "error"; text: string } | null>(null);
 
@@ -511,7 +515,62 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Helper to get active conversation
-  const activeConversation = conversations[activePersonaId] || null;
+  const activeConversation = useMemo(() => {
+    if (activeConversationId && conversations[activeConversationId]) {
+      return conversations[activeConversationId];
+    }
+    const all = Object.values(conversations);
+    return all.length > 0 ? all[0] : null;
+  }, [activeConversationId, conversations]);
+
+  // Fetch providers list on mount
+  useEffect(() => {
+    let isMounted = true;
+    apiClient
+      .get<any>("/api/admin/providers")
+      .then((res) => {
+        if (!isMounted) return;
+        const list = Array.isArray(res) ? res : res?.data ?? [];
+        setProviders(list);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch persisted style profile on mount and provider change
+  useEffect(() => {
+    let isMounted = true;
+    const fetchProfile = async () => {
+      try {
+        const url = selectedProviderId !== null
+          ? `/api/admin/sms/bootcamp/profile?provider_id=${selectedProviderId}`
+          : "/api/admin/sms/bootcamp/profile";
+        const res = await apiClient.get<any>(url);
+        if (isMounted && res) {
+          const profile = res.active_profile || res.styleProfile || res.style_profile;
+          if (profile) {
+            setStyleProfile({ ...DEFAULT_STYLE_PROFILE, ...profile });
+          }
+          const prev = res.previous_profile || res.previousProfile;
+          if (prev) {
+            setPreviousProfile({ ...DEFAULT_STYLE_PROFILE, ...prev });
+            setCanUndo(true);
+          } else {
+            setPreviousProfile(null);
+            setCanUndo(false);
+          }
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to load style profile");
+      }
+    };
+    fetchProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProviderId]);
 
   // Fetch available scenario packs
   const loadScenarios = useCallback(async () => {
@@ -533,8 +592,9 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       const persona = PERSONAS.find((p) => p.id === pid);
       if (!persona) return;
       const initialScript = persona.dialogueScript[0];
-      newConvs[pid] = {
-        id: `bootcamp-conv-${pid}`,
+      const convId = `bootcamp-conv-${pid}`;
+      newConvs[convId] = {
+        id: convId,
         personaId: pid,
         personaName: persona.name,
         currentTurn: 1,
@@ -555,7 +615,53 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       };
     });
     setConversations(newConvs);
+    setActiveConversationId((prev) => (prev && newConvs[prev] ? prev : Object.keys(newConvs)[0] || null));
   }, []);
+
+  // Map backend conversation format to frontend BootcampConversation
+  const mapBackendConversation = useCallback(
+    (c: any, prevConv?: BootcampConversation): BootcampConversation => {
+      const personaId = c.persona_id || c.personaId;
+      const persona = PERSONAS.find((p) => p.id === personaId);
+      const personaName = c.persona_name || c.personaName || persona?.name || personaId;
+      const msgs: BootcampMessage[] = (c.messages || []).map((m: any) => {
+        const isCustomer = m.role === "persona" || m.sender === "customer" || m.sender === "persona";
+        const isTori = m.role === "tori" || m.sender === "tori";
+        return {
+          id: String(m.id || Math.random()),
+          sender: isCustomer ? "customer" : isTori ? "tori" : "staff",
+          authorName: isCustomer ? personaName : isTori ? "Tori" : "Staff",
+          text: m.text || "",
+          timestamp: m.createdAt || m.created_at
+            ? new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: m.status || (isCustomer ? "received" : "sent"),
+        };
+      });
+
+      const convId = String(c.id);
+      return {
+        id: convId,
+        personaId,
+        personaName,
+        scenarioId: c.scenario_id || c.scenarioId || undefined,
+        currentTurn: c.current_turn ?? c.currentTurn ?? 1,
+        maxTurns: c.max_turns ?? c.maxTurns ?? turns,
+        status:
+          c.needsHandoff || c.status === "handoff" || c.status === "needs_handoff"
+            ? "needs_handoff"
+            : c.status === "waiting_approval"
+            ? "paused"
+            : c.status || "idle",
+        needsHandoff: Boolean(c.needsHandoff || c.status === "handoff" || c.status === "needs_handoff"),
+        handoffReason: c.handoff_reason || c.handoffReason,
+        messages: msgs,
+        isPinned: prevConv?.isPinned ?? false,
+        isBlocked: prevConv?.isBlocked ?? false,
+      };
+    },
+    [turns]
+  );
 
   // Initial setup on mount
   useEffect(() => {
@@ -569,9 +675,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     if (profile.directness >= 4) {
       result = result.replace(/Hello [^!.]+! /i, "").replace(/Thanks for reaching out. /i, "");
     }
-    if (profile.warmth >= 4 && !result.includes("❤️") && !result.includes("pleasure")) {
-      result = `We really care about taking great care of you! ${result}`;
-    }
     if (profile.wit >= 4 && profile.sarcasm >= 3) {
       result = `${result} (And yes, we actually keep our promises!)`;
     } else if (profile.cheerfulness >= 4 && !result.includes("!")) {
@@ -584,64 +687,72 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const handleStart = async () => {
     setNotice(null);
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/runs", {
+      const payload: any = {
         persona_ids: selectedPersonaIds,
         turns,
         max_turns: turns,
         style_profile: styleProfile,
         autonomy_level: autonomyLevel,
         scenario_ids: selectedScenarios.length ? selectedScenarios : undefined,
-      }).catch(async () => {
-        // Fallback to legacy path if /runs route is unavailable
-        await apiClient.post("/api/admin/sms/bootcamp/runs/start", {
-          data: {
-            personas: selectedPersonaIds,
-            turns,
-            styleProfile,
-            autonomyLevel,
-            scenarios: selectedScenarios,
+      };
+      if (selectedProviderId !== null) {
+        payload.provider_id = selectedProviderId;
+      }
+      const res = await apiClient.post<any>("/api/admin/sms/bootcamp/runs", payload);
+
+      const runData = res?.run || res;
+      if (runData?.id) {
+        setActiveRunId(Number(runData.id));
+      }
+      if (runData && Array.isArray(runData.conversations) && runData.conversations.length > 0) {
+        const nextConvs: Record<string, BootcampConversation> = {};
+        runData.conversations.forEach((c: any) => {
+          if (c && c.id) {
+            const key = String(c.id);
+            nextConvs[key] = mapBackendConversation(c);
           }
-        }).catch(() => {});
-      });
-    } catch {
-      // Ignored for standalone mode
+        });
+        setConversations(nextConvs);
+        setActiveConversationId(String(runData.conversations[0].id));
+        setRunStatus(runData.status === "paused" ? "paused" : "running");
+        toast.success("Tori Boot Camp started! Real backend simulation active...");
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to start Bootcamp run");
+      return;
     }
 
-    // Reset turn progress if starting afresh
-    setConversations((prev) => {
-      const next = { ...prev };
-      selectedPersonaIds.forEach((pid) => {
-        const persona = PERSONAS.find((p) => p.id === pid);
-        if (!persona) return;
-        const initialText = persona.dialogueScript[0].customer;
-
-        if (!next[pid] || next[pid].status === "completed") {
-          next[pid] = {
-            id: `bootcamp-conv-${pid}`,
-            personaId: pid,
-            personaName: persona.name,
-            currentTurn: 1,
-            maxTurns: turns,
-            status: "running",
-            needsHandoff: false,
-            handoffReason: persona.handoffReason,
-            messages: [
-              {
-                id: `msg-${pid}-init`,
-                sender: "customer",
-                authorName: persona.name,
-                text: initialText,
-                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                status: "received"
-              }
-            ]
-          };
-        } else {
-          next[pid] = { ...next[pid], status: "running" };
-        }
-      });
-      return next;
+    // Reset turn progress if starting afresh offline
+    const nextConvs: Record<string, BootcampConversation> = {};
+    selectedPersonaIds.forEach((pid) => {
+      const persona = PERSONAS.find((p) => p.id === pid);
+      if (!persona) return;
+      const initialText = persona.dialogueScript[0].customer;
+      const convId = `bootcamp-conv-${pid}`;
+      nextConvs[convId] = {
+        id: convId,
+        personaId: pid,
+        personaName: persona.name,
+        currentTurn: 1,
+        maxTurns: turns,
+        status: "running",
+        needsHandoff: false,
+        handoffReason: persona.handoffReason,
+        messages: [
+          {
+            id: `msg-${convId}-init`,
+            sender: "customer",
+            authorName: persona.name,
+            text: initialText,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "received"
+          }
+        ]
+      };
     });
+    setConversations(nextConvs);
+    setActiveConversationId(Object.keys(nextConvs)[0] || null);
 
     setRunStatus("running");
     toast.success("Tori Boot Camp started! Generating simulated interactions...");
@@ -650,70 +761,83 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   // Run action: PAUSE
   const handlePause = async () => {
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/runs/pause", {}).catch(() => {});
-    } catch {
-      // Standalone fallback
-    }
-    setRunStatus("paused");
-    setConversations((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((k) => {
-        if (next[k].status === "running") {
-          next[k] = { ...next[k], status: "paused" };
-        }
+      if (activeRunId) {
+        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+          operation: "pause",
+        });
+      }
+      setRunStatus("paused");
+      setConversations((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          if (next[k].status === "running") {
+            next[k] = { ...next[k], status: "paused" };
+          }
+        });
+        return next;
       });
-      return next;
-    });
-    toast.info("Boot Camp paused.");
+      toast.info("Boot Camp paused.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to pause Boot Camp");
+    }
   };
 
   // Run action: RESUME
   const handleResume = async () => {
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/runs/resume", {}).catch(() => {});
-    } catch {
-      // Standalone fallback
-    }
-    setRunStatus("running");
-    setConversations((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((k) => {
-        if (next[k].status === "paused") {
-          next[k] = { ...next[k], status: "running" };
-        }
+      if (activeRunId) {
+        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+          operation: "resume",
+        });
+      }
+      setRunStatus("running");
+      setConversations((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          if (next[k].status === "paused") {
+            next[k] = { ...next[k], status: "running" };
+          }
+        });
+        return next;
       });
-      return next;
-    });
-    toast.success("Boot Camp resumed.");
+      toast.success("Boot Camp resumed.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to resume Boot Camp");
+    }
   };
 
   // Run action: STOP
   const handleStop = async () => {
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/runs/stop", {}).catch(() => {});
-    } catch {
-      // Standalone fallback
-    }
-    setRunStatus("stopped");
-    setConversations((prev) => {
-      const next = { ...prev };
-      Object.keys(next).forEach((k) => {
-        if (next[k].status === "running" || next[k].status === "paused") {
-          next[k] = { ...next[k], status: "idle" };
-        }
+      if (activeRunId) {
+        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+          operation: "stop",
+        });
+      }
+      setRunStatus("stopped");
+      setConversations((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          if (next[k].status === "running" || next[k].status === "paused") {
+            next[k] = { ...next[k], status: "idle" };
+          }
+        });
+        return next;
       });
-      return next;
-    });
-    toast.info("Boot Camp stopped.");
+      toast.info("Boot Camp stopped.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to stop Boot Camp");
+    }
   };
 
   // Run action: RESET
   const handleReset = async () => {
     try {
-      await apiClient.delete("/api/admin/sms/bootcamp/runs").catch(() => {});
+      await apiClient.delete("/api/admin/sms/bootcamp/runs");
     } catch {
-      // Standalone fallback
+      // Ignored
     }
+    setActiveRunId(null);
     initializeConversations(selectedPersonaIds, turns);
     setRunStatus("idle");
     setNotice(null);
@@ -730,10 +854,38 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     pollingRef.current = setInterval(async () => {
       // Attempt backend poll first
       try {
-        const latest = await apiClient.get<any>("/api/admin/sms/bootcamp/runs/latest").catch(() => null);
-        if (latest && latest.conversations) {
-          setConversations(latest.conversations);
-          if (latest.status) setRunStatus(latest.status);
+        const url = selectedProviderId !== null
+          ? `/api/admin/sms/bootcamp/runs/latest?provider_id=${selectedProviderId}`
+          : "/api/admin/sms/bootcamp/runs/latest";
+        const latest = await apiClient.get<any>(url).catch(() => null);
+        const runData = latest?.run || latest;
+        if (runData?.id) {
+          setActiveRunId(Number(runData.id));
+        }
+        const convList: any[] = Array.isArray(runData?.conversations)
+          ? runData.conversations
+          : runData?.conversations && typeof runData.conversations === "object"
+          ? Object.values(runData.conversations)
+          : [];
+
+        if (convList.length > 0) {
+          setConversations((prev) => {
+            const next = { ...prev };
+            convList.forEach((c) => {
+              if (c && c.id) {
+                const key = String(c.id);
+                next[key] = mapBackendConversation(c, prev[key]);
+              }
+            });
+            return next;
+          });
+          if (runData.status) {
+            if (runData.status === "completed" || runData.status === "stopped") {
+              setRunStatus(runData.status);
+            } else if (runData.status === "waiting_approval" || runData.status === "paused") {
+              setRunStatus("paused");
+            }
+          }
           return;
         }
       } catch {
@@ -746,8 +898,8 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         let allCompleted = true;
         let madeProgress = false;
 
-        for (const pid of selectedPersonaIds) {
-          const conv = next[pid];
+        for (const convId of Object.keys(next)) {
+          const conv = next[convId];
           if (!conv) continue;
 
           // If blocked by handoff, skip this thread until resolved
@@ -758,7 +910,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
           if (conv.currentTurn <= conv.maxTurns && conv.status === "running") {
             allCompleted = false;
-            const persona = PERSONAS.find((p) => p.id === pid);
+            const persona = PERSONAS.find((p) => p.id === conv.personaId);
             if (!persona) continue;
 
             const scriptTurn = persona.dialogueScript[conv.currentTurn - 1];
@@ -768,7 +920,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
             if (lastMsg && lastMsg.sender === "customer") {
               // Level 2 (Semi-Autonomous): Check if handoff should trigger this turn
               if (autonomyLevel === 2 && persona.handoffTurn === conv.currentTurn) {
-                next[pid] = {
+                next[convId] = {
                   ...conv,
                   needsHandoff: true,
                   status: "needs_handoff",
@@ -787,13 +939,13 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
               // Level 1: Review Every Turn generates a draft and pauses for operator sign-off
               const isLevel1Draft = autonomyLevel === 1;
 
-              next[pid] = {
+              next[convId] = {
                 ...conv,
                 status: isLevel1Draft ? "paused" : conv.status,
                 messages: [
                   ...conv.messages,
                   {
-                    id: `msg-${pid}-tori-${conv.currentTurn}`,
+                    id: `msg-${convId}-tori-${conv.currentTurn}`,
                     sender: "tori",
                     authorName: "Tori",
                     text: toriText,
@@ -815,13 +967,13 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
               if (nextTurn <= conv.maxTurns) {
                 const nextScript = persona.dialogueScript[nextTurn - 1];
                 if (nextScript) {
-                  next[pid] = {
+                  next[convId] = {
                     ...conv,
                     currentTurn: nextTurn,
                     messages: [
                       ...conv.messages,
                       {
-                        id: `msg-${pid}-cust-${nextTurn}`,
+                        id: `msg-${convId}-cust-${nextTurn}`,
                         sender: "customer",
                         authorName: persona.name,
                         text: nextScript.customer,
@@ -834,11 +986,11 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                   break;
                 }
               } else {
-                next[pid] = { ...conv, status: "completed" };
+                next[convId] = { ...conv, status: "completed" };
               }
             }
           } else if (conv.status !== "completed") {
-            next[pid] = { ...conv, status: "completed" };
+            next[convId] = { ...conv, status: "completed" };
           }
         }
 
@@ -850,45 +1002,54 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         return next;
       });
     }, 2500);
-
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [runStatus, selectedPersonaIds, turns, styleProfile, autonomyLevel]);
+  }, [runStatus, turns, styleProfile, autonomyLevel, selectedProviderId]);
 
   // Handle owner lesson response to information request
   const handleResolveLesson = async (answer: string) => {
     if (!activeConversation) return;
-    const pid = activeConversation.personaId;
-    const persona = PERSONAS.find((p) => p.id === pid);
+    const convId = activeConversation.id;
+    const persona = PERSONAS.find((p) => p.id === activeConversation.personaId);
 
     try {
-      await apiClient.post(
-        `/api/admin/sms/bootcamp/conversations/${activeConversation.id}/information-request/respond`,
+      const res = await apiClient.post<any>(
+        `/api/admin/sms/bootcamp/conversations/${convId}/information-request/respond`,
         { information: answer }
-      ).catch(() => {});
-    } catch {
-      // Standalone fallback
+      );
+      if (res?.conversation) {
+        const updated = mapBackendConversation(res.conversation);
+        setConversations((prev) => ({
+          ...prev,
+          [updated.id]: updated,
+        }));
+        toast.success("Lesson saved! Tori retried the message with the new knowledge.");
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to respond to information request");
+      return;
     }
 
-    // Clear handoff on the conversation, add lesson resolved reply from Tori, and advance
+    // Local simulation fallback
     const resolvedReply =
       persona?.handoffResolvedReply ||
       `Got it! Based on your update: "${answer}". I've recorded this lesson and will proceed with the booking!`;
 
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
 
-      next[pid] = {
+      next[convId] = {
         ...conv,
         needsHandoff: false,
         status: "running",
         messages: [
           ...conv.messages,
           {
-            id: `msg-${pid}-tori-resolved-${Date.now()}`,
+            id: `msg-${convId}-tori-resolved-${Date.now()}`,
             sender: "tori",
             authorName: "Tori",
             text: resolvedReply,
@@ -905,12 +1066,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   const handleDismissHandoff = async () => {
     if (!activeConversation) return;
-    const pid = activeConversation.personaId;
+    const convId = activeConversation.id;
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
-      next[pid] = {
+      next[convId] = {
         ...conv,
         needsHandoff: false,
         status: conv.status === "needs_handoff" ? "running" : conv.status,
@@ -924,27 +1085,35 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const handleSendMessage = async (text: string) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const pid = activeConversation.personaId;
 
     try {
-      await apiClient.post(`/api/admin/sms/bootcamp/conversations/${convId}/messages`, {
+      const res = await apiClient.post<any>(`/api/admin/sms/bootcamp/conversations/${convId}/messages`, {
         body: text,
         author_type: "staff",
-      }).catch(() => {});
-    } catch {
-      // Standalone fallback
+      });
+      if (res?.conversation) {
+        const updated = mapBackendConversation(res.conversation);
+        setConversations((prev) => ({
+          ...prev,
+          [updated.id]: updated,
+        }));
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send staff message");
+      return;
     }
 
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
-      next[pid] = {
+      next[convId] = {
         ...conv,
         messages: [
           ...conv.messages,
           {
-            id: `msg-${pid}-staff-${Date.now()}`,
+            id: `msg-${convId}-staff-${Date.now()}`,
             sender: "staff",
             authorName: "Staff",
             text,
@@ -965,29 +1134,31 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   ) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const pid = activeConversation.personaId;
+
+    const trimmedReason = reason?.trim() || "Manual response correction";
+    const trimmedWording = correctedWording?.trim();
 
     try {
       await apiClient.post(`/api/admin/sms/bootcamp/conversations/${convId}/corrections`, {
-        message_id: target.messageId,
-        reason,
-        corrected_wording: correctedWording,
-      }).catch(() => {});
-    } catch {
-      // Standalone fallback
+        message_id: String(target.messageId),
+        reason: trimmedReason,
+        corrected_wording: trimmedWording || undefined,
+      });
+      toast.success("Correction saved to learning queue");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save correction");
+      return;
     }
 
-    toast.success("Correction saved to learning queue");
-
-    if (correctedWording && correctedWording.trim()) {
+    if (trimmedWording) {
       setConversations((prev) => {
         const next = { ...prev };
-        const conv = next[pid];
+        const conv = next[convId];
         if (!conv) return prev;
-        next[pid] = {
+        next[convId] = {
           ...conv,
           messages: conv.messages.map((m) =>
-            m.id === target.messageId ? { ...m, text: correctedWording.trim() } : m
+            String(m.id) === String(target.messageId) ? { ...m, text: trimmedWording } : m
           ),
         };
         return next;
@@ -1002,16 +1173,31 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     const pid = activeConversation.personaId;
 
     try {
-      await apiClient.post(`/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`, {
-        action: "approve"
-      }).catch(() => {});
-    } catch {
-      // Standalone fallback
+      const res = await apiClient.post<any>(
+        `/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`,
+        { action: "approve" }
+      );
+      if (res?.conversation) {
+        const updated = mapBackendConversation(res.conversation);
+        setConversations((prev) => ({
+          ...prev,
+          [updated.id]: updated,
+        }));
+        if (runStatus === "paused") {
+          setRunStatus("running");
+        }
+        toast.success("Draft approved and sent. Turn advanced.");
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to approve draft");
+      return;
     }
 
+    // Local fallback
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
 
       const persona = PERSONAS.find((p) => p.id === pid);
@@ -1019,7 +1205,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         m.id === msgId ? { ...m, status: "sent" as const } : m
       );
 
-      // Advance simulation turn upon draft approval (Requirement 1.4)
       const nextTurn = conv.currentTurn + 1;
       let nextMessages = updatedMessages;
       let newTurn = conv.currentTurn;
@@ -1032,7 +1217,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
           nextMessages = [
             ...updatedMessages,
             {
-              id: `msg-${pid}-cust-${nextTurn}`,
+              id: `msg-${convId}-cust-${nextTurn}`,
               sender: "customer",
               authorName: persona.name,
               text: nextScript.customer,
@@ -1047,7 +1232,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         newStatus = "completed";
       }
 
-      next[pid] = {
+      next[convId] = {
         ...conv,
         currentTurn: newTurn,
         status: newStatus,
@@ -1065,21 +1250,31 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const handleDiscardDraft = async (msgId: string | number) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const pid = activeConversation.personaId;
 
     try {
-      await apiClient.post(`/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`, {
-        action: "discard"
-      }).catch(() => {});
-    } catch {
-      // Standalone fallback
+      const res = await apiClient.post<any>(
+        `/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`,
+        { action: "discard" }
+      );
+      if (res?.conversation) {
+        const updated = mapBackendConversation(res.conversation);
+        setConversations((prev) => ({
+          ...prev,
+          [updated.id]: updated,
+        }));
+        toast.info("Draft discarded.");
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to discard draft");
+      return;
     }
 
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
-      next[pid] = {
+      next[convId] = {
         ...conv,
         messages: conv.messages.filter((m) => m.id !== msgId),
       };
@@ -1094,17 +1289,31 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     const pid = activeConversation.personaId;
 
     try {
-      await apiClient.post(`/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`, {
-        action: "approve",
-        text
-      }).catch(() => {});
-    } catch {
-      // Standalone fallback
+      const res = await apiClient.post<any>(
+        `/api/admin/sms/bootcamp/conversations/${convId}/drafts/${msgId}/review`,
+        { action: "approve", text }
+      );
+      if (res?.conversation) {
+        const updated = mapBackendConversation(res.conversation);
+        setConversations((prev) => ({
+          ...prev,
+          [updated.id]: updated,
+        }));
+        if (runStatus === "paused") {
+          setRunStatus("running");
+        }
+        toast.success("Edited draft sent. Turn advanced.");
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send edited draft");
+      return;
     }
 
+    // Local fallback
     setConversations((prev) => {
       const next = { ...prev };
-      const conv = next[pid];
+      const conv = next[convId];
       if (!conv) return prev;
 
       const persona = PERSONAS.find((p) => p.id === pid);
@@ -1112,7 +1321,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         m.id === msgId ? { ...m, text, status: "sent" as const } : m
       );
 
-      // Advance simulation turn upon edited draft approval
       const nextTurn = conv.currentTurn + 1;
       let nextMessages = updatedMessages;
       let newTurn = conv.currentTurn;
@@ -1125,7 +1333,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
           nextMessages = [
             ...updatedMessages,
             {
-              id: `msg-${pid}-cust-${nextTurn}`,
+              id: `msg-${convId}-cust-${nextTurn}`,
               sender: "customer",
               authorName: persona.name,
               text: nextScript.customer,
@@ -1140,7 +1348,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         newStatus = "completed";
       }
 
-      next[pid] = {
+      next[convId] = {
         ...conv,
         currentTurn: newTurn,
         status: newStatus,
@@ -1165,12 +1373,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   const handleTogglePin = async () => {
     if (!activeConversation) return;
-    const pid = activeConversation.personaId;
+    const convId = activeConversation.id;
     const newPinned = !activeConversation.isPinned;
     setConversations((prev) => {
       const next = { ...prev };
-      if (!next[pid]) return prev;
-      next[pid] = { ...next[pid], isPinned: newPinned };
+      if (!next[convId]) return prev;
+      next[convId] = { ...next[convId], isPinned: newPinned };
       return next;
     });
     toast.success(newPinned ? "Thread pinned." : "Thread unpinned.");
@@ -1178,12 +1386,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   const handleToggleBlock = async () => {
     if (!activeConversation) return;
-    const pid = activeConversation.personaId;
+    const convId = activeConversation.id;
     const newBlocked = !activeConversation.isBlocked;
     setConversations((prev) => {
       const next = { ...prev };
-      if (!next[pid]) return prev;
-      next[pid] = { ...next[pid], isBlocked: newBlocked };
+      if (!next[convId]) return prev;
+      next[convId] = { ...next[convId], isBlocked: newBlocked };
       return next;
     });
     toast.success(newBlocked ? "Contact blocked in simulation." : "Contact unblocked.");
@@ -1217,9 +1425,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       }
       const updated = selectedPersonaIds.filter((id) => id !== pid);
       setSelectedPersonaIds(updated);
-      if (activePersonaId === pid) {
-        setActivePersonaId(updated[0]);
-      }
+      initializeConversations(updated, turns);
     } else {
       const updated = [...selectedPersonaIds, pid];
       setSelectedPersonaIds(updated);
@@ -1237,7 +1443,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const clearPersonas = () => {
     const single = [PERSONAS[0].id];
     setSelectedPersonaIds(single);
-    setActivePersonaId(single[0]);
     initializeConversations(single, turns);
   };
 
@@ -1249,27 +1454,44 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   // Apply to Tori
   const handleApplyProfile = async () => {
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/profile/apply", {
-        data: { profile: styleProfile }
-      }).catch(() => {});
-      setPreviousProfile({ ...styleProfile });
+      const prior = { ...styleProfile };
+      const payload: any = {
+        styleProfile,
+      };
+      if (selectedProviderId !== null) {
+        payload.provider_id = selectedProviderId;
+      }
+      const res = await apiClient.post<any>("/api/admin/sms/bootcamp/profile/apply", payload);
+      setPreviousProfile(prior);
       setCanUndo(true);
+      if (res?.active_profile) {
+        setStyleProfile({ ...DEFAULT_STYLE_PROFILE, ...res.active_profile });
+      }
       toast.success("Style profile applied to Tori!");
-    } catch {
-      toast.error("Failed to apply style profile");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to apply style profile");
     }
   };
 
   // Undo profile
   const handleUndoProfile = async () => {
-    if (!previousProfile) return;
+    if (!canUndo) return;
     try {
-      await apiClient.post("/api/admin/sms/bootcamp/profile/undo", {}).catch(() => {});
-      setStyleProfile({ ...previousProfile });
+      const payload: any = {};
+      if (selectedProviderId !== null) {
+        payload.provider_id = selectedProviderId;
+      }
+      const res = await apiClient.post<any>("/api/admin/sms/bootcamp/profile/undo", payload);
+      if (res?.active_profile) {
+        setStyleProfile({ ...DEFAULT_STYLE_PROFILE, ...res.active_profile });
+      } else if (previousProfile) {
+        setStyleProfile({ ...previousProfile });
+      }
       setCanUndo(false);
+      setPreviousProfile(null);
       toast.info("Reverted to previous style profile.");
-    } catch {
-      toast.error("Failed to undo style profile");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to undo style profile");
     }
   };
 
@@ -1324,15 +1546,33 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   return (
     <div className="flex flex-col h-full min-h-0 bg-background text-foreground">
       {/* 1. Header Toolbar */}
-      <header className="flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4 sm:py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+      <header className="flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4 sm:py-3 border-b border-border bg-card shrink-0">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-600 text-white shadow-xs">
+          <div className="p-2 rounded-xl bg-primary text-primary-foreground shadow-xs">
             <Bot className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base sm:text-lg font-bold tracking-tight">Tori Boot Camp</h1>
               {renderStatusPill()}
+              {providers.length > 0 && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  <span className="text-[11px] text-muted-foreground font-medium">Provider:</span>
+                  <select
+                    value={selectedProviderId ?? ""}
+                    disabled={runStatus === "running"}
+                    onChange={(e) => setSelectedProviderId(e.target.value ? Number(e.target.value) : null)}
+                    className="h-6 text-xs rounded-md border border-border bg-card px-2 py-0 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">Tenant Global</option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <p className="text-[11px] sm:text-xs text-muted-foreground">
               Simulated only · paced updates · no SMS or bookings
@@ -1370,7 +1610,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                 size="sm"
                 variant="outline"
                 onClick={handleStop}
-                className="h-8 text-xs gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                className="h-8 text-xs gap-1.5 border-border text-foreground hover:bg-muted"
               >
                 <Square className="h-3.5 w-3.5" />
                 <span>Stop</span>
@@ -1393,7 +1633,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                 size="sm"
                 variant="outline"
                 onClick={handleStop}
-                className="h-8 text-xs gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100"
+                className="h-8 text-xs gap-1.5 border-border text-foreground hover:bg-muted"
               >
                 <Square className="h-3.5 w-3.5" />
                 <span>Stop</span>
@@ -1407,7 +1647,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
             variant="outline"
             size="sm"
             onClick={handleReset}
-            className="h-8 text-xs gap-1 text-slate-600 dark:text-slate-400 hover:text-rose-600"
+            className="h-8 text-xs gap-1 text-muted-foreground hover:text-rose-600"
             title="Clear all test run threads"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -1421,7 +1661,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 hover:bg-indigo-100"
+                className="h-8 text-xs gap-1.5 border-primary/20 text-primary bg-primary/5 hover:bg-primary/10"
               >
                 <Settings className="h-3.5 w-3.5" />
                 <span>Settings</span>
@@ -1430,11 +1670,11 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
             <SheetContent side="right" className="w-full sm:max-w-xl md:max-w-2xl overflow-y-auto p-4 sm:p-6">
               <SheetHeader className="mb-4">
                 <SheetTitle className="text-base font-bold flex items-center gap-2">
-                  <Bot className="h-4 w-4 text-indigo-600" />
+                  <Bot className="h-4 w-4 text-primary" />
                   Bootcamp Isolated Settings
                 </SheetTitle>
               </SheetHeader>
-              <BootcampSettingsTab onBackToBootcamp={() => setSettingsSheetOpen(false)} />
+              <BootcampSettingsTab onBackToBootcamp={() => setSettingsSheetOpen(false)} initialProviderId={selectedProviderId} />
             </SheetContent>
           </Sheet>
 
@@ -1458,7 +1698,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
           className={`px-4 py-2 text-xs flex items-center justify-between shrink-0 ${
             notice.type === "error"
               ? "bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200"
-              : "bg-indigo-50 dark:bg-indigo-950/40 border-b border-indigo-200 dark:border-indigo-900 text-indigo-800 dark:text-indigo-200"
+              : "bg-primary/10 dark:bg-primary/20 border-b border-primary/20 text-primary dark:text-primary-foreground"
           }`}
         >
           <span>{notice.text}</span>
@@ -1475,27 +1715,27 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       {/* 2. Responsive 3-Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT COLUMN: Personas & Turn Controls */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col min-h-0">
-          {/* Header Controls */}
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2.5 shrink-0">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card flex flex-col min-h-0">
+          {/* Compact Header Controls */}
+          <div className="p-2.5 border-b border-border space-y-1.5 shrink-0">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <Users className="h-4 w-4 text-indigo-500" />
+              <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Users className="h-3.5 w-3.5 text-primary" />
                 <span>Threads {selectedPersonaIds.length}/{PERSONAS.length}</span>
               </div>
               <div className="flex items-center gap-1 text-[11px]">
                 <button
                   type="button"
                   onClick={selectAllPersonas}
-                  className="text-indigo-600 hover:text-indigo-700 font-medium px-1 cursor-pointer"
+                  className="text-primary hover:underline font-medium px-1 cursor-pointer"
                 >
                   Select all
                 </button>
-                <span className="text-slate-300 dark:text-slate-700">|</span>
+                <span className="text-border">|</span>
                 <button
                   type="button"
                   onClick={clearPersonas}
-                  className="text-slate-500 hover:text-slate-700 font-medium px-1 cursor-pointer"
+                  className="text-muted-foreground hover:text-foreground font-medium px-1 cursor-pointer"
                 >
                   Clear
                 </button>
@@ -1504,38 +1744,33 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
             {/* Mobile Responsive Selector (Visible on small screens) */}
             <div className="block lg:hidden">
-              <label htmlFor="mobile-persona-select" className="text-[10px] font-bold uppercase text-slate-500 mb-1 block">
+              <label htmlFor="mobile-persona-select" className="text-[10px] font-bold uppercase text-muted-foreground mb-0.5 block">
                 Active Thread View
               </label>
               <select
                 id="mobile-persona-select"
-                value={activePersonaId}
-                onChange={(e) => setActivePersonaId(e.target.value)}
-                className="w-full h-8 px-2 text-xs rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-foreground"
+                value={activeConversation?.id || ""}
+                onChange={(e) => setActiveConversationId(e.target.value)}
+                className="w-full h-7 px-2 text-xs rounded-md border border-border bg-background text-foreground"
               >
-                {selectedPersonaIds.map((pid) => {
-                  const p = PERSONAS.find((item) => item.id === pid);
-                  const conv = conversations[pid];
+                {Object.values(conversations).map((conv) => {
+                  const p = PERSONAS.find((item) => item.id === conv.personaId);
                   const handoffFlag = conv?.needsHandoff ? " ⚠️ (Needs Handoff)" : "";
+                  const scenarioFlag = conv?.scenarioId ? ` [${conv.scenarioId}]` : "";
                   return (
-                    <option key={pid} value={pid}>
-                      {p?.name} [{p?.category}]{handoffFlag}
+                    <option key={conv.id} value={conv.id}>
+                      {conv.personaName} [{p?.category || "SIM"}]{scenarioFlag}{handoffFlag}
                     </option>
                   );
                 })}
               </select>
             </div>
 
-            {/* Turns Slider */}
-            <div className="space-y-1 pt-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                  Turns per Thread
-                </span>
-                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                  {turns} turns
-                </span>
-              </div>
+            {/* Turns / Iterations per Thread - Compact Inline Row */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <span className="text-[11px] font-semibold text-muted-foreground shrink-0 whitespace-nowrap">
+                Turns/Thread: <span className="font-mono font-bold text-primary">{turns}</span>
+              </span>
               <input
                 type="range"
                 min="2"
@@ -1548,83 +1783,75 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                   setTurns(val);
                   initializeConversations(selectedPersonaIds, val);
                 }}
-                className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
+                className="flex-1 h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary disabled:opacity-50"
+                title={`Turns per thread: ${turns} (range 2 - 12)`}
               />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>2 min</span>
-                <span>12 max</span>
-              </div>
             </div>
 
-            {/* Autonomy Level Selector (Spec 37) */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+            {/* Autonomy Level Selector - Compact Group */}
+            <div className="space-y-1 pt-1 border-t border-border">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                <span className="text-[11px] font-semibold text-muted-foreground">
                   Autonomy Level
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                  {autonomyLevel === 1 ? "Level 1" : autonomyLevel === 2 ? "Level 2" : "Level 3"}
+                <span className="text-[10px] text-muted-foreground truncate max-w-[155px]">
+                  {autonomyLevel === 1 ? "Review Every Turn" : autonomyLevel === 2 ? "Semi-Autonomous" : "Full Sim"}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1 p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-3 gap-1 p-0.5 rounded-md bg-muted/60 border border-border">
                 <button
                   type="button"
                   onClick={() => setAutonomyLevel(1)}
                   disabled={runStatus === "running"}
-                  className={`h-7 text-xs px-2 rounded-md font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
+                  className={`h-6 text-[11px] px-1 rounded font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
                     autonomyLevel === 1
-                      ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs border border-slate-200 dark:border-slate-700"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      ? "bg-card text-primary font-bold shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   title="Level 1: Review Every Turn — Pauses on drafts for human sign-off"
                 >
-                  Level 1
+                  L1 Review
                 </button>
                 <button
                   type="button"
                   onClick={() => setAutonomyLevel(2)}
                   disabled={runStatus === "running"}
-                  className={`h-7 text-xs px-2 rounded-md font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
+                  className={`h-6 text-[11px] px-1 rounded font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
                     autonomyLevel === 2
-                      ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs border border-slate-200 dark:border-slate-700"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      ? "bg-card text-primary font-bold shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   title="Level 2: Semi-Autonomous (Default) — Pauses on handoffs & knowledge gaps"
                 >
-                  Level 2
+                  L2 Semi
                 </button>
                 <button
                   type="button"
                   onClick={() => setAutonomyLevel(3)}
                   disabled={runStatus === "running"}
-                  className={`h-7 text-xs px-2 rounded-md font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
+                  className={`h-6 text-[11px] px-1 rounded font-medium transition-all text-center flex items-center justify-center cursor-pointer disabled:opacity-50 ${
                     autonomyLevel === 3
-                      ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-xs border border-slate-200 dark:border-slate-700"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      ? "bg-card text-primary font-bold shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   title="Level 3: Full Simulation — Executes all turns completely autonomously"
                 >
-                  Level 3
+                  L3 Full
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground leading-tight">
-                {autonomyLevel === 1 && "Review Every Turn — Pauses on drafts for operator sign-off."}
-                {autonomyLevel === 2 && "Semi-Autonomous — Pauses on handoffs and knowledge gaps."}
-                {autonomyLevel === 3 && "Full Simulation — Executes all turns autonomously."}
-              </p>
             </div>
 
-            {/* Scenario Pack Selector (Specs 33, 34) */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+            {/* Test Scenario Selector - Compact */}
+            <div className="space-y-1 pt-1 border-t border-border">
               <div className="flex items-center justify-between text-xs">
-                <label htmlFor="bootcamp-scenario-select" className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                <label htmlFor="bootcamp-scenario-select" className="text-[11px] font-semibold text-muted-foreground">
                   Test Scenario
                 </label>
                 {selectedScenarios.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setSelectedScenarios([])}
-                    className="text-[10px] text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 font-medium cursor-pointer"
+                    className="text-[10px] text-primary hover:underline font-medium cursor-pointer"
                   >
                     Reset
                   </button>
@@ -1638,9 +1865,9 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                   const val = e.target.value;
                   setSelectedScenarios(val ? [val] : []);
                 }}
-                className="w-full h-8 px-2 text-xs rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                className="w-full h-7 px-2 text-[11px] rounded-md border border-border bg-card text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
               >
-                <option value="">All Scenarios (Random / Balanced)</option>
+                <option value="">All Scenarios (Balanced)</option>
                 {scenarioPacks.map((pack) => (
                   <optgroup key={pack.id} label={pack.title}>
                     {(pack.scenarios || []).map((sc) => (
@@ -1651,90 +1878,135 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                   </optgroup>
                 ))}
               </select>
-              {selectedScenarios.length > 0 ? (
-                (() => {
-                  const activeSc = scenarioPacks
-                    .flatMap((p) => p.scenarios || [])
-                    .find((s) => s.id === selectedScenarios[0]);
-                  return activeSc ? (
-                    <div className="p-1.5 rounded bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 text-[10px] text-indigo-900 dark:text-indigo-200">
-                      <span className="font-semibold block">{activeSc.title}</span>
-                      <span className="text-muted-foreground">{activeSc.description}</span>
-                    </div>
-                  ) : null;
-                })()
-              ) : (
-                <p className="text-[10px] text-muted-foreground leading-tight">
-                  Default: Dynamically tests balanced scenarios across all packs.
-                </p>
-              )}
+              {selectedScenarios.length > 0 && (() => {
+                const activeSc = scenarioPacks
+                  .flatMap((p) => p.scenarios || [])
+                  .find((s) => s.id === selectedScenarios[0]);
+                return activeSc ? (
+                  <div className="px-2 py-1 rounded bg-primary/5 border border-primary/20 text-[10px] text-primary">
+                    <span className="font-semibold mr-1">{activeSc.title}:</span>
+                    <span className="text-muted-foreground line-clamp-1">{activeSc.description}</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
 
-          {/* 12 Persona Cards List (Hidden on mobile dropdown unless desktop) */}
+          {/* Threads list */}
           <div className="hidden lg:flex flex-1 flex-col overflow-y-auto p-2 space-y-1.5 no-scrollbar">
-            {PERSONAS.map((persona) => {
-              const isSelected = selectedPersonaIds.includes(persona.id);
-              const isActive = activePersonaId === persona.id;
-              const conv = conversations[persona.id];
-              const needsHandoff = conv?.needsHandoff === true;
+            {runStatus === "idle" ? (
+              PERSONAS.map((persona) => {
+                const isSelected = selectedPersonaIds.includes(persona.id);
+                const conv = Object.values(conversations).find((c) => c.personaId === persona.id);
+                const isActive = activeConversation?.id === conv?.id;
+                const needsHandoff = conv?.needsHandoff === true;
 
-              return (
-                <div
-                  key={persona.id}
-                  onClick={() => {
-                    setActivePersonaId(persona.id);
-                    if (!isSelected) {
-                      togglePersona(persona.id);
-                    }
-                  }}
-                  className={`p-2.5 rounded-lg border transition-all cursor-pointer text-xs relative ${
-                    isActive
-                      ? "border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 shadow-xs"
-                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-1.5 mb-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          togglePersona(persona.id);
-                        }}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
-                      />
-                      <span className="font-bold truncate text-slate-900 dark:text-slate-100">
-                        {persona.name}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      {needsHandoff && (
-                        <span title="Action required: Missing information handoff">
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                return (
+                  <div
+                    key={persona.id}
+                    onClick={() => {
+                      if (conv) setActiveConversationId(conv.id);
+                      if (!isSelected) {
+                        togglePersona(persona.id);
+                      }
+                    }}
+                    className={`p-2.5 rounded-lg border transition-all cursor-pointer text-xs relative ${
+                      isActive
+                        ? "border-primary bg-primary/5 shadow-xs"
+                        : "border-border bg-card hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            togglePersona(persona.id);
+                          }}
+                          className="rounded border-slate-300 text-primary focus:ring-primary accent-primary h-3.5 w-3.5 cursor-pointer"
+                        />
+                        <span className="font-bold truncate text-foreground">
+                          {persona.name}
                         </span>
-                      )}
-                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${persona.badgeClass}`}>
-                        {persona.category}
-                      </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {needsHandoff && (
+                          <span title="Action required: Missing information handoff">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                          </span>
+                        )}
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${persona.badgeClass}`}>
+                          {persona.category}
+                        </span>
+                      </div>
                     </div>
+
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 ml-5.5">
+                      {persona.description}
+                    </p>
+
+                    {conv && (
+                      <div className="mt-1 ml-5.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>Turn {conv.currentTurn}/{conv.maxTurns}</span>
+                        <span className="capitalize">{conv.status.replace("_", " ")}</span>
+                      </div>
+                    )}
                   </div>
+                );
+              })
+            ) : (
+              Object.values(conversations).map((conv) => {
+                const persona = PERSONAS.find((p) => p.id === conv.personaId);
+                const isActive = activeConversation?.id === conv.id;
+                const needsHandoff = conv.needsHandoff === true;
 
-                  <p className="text-[11px] text-muted-foreground line-clamp-1 ml-5.5">
-                    {persona.description}
-                  </p>
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => setActiveConversationId(conv.id)}
+                    className={`p-2.5 rounded-lg border transition-all cursor-pointer text-xs relative ${
+                      isActive
+                        ? "border-primary bg-primary/5 shadow-xs"
+                        : "border-border bg-card hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-bold truncate text-foreground">
+                          {conv.personaName}
+                        </span>
+                        {conv.scenarioId && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono">
+                            {conv.scenarioId}
+                          </span>
+                        )}
+                      </div>
 
-                  {conv && (
-                    <div className="mt-1 ml-5.5 flex items-center justify-between text-[10px] text-slate-400">
+                      <div className="flex items-center gap-1 shrink-0">
+                        {needsHandoff && (
+                          <span title="Action required: Missing information handoff">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                          </span>
+                        )}
+                        {persona && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${persona.badgeClass}`}>
+                            {persona.category}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
                       <span>Turn {conv.currentTurn}/{conv.maxTurns}</span>
                       <span className="capitalize">{conv.status.replace("_", " ")}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })
+            )}
           </div>
         </aside>
 
@@ -1782,11 +2054,11 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         </main>
 
         {/* RIGHT COLUMN: Style Laboratory */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col min-h-0">
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-card flex flex-col min-h-0">
+          <div className="p-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-sm font-bold flex items-center gap-1.5 text-slate-900 dark:text-slate-100">
-                <Sliders className="h-4 w-4 text-indigo-600" />
+              <h2 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                <Sliders className="h-4 w-4 text-primary" />
                 Tori style laboratory
               </h2>
             </div>
@@ -1814,10 +2086,10 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                 <div key={key} className="space-y-1">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{label}</span>
+                      <span className="font-semibold text-foreground">{label}</span>
                       <span className="text-[10px] text-muted-foreground block">{desc}</span>
                     </div>
-                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
                       {val} / 5
                     </span>
                   </div>
@@ -1828,7 +2100,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                     step="1"
                     value={val}
                     onChange={(e) => handleSliderChange(key, Number(e.target.value))}
-                    className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[9px] text-muted-foreground">
                     <span>0 (None)</span>
@@ -1840,7 +2112,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
           </div>
 
           {/* Action Buttons: Apply & Undo */}
-          <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 shrink-0 flex items-center justify-between gap-2">
+          <div className="p-3 border-t border-border bg-card/50 shrink-0 flex items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"
@@ -1857,7 +2129,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
               type="button"
               size="sm"
               onClick={handleApplyProfile}
-              className="h-8 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs"
+              className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs"
             >
               <Save className="h-3.5 w-3.5" />
               Apply to Tori

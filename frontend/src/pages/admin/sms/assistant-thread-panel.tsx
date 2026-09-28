@@ -241,14 +241,19 @@ export function AssistantThreadPanel({
 
   // AI Correction Submission
   const handleCorrectionSubmit = async () => {
-    if (!correctionTarget || !correctionReason.trim() || submittingCorrection) return;
+    if (!correctionTarget || submittingCorrection) return;
+    const finalReason = correctionReason.trim() || "Manual response correction";
+    const finalWording = correctedWording.trim();
+    if (!correctionReason.trim() && !finalWording) return;
     setSubmittingCorrection(true);
     try {
-      await onSubmitCorrection(
-        correctionTarget,
-        correctionReason.trim(),
-        correctedWording.trim() || undefined
-      );
+      if (onSubmitCorrection) {
+        await onSubmitCorrection(
+          correctionTarget,
+          finalReason,
+          finalWording || undefined
+        );
+      }
       setCorrectionTarget(null);
       setCorrectionReason("");
       setCorrectedWording("");
@@ -293,7 +298,7 @@ export function AssistantThreadPanel({
                 </span>
               )}
               {statusBadge && (
-                <span className="inline-flex items-center text-indigo-600 dark:text-indigo-400 font-bold">
+                <span className="inline-flex items-center text-primary font-bold">
                   · {statusBadge}
                 </span>
               )}
@@ -484,14 +489,14 @@ export function AssistantThreadPanel({
                 return (
                   <div
                     key={msg.id}
-                    className="self-end max-w-[85%] rounded-2xl rounded-br-md border border-blue-400/60 dark:border-blue-700/60 bg-blue-50/80 dark:bg-blue-950/40 text-foreground shadow-xs px-3 py-2 space-y-2"
+                    className="self-end max-w-[85%] rounded-2xl rounded-br-md border border-primary/30 bg-primary/5 text-foreground shadow-xs px-3 py-2 space-y-2"
                   >
-                    <div className="flex items-center justify-between text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-primary">
                       <div className="flex items-center gap-1">
                         <Sparkles className="h-3.5 w-3.5" />
                         <span>AI draft—not sent</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10.5px] text-blue-500/80 dark:text-blue-400/80 font-normal shrink-0">
+                      <div className="flex items-center gap-1.5 text-[10.5px] text-primary/80 font-normal shrink-0">
                         {msg.occurredAt && <span>{formatOccurredAt(msg.occurredAt)} ·</span>}
                         <span>Pending approval</span>
                       </div>
@@ -503,7 +508,7 @@ export function AssistantThreadPanel({
                           value={editingDraftBody}
                           onChange={(e) => setEditingDraftBody(e.target.value)}
                           rows={3}
-                          className="w-full rounded-md border border-blue-400/60 dark:border-blue-700/60 bg-card dark:bg-muted/40 p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                          className="w-full rounded-md border border-primary/40 bg-card dark:bg-muted/40 p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
                         />
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -517,7 +522,7 @@ export function AssistantThreadPanel({
                             type="button"
                             disabled={actionInFlight || !editingDraftBody.trim()}
                             onClick={() => handleSendEditedDraft(msg.id)}
-                            className="px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 rounded transition-colors shadow-xs cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded transition-colors shadow-xs cursor-pointer"
                           >
                             Send
                           </button>
@@ -528,7 +533,7 @@ export function AssistantThreadPanel({
                         <p className="text-[13px] leading-snug whitespace-pre-wrap text-foreground">
                           {msg.body}
                         </p>
-                        <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-blue-200/60 dark:border-blue-800/60">
+                        <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border">
                           <button
                             type="button"
                             onClick={() => {
@@ -551,7 +556,7 @@ export function AssistantThreadPanel({
                             type="button"
                             disabled={actionInFlight}
                             onClick={() => handleApproveDraft(msg.id)}
-                            className="px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 rounded transition-colors shadow-xs cursor-pointer"
+                            className="px-2.5 py-1 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded transition-colors shadow-xs cursor-pointer"
                           >
                             Send
                           </button>
@@ -567,9 +572,9 @@ export function AssistantThreadPanel({
                 return (
                   <div
                     key={msg.id}
-                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-blue-600 dark:bg-blue-700 text-white shadow-xs px-3 py-2 text-[13px]"
+                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-xs px-3 py-2 text-[13px]"
                   >
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-blue-100 dark:text-blue-200 mb-1">
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-primary-foreground/90 mb-1">
                       <div className="flex items-center gap-1">
                         <Bot className="h-3 w-3 shrink-0" />
                         <span>{msg.authorName || "AI"}</span>
@@ -585,7 +590,7 @@ export function AssistantThreadPanel({
                             setCorrectedWording(msg.body || "");
                           }}
                           title="Flag AI reply for correction"
-                          className="text-blue-100 hover:text-white dark:text-blue-200 p-0.5 rounded cursor-pointer transition-colors"
+                          className="text-primary-foreground/80 hover:text-primary-foreground p-0.5 rounded cursor-pointer transition-colors"
                         >
                           <Flag className="h-3 w-3" />
                         </button>
@@ -638,7 +643,7 @@ export function AssistantThreadPanel({
           {/* Real-time simulation thinking indicator */}
           {isGenerating && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground pl-2 py-1">
-              <span className="h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
+              <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
               <span className="italic">AI is analyzing persona cues and formulating reply...</span>
             </div>
           )}
@@ -667,7 +672,7 @@ export function AssistantThreadPanel({
                   : "Type a message... (Cmd+Enter to send)"
               }
               rows={1}
-              className="flex-1 rounded-2xl border border-border bg-card dark:bg-muted/30 px-3.5 py-1.5 text-[13px] max-h-32 min-h-[38px] resize-none text-foreground placeholder:text-muted-foreground focus:border-indigo-500 focus:bg-card focus:outline-none leading-snug"
+              className="flex-1 rounded-2xl border border-border bg-card dark:bg-muted/30 px-3.5 py-1.5 text-[13px] max-h-32 min-h-[38px] resize-none text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-card focus:outline-none leading-snug"
             />
 
             {/* Circular Green Send Button */}
@@ -729,7 +734,7 @@ export function AssistantThreadPanel({
                   href={bookingUrl}
                   className="flex flex-col items-center justify-center py-1.5 px-1 rounded-lg bg-card dark:bg-muted/20 border border-border text-foreground hover:bg-muted transition-colors text-[11px] font-medium cursor-pointer"
                 >
-                  <Calendar className="h-4 w-4 mb-0.5 text-blue-500" />
+                  <Calendar className="h-4 w-4 mb-0.5 text-primary" />
                   <span>Booking</span>
                 </a>
               ) : (
@@ -737,7 +742,7 @@ export function AssistantThreadPanel({
                   href="/admin/bookings"
                   className="flex flex-col items-center justify-center py-1.5 px-1 rounded-lg bg-card dark:bg-muted/20 border border-border text-foreground hover:bg-muted transition-colors text-[11px] font-medium cursor-pointer"
                 >
-                  <Calendar className="h-4 w-4 mb-0.5 text-blue-500" />
+                  <Calendar className="h-4 w-4 mb-0.5 text-primary" />
                   <span>Booking</span>
                 </a>
               )}
@@ -814,7 +819,7 @@ export function AssistantThreadPanel({
         <DialogContent className="max-w-md bg-card text-card-foreground border-border">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold flex items-center gap-1.5 text-foreground">
-              <Flag className="h-4 w-4 text-blue-500" /> Flag AI Response for Correction
+              <Flag className="h-4 w-4 text-primary" /> Flag AI Response for Correction
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Record ground-truth correction evidence to train future assistant responses. Live facts are governed by
@@ -832,14 +837,14 @@ export function AssistantThreadPanel({
 
             <div>
               <label className="font-semibold text-foreground block mb-1">
-                Correction Reason <span className="text-red-500">*</span>:
+                Correction Reason <span className="text-muted-foreground font-normal">(Optional if ideal wording provided)</span>:
               </label>
               <input
                 type="text"
                 value={correctionReason}
                 onChange={(e) => setCorrectionReason(e.target.value)}
                 placeholder="e.g. Quoted outdated prices; wrong weekend hours"
-                className="w-full rounded border border-border bg-card dark:bg-muted/30 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-blue-500"
+                className="w-full rounded border border-border bg-card dark:bg-muted/30 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
 
@@ -850,7 +855,7 @@ export function AssistantThreadPanel({
                 onChange={(e) => setCorrectedWording(e.target.value)}
                 rows={3}
                 placeholder="The exact sentence the assistant should have replied..."
-                className="w-full rounded border border-border bg-card dark:bg-muted/30 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full rounded border border-border bg-card dark:bg-muted/30 p-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
               />
             </div>
           </div>
@@ -865,9 +870,9 @@ export function AssistantThreadPanel({
             </button>
             <button
               type="button"
-              disabled={!correctionReason.trim() || submittingCorrection}
+              disabled={(!correctionReason.trim() && !correctedWording.trim()) || submittingCorrection}
               onClick={handleCorrectionSubmit}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-md shadow-xs transition-colors cursor-pointer"
+              className="px-3 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 rounded-md shadow-xs transition-colors cursor-pointer"
             >
               {submittingCorrection ? "Submitting..." : "Save Correction"}
             </button>

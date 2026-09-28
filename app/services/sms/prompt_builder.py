@@ -288,6 +288,8 @@ def format_structured_operational_data(
             in_call = provider.get("in_call_address")
             out_call_radius = provider.get("out_call_radius_km")
             surcharge = provider.get("base_outcall_surcharge", 0)
+            p_in = provider.get("allow_in_call", True)
+            p_out = provider.get("allow_out_call", True)
         else:
             p_name = getattr(provider, "name", None)
             turnaround = getattr(provider, "turnaround_buffer_mins", None)
@@ -295,9 +297,26 @@ def format_structured_operational_data(
             in_call = getattr(provider, "in_call_address", None)
             out_call_radius = getattr(provider, "out_call_radius_km", None)
             surcharge = getattr(provider, "base_outcall_surcharge", 0)
+            p_in = getattr(provider, "allow_in_call", True)
+            p_out = getattr(provider, "allow_out_call", True)
 
         if p_name:
             lines.append(f"Provider: {p_name}")
+
+        p_in = provider.get("allow_in_call") if isinstance(provider, dict) else getattr(provider, "allow_in_call", None)
+        p_out = provider.get("allow_out_call") if isinstance(provider, dict) else getattr(provider, "allow_out_call", None)
+        if p_in is not None or p_out is not None:
+            p_in_val = True if p_in is None else bool(p_in)
+            p_out_val = True if p_out is None else bool(p_out)
+            if p_in_val and p_out_val:
+                p_modes = "In-Call & Out-Call (Both)"
+            elif p_in_val:
+                p_modes = "In-Call only"
+            elif p_out_val:
+                p_modes = "Out-Call only"
+            else:
+                p_modes = "None"
+            lines.append(f"Delivery Modes Offered: {p_modes}")
 
         if turnaround is not None:
             lines.append(f"Notice & Turnaround Buffer: {turnaround} mins")
@@ -327,7 +346,25 @@ def format_structured_operational_data(
                 s_dep = s.get("deposit_amount", 0)
             s_desc = getattr(s, "description", None) or (s.get("description") if isinstance(s, dict) else "")
 
+            s_in = s.get("allow_in_call") if isinstance(s, dict) else getattr(s, "allow_in_call", None)
+            s_out = s.get("allow_out_call") if isinstance(s, dict) else getattr(s, "allow_out_call", None)
+            s_out_price = s.get("outcall_price") if isinstance(s, dict) else getattr(s, "outcall_price", None)
+
             svc_line = f"- {s_name} | Duration: {s_dur} mins | Price: ${s_price}"
+            if s_out_price is not None:
+                svc_line += f" (Out-Call: ${s_out_price})"
+            if s_in is not None or s_out is not None:
+                s_in_val = True if s_in is None else bool(s_in)
+                s_out_val = True if s_out is None else bool(s_out)
+                if s_in_val and s_out_val:
+                    s_modes = "In-Call & Out-Call (Both)"
+                elif s_in_val:
+                    s_modes = "In-Call only"
+                elif s_out_val:
+                    s_modes = "Out-Call only"
+                else:
+                    s_modes = "None"
+                svc_line += f" | Modes: {s_modes}"
             if s_dep:
                 svc_line += f" | Deposit: ${s_dep}"
             if s_desc:

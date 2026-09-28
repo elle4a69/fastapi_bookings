@@ -64,43 +64,186 @@ def get_service_details(db: Session, provider_id: int, service_id: int) -> Dict[
         "description": service.description
     }
 
-def find_live_availability(
-    db: Session, 
-    provider_id: int, 
-    service_id: int, 
-    search_days: int = 7
+def check_availability(
+    db: Session,
+    provider_id: int,
+    service_id: int,
+    date: Optional[datetime] = None,
+    service_mode: str = "in_call",
+    client_suburb: Optional[str] = None,
+    service_address: Optional[str] = None,
+    client_postcode: Optional[str] = None,
+    search_days: int = 7,
 ) -> List[Dict[str, Any]]:
-    """Query live availability slots using existing booking domain logic."""
+    """Query live availability slots supporting in-call and 5-segment out-call operational windows."""
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     service = db.query(Service).filter(Service.id == service_id).first()
     if not provider or not service:
         raise ValueError("Provider or Service not found.")
 
-    start_search = datetime.now(timezone.utc)
-    end_search = start_search + timedelta(days=search_days)
+    if date is not None:
+        target_dates = [date]
+    else:
+        now_dt = datetime.now(timezone.utc)
+        target_dates = [now_dt + timedelta(days=i) for i in range(max(1, search_days))]
 
-    slots = compute_availability(
+    all_slots: List[Dict[str, Any]] = []
+    from ..booking.availability_service import get_available_slots
+
+    for d in target_dates:
+        day_slots = get_available_slots(
+            db=db,
+            service_duration=service.duration,
+            provider_id=provider.id,
+            date=d,
+            service_id=service.id,
+            service_mode=service_mode,
+            client_suburb=client_suburb,
+            service_address=service_address,
+            client_postcode=client_postcode,
+        )
+        for s in day_slots:
+            slot_item = {
+                "service_id": service.id,
+                "service_name": service.name,
+                "provider_id": provider.id,
+                "provider_name": provider.name,
+                "service_mode": service_mode,
+                "start": s["start"].isoformat(),
+                "end": s["end"].isoformat(),
+                "display": s["start"].strftime("%A %B %d at %I:%M %p"),
+            }
+            if "operational_window" in s:
+                slot_item["operational_window"] = s["operational_window"]
+            all_slots.append(slot_item)
+            if len(all_slots) >= 5:
+                break
+        if len(all_slots) >= 5:
+            break
+
+    return all_slots
+
+
+def find_live_availability(
+    db: Session, 
+    provider_id: int, 
+    service_id: int, 
+    search_days: int = 7,
+    service_mode: str = "in_call",
+    client_suburb: Optional[str] = None,
+    service_address: Optional[str] = None,
+    client_postcode: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Query live availability slots using booking domain logic with out-call support."""
+    return check_availability(
         db=db,
-        service=service,
-        provider=provider,
-        start_time=start_search,
-        end_time=end_search
+        provider_id=provider_id,
+        service_id=service_id,
+        service_mode=service_mode,
+        client_suburb=client_suburb,
+        service_address=service_address,
+        client_postcode=client_postcode,
+        search_days=search_days,
     )
-    
-    # Format slots for AI/SMS use
-    formatted_slots = []
-    for slot in slots[:5]:  # Return at most 5 slots to keep SMS short
-        formatted_slots.append({
-            "service_id": service_id,
-            "service_name": service.name,
-            "provider_id": provider_id,
+
+
+async def quote_travel(
+    db: Session,
+    tenant_id: int,
+    provider_id: int,
+    suburb: Optional[str] = None,
+    service_address: Optional[str] = None,
+    postcode: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Calculate or estimate out-call travel distance and fees for AI tool callers."""
+    from ...models.tenant import Tenant
+    from ..routing.travel_service import TravelCalculationService
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    provider = db.query(Provider).filter(Provider.id == provider_id, Provider.tenant_id == tenant_id).first()
+    if not tenant or not provider:
+        raise ValueError("Tenant or Provider not found.")
+
+    travel_svc = TravelCalculationService()
+    try:
+        if service_address:
+            quote = await travel_svc.calculate_chargeable_travel(
+                tenant=tenant,
+                provider=provider,
+                client_destination=service_address,
+                is_estimate=False,
+            )
+        elif suburb:
+            quote = await travel_svc.estimate_suburb_travel(
+                tenant=tenant,
+                provider=provider,
+                suburb=suburb,
+                postcode=postcode,
+            )
+        else:
+            raise ValueError("Either suburb or service_address must be provided.")
+
+        return {
+            "provider_id": provider.id,
             "provider_name": provider.name,
-            "start": slot["start"].isoformat(),
-            "end": slot["end"].isoformat(),
-            "display": slot["start"].strftime("%A %B %d at %I:%M %p")
-        })
-        
-    return formatted_slots
+            "suburb": suburb or quote.destination_address,
+            "destination": quote.destination_address,
+            "chargeable_distance_km": quote.distance_km,
+            "chargeable_travel_fee": float(quote.travel_fee),
+            "base_surcharge": float(quote.base_surcharge),
+            "distance_fee": float(quote.distance_fee),
+            "is_estimate": quote.is_estimate,
+            "within_radius": quote.within_radius,
+            "disclaimer": quote.disclaimer,
+        }
+    finally:
+        await travel_svc.close()
+
+
+SMS_TOOLS: List[Dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "check_availability",
+            "description": "Check real-time availability slots for a service and provider, supporting both in-call and out-call operational windows.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_id": {"type": "integer", "description": "ID of the service to check."},
+                    "provider_id": {"type": "integer", "description": "ID of the provider."},
+                    "date": {"type": "string", "description": "Specific date in YYYY-MM-DD format (optional)."},
+                    "service_mode": {
+                        "type": "string",
+                        "enum": ["in_call", "out_call"],
+                        "description": "Delivery mode: 'in_call' or 'out_call'. Defaults to 'in_call'."
+                    },
+                    "client_suburb": {
+                        "type": "string",
+                        "description": "Client suburb name for out-call transit window resolution."
+                    }
+                },
+                "required": ["service_id", "provider_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "quote_travel",
+            "description": "Calculate or estimate travel fee and distance for an out-call appointment based on suburb or street address.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "provider_id": {"type": "integer", "description": "ID of the provider providing out-call service."},
+                    "suburb": {"type": "string", "description": "Client suburb for fee estimation."},
+                    "postcode": {"type": "string", "description": "Client postal code (optional)."},
+                    "service_address": {"type": "string", "description": "Client exact street address for precise quote (optional)."}
+                },
+                "required": ["provider_id"]
+            }
+        }
+    }
+]
 
 def create_booking(
     db: Session,
