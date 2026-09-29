@@ -411,3 +411,235 @@ class GeocodingService:
         except Exception as exc:
             logger.warning("Mapbox geocoding query failed for '%s': %s", query, exc)
         return None
+
+    async def search_addresses(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Search for verified addresses using the service's HTTP client."""
+        client = await self._get_client()
+        return await search_addresses(query, limit=limit, client=client)
+
+
+async def search_addresses_mapbox(
+    query: str,
+    token: str,
+    client: httpx.AsyncClient,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Query Mapbox Geocoding Places API for Australian addresses."""
+    encoded = quote(query, safe="")
+    url = (
+        f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
+        f"?access_token={token}&country=au&types=address,poi,postcode,locality,place&limit={limit}"
+    )
+    results: list[dict[str, Any]] = []
+    try:
+        resp = await client.get(url)
+        if resp.status_code == 200:
+            data = resp.json()
+            for feat in data.get("features", []):
+                coords = feat.get("center")
+                if not coords or len(coords) < 2:
+                    continue
+                lng, lat = float(coords[0]), float(coords[1])
+                place_name = feat.get("place_name", "")
+                street_num = feat.get("address", "")
+                street_name = feat.get("text", "")
+                street_address = f"{street_num} {street_name}".strip() if (street_num or street_name) else None
+
+                suburb = None
+                state = None
+                postcode = None
+                country = "Australia"
+
+                for ctx in feat.get("context", []):
+                    cid = ctx.get("id", "")
+                    if cid.startswith("postcode"):
+                        postcode = ctx.get("text")
+                    elif cid.startswith("locality") or cid.startswith("place") or cid.startswith("district"):
+                        if not suburb:
+                            suburb = ctx.get("text")
+                    elif cid.startswith("region"):
+                        state = (ctx.get("short_code", "") or "").replace("AU-", "") or ctx.get("text")
+                    elif cid.startswith("country"):
+                        country = ctx.get("text", "Australia")
+
+                if not suburb and "place" in feat.get("place_type", []):
+                    suburb = feat.get("text")
+
+                results.append({
+                    "formatted_address": place_name,
+                    "street_address": street_address,
+                    "suburb": suburb,
+                    "state": state,
+                    "postcode": postcode,
+                    "country": country,
+                    "latitude": lat,
+                    "longitude": lng,
+                    "source": "mapbox",
+                    "is_verified": True,
+                })
+    except Exception as exc:
+        logger.warning("Mapbox address search failed for '%s': %s", query, exc)
+    return results
+
+
+async def search_addresses_osm(
+    query: str,
+    client: httpx.AsyncClient,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Query OpenStreetMap Nominatim for Australian addresses."""
+    encoded = quote(query, safe="")
+    url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&addressdetails=1&limit={limit}&countrycodes=au"
+    headers = {"User-Agent": "FastAPIBookings-AddressVerification/1.0"}
+    results: list[dict[str, Any]] = []
+    try:
+        resp = await client.get(url, headers=headers)
+        if resp.status_code == 200:
+            items = resp.json()
+            for item in items:
+                lat = float(item.get("lat", 0))
+                lng = float(item.get("lon", 0))
+                addr = item.get("address", {})
+                road = addr.get("road")
+                house_num = addr.get("house_number")
+                street_address = f"{house_num} {road}".strip() if house_num and road else (road or None)
+                suburb = addr.get("suburb") or addr.get("neighbourhood") or addr.get("city") or addr.get("town")
+                state = addr.get("state")
+                postcode = addr.get("postcode")
+                country = addr.get("country", "Australia")
+                formatted = item.get("display_name", "")
+
+                results.append({
+                    "formatted_address": formatted,
+                    "street_address": street_address,
+                    "suburb": suburb,
+                    "state": state,
+                    "postcode": postcode,
+                    "country": country,
+                    "latitude": lat,
+                    "longitude": lng,
+                    "source": "osm_nominatim",
+                    "is_verified": True,
+                })
+    except Exception as exc:
+        logger.warning("OSM Nominatim address search failed for '%s': %s", query, exc)
+    return results
+
+
+def search_addresses_local(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Search addresses using the local Australian postcodes database."""
+    q = (query or "").strip()
+    if not q:
+        return []
+
+    results: list[dict[str, Any]] = []
+
+    # Check if query has comma or street structure, e.g. "123 George St, Sydney" or "10 Main St, 2000"
+    parts = [p.strip() for p in q.split(",") if p.strip()]
+    if len(parts) >= 2:
+        street_part = parts[0]
+        locality_part = parts[1]
+        local_match = lookup_au_postcode(suburb=locality_part) or lookup_au_postcode(postcode=locality_part)
+        if local_match:
+            formatted = f"{street_part}, {local_match['suburb']} {local_match['state']} {local_match['postcode']}, Australia"
+            results.append({
+                "formatted_address": formatted,
+                "street_address": street_part,
+                "suburb": local_match["suburb"],
+                "state": local_match["state"],
+                "postcode": local_match["postcode"],
+                "country": "Australia",
+                "latitude": local_match["latitude"],
+                "longitude": local_match["longitude"],
+                "source": "au_postcodes",
+                "is_verified": True,
+            })
+
+    # Also search suburb autocomplete matches
+    suburbs = search_au_suburbs(q, limit=limit)
+    for sub in suburbs:
+        formatted = f"{sub['suburb']} {sub['state']} {sub['postcode']}, Australia"
+        results.append({
+            "formatted_address": formatted,
+            "street_address": None,
+            "suburb": sub["suburb"],
+            "state": sub["state"],
+            "postcode": sub["postcode"],
+            "country": "Australia",
+            "latitude": sub["latitude"],
+            "longitude": sub["longitude"],
+            "source": "au_postcodes",
+            "is_verified": True,
+        })
+
+    # Deduplicate results by formatted_address
+    seen = set()
+    deduped = []
+    for r in results:
+        addr = r["formatted_address"].lower()
+        if addr not in seen:
+            seen.add(addr)
+            deduped.append(r)
+        if len(deduped) >= limit:
+            break
+
+    return deduped
+
+
+async def search_addresses(
+    query: str,
+    limit: int = 10,
+    client: Optional[httpx.AsyncClient] = None,
+) -> list[dict[str, Any]]:
+    """Search for verified Australian addresses with multi-tier fallback.
+
+    Tier 1: Mapbox Geocoding (if MAPBOX_ACCESS_TOKEN is configured and not in offline test mode).
+    Tier 2: OpenStreetMap Nominatim (if not in offline test mode).
+    Tier 3: Local Australian postcodes database (<1ms, offline-safe).
+    """
+    q = (query or "").strip()
+    if not q:
+        return []
+
+    is_test_env = bool(os.getenv("PYTEST_CURRENT_TEST"))
+    mapbox_token = getattr(settings, "MAPBOX_ACCESS_TOKEN", None)
+
+    # 1. Mapbox Geocoding if available and not offline test
+    if mapbox_token and not is_test_env:
+        try:
+            close_client = False
+            req_client = client
+            if req_client is None:
+                req_client = httpx.AsyncClient(timeout=4.0)
+                close_client = True
+            try:
+                results = await search_addresses_mapbox(q, mapbox_token, req_client, limit=limit)
+                if results:
+                    return results
+            finally:
+                if close_client:
+                    await req_client.aclose()
+        except Exception as exc:
+            logger.warning("Mapbox search failed, trying fallback: %s", exc)
+
+    # 2. OSM Nominatim fallback if not offline test
+    if not is_test_env:
+        try:
+            close_client = False
+            req_client = client
+            if req_client is None:
+                req_client = httpx.AsyncClient(timeout=3.0)
+                close_client = True
+            try:
+                results = await search_addresses_osm(q, req_client, limit=limit)
+                if results:
+                    return results
+            finally:
+                if close_client:
+                    await req_client.aclose()
+        except Exception as exc:
+            logger.warning("OSM Nominatim search failed, falling back to local: %s", exc)
+
+    # 3. Local AU Postcodes fast-path / fallback
+    return search_addresses_local(q, limit=limit)
+

@@ -90,10 +90,26 @@ class TravelCalculationService:
         raw_policy = getattr(tenant, "travel_charge_origin", TravelChargeOrigin.ALWAYS_FROM_BASE.value)
         policy_str = raw_policy.value if isinstance(raw_policy, TravelChargeOrigin) else str(raw_policy)
 
+        # Resolve base origin from provider's assigned Location, falling back to base_location_id, then tenant address
+        prov_loc_address = None
+        if hasattr(provider, "locations") and provider.locations:
+            first_loc = provider.locations[0]
+            prov_loc_address = getattr(first_loc, "address", None) or (
+                getattr(first_loc.location, "address", None) if hasattr(first_loc, "location") else None
+            )
+        elif hasattr(provider, "location") and provider.location:
+            prov_loc_address = getattr(provider.location, "address", None)
+        elif hasattr(provider, "location_providers") and provider.location_providers:
+            first_lp = provider.location_providers[0]
+            if hasattr(first_lp, "location") and first_lp.location:
+                prov_loc_address = getattr(first_lp.location, "address", None)
+
         base_origin = (
-            getattr(provider, "in_call_address", None)
+            prov_loc_address
             or getattr(provider, "base_location_id", None)
             or getattr(tenant, "address", None)
+            or (getattr(provider.tenant, "address", None) if getattr(provider, "tenant", None) else None)
+            or getattr(provider, "in_call_address", None)
             or (-33.8688, 151.2093)
         )
 

@@ -63,9 +63,12 @@ app/
 - `tenants`:
   - `travel_charge_origin`: String enum (`ALWAYS_FROM_BASE`, `ACTUAL_ORIGIN`).
   - `address`, `latitude`, `longitude`: Default base location fallback.
+- `locations`:
+  - `address`: Physical branch/studio address; authoritative base origin for calculating out-call travel times, transit distances, and provider operational windows.
 - `providers`:
+  - Providers operate from their assigned `Location`(s) and do not own an address on their profile.
+  - Base travel origin is derived dynamically from the provider's assigned Location (`provider.locations[0].address` or `provider.location.address`), falling back to `provider.base_location_id`, then `tenant.address`.
   - `allow_out_call`: Boolean capability flag.
-  - `in_call_address`: Primary base address for mobile providers.
   - `out_call_radius_km`: Maximum serviceable radius (default: 25.0 km).
   - `base_outcall_surcharge`: Flat fee component (Numeric).
   - `per_km_fee`: Distance rate per km (Numeric).
@@ -95,6 +98,8 @@ Commercial Chargeable           Operational Transit
 ```
 
 ### API Contracts
+- `GET /api/public/travel/addresses?q=...&limit=10`:
+  - Output: List of `AddressAutocompleteItem` (`formatted_address`, `street_address`, `suburb`, `state`, `postcode`, `country`, `latitude`, `longitude`, `source`, `is_verified`). Multi-tier fallback supporting Mapbox Geocoding Places API, OpenStreetMap Nominatim, and offline local Australian postcodes dataset.
 - `GET /api/public/travel/suburbs?q=...&limit=10`:
   - Output: List of `SuburbAutocompleteItem` (`suburb`, `postcode`, `state`, `latitude`, `longitude`) matching prefix.
 - `POST /api/public/travel/estimate`:

@@ -7,6 +7,7 @@ import threading
 # Force OTel SDK off before ANY app module is imported.
 # Uses a hard assignment so shell env overrides are also suppressed.
 os.environ["OTEL_SDK_DISABLED"] = "true"
+os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-long-strictly-for-tests")
 
 import pytest
 from sqlalchemy import create_engine
@@ -16,6 +17,12 @@ from fastapi.testclient import TestClient
 from app.main import app as fastapi_app
 from app.db.database import Base, get_db
 import app.models  # Crucial: imports all models to register them on Base.metadata
+from tests.fixtures.channel_fixtures import (  # noqa: F401
+    channel_test_env,
+    synthetic_channel_accounts,
+    multi_turn_conversation_with_chatwoot,
+    legacy_sms_compatibility_data,
+)
 
 # SQLite in-memory database URL for tests
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

@@ -234,9 +234,24 @@ def recalculate_provider_itinerary(
         if b.status not in (BookingStatus.CANCELLED, "CANCELLED", "cancelled")
     ]
 
+    # Resolve base origin from provider's location address, then tenant address
+    prov_loc_address = None
+    if hasattr(provider, "locations") and provider.locations:
+        first_loc = provider.locations[0]
+        prov_loc_address = getattr(first_loc, "address", None) or (
+            getattr(first_loc.location, "address", None) if hasattr(first_loc, "location") else None
+        )
+    elif hasattr(provider, "location") and provider.location:
+        prov_loc_address = getattr(provider.location, "address", None)
+    elif hasattr(provider, "location_providers") and provider.location_providers:
+        first_lp = provider.location_providers[0]
+        if hasattr(first_lp, "location") and first_lp.location:
+            prov_loc_address = getattr(first_lp.location, "address", None)
+
     base_loc = (
-        getattr(provider, "in_call_address", None)
+        prov_loc_address
         or (getattr(provider.tenant, "address", None) if getattr(provider, "tenant", None) else None)
+        or getattr(provider, "in_call_address", None)
         or "Sydney CBD"
     )
 

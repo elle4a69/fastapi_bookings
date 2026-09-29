@@ -58,9 +58,27 @@ def evaluate_outcall_day_slots(
         return []
 
     calc = get_operational_window_calculator()
+
+    # Resolve base origin from location.address or provider's location address, then tenant address
+    prov_loc_address = None
+    if location and getattr(location, "address", None):
+        prov_loc_address = location.address
+    elif hasattr(prov, "locations") and prov.locations:
+        first_loc = prov.locations[0]
+        prov_loc_address = getattr(first_loc, "address", None) or (
+            getattr(first_loc.location, "address", None) if hasattr(first_loc, "location") else None
+        )
+    elif hasattr(prov, "location") and prov.location:
+        prov_loc_address = getattr(prov.location, "address", None)
+    elif hasattr(prov, "location_providers") and prov.location_providers:
+        first_lp = prov.location_providers[0]
+        if hasattr(first_lp, "location") and first_lp.location:
+            prov_loc_address = getattr(first_lp.location, "address", None)
+
     base_origin = (
-        getattr(prov, "in_call_address", None)
+        prov_loc_address
         or (getattr(prov.tenant, "address", None) if getattr(prov, "tenant", None) else None)
+        or getattr(prov, "in_call_address", None)
         or (-33.8688, 151.2093)
     )
     effective_dest = destination or base_origin

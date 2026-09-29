@@ -508,3 +508,78 @@ def test_api_travel_suburbs_autocomplete_endpoint(client: TestClient):
     assert isinstance(data_num, list)
     assert len(data_num) > 0
     assert all(item["postcode"].startswith("202") for item in data_num)
+
+
+def test_api_travel_addresses_autocomplete_endpoint(client: TestClient):
+    """GET /api/public/travel/addresses returns standardized addresses with verification."""
+    resp = client.get("/api/public/travel/addresses?q=Bondi")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    assert isinstance(items, list)
+    assert len(items) > 0
+
+    first = items[0]
+    assert "formatted_address" in first
+    assert "suburb" in first
+    assert "state" in first
+    assert "postcode" in first
+    assert "latitude" in first
+    assert "longitude" in first
+    assert "source" in first
+    assert "is_verified" in first
+    assert first["is_verified"] is True
+    assert "BONDI" in first["formatted_address"].upper()
+
+    # Test street address query
+    resp_street = client.get("/api/public/travel/addresses?q=123+George+St,+Sydney")
+    assert resp_street.status_code == 200
+    street_items = resp_street.json()
+    assert isinstance(street_items, list)
+    assert len(street_items) > 0
+    assert any("123 George St" in item["formatted_address"] for item in street_items)
+
+
+@pytest.mark.asyncio
+async def test_quote_outcall_travel_resolves_origin_from_provider_location(base_tenant):
+    """Ensure base_origin resolves from provider's assigned location."""
+    service = TravelCalculationService()
+
+    class MockLocation:
+        def __init__(self, address):
+            self.address = address
+
+    class MockProviderWithLocations:
+        def __init__(self, locations):
+            self.tenant = base_tenant
+            self.locations = locations
+            self.allow_out_call = True
+            self.out_call_radius_km = 30.0
+            self.base_outcall_surcharge = Decimal("15.00")
+            self.per_km_fee = Decimal("2.00")
+
+    prov = MockProviderWithLocations(locations=[MockLocation("North Sydney")])
+    quote = await service.calculate_chargeable_travel(
+        tenant=base_tenant,
+        provider=prov,
+        client_destination="Bondi",
+    )
+    assert quote.origin_address == "North Sydney"
+
+    # Test with provider.location
+    class MockProviderWithSingleLocation:
+        def __init__(self, location):
+            self.tenant = base_tenant
+            self.location = location
+            self.allow_out_call = True
+            self.out_call_radius_km = 30.0
+            self.base_outcall_surcharge = Decimal("15.00")
+            self.per_km_fee = Decimal("2.00")
+
+    prov_single = MockProviderWithSingleLocation(location=MockLocation("Chatswood"))
+    quote_single = await service.calculate_chargeable_travel(
+        tenant=base_tenant,
+        provider=prov_single,
+        client_destination="Bondi",
+    )
+    assert quote_single.origin_address == "Chatswood"
+

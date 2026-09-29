@@ -70,3 +70,20 @@ class SuburbAutocompleteItem(BaseModel):
     state: str = Field(..., description="State or territory code (e.g. NSW, VIC)")
     latitude: float = Field(..., description="Centroid latitude")
     longitude: float = Field(..., description="Centroid longitude")
+
+
+class AddressAutocompleteItem(BaseModel):
+    """Standardized address suggestion returned by the address autocomplete endpoint."""
+    model_config = ConfigDict(from_attributes=True)
+
+    formatted_address: str = Field(..., description="Full standardized display address")
+    street_address: Optional[str] = Field(None, description="Street number and street name if available")
+    suburb: Optional[str] = Field(None, description="Suburb or locality name")
+    state: Optional[str] = Field(None, description="State or territory code (e.g. NSW, VIC)")
+    postcode: Optional[str] = Field(None, description="Postal code")
+    country: Optional[str] = Field("Australia", description="Country name")
+    latitude: float = Field(..., description="Latitude coordinate")
+    longitude: float = Field(..., description="Longitude coordinate")
+    source: str = Field("au_postcodes", description="Data source providing verification (mapbox, osm_nominatim, au_postcodes)")
+    is_verified: bool = Field(True, description="Whether this address was verified against geospatial authority")
+

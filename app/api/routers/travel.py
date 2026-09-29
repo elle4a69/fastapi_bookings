@@ -19,6 +19,7 @@ from ..deps import get_current_tenant, get_db
 from ...models.provider import Provider
 from ...models.tenant import Tenant
 from ...schemas.travel import (
+    AddressAutocompleteItem,
     ChargeableTravelQuote,
     OperationalTransitRequest,
     OperationalTravelSegment,
@@ -26,7 +27,7 @@ from ...schemas.travel import (
     TravelEstimateRequest,
     TravelQuoteRequest,
 )
-from ...services.routing.geocoding import search_au_suburbs
+from ...services.routing.geocoding import search_addresses, search_au_suburbs
 from ...services.routing.travel_service import TravelCalculationService
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,20 @@ async def _resolve_tenant_and_provider(
 
 
 @router.get(
+    "/addresses",
+    response_model=list[AddressAutocompleteItem],
+    summary="Autocomplete and standardize physical addresses with verification",
+)
+async def autocomplete_addresses(
+    q: str = Query(..., min_length=2, description="Address search query prefix"),
+    limit: int = Query(10, ge=1, le=50, description="Max results to return"),
+) -> list[AddressAutocompleteItem]:
+    """Instant lookup and standardization of Australian physical addresses with verification metadata."""
+    raw_results = await search_addresses(query=q, limit=limit)
+    return [AddressAutocompleteItem(**item) for item in raw_results]
+
+
+@router.get(
     "/suburbs",
     response_model=list[SuburbAutocompleteItem],
     summary="Autocomplete Australian suburbs and postcodes for typeahead",
@@ -85,6 +100,7 @@ def autocomplete_suburbs(
     """Instant lookup of Australian localities for frontend address autocomplete."""
     raw_results = search_au_suburbs(query=q, limit=limit)
     return [SuburbAutocompleteItem(**item) for item in raw_results]
+
 
 
 @router.post(
