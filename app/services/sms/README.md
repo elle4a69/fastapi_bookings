@@ -996,7 +996,17 @@ The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped
    - Information resolution and retry generation (`generate_bootcamp_information_resolution`) strictly respect the saved model in `SmsBootcampSettings` (`(settings_data or {}).get("model")`) with fallback to `BOOTCAMP_TORI_MODEL` / `gpt-4o-mini`.
    - Prompt assembly across both initial turns and information request resolutions is unified through `_assemble_bootcamp_unified_prompt`, ensuring identical placeholder replacement (`{agent_name}`, `{traits}`, `{business_name}`, `{provider_name}`), provider-scoped `SmsPromptProfile` fallback, and safety guardrails.
 
-8. **Settings Reset Persistence**:
+8. **Learned Facts Model Prompt Injection**:
+   - `_assemble_bootcamp_unified_prompt(..., learned_facts: Optional[str] = None)` injects non-empty/non-whitespace `learned_facts` into the system prompt as a clearly labelled instruction block:
+     ```text
+     Known Business Facts:
+     <learned facts>
+     ```
+   - Preserves immutable platform safety rules, provider-scoped profiles, and avoids ambiguous merging with `training_notes`.
+   - Both normal simulated dialogue (`generate_bootcamp_tori_reply`) and retry generation (`generate_bootcamp_information_resolution`) extract `learned_facts` from `SmsBootcampSettings` and propagate them into the model payload.
+   - Provider-scoped settings override tenant-level learned facts, ensuring strict provider fact isolation.
+
+9. **Settings Reset Persistence**:
    - `PUT /api/admin/sms/bootcamp/settings` explicitly supports resetting prompt templates, role descriptions, training notes, and learned facts back to `None` or defaults when keys are passed with `None` values, ensuring "Reset Defaults" persists to the database rather than existing purely in browser storage.
 
 ### Verification & Testing Commands

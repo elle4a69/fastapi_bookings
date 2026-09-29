@@ -1710,6 +1710,7 @@ def test_tenant_default_inheritance_when_provider_settings_created(
     assert "Dr. Inherited Defaults" in system_msg
     assert "[TENANT_ROLE] Lead Clinical Concierge" in system_msg
     assert "[TENANT_NOTES] Always offer valet parking instructions." in system_msg
+    assert "[TENANT_FACT] Practice founded in 2021." in system_msg
     assert "Inherited Care Session" in system_msg
 
 
@@ -1732,6 +1733,7 @@ def test_provider_override_takes_precedence_over_tenant_defaults(
         role_description="[TENANT_ROLE] Generic Role",
         system_prompt_template="[TENANT_TEMPLATE] Welcome to our company.",
         training_notes="[TENANT_NOTES] Generic notes.",
+        learned_facts="[TENANT_FACT] Practice founded in 2021.",
     )
     db_session.add(tenant_settings)
 
@@ -1748,6 +1750,7 @@ def test_provider_override_takes_precedence_over_tenant_defaults(
         role_description="[PROVIDER_OVERRIDE_ROLE] Chief Orthopedic Specialist",
         system_prompt_template="[PROVIDER_OVERRIDE_TEMPLATE] Dedicated provider portal.",
         training_notes="[PROVIDER_OVERRIDE_NOTES] Provider specific instructions.",
+        learned_facts="[PROVIDER_FACT] Specialized in pediatric orthopedics.",
     )
     db_session.add(prov_settings)
     db_session.commit()
@@ -1779,11 +1782,13 @@ def test_provider_override_takes_precedence_over_tenant_defaults(
     assert "[PROVIDER_OVERRIDE_ROLE] Chief Orthopedic Specialist" in system_msg
     assert "[PROVIDER_OVERRIDE_TEMPLATE]" in system_msg
     assert "[PROVIDER_OVERRIDE_NOTES]" in system_msg
+    assert "[PROVIDER_FACT] Specialized in pediatric orthopedics." in system_msg
 
     # Tenant defaults MUST NOT appear
     assert "[TENANT_ROLE]" not in system_msg
     assert "[TENANT_TEMPLATE]" not in system_msg
     assert "[TENANT_NOTES]" not in system_msg
+    assert "[TENANT_FACT]" not in system_msg
 
 
 def test_role_description_influences_normal_and_information_resolution_generations(
@@ -1865,6 +1870,144 @@ def test_role_description_influences_normal_and_information_resolution_generatio
     system_msg_info = next(m["content"] for m in call_kwargs_info["messages"] if m.get("role") == "system")
     assert role_desc in system_msg_info
     assert "Role and Responsibilities:\n" + role_desc in system_msg_info
+
+
+def test_learned_facts_influences_normal_and_information_resolution_generations(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify learned_facts reaches system prompt in both normal generation and info resolution."""
+    import json
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import (
+        generate_bootcamp_tori_reply,
+        generate_bootcamp_information_resolution,
+    )
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    prov = Provider(tenant_id=tenant.id, name="Dr. Facts Specialist", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    distinctive_facts = "[DISTINCTIVE_FACTS] Open on alternate Sundays. Free client parking in rear."
+
+    settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="Tori",
+        model="gpt-4o",
+        learned_facts=distinctive_facts,
+    )
+    db_session.add(settings)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = json.dumps({
+        "customer_reply": "We are open on alternate Sundays!",
+        "knowledge_summary": "Open alternate Sundays.",
+    })
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 1. Test normal generation
+    generate_bootcamp_tori_reply(
+        history=[{"role": "persona", "text": "Are you open on Sundays?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+    )
+
+    assert mock_client.chat.completions.create.call_count == 1
+    call_kwargs_normal = mock_client.chat.completions.create.call_args[1]
+    system_msg_normal = next(m["content"] for m in call_kwargs_normal["messages"] if m.get("role") == "system")
+    assert distinctive_facts in system_msg_normal
+    assert "Known Business Facts:\n" + distinctive_facts in system_msg_normal
+
+    # 2. Test information-resolution retry generation
+    mock_client.chat.completions.create.reset_mock()
+    generate_bootcamp_information_resolution(
+        history=[{"role": "persona", "text": "Where can I park?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        supplied_information="Parking is free in the rear lot.",
+        settings_data={
+            "agent_name": "Tori",
+            "model": "gpt-4o",
+            "learned_facts": distinctive_facts,
+            "tenant_id": tenant.id,
+            "provider_id": prov.id,
+            "db": db_session,
+        },
+    )
+
+    assert mock_client.chat.completions.create.call_count == 1
+    call_kwargs_info = mock_client.chat.completions.create.call_args[1]
+    system_msg_info = next(m["content"] for m in call_kwargs_info["messages"] if m.get("role") == "system")
+    assert distinctive_facts in system_msg_info
+    assert "Known Business Facts:\n" + distinctive_facts in system_msg_info
+
+
+def test_provider_learned_facts_override_tenant_learned_facts(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify provider learned_facts overrides tenant learned_facts in system prompt."""
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import generate_bootcamp_tori_reply
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    tenant_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=None,
+        agent_name="Tenant Tori",
+        model="gpt-4o-mini",
+        learned_facts="[TENANT_FACT] Practice founded in 2021 in Melbourne.",
+    )
+    db_session.add(tenant_settings)
+
+    prov = Provider(tenant_id=tenant.id, name="Dr. Provider Fact", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    prov_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="Provider Tori",
+        model="gpt-4o-mini",
+        learned_facts="[PROVIDER_FACT] Practice operating out of Sydney North.",
+    )
+    db_session.add(prov_settings)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Welcome to Sydney North."
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    generate_bootcamp_tori_reply(
+        history=[{"role": "persona", "text": "Where are you located?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+    )
+
+    call_kwargs = mock_client.chat.completions.create.call_args[1]
+    system_msg = next(m["content"] for m in call_kwargs["messages"] if m.get("role") == "system")
+
+    assert "[PROVIDER_FACT] Practice operating out of Sydney North." in system_msg
+    assert "[TENANT_FACT]" not in system_msg
+
 
 
 

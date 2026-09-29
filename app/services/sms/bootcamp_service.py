@@ -109,6 +109,7 @@ def _assemble_bootcamp_unified_prompt(
     latest_customer_text: Optional[str] = None,
     history: Optional[List[Dict[str, Any]]] = None,
     active_retrieval_result: Optional[str] = None,
+    learned_facts: Optional[str] = None,
 ) -> str:
     bootcamp_core_safety = (
         "Immutable Platform Safety Rules:\n"
@@ -242,7 +243,11 @@ def _assemble_bootcamp_unified_prompt(
             is_new_customer=False,
         )
 
-    return builder.build_system_prompt()
+    system_prompt = builder.build_system_prompt()
+    if learned_facts and str(learned_facts).strip():
+        system_prompt += f"\n\nKnown Business Facts:\n{str(learned_facts).strip()}"
+
+    return system_prompt
 
 
 def generate_bootcamp_tori_reply(
@@ -342,6 +347,7 @@ def generate_bootcamp_tori_reply(
         custom_notes = (settings_data or {}).get("training_notes") or (settings_data or {}).get("custom_training_notes")
         system_template = (settings_data or {}).get("system_prompt_template")
         configured_model = (settings_data or {}).get("model") or os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini")
+        learned_facts = (settings_data or {}).get("learned_facts") or ""
 
         instructions = _assemble_bootcamp_unified_prompt(
             agent_name=agent_name,
@@ -355,6 +361,7 @@ def generate_bootcamp_tori_reply(
             latest_customer_text=latest,
             history=history,
             active_retrieval_result=active_retrieval_result,
+            learned_facts=learned_facts,
         )
 
         messages = [{"role": "system", "content": instructions}]
@@ -420,6 +427,7 @@ def generate_bootcamp_information_resolution(
         resolved_tenant_id = (settings_data or {}).get("tenant_id")
         resolved_provider_id = (settings_data or {}).get("provider_id")
         resolved_db = (settings_data or {}).get("db")
+        learned_facts = (settings_data or {}).get("learned_facts") or ""
 
         instructions = _assemble_bootcamp_unified_prompt(
             agent_name=agent_name,
@@ -432,6 +440,7 @@ def generate_bootcamp_information_resolution(
             resolved_db=resolved_db,
             latest_customer_text=latest,
             history=history,
+            learned_facts=learned_facts,
         )
         instructions += (
             "\n\nThis is a Boot Camp information-request retry. The business owner supplied "
