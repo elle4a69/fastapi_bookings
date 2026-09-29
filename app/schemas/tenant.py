@@ -33,6 +33,7 @@ class TenantBase(BaseModel):
         TravelChargeOrigin.ALWAYS_FROM_BASE,
         description="Policy for calculating out-call travel charges: ALWAYS_FROM_BASE or ACTUAL_ORIGIN",
     )
+    chatwoot_account_id: Optional[int] = Field(None, description="Bound Chatwoot account ID")
 
 
 class TenantCreate(TenantBase):
@@ -56,6 +57,7 @@ class TenantUpdate(BaseModel):
     allow_in_call: Optional[bool] = None
     allow_out_call: Optional[bool] = None
     travel_charge_origin: Optional[TravelChargeOrigin] = None
+    chatwoot_account_id: Optional[int] = None
 
 
 class TenantInDBBase(TenantBase):

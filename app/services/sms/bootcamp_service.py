@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -14,12 +13,11 @@ from sqlalchemy.orm import Session
 from ...core.config import settings
 from ...models.conversation import ChannelType
 from ..assistant import (
-    AssistantToolEngine,
+    AssistantRuntimeService,
     ClientInfo,
     LocationInfo,
     PromptPolicyAssembler,
     RuntimeContext,
-    get_assistant_tool_definitions,
 )
 from .bootcamp import (
     BOOTCAMP_HANDOFF_RE,
@@ -487,6 +485,25 @@ def _build_bootcamp_runtime_and_prompt(
     if active_retrieval_result and getattr(active_retrieval_result, "facts", None):
         curated_memories.extend(active_retrieval_result.facts)
 
+    from ..knowledge.example_service import detect_style_intent, retrieve_style_examples
+    style_examples: List[Any] = []
+    if resolved_db and resolved_tenant_id:
+        try:
+            style_examples = retrieve_style_examples(
+                db=resolved_db,
+                tenant_id=resolved_tenant_id,
+                provider_id=resolved_provider_id,
+                detected_intent=detect_style_intent(
+                    next(
+                        (str(item.get("text", "")) for item in reversed(history) if item.get("role") == "persona"),
+                        "",
+                    )
+                ),
+                limit=3,
+            )
+        except Exception as exc:
+            logger.warning("Style examples retrieval failed in bootcamp: %s", exc)
+
     assembler = PromptPolicyAssembler()
     assembled = assembler.assemble(
         context=runtime_context,
@@ -494,6 +511,7 @@ def _build_bootcamp_runtime_and_prompt(
         provider_overlay=provider_overlay_text,
         style_profile=style_profile,
         curated_memories=curated_memories,
+        style_examples=style_examples,
         db=resolved_db,
         training_notes=custom_notes,
         learned_facts=learned_facts,
@@ -519,6 +537,7 @@ def generate_bootcamp_tori_reply(
     tenant_id: Optional[int] = None,
     provider_id: Optional[int] = None,
     db: Optional[Session] = None,
+    executed_tools_meta: Optional[List[Dict[str, Any]]] = None,
     **kwargs: Any,
 ) -> Tuple[str, Optional[str]]:
     """Generate simulated Tori reply given dialogue history, style profile, and active scenario."""
@@ -575,15 +594,14 @@ def generate_bootcamp_tori_reply(
         return "Thank you for reaching out! Which service were you interested in?", None
 
     try:
-        from openai import OpenAI
-        openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
-        client = OpenAI(api_key=openai_key)
-
+        # Bootcamp deliberately delegates the actual model/tool execution to the
+        # same runtime used by Assistant Studio.  This prevents simulator and
+        # live Bootcamp behaviour from drifting into separate tool loops.
         (
             runtime_context,
-            assembled,
+            _assembled,
             configured_model,
-            agent_name,
+            _agent_name,
             resolved_db,
             resolved_tenant_id,
             resolved_provider_id,
@@ -598,114 +616,36 @@ def generate_bootcamp_tori_reply(
             active_retrieval_result=active_retrieval_result,
             **kwargs,
         )
-
-        messages = list(assembled.messages)
-        tools = get_assistant_tool_definitions()
-
-        response = client.chat.completions.create(
+        merged_settings = dict(settings_data or {})
+        merged_settings.update({
+            "tenant_id": resolved_tenant_id,
+            "provider_id": resolved_provider_id,
+            "style_profile": style_profile,
+            "model": configured_model,
+        })
+        runtime_result = AssistantRuntimeService.execute_turn(
+            db=resolved_db,
+            runtime_context=runtime_context,
+            user_message=latest,
+            settings_data=merged_settings,
             model=configured_model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
             temperature=0.7,
-            max_tokens=250,
+            is_simulation=False,
         )
+        reply = runtime_result.reply_text.strip()
+        collected_tools = list(runtime_result.executed_tools)
 
-        tool_engine = AssistantToolEngine()
-        executed_tools_meta: List[Dict[str, Any]] = []
-        max_tool_turns = 3
-        tool_turns = 0
-
-        while tool_turns < max_tool_turns:
-            choice = response.choices[0]
-            tool_calls = getattr(choice.message, "tool_calls", None)
-            if not (tool_calls and isinstance(tool_calls, (list, tuple))):
-                break
-
-            assistant_tool_msg: Dict[str, Any] = {
-                "role": "assistant",
-                "content": choice.message.content or "",
-                "tool_calls": [
-                    {
-                        "id": getattr(tc, "id", f"call_{i}"),
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments if isinstance(tc.function.arguments, str) else json.dumps(tc.function.arguments),
-                        },
-                    }
-                    for i, tc in enumerate(tool_calls)
-                ],
-            }
-            messages.append(assistant_tool_msg)
-            runtime_context.add_turn(
-                role="assistant",
-                content=choice.message.content or "",
-                source="assistant",
-                tool_calls=assistant_tool_msg["tool_calls"],
-            )
-
-            for tc in tool_calls:
-                func_name = tc.function.name
-                raw_args = tc.function.arguments
-                if isinstance(raw_args, str):
-                    try:
-                        parsed_args = json.loads(raw_args)
-                    except Exception:
-                        parsed_args = {}
-                elif isinstance(raw_args, dict):
-                    parsed_args = dict(raw_args)
-                else:
-                    parsed_args = {}
-
-                tool_result = tool_engine.execute_tool(
-                    tool_name=func_name,
-                    arguments=parsed_args,
-                    context=runtime_context,
-                    db=resolved_db,
-                )
-
-                call_id = getattr(tc, "id", f"call_{tool_turns}_{func_name}")
-                res_json = json.dumps(tool_result)
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": res_json,
-                })
-                runtime_context.add_turn(
-                    role="tool",
-                    content=res_json,
-                    source="assistant",
-                    tool_call_id=call_id,
-                )
-
-                executed_tools_meta.append({
-                    "tool_name": func_name,
-                    "arguments": parsed_args,
-                    "result": tool_result,
-                    "success": tool_result.get("success", True) if isinstance(tool_result, dict) else True,
-                })
-
-            tool_turns += 1
-
-            response = client.chat.completions.create(
-                model=configured_model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.7,
-                max_tokens=250,
-            )
-
-        reply = (response.choices[0].message.content or "").strip()
-
+        if executed_tools_meta is not None and isinstance(executed_tools_meta, list):
+            executed_tools_meta.extend(collected_tools)
+        if "executed_tools_meta" in kwargs and isinstance(kwargs["executed_tools_meta"], list):
+            if kwargs["executed_tools_meta"] is not executed_tools_meta:
+                kwargs["executed_tools_meta"].extend(collected_tools)
         if "metadata" in kwargs and isinstance(kwargs["metadata"], dict):
-            kwargs["metadata"]["executed_tools"] = executed_tools_meta
+            kwargs["metadata"]["executed_tools"] = collected_tools
         if "telemetry" in kwargs and isinstance(kwargs["telemetry"], dict):
-            kwargs["telemetry"]["executed_tools"] = executed_tools_meta
+            kwargs["telemetry"]["executed_tools"] = collected_tools
         if "execution_meta" in kwargs and isinstance(kwargs["execution_meta"], dict):
-            kwargs["execution_meta"]["executed_tools"] = executed_tools_meta
+            kwargs["execution_meta"]["executed_tools"] = collected_tools
             kwargs["execution_meta"]["runtime_context"] = runtime_context
     except Exception as exc:
         logger.warning("OpenAI Tori generation error in Bootcamp: %s", exc)

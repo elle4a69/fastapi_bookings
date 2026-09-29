@@ -53,8 +53,10 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ selectedProvider, ac
   const [toolExecutions, setToolExecutions] = useState<Array<{
     name: string;
     timestamp: string;
-    arguments: Record<string, any>;
-    output: Record<string, any>;
+    status: 'success' | 'error';
+    success: boolean;
+    argumentKeys: string[];
+    resultKeys: string[];
     server_bound_keys: string[];
   }>>([]);
 
@@ -118,9 +120,11 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ selectedProvider, ac
           const timestamp = new Date().toLocaleTimeString();
           const mappedTools = resp.executed_tools.map((t) => ({
             name: t.name,
-            timestamp,
-            arguments: t.arguments,
-            output: t.output,
+            timestamp: t.timestamp || timestamp,
+            status: t.status,
+            success: t.success,
+            argumentKeys: t.argument_keys || [],
+            resultKeys: t.result_keys || [],
             server_bound_keys: t.server_bound_keys || ['tenant_id'],
           }));
           setToolExecutions(mappedTools);
@@ -359,7 +363,7 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ selectedProvider, ac
                         <span className="font-bold text-foreground">{t.name}</span>
                       </div>
                       <Badge variant="outline" className="text-[10px] py-0 font-sans">
-                        {t.timestamp}
+                        {t.status} · {t.timestamp}
                       </Badge>
                     </div>
 
@@ -375,17 +379,13 @@ export const SimulatorTab: React.FC<SimulatorTabProps> = ({ selectedProvider, ac
                     </div>
 
                     <div>
-                      <span className="text-muted-foreground font-sans font-semibold text-[11px]">Inputs:</span>
-                      <pre className="p-1.5 rounded bg-muted text-[10px] overflow-x-auto mt-0.5">
-                        {JSON.stringify(t.arguments, null, 2)}
-                      </pre>
+                      <span className="text-muted-foreground font-sans font-semibold text-[11px]">Argument fields:</span>
+                      <div className="text-[10px] mt-0.5 font-mono">{t.argumentKeys.join(', ') || 'none'}</div>
                     </div>
 
                     <div>
-                      <span className="text-muted-foreground font-sans font-semibold text-[11px]">Database Result:</span>
-                      <pre className="p-1.5 rounded bg-muted text-[10px] overflow-x-auto mt-0.5 text-emerald-600 dark:text-emerald-400">
-                        {JSON.stringify(t.output, null, 2)}
-                      </pre>
+                      <span className="text-muted-foreground font-sans font-semibold text-[11px]">Result fields:</span>
+                      <div className="text-[10px] mt-0.5 font-mono text-emerald-600 dark:text-emerald-400">{t.resultKeys.join(', ') || 'none'}</div>
                     </div>
                   </div>
                 ))

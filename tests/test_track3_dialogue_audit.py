@@ -62,6 +62,7 @@ async def audit_session():
             email="bookings@auraholistic.com",
             latitude=-33.8688,
             longitude=151.2093,
+            chatwoot_account_id=101,
         )
         session.add(tenant1)
         await session.flush()
@@ -145,6 +146,7 @@ async def audit_session():
             email="contact@bonsaizen.com",
             latitude=-37.8175,
             longitude=144.9671,
+            chatwoot_account_id=202,
         )
         session.add(tenant2)
         await session.flush()
@@ -700,12 +702,30 @@ def test_agent_state_full_serialization_roundtrip():
 
 @pytest.mark.asyncio
 async def test_chatwoot_webhook_resolves_correct_tenant_binding(audit_session: AsyncSession):
-    """Verify Chatwoot webhook resolves binding to route Tenant 1 vs Tenant 2 independently."""
+    """Verify Chatwoot webhook deconflicts mirror-bound inboxes and resolves unbound inboxes correctly."""
     app.dependency_overrides[get_async_db] = lambda: audit_session
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Message to Account 101 (Binds to Tenant 1: Aura)
+        # 1. Invariant 4 (AgentBot Deconfliction): Message to mirror-bound inbox (inbox_id=1) must be ignored
+        resp_deconflict = await client.post(
+            "/api/v1/chatwoot/webhook",
+            json={
+                "event": "message_created",
+                "id": 5000,
+                "content": "What treatments do you offer?",
+                "message_type": "incoming",
+                "conversation": {"id": 1000, "inbox_id": 1, "status": "pending"},
+                "account": {"id": 101, "name": "Aura Chatwoot"},
+                "sender": {"id": 11, "name": "Sarah", "type": "contact"},
+            },
+        )
+        assert resp_deconflict.status_code == 200
+        data_deconflict = resp_deconflict.json()
+        assert data_deconflict["status"] == "ignored"
+        assert data_deconflict["reason"] == "inbox_managed_by_canonical_mirror_webhook"
+
+        # 2. Non-mirror-bound inbox (inbox_id=999) to Account 101 (Binds to Tenant 1: Aura)
         resp1 = await client.post(
             "/api/v1/chatwoot/webhook",
             json={
@@ -713,7 +733,7 @@ async def test_chatwoot_webhook_resolves_correct_tenant_binding(audit_session: A
                 "id": 5001,
                 "content": "What treatments do you offer?",
                 "message_type": "incoming",
-                "conversation": {"id": 1001, "inbox_id": 1, "status": "pending"},
+                "conversation": {"id": 1001, "inbox_id": 999, "status": "pending"},
                 "account": {"id": 101, "name": "Aura Chatwoot"},
                 "sender": {"id": 11, "name": "Sarah", "type": "contact"},
             },
@@ -724,7 +744,7 @@ async def test_chatwoot_webhook_resolves_correct_tenant_binding(audit_session: A
         assert "Aura Relaxation Massage" in data1["reply_sent"] or "Aura Remedial" in data1["reply_sent"]
         assert "Shiatsu" not in data1["reply_sent"]
 
-        # Message to Account 202 (Binds to Tenant 2: Bonsai)
+        # 3. Non-mirror-bound inbox (inbox_id=998) to Account 202 (Binds to Tenant 2: Bonsai)
         resp2 = await client.post(
             "/api/v1/chatwoot/webhook",
             json={
@@ -732,7 +752,7 @@ async def test_chatwoot_webhook_resolves_correct_tenant_binding(audit_session: A
                 "id": 5002,
                 "content": "What treatments do you offer?",
                 "message_type": "incoming",
-                "conversation": {"id": 2001, "inbox_id": 2, "status": "pending"},
+                "conversation": {"id": 2001, "inbox_id": 998, "status": "pending"},
                 "account": {"id": 202, "name": "Bonsai Chatwoot"},
                 "sender": {"id": 22, "name": "Kenji", "type": "contact"},
             },

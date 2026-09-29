@@ -16,7 +16,8 @@ The **Knowledge Subsystem** provides a multi-tenant, provider-isolated graph and
 - **Canonical Graph Projection Ledger (`knowledge_graph_projections`)**: Durable, idempotent projection outbox bridging PostgreSQL curated knowledge to Graphiti/Neo4j graph representation.
 - **Multi-tenant and provider-partitioned knowledge retrieval** via Graphiti group IDs (`tenant:{tenant_id}:shared` vs `tenant:{tenant_id}:provider:{provider_id}`).
 - **Epistemic authority classification (`Authority`)** and knowledge categorization (`KnowledgeKind`).
-- **Dynamic operational data rejection policies (Spec 19)**: Blocking live booking times, quotes, and payment links from polluting long-term graphs (`REJECT_DYNAMIC`).
+- **Dynamic operational data rejection policies (Spec 19)**: Blocking live booking times, quotes, payment links, customer data, and redacted customer markers from polluting long-term graphs (`REJECT_DYNAMIC`).
+- **Typed procedural-variable boundary (`classifier.py`)**: New learning content may reference only `{business_name}`, `{provider_name}`, `{location_name}`, `{location_address}`, `{service_name}`, `{service_area}`, and `{booking_link}`. Dates, times, availability, prices, booking IDs, and customer/contact/address values are never normalised into memory; they must come from a tenant/provider-scoped live tool at response time. Style retrieval derives a conservative intent and applies provider -> tenant -> platform precedence; it does not inject unrelated recent examples.
 - **Security and prompt-injection guardrails (`is_system_safety_violation`)**: Quarantining safety breaches into review queues (`QUARANTINE`).
 - **Bounded Multi-Channel Retrieval (`retrieval.py`)**: 3 bounded retrieval channels separating factual knowledge (`retrieve_facts`), behavioural rules (`retrieve_behaviour`), and style examples (`retrieve_examples`) with strictly bounded context windows (Specs 47, 48, 96).
 - **Safe PostgreSQL Fallback Path (Spec 66)**: Graceful fallback querying active `CuratedMemory` and approved `SmsKnowledgeEntry` when Graphiti is disabled, offline, or returns empty, strictly preserving multi-tenant/provider boundaries and filtering dynamic/safety data.
@@ -42,6 +43,7 @@ app/services/knowledge/
 ├── __init__.py               # Package exports for gateway, curator, workers, models, ontology, rebuild, and policies
 ├── types.py                  # Enums (KnowledgeKind, Authority, CuratorAction) & Pydantic models (KnowledgeScope, etc.)
 ├── policy.py                 # Scope validation, dynamic operational data filters, safety violation detection
+├── classifier.py             # Fail-closed factual/procedural classifier and typed-variable registry
 ├── cache.py                  # Redis composite epoch management, key hashing, and query result caching
 ├── retrieval.py              # Bounded multi-channel retrieval (Facts, Behaviour, Examples) with safe fallback
 ├── graphiti_client.py        # Neo4j driver connection pool, Graphiti client factory, health ping, group ID formatters
@@ -68,7 +70,7 @@ app/tools/
 - [`LearningEvent`](file:///f:/Projects/fastapi_bookings/app/models/learning_event.py): Ingestion event model augmented with leasing (`lease_owner`, `lease_expires_at`), retries (`attempt_count`, `next_attempt_at`, `last_error`), and claim index (`ix_learning_events_claim`).
 - [`CuratorWorker`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/curator_worker.py): Autonomous background worker that claims, leases, and executes pending learning events with exponential backoff and multi-tenant isolation.
 - [`KnowledgeGraphProjection`](file:///f:/Projects/fastapi_bookings/app/models/knowledge_projection.py): Canonical projection ledger and outbox table (`knowledge_graph_projections`) tracking synchronization status to Graphiti/Neo4j.
-- [`UnifiedCurator`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/curator.py): Unified autonomous curation engine consolidating factual curation, behavioral guidance, draft edit evaluation, and safety quarantines.
+- [`UnifiedCurator`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/curator.py): Unified autonomous curation engine consolidating factual curation, behavioral guidance, draft edit evaluation, safety quarantines, and a final classifier gate before `CuratedMemory` persistence.
 - [`CuratorDecision`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/curator.py): Structured, privacy-safe decision payload returned by the curation pipeline.
 - [`KnowledgeScope`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/types.py): Strict tenant and provider scope defining Graphiti group ID partitioning (`gt=0` enforced).
 - [`KnowledgeGateway`](file:///f:/Projects/fastapi_bookings/app/services/knowledge/gateway.py): Primary programmatic interface for knowledge retrieval, caching, and invalidation.
@@ -450,12 +452,19 @@ To prevent prompt injection, server-side template injection (SSTI), or variable 
 ### 11.5 Packaged Safe Asset Importer (`asset_importer.py`)
 The asset importer provides deterministic, verified batch ingestion of approved intent examples packaged directly within the platform:
 - **Packaged Internal Asset**: `app/services/knowledge/data/approved_intent_examples.jsonl` (resolved dynamically via `Path(__file__).parent / "data" / "approved_intent_examples.jsonl"`, removing any external system dependencies).
-- **Line Count**: Exactly 180 lines.
+- **Line Count**: Exactly 180 checksum-pinned source records. Each record is
+  independently classified; records containing dynamic operational content,
+  PII, or unsafe placeholders are rejected rather than trusted merely because
+  they are present in the packaged asset.
 - **Cryptographic Fingerprint**: SHA-256 digest `F0C80D93EAB23D7772B7454C81F38027D23D1C6D6E88D4F1EF1314E5B54303A6`.
 - **Pre-Ingestion Verification**: Before parsing any records, the importer computes the full-file SHA-256 digest. If the hash does not match `EXPECTED_SHA256`, the importer halts immediately with a `ValueError`.
 - **Stream Ingestion & Safety Screening**: Reads lines sequentially, parsing JSON payloads and passing each `(client_message, assistant_reply)` pair through `classify_style_example`.
 - **Deterministic Idempotency**: Matches existing records via `compute_style_example_hash(intent, client_message)` (`SHA-256(intent::client_message)`). Re-running the importer incurs 0 duplicate insertions.
 - **Scope Customization**: Supports importing records as global platform defaults (`tenant_id=None, provider_id=None`) or targeted to specific tenants and providers.
+- **Dry-Run Safety Guarantee**: When invoked with `dry_run=True`, the importer
+  performs complete cryptographic verification, JSON parsing, safety
+  classification, and duplicate detection without adding, flushing,
+  committing, or rolling back caller-owned database state.
 - **Invariant Guarantee**: Formally asserts that `CuratedMemory` row counts remain strictly unchanged before and after import.
 
 ### 11.6 Bounded Procedural Example Retrieval (`example_service.py`)

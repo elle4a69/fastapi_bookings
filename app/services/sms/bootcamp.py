@@ -890,6 +890,7 @@ class BootcampRunner:
             )
             history = [{"id": m.id, "role": m.role, "text": m.text, "meta": m.meta} for m in messages]
 
+            executed_tools_meta: List[Dict[str, Any]] = []
             tori_reply, handoff_reason = _call_generate_tori(
                 self.generate_tori,
                 history,
@@ -898,6 +899,7 @@ class BootcampRunner:
                 tenant_id=tenant_id,
                 provider_id=getattr(conv, "provider_id", None),
                 db=db,
+                executed_tools_meta=executed_tools_meta,
             )
 
             # Guard against repeated Tori reply
@@ -917,13 +919,21 @@ class BootcampRunner:
             if autonomy_level == 1:
                 reply_text = tori_reply.strip() if tori_reply.strip() else "Thank you for reaching out. How can I help you today?"
                 self._pace_message()
+                msg_meta = {
+                    "status": "draft",
+                    "turn": turn,
+                    "scenario_id": scenario["id"] if scenario else None,
+                    "provider_id": getattr(conv, "provider_id", None),
+                    "executed_tools": executed_tools_meta,
+                    "tool_count": len(executed_tools_meta),
+                }
                 tori_msg = SmsBootcampMessage(
                     id=str(uuid.uuid4()),
                     conversation_id=conv.id,
                     tenant_id=tenant_id,
                     role="tori",
                     text=reply_text,
-                    meta={"status": "draft", "turn": turn, "scenario_id": scenario["id"] if scenario else None},
+                    meta=msg_meta,
                     created_at=utc_now(),
                 )
                 db.add(tori_msg)
@@ -946,13 +956,21 @@ class BootcampRunner:
 
                 if tori_reply.strip():
                     self._pace_message()
+                    msg_meta = {
+                        "status": "sent",
+                        "turn": turn,
+                        "scenario_id": scenario["id"] if scenario else None,
+                        "provider_id": getattr(conv, "provider_id", None),
+                        "executed_tools": executed_tools_meta,
+                        "tool_count": len(executed_tools_meta),
+                    }
                     tori_msg = SmsBootcampMessage(
                         id=str(uuid.uuid4()),
                         conversation_id=conv.id,
                         tenant_id=tenant_id,
                         role="tori",
                         text=tori_reply.strip(),
-                        meta={"status": "sent", "turn": turn, "scenario_id": scenario["id"] if scenario else None},
+                        meta=msg_meta,
                         created_at=utc_now(),
                     )
                     db.add(tori_msg)
@@ -998,7 +1016,14 @@ class BootcampRunner:
             # Level 3: Full autonomous simulation
             else:
                 reply_text = tori_reply.strip() if tori_reply.strip() else "Thank you for reaching out. We will accommodate your request."
-                meta_payload = {"status": "sent", "turn": turn, "scenario_id": scenario["id"] if scenario else None}
+                meta_payload = {
+                    "status": "sent",
+                    "turn": turn,
+                    "scenario_id": scenario["id"] if scenario else None,
+                    "provider_id": getattr(conv, "provider_id", None),
+                    "executed_tools": executed_tools_meta,
+                    "tool_count": len(executed_tools_meta),
+                }
                 if handoff_reason:
                     meta_payload["autonomous_handoff_flag"] = handoff_reason
 
@@ -1110,6 +1135,7 @@ class BootcampRunner:
         updated_history.append({"id": cust_msg.id, "role": "persona", "text": customer_reply.strip(), "meta": cust_msg.meta})
 
         profile = run.style_profile or DEFAULT_STYLE_PROFILE
+        executed_tools_meta: List[Dict[str, Any]] = []
         tori_reply, handoff_reason = _call_generate_tori(
             self.generate_tori,
             updated_history,
@@ -1118,18 +1144,27 @@ class BootcampRunner:
             tenant_id=conv.tenant_id,
             provider_id=conv.provider_id,
             db=db,
+            executed_tools_meta=executed_tools_meta,
         )
 
         conv.current_turn = next_turn
         if run.autonomy_level == 1:
             reply_text = tori_reply.strip() if tori_reply.strip() else "Thank you for reaching out. How can I help you today?"
+            msg_meta = {
+                "status": "draft",
+                "turn": next_turn,
+                "scenario_id": conv.scenario_id,
+                "provider_id": conv.provider_id,
+                "executed_tools": executed_tools_meta,
+                "tool_count": len(executed_tools_meta),
+            }
             tori_msg = SmsBootcampMessage(
                 id=str(uuid.uuid4()),
                 conversation_id=conv.id,
                 tenant_id=conv.tenant_id,
                 role="tori",
                 text=reply_text,
-                meta={"status": "draft", "turn": next_turn, "scenario_id": conv.scenario_id},
+                meta=msg_meta,
                 created_at=utc_now(),
             )
             db.add(tori_msg)
@@ -1141,13 +1176,21 @@ class BootcampRunner:
                 conv.handoff_reason = handoff_reason
             else:
                 if tori_reply.strip():
+                    msg_meta = {
+                        "status": "sent",
+                        "turn": next_turn,
+                        "scenario_id": conv.scenario_id,
+                        "provider_id": conv.provider_id,
+                        "executed_tools": executed_tools_meta,
+                        "tool_count": len(executed_tools_meta),
+                    }
                     tori_msg = SmsBootcampMessage(
                         id=str(uuid.uuid4()),
                         conversation_id=conv.id,
                         tenant_id=conv.tenant_id,
                         role="tori",
                         text=tori_reply.strip(),
-                        meta={"status": "sent", "turn": next_turn, "scenario_id": conv.scenario_id},
+                        meta=msg_meta,
                         created_at=utc_now(),
                     )
                     db.add(tori_msg)
@@ -1157,13 +1200,21 @@ class BootcampRunner:
                     conv.status = "running"
         else:
             if tori_reply.strip():
+                msg_meta = {
+                    "status": "sent",
+                    "turn": next_turn,
+                    "scenario_id": conv.scenario_id,
+                    "provider_id": conv.provider_id,
+                    "executed_tools": executed_tools_meta,
+                    "tool_count": len(executed_tools_meta),
+                }
                 tori_msg = SmsBootcampMessage(
                     id=str(uuid.uuid4()),
                     conversation_id=conv.id,
                     tenant_id=conv.tenant_id,
                     role="tori",
                     text=tori_reply.strip(),
-                    meta={"status": "sent", "turn": next_turn, "scenario_id": conv.scenario_id},
+                    meta=msg_meta,
                     created_at=utc_now(),
                 )
                 db.add(tori_msg)

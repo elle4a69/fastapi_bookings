@@ -11,6 +11,8 @@ from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
 from ...models.client import Client
+from ...models.provider import Provider
+from ...models.tenant import Tenant
 from .transports.base import normalize_sms_destination
 
 logger = logging.getLogger(__name__)
@@ -28,11 +30,22 @@ async def send_chatwoot_message(
     source_id: Optional[str] = None,
 ) -> int:
     """Send message to Chatwoot using live HTTP API client, returning Chatwoot message ID."""
-    binding = db.query(SmsChatwootBinding).filter(
+    query = db.query(SmsChatwootBinding).filter(
         SmsChatwootBinding.tenant_id == conversation.tenant_id,
         SmsChatwootBinding.provider_id == conversation.provider_id,
         SmsChatwootBinding.is_enabled == True
-    ).first()
+    )
+    if conversation.chatwoot_inbox_id is not None:
+        query = query.filter(SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id)
+    binding = query.first()
+
+    if not binding:
+        # Fallback without inbox filter if needed
+        binding = db.query(SmsChatwootBinding).filter(
+            SmsChatwootBinding.tenant_id == conversation.tenant_id,
+            SmsChatwootBinding.provider_id == conversation.provider_id,
+            SmsChatwootBinding.is_enabled == True
+        ).first()
 
     if not binding:
         raise ValueError("No enabled Chatwoot binding found for conversation.")
@@ -73,6 +86,8 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         logger.warning("Rejecting Chatwoot webhook: missing inbox identification.")
         raise HTTPException(status_code=400, detail="Missing inbox identification in payload.")
 
+    chatwoot_account_id = payload.get("account", {}).get("id") or payload.get("conversation", {}).get("account_id")
+
     chatwoot_msg_id = payload.get("id")
     if not chatwoot_msg_id:
         # Fallback to check message field
@@ -81,16 +96,41 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         logger.warning("Rejecting Chatwoot webhook: missing message ID.")
         raise HTTPException(status_code=400, detail="Missing message ID in payload.")
 
-    # 2. Resolve enabled binding
-    binding = db.query(SmsChatwootBinding).filter(
+    # 2. Resolve enabled binding by exact inbox (and account if present in payload)
+    query = db.query(SmsChatwootBinding).filter(
         SmsChatwootBinding.chatwoot_inbox_id == chatwoot_inbox_id,
         SmsChatwootBinding.is_enabled == True
-    ).first()
+    )
+    if chatwoot_account_id is not None:
+        query = query.filter(SmsChatwootBinding.chatwoot_account_id == chatwoot_account_id)
+    binding = query.first()
 
     if not binding:
-        logger.warning(f"Chatwoot webhook rejected: binding not found or disabled for chatwoot_inbox_id={chatwoot_inbox_id}")
+        logger.warning(
+            f"Chatwoot webhook rejected: binding not found or disabled for chatwoot_inbox_id={chatwoot_inbox_id}, account_id={chatwoot_account_id}"
+        )
         record_webhook_event("rejected")
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
+
+    # Scoping Validation:
+    # 1) Provider scoping: validate provider belongs to the mapped FastAPI tenant
+    provider = db.query(Provider).filter(
+        Provider.id == binding.provider_id,
+        Provider.tenant_id == binding.tenant_id
+    ).first()
+    if not provider or not provider.active:
+        logger.warning(f"Chatwoot webhook scoping rejected: provider {binding.provider_id} does not belong to tenant {binding.tenant_id}")
+        record_webhook_event("rejected")
+        raise HTTPException(status_code=403, detail="Provider scoping validation failed: provider does not belong to mapped tenant.")
+
+    # 2) Tenant scoping: validate tenant chatwoot_account_id mapping if established
+    tenant = db.query(Tenant).filter(Tenant.id == binding.tenant_id).first()
+    if tenant and tenant.chatwoot_account_id is not None and tenant.chatwoot_account_id != binding.chatwoot_account_id:
+        logger.warning(
+            f"Chatwoot webhook scoping rejected: tenant {tenant.id} mapped chatwoot_account_id {tenant.chatwoot_account_id} does not match binding {binding.chatwoot_account_id}"
+        )
+        record_webhook_event("rejected")
+        raise HTTPException(status_code=403, detail="Tenant Chatwoot account scoping validation failed.")
 
     # 3. Validate authenticity
     import secrets

@@ -48,7 +48,11 @@ graph TD
 - [client_portal.py](file:///F:/Projects/fastapi_bookings/app/api/routers/client_portal.py): Self-service client appointment views, reschedules, and cancellations.
 - [sms_conversations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_conversations.py): SMS conversation thread view, message history, human takeover toggle.
 - [sms_webhooks.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_webhooks.py): Inbound webhook receiver for ClickSend and external SMS carriers.
+- [sms_chatwoot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_chatwoot.py): Canonical Chatwoot mirror webhook intake, provider-scoped `SmsChatwootBinding` CRUD, token/secret masking, 1-to-1 Tenant mapping enforcement, and admin automated provisioning trigger (`POST /provision`).
+- [tenants.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenants.py): Tenant creation and retrieval router with automated Chatwoot multi-tenant provisioning lifecycle hook (`CHATWOOT_AUTO_PROVISION`).
+- [chatwoot_agentbot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_agentbot.py): Chatwoot AgentBot webhook integration with automated de-confliction ignoring mirror-bound inboxes to prevent duplicate replies.
 - [resident_agent.py](file:///F:/Projects/fastapi_bookings/app/api/routers/resident_agent.py): Operational health checks, deep audit trigger, and fuzzer controls.
+- [assistant_studio.py](file:///F:/Projects/fastapi_bookings/app/api/routers/assistant_studio.py): Assistant Studio administration endpoints: 10-tier policy management (`Tenant.assistant_policy`), procedural style example CRUD, curator proposal management, simulation sandbox, cryptographic dataset importer, and evaluation suite with uniform `validate_tenant_provider` cross-tenant scoping and platform seed read-only lockdown.
 - [deps.py](file:///F:/Projects/fastapi_bookings/app/api/deps.py): Core dependency injection functions: `get_current_tenant`, `get_current_user`, `require_role`, `get_current_client`.
 
 ---
@@ -145,6 +149,12 @@ pytest tests/test_numeric_id_bounds.py -v
 
 # 6. Test granular readiness & diagnostics
 pytest tests/test_production_readiness_drills.py -k test_drill_11 -v
+
+# 7. Test Assistant Studio policy persistence, scoping lockdown & importer dry-run safety
+pytest tests/test_assistant_studio_policy_and_scoping.py tests/test_assistant_studio_api.py tests/test_curator_import_safety.py -v
+
+# 8. Test Chatwoot Tenant Binding, Webhook Scoping, AgentBot De-confliction, Automated Provisioning, and Docker E2E
+pytest tests/test_chatwoot_provisioning.py tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
 ```
 
 ---
@@ -158,4 +168,34 @@ The router layer provides unauthenticated public readiness checks (`/health/gran
 - **Background Outbox Lag**: Quantifies pending and dead-letter projection queues (`knowledge_graph_projections`) and learning events (`learning_events`).
 - **Telemetry & Celery Worker Status**: Evaluates tracing initialization and worker queue responsiveness.
 - **Response Format**: Status 200 with `status: "ready"` if all critical subsystems are online; Status 503 with degraded component details if any core dependency fails.
+
+---
+
+## 9. Chatwoot Tenant Binding, Provisioning & AgentBot De-confliction (`sms_chatwoot.py`, `chatwoot_agentbot.py`, `tenants.py`)
+
+### Purpose & Scope
+This slice provides the HTTP REST API layer for bi-directional Chatwoot synchronization, authoritative tenant scoping, automated multi-tenant provisioning, and webhook de-confliction:
+- **Automated Multi-Tenant Provisioning Trigger**:
+  - Mounted at `POST /api/sms/chatwoot/provision` (accessible by authenticated tenant admin).
+  - Automatically reconciles or provisions the Chatwoot account, API channel inboxes for active providers, `SmsChatwootBinding` entries, webhook subscriptions (`message_created`, `message_updated`), and staff agents.
+  - Idempotent and safe for repeated calls.
+- **Tenant Lifecycle Creation Hook**:
+  - Mounted at `POST /api/tenants` (`tenants.py`).
+  - When `CHATWOOT_AUTO_PROVISION=true`, triggers automated Chatwoot provisioning with graceful fail-safe handling if Chatwoot is offline.
+- **FastAPI Tenant ↔ Chatwoot Account 1-to-1 Mapping**:
+  - `Tenant.chatwoot_account_id` enforces unique 1-to-1 mapping between a FastAPI tenant and Chatwoot account.
+  - Creating or updating an `SmsChatwootBinding` automatically links and validates that the Chatwoot account is not already claimed by a different tenant (`HTTP 400 Bad Request`).
+  - Provider scoping requires that the provider belongs strictly to the authenticated tenant.
+  - Secret tokens (`chatwoot_api_token` and `webhook_secret`) are masked with `********` on all response schemas.
+- **Authoritative Canonical Inbound Webhook**:
+  - Mounted at `POST /api/sms/chatwoot/webhook` (and `/api/admin/sms/chatwoot/webhook`).
+  - Authenticated via query param `?token=` or `X-Chatwoot-Token` header matching the binding's `webhook_secret`.
+  - Resolves bindings by exact `chatwoot_inbox_id` and `account.id`.
+  - Rejects unknown inboxes, mismatched account IDs, or invalid secrets (`HTTP 401/404`).
+- **AgentBot Inbound De-confliction**:
+  - Mounted at `POST /api/v1/chatwoot/webhook` (`chatwoot_agentbot.py`).
+  - Before handling an incoming message, checks whether `conversation.inbox_id` is registered with an active `SmsChatwootBinding`.
+  - If bound to the canonical mirror path, AgentBot returns `{"status": "ignored", "reason": "inbox_managed_by_canonical_mirror_webhook"}` without executing duplicate AI turns or sending duplicate responses.
+  - Verifies that the Chatwoot account belongs to the resolved tenant, rejecting tenant spoofing or hijacking attempts.
+
 

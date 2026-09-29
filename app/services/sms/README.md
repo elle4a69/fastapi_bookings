@@ -64,6 +64,7 @@ flowchart TD
 - [operations_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/operations_service.py): Tenant/account-scoped staff lifecycle transitions, structural audit events, draft selection, and sanitized timeline assembly.
 - [outbox_worker.py](file:///F:/Projects/fastapi_bookings/app/services/sms/outbox_worker.py): Async background polling loop leasing pending outbound jobs and dispatching via transports.
 - [chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py): Bi-directional synchronization bridge linking conversations to Chatwoot contacts and messages.
+- [chatwoot_provisioning_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_provisioning_service.py): Automated idempotent multi-tenant pipeline provisioning Chatwoot accounts, provider inboxes, bindings, webhooks, and staff memberships.
 - [arrival_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/arrival_service.py): Self-service lobby arrival token creation, arrival check-in, and repeating staff chime alerts.
 - [prompt_builder.py](file:///F:/Projects/fastapi_bookings/app/services/sms/prompt_builder.py): Master Spec Unified Layered Prompt Builder compiling system safety, tenant policies, Style Lab traits, structured operational catalogs, curated knowledge, and situational modulation.
 - [curator_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/curator_service.py): Master Spec Autonomous Knowledge Curator Service processing learning events, managing supersession lifecycles, deriving canonical behavioural rules, and enforcing fail-closed safety boundaries.
@@ -84,10 +85,12 @@ CLICKSEND_API_KEY=key_abcdef123456
 # OpenAI Assistant
 OPENAI_API_KEY=sk-proj-...
 
-# Chatwoot Sync
-CHATWOOT_BASE_URL=https://app.chatwoot.com
-CHATWOOT_API_ACCESS_TOKEN=token_xyz
+# Chatwoot Multi-Tenant Sync & Provisioning
+CHATWOOT_BASE_URL=http://localhost:4000
+CHATWOOT_API_ACCESS_TOKEN=4ULEfYYtAJAbPZmZYaVcr9Lb
+CHATWOOT_PLATFORM_API_TOKEN=ReqRYyswSvVB8nVktQrZP1zg
 CHATWOOT_WEBHOOK_SECRET=webhook_secret_123
+CHATWOOT_AUTO_PROVISION=false
 
 # Outbox Worker Configuration
 OUTBOX_POLL_INTERVAL=5.0
@@ -98,6 +101,7 @@ OUTBOX_BATCH_SIZE=20
 ### Models & Schema Dependencies
 Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_bookings/app/models/):
 - `sms_accounts`: Gateway credentials, transport type, prompt profiles, AI mode (`off`, `draft`, `autopilot`).
+- `sms_chatwoot_bindings`: 1-to-1 tenant/provider Chatwoot account/inbox binding, encrypted tokens, and timing-safe webhook secrets.
 - `sms_conversations`: Thread state, customer phone number, active client link, `unread_count`, `state`.
 - `sms_messages`: Individual SMS messages with direction, status, and `customer_turn_ref`.
 - `sms_inbound_receipts`: Event key deduplication receipts.
@@ -228,6 +232,29 @@ To protect tenant security and PII, structural audit events in `sms_conversation
   - `POST /answer-info-request` is rejected with `HTTP 409 Conflict`. Direct conversation-to-knowledge ingestion is disabled; reusable knowledge requires governed curator proposals.
   - Production `POST /seed-scenarios` is rejected with `HTTP 409 Conflict` before any mutation.
   - Retrying failed outbound jobs requires an enabled line and unblocked conversation; raw provider error text is withheld from client responses.
+
+### 4.5 Automated Chatwoot Multi-Tenant Provisioning Pipeline (`chatwoot_provisioning_service.py`)
+
+FastAPI Bookings owns the multi-tenant source of truth. The automated provisioning pipeline ensures that whenever a new tenant is onboarded or triggered via `POST /api/sms/chatwoot/provision`, the corresponding Chatwoot infrastructure is automatically and idempotently provisioned:
+
+1. **Account Provisioning**:
+   - Matches existing Chatwoot accounts by name via the Platform API (`GET /platform/api/v1/accounts`) or provisions a new Account (`POST /platform/api/v1/accounts`).
+   - Binds the resulting Account ID 1-to-1 onto `Tenant.chatwoot_account_id` and commits to PostgreSQL/SQLite.
+   - Links the configured SuperAdmin / agent user to the account as an administrator (`POST /platform/api/v1/accounts/{id}/account_users`).
+2. **Inbox Provisioning**:
+   - Discovers or creates API Channel Inboxes for the tenant's primary/default and active providers (`name=f"{tenant.name} - {provider.name}"`).
+   - Configures the inbound webhook endpoint URL on the channel.
+3. **Binding Provisioning**:
+   - Creates or updates `SmsChatwootBinding` records linking `(tenant_id, provider_id, chatwoot_account_id, chatwoot_inbox_id)`.
+   - Generates cryptographically strong, timing-safe 32-byte `webhook_secret` tokens stored encrypted with Fernet.
+4. **Webhook Subscription**:
+   - Subscribes the FastAPI webhook endpoint (`/api/sms/chatwoot/webhook?token={webhook_secret}`) to `message_created` and `message_updated` events on the Chatwoot account.
+5. **Staff Provisioning**:
+   - Maps FastAPI staff/admin users (`User.role in ("admin", "owner", "staff")`) to Chatwoot Agents (`POST /api/v1/accounts/{id}/agents`).
+   - Automatically enrolls staff agents as members of all provisioned tenant inboxes (`POST /api/v1/accounts/{id}/inbox_members`).
+6. **Idempotency & Fail-Safe Resiliency**:
+   - Repeated runs detect existing accounts, inboxes, bindings, webhooks, and agents, skipping already-created resources without side-effects.
+   - If Chatwoot is offline or unreachable, the service gracefully logs a warning and returns `status="pending"`, ensuring tenant creation and onboarding never fail due to upstream Chatwoot unavailability.
 
 ---
 
@@ -1026,20 +1053,29 @@ The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped
      8. Approved procedural style examples (`MessageStyleExample`).
      9. Current simulation/dialogue state.
      10. Recent turn history window.
-   - **Multi-Turn Live Tool Calling**:
+   - **Procedural Style Example Conditioning (Tier 8)**:
+     - `_build_bootcamp_runtime_and_prompt` retrieves up to 3 approved, active `MessageStyleExample` records via `retrieve_style_examples` prioritizing provider overrides -> tenant defaults -> platform seed exemplars.
+     - Injected into system prompt Tier 8 to condition tone and conversational flow directly.
+   - **Multi-Turn Live Tool Calling & Audit Persistence**:
      - `generate_bootcamp_tori_reply` passes `get_assistant_tool_definitions()` to OpenAI.
      - When the model emits tool calls (`check_availability`, `quote_travel`, `service_lookup`, `provider_lookup`, `address_validation`), `AssistantToolEngine` executes them locally against live booking/travel services with server-enforced `tenant_id` and `provider_id` parameters.
      - The tool responses are fed back into the OpenAI dialogue stream (supporting up to 3 tool execution turns) before the final Tori reply is synthesized.
-     - Tool execution telemetry is attached to simulation metadata for real-time inspection.
+     - **Audit Trace Persistence**: `BootcampRunner` receives the shared
+       `AssistantRuntimeService` audit trace and persists only structural
+       metadata (`tool_name`, success/status, UTC timestamp, argument/result
+       key names, and server-bound scope labels) into
+       `SmsBootcampMessage.meta["executed_tools"]`. Raw arguments, tool
+       output, prices, slots, addresses, and customer data are never persisted
+       as telemetry.
 
 ### Verification & Testing Commands
 
 ```powershell
-# Run the complete Bootcamp test suite including tool integration:
-& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py -v
+# Run the complete Bootcamp test suite including tool integration, style wiring & audit persistence:
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py tests/test_bootcamp_style_and_tool_audit.py -v
 
-# Run the complete regression check across Bootcamp, UI Controls, and Prompt Builder:
-& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py tests/test_assistant_tools_and_prompts.py -v
+# Run the complete regression check across Bootcamp, Studio API, and Runtime:
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py tests/test_bootcamp_style_and_tool_audit.py tests/test_assistant_studio_api.py -v
 ```
 
 > **Testing Environment Note**: On Windows Python 3.11 runtimes, `pytest.ini` configures `addopts = -p no:schemathesis` to prevent the third-party `schemathesis` pytest plugin from causing an access violation deadlock during `hypothesis_jsonschema` setup in async test suites.
@@ -1095,5 +1131,86 @@ The `booking_facade.py` module exposes narrow, provider/tenant-isolated tools ca
 ```powershell
 # Run SMS prompt builder and booking facade test suite:
 python -m pytest tests/test_sms_prompt_builder.py -v
+```
+
+---
+
+## 16. Chatwoot Tenant Binding, Canonical Mirror Path & Channel-Neutral AI (`chatwoot_service.py`, `ai_orchestrator.py`)
+
+### Purpose & Scope
+This module provides a production-grade, bi-directional Chatwoot synchronization slice:
+- FastAPI `Tenant` is the single source of truth for accounts, users, providers, services, bookings, prompts, and policies.
+- One Chatwoot Account maps to one FastAPI tenant (`Tenant.chatwoot_account_id` with unique constraint).
+- `SmsChatwootBinding` maps provider communication channels to Chatwoot inboxes, storing Fernet-encrypted API tokens and webhook secrets with secret masking in API responses.
+- Inbound Chatwoot messages trigger transactional `SmsAiJob` records debounced for 5 seconds.
+- Channel-neutral AI orchestration executes without requiring an `SmsAccount` (`sms_account_id=None`), resolving the legacy mirror-path dead end.
+- Outbound AI replies are dispatched exclusively via Chatwoot outbox; outbound echoes from Chatwoot are deduplicated via `client_request_id` (`fastapi-chatwoot-message-{id}`).
+- Human staff replies sent directly inside Chatwoot switch conversation state to `taken-over` and cancel any pending debounced `SmsAiJob`.
+
+### Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    Chatwoot["Docker Chatwoot (Port 4000)"] -->|POST /api/sms/chatwoot/webhook| Webhook["chatwoot_service.py\nprocess_chatwoot_webhook()"]
+    
+    subgraph WebhookIntake["Inbound Scoping & Verification"]
+        Webhook --> VerifyToken["Verify webhook_secret"]
+        VerifyToken --> ScopeCheck["Validate Account & Inbox Mappings\nEnsure provider belongs to Tenant"]
+        ScopeCheck --> InsertMsg["Insert SmsConversation & SmsMessage\n(sms_account_id=None, direction='inbound')"]
+        InsertMsg --> EnqueueJob["Enqueue SmsAiJob\n(run_at = now + 5s)"]
+    end
+
+    subgraph ChannelNeutralAI["Channel-Neutral AI Orchestration"]
+        Worker["ai_orchestrator.py\nprocess_pending_sms_ai_jobs()"] --> QueryJob["Query SmsAiJob (run_at <= now)"]
+        QueryJob --> ResolveBinding["Resolve SmsChatwootBinding\nfor (tenant_id, provider_id)"]
+        ResolveBinding --> ExecRuntime["AssistantRuntimeService.execute_turn()\nor Safe Local Fallback"]
+        ExecRuntime --> QueueOutbox["enqueue_outbound_message_transactional()\n(queued in sms_outbound_jobs)"]
+    end
+
+    subgraph OutboundDispatch["Outbox Delivery & Echo Deduplication"]
+        OutboxWorker["outbox_worker.py"] --> SendChatwoot["send_chatwoot_message()\nvia Chatwoot REST API"]
+        SendChatwoot -->|Assign client_request_id| RemoteMsg["Chatwoot Message Created"]
+        RemoteMsg -.->|Chatwoot Webhook Echo| Webhook
+        Webhook -->|Detect source_id / client_request_id| DedupeEcho["Mark duplicate=True\nPreserve auto-reply state"]
+    end
+
+    subgraph HumanTakeover["Staff Takeover Safety"]
+        Chatwoot -->|Staff Agent Outgoing Webhook| Webhook
+        Webhook --> CheckHuman{"Is Staff Reply?"}
+        CheckHuman -->|Yes| SetTakenOver["Set state = 'taken-over'"]
+        SetTakenOver --> CancelJob["Cancel pending SmsAiJob"]
+        SetTakenOver --> LogEvent["Log SmsConversationEvent\n(type='takeover')"]
+    end
+
+    EnqueueJob -.-> QueryJob
+```
+
+### Key Workflows & Contracts
+
+1. **Unique Tenant Binding**:
+   - `Tenant.chatwoot_account_id` enforces a strict 1-to-1 relationship between a FastAPI tenant and a Chatwoot account.
+   - Any attempt to bind a Chatwoot account already mapped to another tenant fails with `HTTP 400 Bad Request`.
+   - Provider scoping requires the provider to belong to the active tenant.
+2. **Channel-Neutral Dialogue Execution**:
+   - For Chatwoot conversations where `conversation.sms_account_id is None`, `ai_orchestrator.py` queries `SmsChatwootBinding` for `(tenant_id, provider_id)` to evaluate `ai_enabled` and `ai_mode` (defaulting to autopilot).
+   - Message history queries scope with `(SmsMessage.sms_account_id.is_(None) | (SmsMessage.sms_account_id == conv.sms_account_id))`, eliminating the legacy dead end where Chatwoot turns were silently dropped.
+   - Evaluates `AssistantRuntimeService.execute_turn` or `_safe_local_reply` with provider profile context.
+3. **AgentBot De-confliction**:
+   - `chatwoot_agentbot.py` checks whether incoming webhook events belong to an inbox managed by `SmsChatwootBinding`.
+   - If bound, AgentBot yields: `{"status": "ignored", "reason": "inbox_managed_by_canonical_mirror_webhook"}`.
+   - Prevents duplicate replies or conflicting state machines when both webhooks are active.
+4. **Outbox Echo Deduplication & Staff Takeover**:
+   - Internal outbound AI messages carry `client_request_id = fastapi-chatwoot-message-{id}`.
+   - When Chatwoot emits an outgoing message webhook, the canonical receiver inspects `source_id` / `client_request_id`. Internal echoes are acknowledged as duplicates (`duplicate=True, reason="internal_outbound_echo"`) without triggering takeover.
+   - Genuine human staff replies trigger instant conversation takeover (`state="taken-over"`) and mark all pending `SmsAiJob`s as `CANCELLED`.
+
+### Verification & Testing Commands
+
+```powershell
+# 1. Run the Docker-backed Chatwoot End-to-End Integration Suite:
+.\.venv\Scripts\python.exe -m pytest tests/test_chatwoot_docker_e2e.py -v
+
+# 2. Run all Chatwoot and AgentBot unit and integration tests:
+.\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
 ```
 

@@ -23,6 +23,10 @@ from app.models.knowledge_projection import KnowledgeGraphProjection
 from app.models.learning_event import LearningEvent, compute_text_diff
 from app.services.curation.pii_scrubber import scrub_pii
 from app.services.knowledge.gateway import knowledge_gateway
+from app.services.knowledge.classifier import (
+    classify_curated_memory_candidate,
+    classify_text,
+)
 from app.services.knowledge.policy import (
     is_dynamic_operational_data,
     is_system_safety_violation,
@@ -248,6 +252,36 @@ class UnifiedCurator:
             return proposal.provider_id == provider_id
         return proposal.provider_id is None
 
+    @classmethod
+    def _reject_event_proposals(
+        cls,
+        db: Session,
+        event: LearningEvent,
+        *,
+        reason_code: str,
+        resolution_code: str,
+        now: datetime,
+    ) -> None:
+        """Reject only pending proposals tied to this scoped learning event.
+
+        Learning events may retain sanitized audit evidence, but no pending
+        proposal associated with unsafe content may remain eligible for manual
+        promotion.  Matching is deliberately scoped by tenant/provider first.
+        """
+        for proposal in cls.get_scoped_pending_proposals(
+            db, event.tenant_id, event.provider_id
+        ):
+            if (
+                (event.message_id and event.message_id in (proposal.fingerprint or ""))
+                or (event.conversation_id and event.conversation_id in (proposal.fingerprint or ""))
+                or (event.human_content and proposal.proposed_response == event.human_content)
+            ):
+                proposal.status = "rejected"
+                proposal.reason_code = reason_code
+                proposal.resolution_code = resolution_code
+                proposal.reviewed_at = now
+                proposal.updated_at = now
+
     def process_learning_event(
         self,
         db: Session,
@@ -392,25 +426,42 @@ class UnifiedCurator:
                 rationale="Quarantined due to system safety boundary violation",
             )
 
-        if has_dynamic_facts and event_type not in ("draft_edit", "approved_draft"):
+        if has_dynamic_facts:
+            # Draft edits and approvals are not exempt.  They may be retained as
+            # sanitized audit events, but literal appointments, quotes, customer
+            # details or availability must never become style evidence or a
+            # proposal that can later be promoted.
+            if event_type in ("draft_edit", "approved_draft"):
+                self._reject_event_proposals(
+                    db,
+                    event,
+                    reason_code="dynamic_operational_data",
+                    resolution_code="retained_audit_only_dynamic_operational_data",
+                    now=now,
+                )
+                event.status = "processed"
+                return CuratorDecision(
+                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit")),
+                    status="processed",
+                    classification="incidental",
+                    retained_as_evidence=True,
+                    contains_dynamic_fact=True,
+                    reason_code="dynamic_operational_data",
+                    rationale="Dynamic operational content retained as audit evidence only",
+                )
+
             logger.info(
                 "Rejected dynamic operational data in LearningEvent %s: %s",
                 event.id,
                 f"{clean_query} {clean_human}"[:60],
             )
-            proposals = self.get_scoped_pending_proposals(db, event.tenant_id, event.provider_id)
-            for p in proposals:
-                if (
-                    (event.message_id and event.message_id in (p.fingerprint or ""))
-                    or (event.conversation_id and event.conversation_id in (p.fingerprint or ""))
-                    or p.proposed_response == event.human_content
-                    or (clean_human and p.proposed_response == clean_human)
-                ):
-                    p.status = "rejected"
-                    p.reason_code = "dynamic_operational_data"
-                    p.resolution_code = "rejected_dynamic_operational_data"
-                    p.reviewed_at = now
-                    p.updated_at = now
+            self._reject_event_proposals(
+                db,
+                event,
+                reason_code="dynamic_operational_data",
+                resolution_code="rejected_dynamic_operational_data",
+                now=now,
+            )
 
             event.status = "rejected"
             return CuratorDecision(
@@ -427,6 +478,30 @@ class UnifiedCurator:
         # -------------------------------------------------------------
         # Step 5: Evidence & Authority Evaluation (Spec 16, 24, 26)
         # -------------------------------------------------------------
+        if event_type in ("draft_edit", "approved_draft") and clean_human:
+            # Drafts do not become durable facts, but a material edit can create
+            # a style-evidence proposal.  Apply the same PII/template/injection
+            # gate before that proposal is created so an unsafe edit cannot wait
+            # for a later human approval.
+            draft_classification = classify_text(clean_human)
+            if not draft_classification.is_safe:
+                self._reject_event_proposals(
+                    db,
+                    event,
+                    reason_code=f"classifier_{draft_classification.category.value.lower()}",
+                    resolution_code="rejected_by_curator_classifier",
+                    now=now,
+                )
+                event.status = "rejected"
+                return CuratorDecision(
+                    action=CuratorActionValue("REJECT", ("rejected", "classifier_rejected")),
+                    status="rejected",
+                    classification="unsafe_draft",
+                    reason_code=f"classifier_{draft_classification.category.value.lower()}",
+                    requires_review=True,
+                    rationale="Draft learning candidate rejected by the safety classifier",
+                )
+
         if event_type == "draft_edit":
             diff = event.diff_payload or compute_text_diff(
                 event.original_ai_content, event.human_content
@@ -533,6 +608,44 @@ class UnifiedCurator:
                 status="processed",
                 retained_as_evidence=True,
                 rationale="No factual content provided for durable memory creation",
+            )
+
+        # -----------------------------------------------------------------
+        # Step 5b: classifier-backed promotion gate
+        # -----------------------------------------------------------------
+        # PII scrubbing prevents raw identifiers from reaching this point, but
+        # scrub markers themselves are not reusable knowledge.  Likewise, an
+        # admin-approved proposal is not a substitute for this gate: every
+        # candidate is classified immediately before CuratedMemory persistence.
+        if is_behavioural:
+            candidate_text = self.derive_behavioural_principle(clean_reason, clean_human)
+            candidate_classification = classify_text(candidate_text)
+        else:
+            candidate_text = clean_human
+            candidate_classification = classify_curated_memory_candidate(
+                clean_query, candidate_text
+            )
+
+        if not candidate_classification.is_safe:
+            self._reject_event_proposals(
+                db,
+                event,
+                reason_code=(
+                    f"classifier_{candidate_classification.category.value.lower()}"
+                ),
+                resolution_code="rejected_by_curator_classifier",
+                now=now,
+            )
+            event.status = "rejected"
+            return CuratorDecision(
+                action=CuratorActionValue("REJECT", ("rejected", "classifier_rejected")),
+                status="rejected",
+                category=category,
+                reason_code=(
+                    f"classifier_{candidate_classification.category.value.lower()}"
+                ),
+                requires_review=True,
+                rationale="Learning candidate rejected by the pre-promotion safety classifier",
             )
 
         # -------------------------------------------------------------

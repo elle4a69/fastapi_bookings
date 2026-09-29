@@ -92,6 +92,7 @@ def import_approved_style_examples(
     provider_id: Optional[int] = None,
     enforce_sha: bool = True,
     expected_hash: str = EXPECTED_SHA256,
+    dry_run: bool = False,
 ) -> ImportReport:
     """Import approved intent examples safely and idempotently into MessageStyleExample.
 
@@ -102,6 +103,8 @@ def import_approved_style_examples(
         provider_id: Optional provider ID (None for tenant-wide or platform defaults).
         enforce_sha: Whether to halt on SHA-256 mismatch.
         expected_hash: Expected SHA-256 digest.
+        dry_run: If True, validate and compute counts without adding, flushing,
+            committing, or rolling back caller-owned session state.
 
     Returns:
         ImportReport containing counts and verification status.
@@ -125,9 +128,6 @@ def import_approved_style_examples(
 
     # 2. Invariant Baseline: CuratedMemory must not be touched
     initial_curated_count = db.query(CuratedMemory).count()
-
-    # Ensure table exists in current database schema
-    MessageStyleExample.__table__.create(bind=db.bind, checkfirst=True)
 
     # 3. Stream JSONL line by line
     with open(file_path, "r", encoding="utf-8") as f:
@@ -198,25 +198,29 @@ def import_approved_style_examples(
                 if p not in tags:
                     tags.append(p)
 
-            # 6. Store into MessageStyleExample
-            example = MessageStyleExample(
-                tenant_id=tenant_id,
-                provider_id=provider_id,
-                intent=primary_intent,
-                client_message=client_msg,
-                assistant_reply=assistant_reply,
-                category=category,
-                tags=tags,
-                is_approved=True,
-                is_active=True,
-                source="assistant_ui_import",
-                content_hash=content_hash,
-            )
-            db.add(example)
+            # 6. Store into MessageStyleExample if not dry_run
+            if not dry_run:
+                example = MessageStyleExample(
+                    tenant_id=tenant_id,
+                    provider_id=provider_id,
+                    intent=primary_intent,
+                    client_message=client_msg,
+                    assistant_reply=assistant_reply,
+                    category=category,
+                    tags=tags,
+                    is_approved=True,
+                    is_active=True,
+                    source="assistant_ui_import",
+                    content_hash=content_hash,
+                )
+                db.add(example)
             report.imported_count += 1
 
-    # Commit all imported examples
-    db.commit()
+    # Dry runs never add rows, so they deliberately do not roll back the
+    # caller's transaction.  Transaction ownership belongs to the caller.
+    if not dry_run:
+        # Commit all imported examples
+        db.commit()
 
     # 7. Invariant Verification: Prove imported examples NEVER entered CuratedMemory
     final_curated_count = db.query(CuratedMemory).count()
@@ -227,7 +231,7 @@ def import_approved_style_examples(
         )
 
     logger.info(
-        f"Approved examples import complete: scanned={report.total_scanned}, "
+        f"Approved examples import complete (dry_run={dry_run}): scanned={report.total_scanned}, "
         f"imported={report.imported_count}, skipped={report.skipped_duplicate}, "
         f"rejected={report.rejected_count}"
     )

@@ -41,6 +41,7 @@ from ...schemas.message_style_example import (
     MessageStyleExampleUpdate,
 )
 from ...services.assistant import (
+    AssistantRuntimeService,
     AssistantToolEngine,
     ClientInfo,
     LocationInfo,
@@ -55,6 +56,10 @@ from ...services.assistant.prompt_policy import (
     STYLE_TRAIT_DESCRIPTIONS,
 )
 from ...services.knowledge.asset_importer import import_approved_style_examples
+from ...services.knowledge.classifier import (
+    classify_curated_memory_candidate,
+    classify_style_example,
+)
 from ...services.knowledge.gateway import knowledge_gateway
 from ...services.sms.bootcamp import DEFAULT_STYLE_PROFILE
 
@@ -65,6 +70,41 @@ router = APIRouter(tags=["Assistant Studio"])
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def validate_tenant_provider(
+    db: Session,
+    tenant_id: int,
+    provider_id: Optional[int],
+) -> Optional[Provider]:
+    """Validate that provider_id exists and belongs to the given tenant.
+
+    Raises:
+        HTTPException(404): If provider_id is provided but not found in current tenant.
+    """
+    if provider_id is None:
+        return None
+    provider = (
+        db.query(Provider)
+        .filter(Provider.id == provider_id, Provider.tenant_id == tenant_id)
+        .first()
+    )
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found in current tenant",
+        )
+    return provider
+
+
+def _validate_style_example_pair(client_message: str, assistant_reply: str) -> None:
+    """Fail closed before any Studio example reaches the prompt store."""
+    classification = classify_style_example(client_message, assistant_reply)
+    if not classification.is_safe:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Style example rejected by safety classifier: {classification.reason}",
+        )
 
 
 # ===========================================================================
@@ -174,6 +214,8 @@ def get_overview_statistics(
     db: Session = Depends(get_db),
 ) -> OverviewStats:
     """Return live operational and knowledge statistics for the active tenant."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
     # 1. Channel Accounts count
     ca_query = db.query(ChannelAccount).filter(ChannelAccount.tenant_id == tenant.id)
     if provider_id is not None:
@@ -276,6 +318,10 @@ def get_prompt_policy(
     db: Session = Depends(get_db),
 ) -> PolicyReadResponse:
     """Return the complete 10-tier policy configurations and active style profile."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
+    tenant_obj = db.query(Tenant).filter(Tenant.id == tenant.id).first() or tenant
+
     # Look up bootcamp settings
     settings = (
         db.query(SmsBootcampSettings)
@@ -328,8 +374,12 @@ def get_prompt_policy(
         provider_overlay = custom_notes
 
     tenant_policy = (
-        f"Standard operating policies for {tenant.name}. "
-        "Appointments must be cancelled at least 24 hours in advance to receive a full refund."
+        tenant_obj.assistant_policy
+        if tenant_obj.assistant_policy is not None
+        else (
+            f"Standard operating policies for {tenant_obj.name}. "
+            "Appointments must be cancelled at least 24 hours in advance to receive a full refund."
+        )
     )
 
     # Pre-render 10 hierarchy tiers descriptions
@@ -457,7 +507,15 @@ def update_prompt_policy(
     _admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> PolicyReadResponse:
-    """Save provider overlay, custom notes, system prompt template, and style profile."""
+    """Save tenant policy, provider overlay, custom notes, system prompt template, and style profile."""
+    validate_tenant_provider(db, tenant.id, payload.provider_id)
+
+    tenant_obj = db.query(Tenant).filter(Tenant.id == tenant.id).first() or tenant
+
+    if payload.tenant_policy is not None:
+        tenant_obj.assistant_policy = payload.tenant_policy
+        db.add(tenant_obj)
+
     # Find or create SmsBootcampSettings
     settings = (
         db.query(SmsBootcampSettings)
@@ -508,7 +566,7 @@ def update_prompt_policy(
             profile = SmsPromptProfile(
                 tenant_id=tenant.id,
                 provider_id=payload.provider_id,
-                name=f"{tenant.name} - Provider #{payload.provider_id or 'all'}",
+                name=f"{tenant_obj.name} - Provider #{payload.provider_id or 'all'}",
                 system_prompt=effective_prompt,
                 is_active=True,
             )
@@ -518,6 +576,7 @@ def update_prompt_policy(
 
     db.commit()
     db.refresh(settings)
+    db.refresh(tenant_obj)
 
     # Invalidate cached knowledge retrieval for this scope
     try:
@@ -525,7 +584,7 @@ def update_prompt_policy(
     except Exception as exc:
         logger.warning("Knowledge gateway cache invalidation error: %s", exc)
 
-    return get_prompt_policy(provider_id=payload.provider_id, tenant=tenant, _admin=_admin, db=db)
+    return get_prompt_policy(provider_id=payload.provider_id, tenant=tenant_obj, _admin=_admin, db=db)
 
 
 # ===========================================================================
@@ -546,13 +605,7 @@ def simulate_assistant_turn(
     replies in authoritative database truth.
     """
     # 1. Resolve Provider & Location
-    provider = None
-    if payload.provider_id:
-        provider = (
-            db.query(Provider)
-            .filter(Provider.id == payload.provider_id, Provider.tenant_id == tenant.id)
-            .first()
-        )
+    provider = validate_tenant_provider(db, tenant.id, payload.provider_id)
 
     location = (
         db.query(Location)
@@ -590,32 +643,7 @@ def simulate_assistant_turn(
             source="client" if role in ("user", "persona", "client") else "assistant",
         )
 
-    # Add current client turn
-    context.add_turn(role="user", content=payload.client_input, source="client")
-
-    # 3. Retrieve Curated Memories and Style Examples
-    curated_memories = (
-        db.query(CuratedMemory)
-        .filter(
-            CuratedMemory.tenant_id == tenant.id,
-            CuratedMemory.status == "active",
-        )
-        .limit(5)
-        .all()
-    )
-
-    style_examples = (
-        db.query(MessageStyleExample)
-        .filter(
-            MessageStyleExample.tenant_id == tenant.id,
-            MessageStyleExample.is_approved.is_(True),
-            MessageStyleExample.is_active.is_(True),
-        )
-        .limit(3)
-        .all()
-    )
-
-    # 4. Resolve Settings and Style Profile
+    # Resolve Settings and Style Profile
     settings = (
         db.query(SmsBootcampSettings)
         .filter(
@@ -628,183 +656,59 @@ def simulate_assistant_turn(
         settings.active_style_profile if settings and settings.active_style_profile else dict(DEFAULT_STYLE_PROFILE)
     )
 
-    assembler = PromptPolicyAssembler()
-    distress_detected = assembler.detect_frustration(context)
-
-    # 5. Execute Live Server-Enforced Tools against real DB if applicable
-    tool_engine = AssistantToolEngine()
-    executed_tools: List[Dict[str, Any]] = []
-
-    lower_input = payload.client_input.lower()
-
-    # Rule-assisted live tool triggers for simulation sandbox
-    if any(k in lower_input for k in ["swedish", "massage", "service", "pricing", "cost", "how much", "rate"]):
-        # Execute service_lookup
-        search_query = "Swedish" if "swedish" in lower_input else "massage"
-        t_res = tool_engine.execute_tool(
-            "service_lookup",
-            {"service_id_or_slug": search_query},
-            context=context,
-            db=db,
-        )
-        executed_tools.append({
-            "name": "service_lookup",
-            "arguments": {"service_id_or_slug": search_query},
-            "output": t_res,
-            "server_bound_keys": ["tenant_id"],
-        })
-
-    if any(k in lower_input for k in ["travel", "home visit", "quote", "mobile", "come out", "bondi"]):
-        # Execute quote_travel
-        dest = "Bondi Beach" if "bondi" in lower_input else "Sydney CBD"
-        loc_id = location.id if location else 1
-        t_res = tool_engine.execute_tool(
-            "quote_travel",
-            {"origin_location_id": loc_id, "destination_address": dest},
-            context=context,
-            db=db,
-        )
-        executed_tools.append({
-            "name": "quote_travel",
-            "arguments": {"origin_location_id": loc_id, "destination_address": dest},
-            "output": t_res,
-            "server_bound_keys": ["tenant_id"],
-        })
-
-    if any(k in lower_input for k in ["available", "tomorrow", "friday", "slot", "when are you free", "openings"]):
-        # Execute check_availability
-        first_service = (
-            db.query(Service)
-            .filter(Service.tenant_id == tenant.id, Service.active.is_(True))
-            .first()
-        )
-        srv_id = first_service.id if first_service else 1
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        t_res = tool_engine.execute_tool(
-            "check_availability",
-            {"service_id": srv_id, "start_date": today_str, "end_date": today_str},
-            context=context,
-            db=db,
-        )
-        executed_tools.append({
-            "name": "check_availability",
-            "arguments": {"service_id": srv_id, "start_date": today_str, "end_date": today_str},
-            "output": t_res,
-            "server_bound_keys": ["tenant_id", "provider_id"],
-        })
-
-    if any(k in lower_input for k in ["who is", "practitioner", "dr.", "doctor", "specialist"]):
-        p_query = provider.name if provider else "Dr"
-        t_res = tool_engine.execute_tool(
-            "provider_lookup",
-            {"provider_id_or_slug": p_query},
-            context=context,
-            db=db,
-        )
-        executed_tools.append({
-            "name": "provider_lookup",
-            "arguments": {"provider_id_or_slug": p_query},
-            "output": t_res,
-            "server_bound_keys": ["tenant_id"],
-        })
-
-    # 6. Assemble Full 10-Tier Prompt Bundle
-    assembled = assembler.assemble(
-        context=context,
-        tenant_policy=f"Standard clinic policy for {tenant.name}.",
-        provider_overlay=settings.system_prompt_template if settings else None,
-        style_profile=style_priors,
-        curated_memories=curated_memories,
-        style_examples=style_examples,
-        db=db,
-        training_notes=settings.custom_training_notes if settings else None,
+    tenant_obj = db.query(Tenant).filter(Tenant.id == tenant.id).first() or tenant
+    effective_tenant_policy = (
+        tenant_obj.assistant_policy
+        if tenant_obj.assistant_policy is not None
+        else f"Standard clinic policy for {tenant_obj.name}."
     )
 
-    # 7. Generate Model Reply
-    # If OpenAI API is available, call it; otherwise synthesize deterministic grounded response
-    reply = ""
-    from ...core.config import settings as app_settings
-    openai_key = app_settings.OPENAI_API_KEY
-    if openai_key and not openai_key.startswith("mock"):
-        try:
-            from openai import OpenAI
-            client = OpenAI(api_key=openai_key)
-            tools_defs = get_assistant_tool_definitions()
-            response = client.chat.completions.create(
-                model=settings.model if settings else "gpt-4o-mini",
-                messages=assembled.messages,
-                tools=tools_defs,
-                tool_choice="auto",
-                temperature=payload.temperature or 0.7,
-                max_tokens=250,
-            )
-            reply = response.choices[0].message.content or ""
-        except Exception as exc:
-            logger.warning("OpenAI API call in simulation failed: %s; using grounded fallback", exc)
+    settings_data = {
+        "style_profile": style_priors,
+        "temperature": payload.temperature or 0.7,
+        "tenant_id": tenant.id,
+        "provider_id": payload.provider_id,
+        "tenant_policy": effective_tenant_policy,
+    }
+    if settings:
+        settings_data["model"] = settings.model
+        settings_data["custom_training_notes"] = settings.custom_training_notes
+        settings_data["system_prompt_template"] = settings.system_prompt_template
 
-    if not reply:
-        # Grounded response based on real executed tools & policy
-        if distress_detected:
-            reply = (
-                "I am very sorry to hear about your frustrating experience. "
-                "I am escalating this directly to our clinic manager right away so they can reach out to you personally."
-            )
-        elif executed_tools:
-            latest_tool = executed_tools[-1]
-            t_name = latest_tool["name"]
-            t_out = latest_tool["output"]
-            if t_name == "service_lookup":
-                services_found = t_out.get("services", [])
-                if services_found:
-                    srv = services_found[0]
-                    reply = f"Our {srv['name']} is ${srv['price']:.2f} for {srv['duration']} minutes. Would you like to check available slots?"
-                else:
-                    reply = "I couldn't find a service matching that description. We offer general consultations, massage therapy, and assessment sessions."
-            elif t_name == "quote_travel":
-                if t_out.get("serviceable", True):
-                    fee = t_out.get("travel_fee", 25.0)
-                    dist = t_out.get("distance_km", 12.5)
-                    reply = f"We can provide mobile travel to your address! The travel fee is ${fee:.2f} ({dist:.1f} km). Which service would you like to book?"
-                else:
-                    reply = f"Unfortunately, that address exceeds our maximum operating radius of {t_out.get('max_radius_km', 50)} km. Would you like to book an in-clinic appointment instead?"
-            elif t_name == "check_availability":
-                slots = t_out.get("available_slots", [])
-                if slots:
-                    slot_strs = [s.get("start", "") for s in slots[:3]]
-                    reply = f"We have availability! Candidate open times include: {', '.join(slot_strs)}. Do any of those work for you?"
-                else:
-                    reply = "There are no open slots available on that specific date. Would you like me to check the following business day?"
-            else:
-                reply = "Thank you for reaching out! How can I assist you with scheduling today?"
-        elif any(k in lower_input for k in ["system prompt", "override", "ignore rules", "disregard"]):
-            reply = (
-                "I am unable to display system instructions or execute administrative overrides. "
-                "I can only assist with verified appointment bookings, service questions, and clinic hours."
-            )
-        else:
-            prov_name = provider.name if provider else tenant.name
-            reply = f"Hello! I am the booking assistant for {prov_name}. How can I assist you with scheduling or services today?"
+    # 3. Execute Turn via unified AssistantRuntimeService
+    result = AssistantRuntimeService.execute_turn(
+        db=db,
+        runtime_context=context,
+        user_message=payload.client_input,
+        settings_data=settings_data,
+        model=settings.model if settings else "gpt-4o-mini",
+        temperature=payload.temperature or 0.7,
+        is_simulation=True,
+    )
 
-    # 8. Resolve Registered Variables for telemetry
+    # 4. Resolve Registered Variables for telemetry
     resolved_vars: Dict[str, Any] = {}
     for var_def in default_variable_registry.list_variables():
         is_res, val = default_variable_registry.resolve_variable(var_def.name, context, db=db)
         if is_res and val is not None:
             resolved_vars[var_def.name] = str(val)
 
+    assembled_data = {
+        "system_prompt": result.system_prompt,
+        "sections": result.sections,
+        "unresolved_variables": getattr(result.assembled_prompt, "unresolved_variables", []),
+    }
+    if hasattr(result.assembled_prompt, "messages"):
+        assembled_data["messages"] = result.assembled_prompt.messages
+
     return SimulateTurnResponse(
-        reply=reply,
-        executed_tools=executed_tools,
-        assembled_prompt={
-            "system_prompt": assembled.system_prompt,
-            "messages": assembled.messages,
-            "sections": assembled.sections,
-            "unresolved_variables": assembled.unresolved_variables,
-        },
+        reply=result.reply_text,
+        executed_tools=result.executed_tools,
+        assembled_prompt=assembled_data,
         resolved_variables=resolved_vars,
         active_priors=style_priors,
-        distress_detected=distress_detected,
-        situational_modulation_active=distress_detected,
+        distress_detected=result.distress_detected,
+        situational_modulation_active=result.situational_modulation_active,
     )
 
 
@@ -823,6 +727,8 @@ def list_style_examples(
     db: Session = Depends(get_db),
 ) -> List[MessageStyleExampleRead]:
     """List procedural style examples filtered by tenant, provider, intent, and active status."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
     query = db.query(MessageStyleExample).filter(
         (MessageStyleExample.tenant_id == tenant.id) | (MessageStyleExample.tenant_id.is_(None))
     )
@@ -849,6 +755,9 @@ def create_style_example(
     db: Session = Depends(get_db),
 ) -> MessageStyleExampleRead:
     """Create a new MessageStyleExample with placeholder validation."""
+    validate_tenant_provider(db, tenant.id, payload.provider_id)
+    _validate_style_example_pair(payload.client_message, payload.assistant_reply)
+
     content_hash = compute_style_example_hash(payload.intent, payload.client_message)
 
     example = MessageStyleExample(
@@ -879,15 +788,17 @@ def update_style_example(
     db: Session = Depends(get_db),
 ) -> MessageStyleExampleRead:
     """Update an existing MessageStyleExample (active status, text, etc.)."""
-    example = (
-        db.query(MessageStyleExample)
-        .filter(
-            MessageStyleExample.id == id,
-            (MessageStyleExample.tenant_id == tenant.id) | (MessageStyleExample.tenant_id.is_(None)),
-        )
-        .first()
-    )
+    example = db.query(MessageStyleExample).filter(MessageStyleExample.id == id).first()
     if not example:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Style example not found")
+
+    if example.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform seed examples are read-only and cannot be modified or deleted by tenant admins",
+        )
+
+    if example.tenant_id != tenant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Style example not found")
 
     if payload.intent is not None:
@@ -905,6 +816,8 @@ def update_style_example(
     if payload.is_active is not None:
         example.is_active = payload.is_active
 
+    _validate_style_example_pair(example.client_message, example.assistant_reply)
+
     example.content_hash = compute_style_example_hash(example.intent, example.client_message)
     example.updated_at = _utc_now()
 
@@ -921,15 +834,17 @@ def delete_style_example(
     db: Session = Depends(get_db),
 ) -> dict:
     """Delete a MessageStyleExample from the database."""
-    example = (
-        db.query(MessageStyleExample)
-        .filter(
-            MessageStyleExample.id == id,
-            MessageStyleExample.tenant_id == tenant.id,
-        )
-        .first()
-    )
+    example = db.query(MessageStyleExample).filter(MessageStyleExample.id == id).first()
     if not example:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Style example not found or unauthorized")
+
+    if example.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform seed examples are read-only and cannot be modified or deleted by tenant admins",
+        )
+
+    if example.tenant_id != tenant.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Style example not found or unauthorized")
 
     db.delete(example)
@@ -950,6 +865,8 @@ def list_curator_proposals(
     db: Session = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """List pending and reviewed knowledge proposals for this tenant."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
     query = db.query(KnowledgeProposal).filter(KnowledgeProposal.tenant_id == tenant.id)
 
     if provider_id is not None:
@@ -998,10 +915,31 @@ def curate_proposal(
     if not proposal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge proposal not found")
 
+    if proposal.provider_id is not None:
+        validate_tenant_provider(db, tenant.id, proposal.provider_id)
+
     action = payload.action.lower()
     now = _utc_now()
 
     if action in ("approved", "accept", "active"):
+        # An administrative click is never an authority bypass.  Proposals can
+        # originate from imported or legacy learning paths, so classify again
+        # immediately before the irreversible promotion to durable memory.
+        classification = classify_curated_memory_candidate(
+            proposal.user_query or "", proposal.proposed_response or ""
+        )
+        if not classification.is_safe:
+            proposal.status = "rejected"
+            proposal.reason_code = f"classifier_{classification.category.value.lower()}"
+            proposal.resolution_code = "rejected_by_curator_classifier"
+            proposal.reviewed_at = now
+            proposal.updated_at = now
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Proposal cannot be promoted because it fails the knowledge safety classifier.",
+            )
+
         # 1. Promote to CuratedMemory
         memory = CuratedMemory(
             tenant_id=tenant.id,
@@ -1076,27 +1014,18 @@ def run_dataset_import(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Execute real cryptographic dataset import into MessageStyleExample."""
+    validate_tenant_provider(db, tenant.id, payload.provider_id)
+
     target_tenant_id = tenant.id if payload.scope != "platform_seed" else None
     target_provider_id = payload.provider_id if payload.scope == "provider_override" else None
 
-    # In dry-run mode, we wrap in transaction and rollback
-    if payload.dry_run:
-        with db.begin_nested():
-            report = import_approved_style_examples(
-                db=db,
-                tenant_id=target_tenant_id,
-                provider_id=target_provider_id,
-                enforce_sha=True,
-            )
-            # rollback inner transaction
-            db.rollback()
-    else:
-        report = import_approved_style_examples(
-            db=db,
-            tenant_id=target_tenant_id,
-            provider_id=target_provider_id,
-            enforce_sha=True,
-        )
+    report = import_approved_style_examples(
+        db=db,
+        tenant_id=target_tenant_id,
+        provider_id=target_provider_id,
+        enforce_sha=True,
+        dry_run=bool(payload.dry_run),
+    )
 
     return {
         "status": "success",
@@ -1125,6 +1054,8 @@ def get_variables_registry(
     db: Session = Depends(get_db),
 ) -> List[VariableItemResponse]:
     """Return registered prompt variables with live resolved values for this scope."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
     context = RuntimeContext(
         tenant_id=tenant.id,
         provider_id=provider_id,
@@ -1188,6 +1119,8 @@ def run_evaluation_benchmark(
     db: Session = Depends(get_db),
 ) -> List[EvalScenarioResult]:
     """Execute real evaluation benchmark testing prompt policy & live tools against the database."""
+    validate_tenant_provider(db, tenant.id, provider_id)
+
     context = RuntimeContext(
         tenant_id=tenant.id,
         provider_id=provider_id,

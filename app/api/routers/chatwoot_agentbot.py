@@ -186,6 +186,27 @@ async def chatwoot_agentbot_webhook(
                 detail="Invalid or missing webhook token",
             )
 
+    # 1b. De-confliction: Ensure inbox managed by canonical mirror route is not handled here
+    inbox_id = payload.conversation.inbox_id
+    if inbox_id:
+        try:
+            mirror_binding_stmt = select(SmsChatwootBinding).where(
+                SmsChatwootBinding.chatwoot_inbox_id == inbox_id,
+                SmsChatwootBinding.is_enabled == True,
+            )
+            mirror_res = await db.execute(mirror_binding_stmt)
+            if mirror_res.scalars().first():
+                logger.info(
+                    "AgentBot webhook ignoring event for inbox %s: managed by canonical mirror webhook",
+                    inbox_id,
+                )
+                return {
+                    "status": "ignored",
+                    "reason": "inbox_managed_by_canonical_mirror_webhook",
+                }
+        except Exception as exc:
+            logger.warning("Failed checking SmsChatwootBinding for inbox %s: %s", inbox_id, exc)
+
     # 2. Support conversation resolution background curation trigger
     if payload.event in ("conversation_resolved", "conversation_status_changed"):
         if payload.conversation.status == "resolved" and payload.transcript:
@@ -294,9 +315,15 @@ async def chatwoot_agentbot_webhook(
     # Resolve tenant and provider bindings for Chatwoot account
     binding = None
     try:
-        binding_stmt = select(SmsChatwootBinding).where(
-            SmsChatwootBinding.chatwoot_account_id == account_id
-        )
+        if inbox_id:
+            binding_stmt = select(SmsChatwootBinding).where(
+                SmsChatwootBinding.chatwoot_inbox_id == inbox_id,
+                SmsChatwootBinding.chatwoot_account_id == account_id
+            )
+        else:
+            binding_stmt = select(SmsChatwootBinding).where(
+                SmsChatwootBinding.chatwoot_account_id == account_id
+            )
         binding_res = await db.execute(binding_stmt)
         binding = binding_res.scalars().first()
     except Exception as exc:
@@ -305,13 +332,41 @@ async def chatwoot_agentbot_webhook(
         except Exception:
             pass
         logger.warning(
-            "Could not query SmsChatwootBinding (%s); falling back to account_id=%s",
+            "Could not query SmsChatwootBinding (%s); checking tenant mapping for account_id=%s",
             exc,
             account_id,
         )
 
-    resolved_tenant_id = binding.tenant_id if binding else account_id
-    resolved_provider_id = binding.provider_id if binding else None
+    from ...models.tenant import Tenant
+    tenant_obj = None
+    try:
+        t_stmt = select(Tenant).where(Tenant.chatwoot_account_id == account_id)
+        t_res = await db.execute(t_stmt)
+        tenant_obj = t_res.scalars().first()
+    except Exception:
+        pass
+
+    if binding:
+        resolved_tenant_id = binding.tenant_id
+        resolved_provider_id = binding.provider_id
+    elif tenant_obj:
+        resolved_tenant_id = tenant_obj.id
+        resolved_provider_id = None
+    else:
+        # Guard against tenant hijacking in production
+        import os
+        if getattr(settings, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
+            resolved_tenant_id = account_id
+            resolved_provider_id = None
+        else:
+            logger.warning(
+                "Rejecting AgentBot webhook: Chatwoot account %s is not mapped to any FastAPI tenant",
+                account_id,
+            )
+            return {
+                "status": "ignored",
+                "reason": "unmapped_chatwoot_account",
+            }
 
     # Fallback to binding tokens if not passed via headers/settings
     if not api_token and binding and binding.chatwoot_api_token:

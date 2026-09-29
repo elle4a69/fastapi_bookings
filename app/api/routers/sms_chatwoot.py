@@ -1,10 +1,12 @@
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
+from ...models.provider import Provider
 from ...models.user import User
 from ...models.sms_chatwoot import SmsChatwootBinding
 from ...schemas.sms_chatwoot import (
@@ -72,6 +74,47 @@ async def create_chatwoot_binding(
     db: Session = Depends(get_db)
 ):
     """Create a new Chatwoot binding."""
+    # 1. Validate provider belongs to tenant
+    provider = db.query(Provider).filter(
+        Provider.id == payload.provider_id,
+        Provider.tenant_id == tenant.id,
+    ).first()
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provider does not belong to the current tenant.",
+        )
+
+    # 2. Enforce Tenant <-> Chatwoot Account 1-to-1 mapping
+    if tenant.chatwoot_account_id is not None:
+        if tenant.chatwoot_account_id != payload.chatwoot_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tenant is already mapped to Chatwoot account {tenant.chatwoot_account_id}.",
+            )
+    else:
+        existing_tenant = db.query(Tenant).filter(
+            Tenant.chatwoot_account_id == payload.chatwoot_account_id,
+            Tenant.id != tenant.id,
+        ).first()
+        if existing_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Chatwoot account {payload.chatwoot_account_id} is already mapped to another tenant.",
+            )
+        tenant.chatwoot_account_id = payload.chatwoot_account_id
+
+    # 3. Check inbox uniqueness across tenants
+    existing_inbox = db.query(SmsChatwootBinding).filter(
+        SmsChatwootBinding.chatwoot_inbox_id == payload.chatwoot_inbox_id,
+        SmsChatwootBinding.is_enabled == True,
+    ).first()
+    if existing_inbox and existing_inbox.tenant_id != tenant.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Chatwoot inbox {payload.chatwoot_inbox_id} is already bound to another tenant.",
+        )
+
     import secrets
     webhook_secret = secrets.token_hex(32)
     binding = SmsChatwootBinding(
@@ -138,6 +181,37 @@ async def update_chatwoot_binding(
         raise HTTPException(status_code=404, detail="Chatwoot binding not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+
+    if "chatwoot_account_id" in update_data and update_data["chatwoot_account_id"] != binding.chatwoot_account_id:
+        new_account_id = update_data["chatwoot_account_id"]
+        if tenant.chatwoot_account_id is not None and tenant.chatwoot_account_id != new_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tenant is already mapped to Chatwoot account {tenant.chatwoot_account_id}.",
+            )
+        existing_tenant = db.query(Tenant).filter(
+            Tenant.chatwoot_account_id == new_account_id,
+            Tenant.id != tenant.id,
+        ).first()
+        if existing_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Chatwoot account {new_account_id} is already mapped to another tenant.",
+            )
+        tenant.chatwoot_account_id = new_account_id
+
+    if "chatwoot_inbox_id" in update_data and update_data["chatwoot_inbox_id"] != binding.chatwoot_inbox_id:
+        existing_inbox = db.query(SmsChatwootBinding).filter(
+            SmsChatwootBinding.chatwoot_inbox_id == update_data["chatwoot_inbox_id"],
+            SmsChatwootBinding.id != binding.id,
+            SmsChatwootBinding.is_enabled == True,
+        ).first()
+        if existing_inbox and existing_inbox.tenant_id != tenant.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Chatwoot inbox {update_data['chatwoot_inbox_id']} is already bound to another tenant.",
+            )
+
     for field, value in update_data.items():
         if field == "chatwoot_api_token":
             if value == "********" or not value:
@@ -190,3 +264,26 @@ async def delete_chatwoot_binding(
         raise HTTPException(status_code=404, detail="Chatwoot binding not found.")
     db.delete(binding)
     db.commit()
+
+
+class ChatwootProvisionRequest(BaseModel):
+    provider_ids: Optional[List[int]] = None
+
+
+@router.post("/provision")
+def trigger_chatwoot_provisioning(
+    payload: Optional[ChatwootProvisionRequest] = None,
+    tenant: Tenant = Depends(get_current_tenant),
+    _admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Trigger automated Chatwoot provisioning for the current tenant and providers."""
+    from ...services.sms.chatwoot_provisioning_service import provision_tenant_chatwoot
+    provider_ids = payload.provider_ids if payload else None
+    result = provision_tenant_chatwoot(db=db, tenant_id=tenant.id, provider_ids=provider_ids)
+    if not result.success and result.status == "failed":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Chatwoot provisioning failed: {result.error_message}",
+        )
+    return result

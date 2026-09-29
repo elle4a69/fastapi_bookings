@@ -11,6 +11,7 @@ from ...models.sms_conversation import SmsConversation
 from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
 from ...models.sms_knowledge import SmsKnowledgeEntry, SmsPromptProfile
+from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.provider import Provider
 from ...models.service import Service
 from ...models.sms_bootcamp import SmsBootcampSettings
@@ -49,17 +50,36 @@ async def process_pending_sms_ai_jobs(db: Session) -> None:
             ):
                 continue
 
-            account = db.query(SmsAccount).filter(
-                SmsAccount.id == conversation.sms_account_id,
-                SmsAccount.tenant_id == conversation.tenant_id,
-                SmsAccount.provider_id == conversation.provider_id,
-                SmsAccount.is_enabled.is_(True),
-            ).first()
-            if not account or not account.ai_enabled or account.ai_mode not in {"draft", "autopilot"}:
-                continue
+            account = None
+            ai_mode = "autopilot"
+            if conversation.sms_account_id is not None:
+                account = db.query(SmsAccount).filter(
+                    SmsAccount.id == conversation.sms_account_id,
+                    SmsAccount.tenant_id == conversation.tenant_id,
+                    SmsAccount.provider_id == conversation.provider_id,
+                    SmsAccount.is_enabled.is_(True),
+                ).first()
+                if not account or not account.ai_enabled or account.ai_mode not in {"draft", "autopilot"}:
+                    continue
+                ai_mode = account.ai_mode
+            else:
+                # Chatwoot-bound conversation without dedicated SmsAccount
+                binding = db.query(SmsChatwootBinding).filter(
+                    SmsChatwootBinding.tenant_id == conversation.tenant_id,
+                    SmsChatwootBinding.provider_id == conversation.provider_id,
+                    SmsChatwootBinding.is_enabled.is_(True),
+                ).first()
+                if not binding:
+                    continue
+                binding_meta = binding.channel_metadata or {}
+                if not binding_meta.get("ai_enabled", True):
+                    continue
+                ai_mode = binding_meta.get("ai_mode", "autopilot")
+                if ai_mode not in {"draft", "autopilot"}:
+                    continue
 
             # Run orchestrator logic
-            await run_ai_orchestration(db, account, conversation, job.customer_turn_ref)
+            await run_ai_orchestration(db, account, conversation, job.customer_turn_ref, ai_mode=ai_mode)
 
         except Exception:
             logger.exception("SMS AI job processing failed.")
@@ -67,19 +87,24 @@ async def process_pending_sms_ai_jobs(db: Session) -> None:
 
 async def run_ai_orchestration(
     db: Session, 
-    account: SmsAccount, 
+    account: Optional[SmsAccount], 
     conversation: SmsConversation, 
-    turn_ref: str
+    turn_ref: str,
+    ai_mode: str = "autopilot"
 ) -> None:
-    """Core AI processing turn. Chooses OpenAI or Local Rules engine."""
+    """Core AI processing turn. Chooses AssistantRuntimeService, OpenAI, or Local Rules engine."""
     # 1. Fetch conversation history for this turn
-    history_messages = db.query(SmsMessage).filter(
+    history_query = db.query(SmsMessage).filter(
         SmsMessage.conversation_id == conversation.id,
         SmsMessage.tenant_id == conversation.tenant_id,
         SmsMessage.provider_id == conversation.provider_id,
-        SmsMessage.sms_account_id == conversation.sms_account_id,
         SmsMessage.direction == "inbound",
-    ).order_by(SmsMessage.occurred_at.desc()).all()
+    )
+    if conversation.sms_account_id is not None:
+        history_query = history_query.filter(SmsMessage.sms_account_id == conversation.sms_account_id)
+    else:
+        history_query = history_query.filter(SmsMessage.sms_account_id.is_(None))
+    history_messages = history_query.order_by(SmsMessage.occurred_at.desc()).all()
 
     if not history_messages:
         return
@@ -93,31 +118,69 @@ async def run_ai_orchestration(
     combined_body = " ".join([m.body for m in reversed(burst_msgs)])
     parent_id = burst_msgs[0].id
 
-    # 2. Check OpenAI Key availability
+    # 2. Check OpenAI Key availability and generate response
     from ...core.config import settings
     openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
     ai_reply = None
     
-    if openai_key:
+    if conversation.sms_account_id is None:
+        # Route Chatwoot-bound conversation into channel-neutral AssistantRuntimeService
         try:
-            ai_reply = await call_openai_chat_completions(db, account, conversation, combined_body, turn_ref)
-        except Exception:
-            logger.warning("OpenAI completion failed; switching to fail-closed local review.")
+            from ..assistant.runtime_service import AssistantRuntimeService
+            from ..assistant.runtime_context import RuntimeContext
+            from ...models.conversation import ChannelType
+
+            runtime_context = RuntimeContext(
+                tenant_id=conversation.tenant_id,
+                provider_id=conversation.provider_id,
+                channel=ChannelType.CHATWOOT if hasattr(ChannelType, "CHATWOOT") else ChannelType.SMS,
+                conversation_id=str(conversation.id),
+            )
+            # Prior messages for context
+            prior_query = db.query(SmsMessage).filter(
+                SmsMessage.conversation_id == conversation.id,
+                SmsMessage.tenant_id == conversation.tenant_id,
+                SmsMessage.provider_id == conversation.provider_id,
+                SmsMessage.sms_account_id.is_(None),
+                SmsMessage.direction.in_(("inbound", "outbound", "draft")),
+                SmsMessage.status.notin_(("failed", "discarded")),
+            ).order_by(SmsMessage.occurred_at.asc()).all()
+            for pm in prior_query:
+                if pm.customer_turn_ref != turn_ref:
+                    role = "assistant" if pm.direction in ("outbound", "draft") else "user"
+                    runtime_context.add_turn(role=role, content=pm.body or "")
+
+            turn_res = AssistantRuntimeService.execute_turn(
+                db=db,
+                runtime_context=runtime_context,
+                user_message=combined_body,
+            )
+            ai_reply = turn_res.reply_text
+        except Exception as exc:
+            logger.warning("AssistantRuntimeService failed for Chatwoot conversation: %s; falling back to local rules", exc)
             ai_reply = run_local_rules_engine(db, account, conversation, combined_body)
     else:
-        # Local Rules / Mock AI fallback (runs offline)
-        ai_reply = run_local_rules_engine(db, account, conversation, combined_body)
+        if openai_key:
+            try:
+                ai_reply = await call_openai_chat_completions(db, account, conversation, combined_body, turn_ref)
+            except Exception:
+                logger.warning("OpenAI completion failed; switching to fail-closed local review.")
+                ai_reply = run_local_rules_engine(db, account, conversation, combined_body)
+        else:
+            # Local Rules / Mock AI fallback (runs offline)
+            ai_reply = run_local_rules_engine(db, account, conversation, combined_body)
 
     if not ai_reply:
         return
 
+    effective_ai_mode = account.ai_mode if account else ai_mode
     dynamic_request = _requires_verified_dynamic_data(combined_body)
     if ai_reply.startswith("[[HANDOFF"):
         conversation.state = "needs-review"
         event = SmsConversationEvent(
             conversation_id=conversation.id,
             type="ai_handoff_required",
-            meta={"requires_review": True, "ai_mode": account.ai_mode},
+            meta={"requires_review": True, "ai_mode": effective_ai_mode},
         )
         db.add(event)
         db.commit()
@@ -125,7 +188,7 @@ async def run_ai_orchestration(
 
     # 3. Determine status: draft mode or autopilot
     status = "draft"
-    if account.ai_mode == "autopilot" and not dynamic_request:
+    if effective_ai_mode == "autopilot" and not dynamic_request:
         status = "queued"
     else:
         conversation.state = "needs-review"
@@ -146,7 +209,7 @@ async def run_ai_orchestration(
     shadow_meta = getattr(conversation, "_last_shadow_metrics", None)
     event_meta = {
         "message_id": ai_message.id,
-        "ai_mode": account.ai_mode,
+        "ai_mode": effective_ai_mode,
         "requires_review": status == "draft",
     }
     if shadow_meta:
@@ -162,7 +225,7 @@ async def run_ai_orchestration(
 
 async def call_openai_chat_completions(
     db: Session, 
-    account: SmsAccount, 
+    account: Optional[SmsAccount], 
     conversation: SmsConversation, 
     message_body: str,
     turn_ref: str
@@ -202,8 +265,9 @@ async def call_openai_chat_completions(
         ).first()
         if p_profile and p_profile.system_prompt:
             provider_instructions = p_profile.system_prompt
-    if not provider_instructions and account.line_prompt:
-        provider_instructions = account.line_prompt
+    line_prompt = getattr(account, "line_prompt", None) if account else None
+    if not provider_instructions and line_prompt:
+        provider_instructions = line_prompt
 
     # Style Lab profile & custom training notes from SmsBootcampSettings
     bootcamp_settings = db.query(SmsBootcampSettings).filter(
@@ -250,14 +314,18 @@ async def call_openai_chat_completions(
             pass
 
     # Chronological conversation history
-    prior_db_messages = db.query(SmsMessage).filter(
+    prior_db_query = db.query(SmsMessage).filter(
         SmsMessage.conversation_id == conversation.id,
         SmsMessage.tenant_id == conversation.tenant_id,
         SmsMessage.provider_id == conversation.provider_id,
-        SmsMessage.sms_account_id == conversation.sms_account_id,
-        SmsMessage.direction.in_(("inbound", "outbound")),
+        SmsMessage.direction.in_(("inbound", "outbound", "draft")),
         SmsMessage.status.notin_(("failed", "discarded")),
-    ).order_by(SmsMessage.occurred_at.asc()).all()
+    )
+    if conversation.sms_account_id is not None:
+        prior_db_query = prior_db_query.filter(SmsMessage.sms_account_id == conversation.sms_account_id)
+    else:
+        prior_db_query = prior_db_query.filter(SmsMessage.sms_account_id.is_(None))
+    prior_db_messages = prior_db_query.order_by(SmsMessage.occurred_at.asc()).all()
 
     prior_messages = [m for m in prior_db_messages if m.customer_turn_ref != turn_ref]
 
@@ -276,7 +344,7 @@ async def call_openai_chat_completions(
         )
     )
     # Only attach structured configuration when active provider profile exists or services are configured
-    if services and (provider_instructions != account.line_prompt or not account.line_prompt):
+    if services and (provider_instructions != line_prompt or not line_prompt):
         builder.with_structured_config(provider=provider, services=services)
 
     builder.with_retrieval_result(retrieval_result).with_spec_54(True)
@@ -364,22 +432,24 @@ def _safe_local_reply(
         # Phase 13: Stop legacy reads of SmsKnowledgeEntry when GRAPH_KNOWLEDGE_ENABLED is True (Spec 27, 46)
         return "[[HANDOFF: inquiry requires staff assistance]]"
 
-    entries = (
-        db.query(SmsKnowledgeEntry)
-        .filter(
-            SmsKnowledgeEntry.tenant_id == conversation.tenant_id,
-            SmsKnowledgeEntry.status == "approved",
-            or_(
-                SmsKnowledgeEntry.provider_id.is_(None),
-                SmsKnowledgeEntry.provider_id == conversation.provider_id,
-            ),
+    entries_query = db.query(SmsKnowledgeEntry).filter(
+        SmsKnowledgeEntry.tenant_id == conversation.tenant_id,
+        SmsKnowledgeEntry.status == "approved",
+        or_(
+            SmsKnowledgeEntry.provider_id.is_(None),
+            SmsKnowledgeEntry.provider_id == conversation.provider_id,
+        ),
+    )
+    if conversation.sms_account_id is not None:
+        entries_query = entries_query.filter(
             or_(
                 SmsKnowledgeEntry.sms_account_id.is_(None),
                 SmsKnowledgeEntry.sms_account_id == conversation.sms_account_id,
-            ),
+            )
         )
-        .all()
-    )
+    else:
+        entries_query = entries_query.filter(SmsKnowledgeEntry.sms_account_id.is_(None))
+    entries = entries_query.all()
     for entry in entries:
         category = (entry.category or "").lower()
         keywords = [word.lower() for word in entry.text.split() if len(word) > 4]
@@ -389,7 +459,7 @@ def _safe_local_reply(
 
 def run_local_rules_engine(
     db: Session, 
-    account: SmsAccount, 
+    account: Optional[SmsAccount], 
     conversation: SmsConversation, 
     message_body: str,
     compiled_rules: Optional[List[Dict[str, Any]]] = None

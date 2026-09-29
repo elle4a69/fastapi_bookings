@@ -73,6 +73,11 @@ The **Assistant Studio** (`frontend/src/pages/admin/assistant-studio/` and `app/
    - `CuratedMemory`: Stores static owner-verified facts only.
    - `MessageStyleExample`: Stores conversational tone and few-shot examples only.
    - Dynamic facts (prices, real-time availability slots, calendar events): Strictly resolved at runtime via live tools, never persisted in static memory tables.
+4. **Privacy-Safe Tool Audit**: Simulator telemetry shows only structural audit
+   fields (tool name, status, timestamp, argument/result key names, and
+   server-bound scope labels). Tool arguments and result bodies—including
+   prices, slots, addresses, and customer data—are intentionally not returned
+   to the browser or written to Bootcamp message metadata.
 
 ---
 

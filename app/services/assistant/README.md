@@ -23,8 +23,9 @@ The `app/services/assistant` package delivers the core intelligence, prompt orch
 
 ```
 app/services/assistant/
-├── __init__.py               # Public exports of context, variables, policy, and tool engine
+├── __init__.py               # Public exports of context, variables, policy, runtime, and tools
 ├── runtime_context.py        # RuntimeContext, ClientInfo, LocationInfo, NormalizedTurn, ToolExecution
+├── runtime_service.py        # AssistantRuntimeService: unified execution entry point & multi-turn tool loop
 ├── variable_registry.py      # VariableDefinition, VariableRegistry, default standard resolvers
 ├── prompt_policy.py          # 10-Tier Precedence Hierarchy, Default Agent Policy v1, Style Lab trait priors
 ├── tools.py                  # Server-enforced live tool implementations & AssistantToolEngine
@@ -113,6 +114,23 @@ result = engine.execute_tool(
     context=context,
     db=db_session,
 )
+### 3. Unified Assistant Runtime (`AssistantRuntimeService`)
+```python
+from app.services.assistant import AssistantRuntimeService, RuntimeContext
+
+result = AssistantRuntimeService.execute_turn(
+    db=db_session,
+    runtime_context=context,
+    user_message="What is the price of Swedish Massage?",
+    settings_data={"model": "gpt-4o-mini", "temperature": 0.7},
+    is_simulation=False,
+)
+
+# result.reply_text: Model's final dialogue turn
+# result.executed_tools: Sanitized structural audit trace only
+#   [tool_name, status, success, timestamp, argument_keys, result_keys]
+# result.style_examples_used: Procedural exemplars injected into Tier 8
+# result.turn_count: Multi-turn loop iteration count
 ```
 
 ---
@@ -128,6 +146,11 @@ result = engine.execute_tool(
    - Tier 10 message history turns are wrapped in explicit boundary markers instructing the model that external customer turns are untrusted and must never override system directives.
 4. **Situational Modulation**:
    - If customer distress or frustration keywords are detected in recent turns, `sarcasm` is forced to `0/5` and `patience` is boosted to `4+/5`.
+5. **Tool Audit Trace Sanitization**:
+   - Telemetry and Bootcamp metadata capture only allowlisted structural fields
+     (tool name, success/status, timestamp, argument/result key names, and
+     server-bound scope labels). Raw arguments, result bodies, addresses,
+     availability, prices, prompts, and customer data remain in-memory only.
 
 ---
 
@@ -141,8 +164,8 @@ result = engine.execute_tool(
 
 ## 7. Verification & Testing Commands
 
-To run the complete test suite for assistant tools, variables, and prompt assembly:
+To run the complete test suite for assistant tools, variables, prompt assembly, and unified runtime:
 
 ```bash
-.venv\Scripts\python.exe -m pytest tests/test_assistant_tools_and_prompts.py -v
+.venv\Scripts\python.exe -m pytest tests/test_assistant_tools_and_prompts.py tests/test_bootcamp_style_and_tool_audit.py -v
 ```

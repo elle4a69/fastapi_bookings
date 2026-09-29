@@ -8,6 +8,7 @@ Enforces deduplication and bounded context footprint.
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional, Set
 
 from sqlalchemy.orm import Session
@@ -20,11 +21,44 @@ DEFAULT_EXAMPLE_LIMIT = 3
 DEFAULT_MAX_CHAR_BUDGET = 2400  # ~600 tokens
 
 
+# This deliberately small vocabulary is used only to select already-approved
+# procedural examples.  It is not a classifier and it must never turn live
+# values (dates, prices, addresses, customer data) into reusable knowledge.
+_INTENT_PATTERNS = (
+    ("pregnancy_inquiry", r"\b(?:pregnan|prenatal)\b"),
+    ("cancellation", r"\b(?:cancel|reschedul|refund)\b"),
+    ("availability", r"\b(?:available|availability|opening|slot|free)\b"),
+    ("pricing", r"\b(?:price|pricing|cost|how much|rate|fee)\b"),
+    ("travel", r"\b(?:travel|mobile|home visit|come to)\b"),
+    ("address", r"\b(?:address|location|where are you)\b"),
+    ("hours", r"\b(?:hours|open|close|opening hours)\b"),
+    ("provider", r"\b(?:provider|practitioner|therapist|doctor|dr\.)\b"),
+    ("service", r"\b(?:service|massage|treatment|appointment)\b"),
+    ("greeting", r"^\s*(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))\b"),
+)
+
+
+def detect_style_intent(message: Optional[str]) -> Optional[str]:
+    """Return a conservative procedural intent for style-example retrieval.
+
+    Returning ``None`` is intentional when no recognised conversational intent
+    is present: callers must not inject merely recent, unrelated examples into
+    a production prompt.
+    """
+    text = (message or "").strip().lower()
+    if not text:
+        return None
+    for intent, pattern in _INTENT_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return intent
+    return None
+
+
 def retrieve_style_examples(
     db: Session,
     tenant_id: Optional[int] = None,
     provider_id: Optional[int] = None,
-    detected_intent: str = "",
+    detected_intent: Optional[str] = None,
     limit: int = DEFAULT_EXAMPLE_LIMIT,
     max_char_budget: int = DEFAULT_MAX_CHAR_BUDGET,
 ) -> List[MessageStyleExample]:
@@ -39,18 +73,15 @@ def retrieve_style_examples(
         db: Active SQLAlchemy session.
         tenant_id: Tenant context ID (if any).
         provider_id: Provider context ID (if any).
-        detected_intent: Target conversation intent (e.g. 'greeting', 'pricing').
+        detected_intent: Target conversation intent (e.g. 'greeting', 'pricing'), or None for general examples.
         limit: Maximum number of examples to return (default: 3).
         max_char_budget: Maximum character budget for the returned examples.
 
     Returns:
         Deduplicated list of MessageStyleExample instances, up to `limit`.
     """
-    if limit <= 0 or not detected_intent:
+    if limit <= 0:
         return []
-
-    # Ensure table exists in current database connection
-    MessageStyleExample.__table__.create(bind=db.bind, checkfirst=True)
 
     results: List[MessageStyleExample] = []
     seen_hashes: Set[str] = set()
@@ -61,14 +92,17 @@ def retrieve_style_examples(
         if len(results) >= limit:
             return
 
+        filters = [
+            MessageStyleExample.is_approved.is_(True),
+            MessageStyleExample.is_active.is_(True),
+            *query_filter,
+        ]
+        if detected_intent:
+            filters.append(MessageStyleExample.intent == detected_intent)
+
         candidates = (
             db.query(MessageStyleExample)
-            .filter(
-                MessageStyleExample.intent == detected_intent,
-                MessageStyleExample.is_approved.is_(True),
-                MessageStyleExample.is_active.is_(True),
-                *query_filter,
-            )
+            .filter(*filters)
             .order_by(MessageStyleExample.id.desc())
             .all()
         )

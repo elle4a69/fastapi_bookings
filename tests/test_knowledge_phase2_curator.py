@@ -75,8 +75,8 @@ def p2_curator_setup(db_session):
 def test_full_pipeline_explicit_knowledge_answer(p2_curator_setup, db_session):
     """Test 1: Full pipeline for explicit provider knowledge answer.
 
-    Verifies auto-curation, PII scrubbing, CuratedMemory creation,
-    and atomic KnowledgeGraphProjection creation in the same transaction.
+    Verifies that PII is scrubbed and then rejected rather than retained as a
+    placeholder-bearing reusable fact.
     """
     tenant = p2_curator_setup["tenant_1"]
     provider = p2_curator_setup["prov_1a"]
@@ -113,42 +113,16 @@ def test_full_pipeline_explicit_knowledge_answer(p2_curator_setup, db_session):
     decision = unified_curator.process_learning_event(db_session, event)
     db_session.commit()
 
-    # 1. Decision assertions
-    assert decision.action == CuratorAction.AUTO_CURATE
-    assert decision.action == "AUTO_CURATE"
-    assert decision.status == "processed"
-    assert decision.memory_id is not None
-    assert decision.projection_id is not None
-    assert event.status == "processed"
-
-    # 2. CuratedMemory validation (PII Scrubbed + Versioned)
-    memory = db_session.query(CuratedMemory).filter_by(id=decision.memory_id).first()
-    assert memory is not None
-    assert memory.tenant_id == tenant.id
-    assert memory.provider_id == provider.id
-    assert memory.status == "active"
-    assert memory.knowledge_kind == "durable_fact"
-    assert memory.authority == "owner_verified"
-    assert "curator:2.0" in memory.source_reference
-    assert f"learning_event:{event.id}" in memory.source_reference
-
-    # Ensure PII was scrubbed
-    assert "0412 345 678" not in memory.user_query
-    assert "john.doe@example.com" not in memory.user_query
-    assert "0422 999 888" not in memory.ideal_response
-    assert "private health insurance" in memory.user_query.lower()
-
-    # 3. KnowledgeGraphProjection validation (Atomic outbox entry)
-    projection = db_session.query(KnowledgeGraphProjection).filter_by(id=decision.projection_id).first()
-    assert projection is not None
-    assert projection.tenant_id == tenant.id
-    assert projection.provider_id == provider.id
-    assert projection.learning_event_id == event.id
-    assert projection.curated_memory_id == memory.id
-    assert projection.projection_type == "upsert_fact"
-    assert projection.graph_group_id == f"tenant:{tenant.id}:provider:{provider.id}"
-    assert projection.status == "pending"
-    assert projection.projection_version == "2.0"
+    assert decision.status == "rejected"
+    assert decision.memory_id is None
+    assert decision.projection_id is None
+    assert event.status == "rejected"
+    assert (
+        db_session.query(CuratedMemory)
+        .filter(CuratedMemory.tenant_id == tenant.id)
+        .count()
+        == 0
+    )
 
 
 def test_dynamic_operational_data_rejected(p2_curator_setup, db_session):
@@ -426,6 +400,47 @@ def test_approved_draft_positive_reinforcement(p2_curator_setup, db_session):
     assert event.status == "processed"
 
 
+def test_dynamic_draft_is_audit_only_and_cannot_create_style_evidence(
+    p2_curator_setup, db_session
+):
+    """Literal availability is never promoted merely because a draft was approved."""
+    tenant = p2_curator_setup["tenant_1"]
+    provider = p2_curator_setup["prov_1a"]
+    now = datetime.now(timezone.utc)
+    event = LearningEvent(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=provider.id,
+        event_type="draft_edit",
+        source="bootcamp",
+        original_ai_content="I can check our diary.",
+        human_content="I have an open slot available tomorrow at 3pm.",
+        status="pending",
+        confidence_score=1.0,
+        created_at=now,
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    decision = unified_curator.process_learning_event(db_session, event)
+    db_session.commit()
+
+    assert decision.memory_id is None
+    assert decision.proposal_id is None
+    assert decision.retained_as_evidence is True
+    assert decision.reason_code == "dynamic_operational_data"
+    assert (
+        db_session.query(KnowledgeProposal)
+        .filter(
+            KnowledgeProposal.tenant_id == tenant.id,
+            KnowledgeProposal.provider_id == provider.id,
+            KnowledgeProposal.category == "style",
+        )
+        .count()
+        == 0
+    )
+
+
 def test_multi_tenant_and_provider_scope_isolation(p2_curator_setup, db_session):
     """Test 7: Multi-tenant and provider scope isolation in curation."""
     tenant_1 = p2_curator_setup["tenant_1"]
@@ -442,8 +457,8 @@ def test_multi_tenant_and_provider_scope_isolation(p2_curator_setup, db_session)
         provider_id=prov_1a.id,
         event_type="knowledge_answer",
         source="production_messages",
-        customer_message="What is Dr. Alice's specialty?",
-        human_content="Dr. Alice specializes in pediatric acupuncture.",
+        customer_message="What techniques are used in pediatric acupuncture?",
+        human_content="Pediatric acupuncture uses gentle non-invasive touch techniques.",
         status="pending",
         created_at=now,
     )

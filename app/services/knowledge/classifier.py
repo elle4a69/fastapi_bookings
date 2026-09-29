@@ -42,6 +42,32 @@ class ClassificationResult(BaseModel):
     details: Dict[str, Any] = Field(default_factory=dict)
 
 
+class TypedVariableKind(str, Enum):
+    """Approved, non-customer variables that a procedural example may reference.
+
+    These are *references*, not values to learn.  Their values are resolved from
+    tenant/provider configuration or a live tool at response time.  In
+    particular, there is intentionally no customer, date, time, price, slot or
+    arbitrary address variable here.
+    """
+
+    BUSINESS_NAME = "business_name"
+    PROVIDER_NAME = "provider_name"
+    LOCATION_NAME = "location_name"
+    LOCATION_ADDRESS = "location_address"
+    SERVICE_NAME = "service_name"
+    SERVICE_AREA = "service_area"
+    BOOKING_LINK = "booking_link"
+
+
+class TypedVariableAssessment(BaseModel):
+    """Privacy-safe result of checking template references in learning content."""
+
+    is_safe: bool
+    variables: Set[str] = Field(default_factory=set)
+    reason: Optional[str] = None
+
+
 # -------------------------------------------------------------------------
 # Prompt Injection Patterns (Adversarial System Overrides / Delimiters)
 # -------------------------------------------------------------------------
@@ -110,6 +136,13 @@ _NAME_INTRO_RE = re.compile(
 # Dynamic Operational Data Patterns (Dates, Times, Slots, Live Pricing)
 # -------------------------------------------------------------------------
 _DYNAMIC_OPERATIONAL_PATTERNS = [
+    # Relative calendar references are contextual to the conversation and are
+    # never durable learning content, even without a written time.
+    r"\b(?:today|tomorrow|yesterday|tonight)\b",
+    # Concrete calendar dates are likewise a live booking context rather than
+    # a reusable policy or style rule.
+    r"\b\d{4}-\d{2}-\d{2}\b",
+    r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
     # Specific times / time slots / calendar availability
     r"\b(?:tomorrow|today|yesterday|tonight)\s+(?:at|around)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b",
     r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s+(?:tomorrow|today|yesterday|tonight)\b",
@@ -250,6 +283,16 @@ def classify_text(text: str) -> ClassificationResult:
             is_safe=False,
         )
 
+    typed_variables = assess_typed_variables(text)
+    if not typed_variables.is_safe:
+        return ClassificationResult(
+            category=ClassificationCategory.DYNAMIC_OPERATIONAL,
+            decision=SafetyDecision.REJECT,
+            reason=typed_variables.reason or "Unsafe typed variable reference",
+            is_safe=False,
+            details={"variables": sorted(typed_variables.variables)},
+        )
+
     # 1. Prompt Injection Gate
     injection_match = detect_prompt_injection(text)
     if injection_match:
@@ -338,17 +381,75 @@ def classify_proposed_knowledge(text: str) -> ClassificationResult:
     )
 
 
+def classify_curated_memory_candidate(
+    user_query: str,
+    ideal_response: str,
+) -> ClassificationResult:
+    """Validate both fields immediately before a durable-memory write.
+
+    ``ideal_response`` must be a durable factual statement.  ``user_query``
+    may be conversational, but it still cannot carry PII, a live operational
+    claim, prompt injection, a redaction marker, or an unapproved variable.
+    """
+    response_result = classify_proposed_knowledge(ideal_response)
+    if not response_result.is_safe:
+        return response_result
+
+    query_variables = assess_typed_variables(user_query)
+    if not query_variables.is_safe:
+        return ClassificationResult(
+            category=ClassificationCategory.DYNAMIC_OPERATIONAL,
+            decision=SafetyDecision.REJECT,
+            reason=query_variables.reason or "Unsafe variable reference in memory query",
+            is_safe=False,
+        )
+    injection = detect_prompt_injection(user_query)
+    if injection:
+        return ClassificationResult(
+            category=ClassificationCategory.PROMPT_INJECTION,
+            decision=SafetyDecision.REJECT,
+            reason="Prompt injection detected in memory query",
+            is_safe=False,
+        )
+    pii = detect_pii(user_query)
+    if pii:
+        return ClassificationResult(
+            category=ClassificationCategory.PII,
+            decision=SafetyDecision.REJECT,
+            reason="PII detected in memory query",
+            is_safe=False,
+        )
+    dynamic = detect_dynamic_operational(user_query)
+    if dynamic:
+        return ClassificationResult(
+            category=ClassificationCategory.DYNAMIC_OPERATIONAL,
+            decision=SafetyDecision.REJECT,
+            reason="Dynamic operational data detected in memory query",
+            is_safe=False,
+        )
+    return response_result
+
+
 # -------------------------------------------------------------------------
 # Placeholder Variable Allowlist Rules
 # -------------------------------------------------------------------------
-ALLOWED_STYLE_PLACEHOLDERS: Set[str] = {
-    "business_name",
-    "provider_name",
-    "location_name",
-    "location_address",
-    "booking_link",
-    "service_name",
+# This registry is deliberately small.  A procedural example may reference a
+# stable business/configuration value, but it must never learn a customer value
+# or turn a transient operational value into a reusable template.  Dates,
+# times, availability, prices, booking IDs and customer/contact/address values
+# therefore have no supported placeholder and must be fetched through a scoped
+# live tool when they are needed.
+APPROVED_TYPED_VARIABLES: Dict[str, TypedVariableKind] = {
+    TypedVariableKind.BUSINESS_NAME.value: TypedVariableKind.BUSINESS_NAME,
+    TypedVariableKind.PROVIDER_NAME.value: TypedVariableKind.PROVIDER_NAME,
+    TypedVariableKind.LOCATION_NAME.value: TypedVariableKind.LOCATION_NAME,
+    TypedVariableKind.LOCATION_ADDRESS.value: TypedVariableKind.LOCATION_ADDRESS,
+    TypedVariableKind.SERVICE_NAME.value: TypedVariableKind.SERVICE_NAME,
+    TypedVariableKind.SERVICE_AREA.value: TypedVariableKind.SERVICE_AREA,
+    TypedVariableKind.BOOKING_LINK.value: TypedVariableKind.BOOKING_LINK,
 }
+
+ALLOWED_STYLE_PLACEHOLDERS: Set[str] = set(APPROVED_TYPED_VARIABLES)
 
 LEGACY_SEED_PLACEHOLDERS: Set[str] = {
     "address",
@@ -365,6 +466,66 @@ LEGACY_SEED_PLACEHOLDERS: Set[str] = {
     "website",
 }
 
+_REDACTION_MARKER_RE = re.compile(r"\[(?:ADDRESS|EMAIL|PHONE|NAME|CREDIT_CARD)\]")
+
+
+def assess_typed_variables(
+    text: str,
+    *,
+    is_approved_source: bool = False,
+) -> TypedVariableAssessment:
+    """Check a procedural template against the strict typed-variable registry.
+
+    This is intentionally validation, not a best-effort anonymiser.  Replacing
+    a literal appointment time, quote, customer address or phone number with a
+    token after the fact would still convert a live conversation into reusable
+    memory without proving that the replacement is semantically safe.  Callers
+    must reject those candidates and use live tools for operational data.
+    """
+    if not text:
+        return TypedVariableAssessment(is_safe=True)
+
+    if _REDACTION_MARKER_RE.search(text):
+        return TypedVariableAssessment(
+            is_safe=False,
+            reason="Redacted customer or address data cannot be retained as reusable memory",
+        )
+
+    raw_syntax_patterns = (
+        r"\{\{.*?\}\}",
+        r"\{%.*?%\}",
+        r"\$\{.*?\}",
+        r"<%#?.*?%>",
+    )
+    for pattern in raw_syntax_patterns:
+        if re.search(pattern, text):
+            return TypedVariableAssessment(
+                is_safe=False,
+                reason="Raw execution or template syntax is not an approved typed variable",
+            )
+
+    matches = {match.strip() for match in re.findall(r"\{([^{}]+)\}", text)}
+    allowed = set(APPROVED_TYPED_VARIABLES)
+    if is_approved_source:
+        allowed |= LEGACY_SEED_PLACEHOLDERS
+    unknown = matches - allowed
+    if unknown:
+        return TypedVariableAssessment(
+            is_safe=False,
+            variables=matches,
+            reason="Unapproved variable reference in learning content",
+        )
+
+    cleaned = re.sub(r"\{[^{}]+\}", "", text)
+    if "{" in cleaned or "}" in cleaned:
+        return TypedVariableAssessment(
+            is_safe=False,
+            variables=matches,
+            reason="Malformed placeholder braces detected",
+        )
+
+    return TypedVariableAssessment(is_safe=True, variables=matches)
+
 
 def validate_style_placeholders(
     text: str,
@@ -377,43 +538,9 @@ def validate_style_placeholders(
     When is_approved_source is True (packaged seed asset), legacy seed placeholders are also accepted.
     Any raw execution variables ({{...}}, ${...}, <%...%>) or unapproved variables are strictly rejected.
     """
-    if not text:
-        return True, None
-
-    # Check for raw execution syntax or Jinja/ES6 template tags
-    raw_syntax_patterns = [
-        r"\{\{.*?\}\}",  # Jinja {{ ... }}
-        r"\{%.*?%\}",    # Jinja {% ... %}
-        r"\$\{.*?\}",    # JS/Bash ${ ... }
-        r"<%#?.*?%>",    # ERB/ASP <% ... %>
-    ]
-    for pattern in raw_syntax_patterns:
-        match = re.search(pattern, text)
-        if match:
-            return False, f"Raw execution / template syntax rejected: '{match.group(0)}'"
-
-    # Extract all {variable} occurrences
-    matches = re.findall(r"\{([^{}]+)\}", text)
-    allowed = (
-        ALLOWED_STYLE_PLACEHOLDERS | LEGACY_SEED_PLACEHOLDERS
-        if is_approved_source
-        else ALLOWED_STYLE_PLACEHOLDERS
-    )
-
-    for m in matches:
-        var_name = m.strip()
-        if var_name not in allowed:
-            return False, (
-                f"Unapproved placeholder variable: '{{{var_name}}}'. "
-                f"Approved variables: {sorted(list(ALLOWED_STYLE_PLACEHOLDERS))}"
-            )
-
-    # Check for unclosed braces or invalid syntax
-    if "{" in text or "}" in text:
-        cleaned = re.sub(r"\{[^{}]+\}", "", text)
-        if "{" in cleaned or "}" in cleaned:
-            return False, "Malformed or unclosed placeholder braces detected."
-
+    assessment = assess_typed_variables(text, is_approved_source=is_approved_source)
+    if not assessment.is_safe:
+        return False, assessment.reason
     return True, None
 
 

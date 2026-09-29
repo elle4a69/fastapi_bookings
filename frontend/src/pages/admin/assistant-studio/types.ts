@@ -136,8 +136,12 @@ export interface SimulateTurnResponse {
   reply: string;
   executed_tools: Array<{
     name: string;
-    arguments: Record<string, any>;
-    output: Record<string, any>;
+    tool_name?: string;
+    status: 'success' | 'error';
+    success: boolean;
+    timestamp: string;
+    argument_keys: string[];
+    result_keys: string[];
     server_bound_keys: string[];
   }>;
   assembled_prompt: {

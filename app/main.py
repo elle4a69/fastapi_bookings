@@ -139,6 +139,7 @@ from .api.routers import (
     itinerary,
     conversations,
     assistant_studio,
+    tenants,
 )
 
 
@@ -430,6 +431,7 @@ app.include_router(stripe_webhooks.router)
 app.include_router(devices.router)
 app.include_router(management_reviews.router)
 app.include_router(business_profile.router)
+app.include_router(tenants.router)
 app.include_router(location_relations.router)
 app.include_router(system.router)
 app.include_router(notifications.router)

@@ -29,6 +29,7 @@ class ChannelType(str, enum.Enum):
     INSTAGRAM = "instagram"
     MESSENGER = "messenger"
     WEBCHAT = "webchat"
+    CHATWOOT = "chatwoot"
     SIMULATED = "simulated"
 
     @classmethod

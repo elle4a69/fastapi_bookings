@@ -36,6 +36,11 @@ from .tools import (
     quote_travel_tool,
     service_lookup_tool,
 )
+from .runtime_service import (
+    AssistantRuntimeService,
+    RuntimeTurnResult,
+    is_openai_available,
+)
 
 __all__ = [
     # Runtime Context
@@ -44,6 +49,10 @@ __all__ = [
     "NormalizedTurn",
     "RuntimeContext",
     "ToolExecution",
+    # Runtime Service
+    "AssistantRuntimeService",
+    "RuntimeTurnResult",
+    "is_openai_available",
     # Variable Registry
     "VariableDefinition",
     "VariableRegistry",

@@ -215,19 +215,15 @@ def test_bootcamp_live_tool_loop_executes_real_database_lookup(bootcamp_test_env
     assert "Swedish Relaxation Massage" in reply
     assert "$120.00" in reply
 
-    # 3. Verify real tool execution metadata recorded real DB result
+    # 3. Persisted/returned telemetry is structural only; raw tool data stays
+    # in the in-memory model exchange below.
     executed_tools = execution_meta.get("executed_tools", [])
     assert len(executed_tools) == 1
     tool_rec = executed_tools[0]
     assert tool_rec["tool_name"] == "service_lookup"
-    assert tool_rec["arguments"]["service_id_or_slug"] == "Swedish"
+    assert tool_rec["argument_keys"] == ["service_id_or_slug"]
     assert tool_rec["success"] is True
-
-    # Real database output verified:
-    services_found = tool_rec["result"]["services"]
-    assert len(services_found) >= 1
-    assert services_found[0]["name"] == "Swedish Relaxation Massage"
-    assert services_found[0]["price"] == 120.0
+    assert not ({"arguments", "result", "result_preview", "output"} & set(tool_rec))
 
     # 4. Verify turn 2 message payload sent to OpenAI contains the live tool execution output
     turn_2_call_args = mock_client.chat.completions.create.call_args_list[1][1]
@@ -289,7 +285,14 @@ def test_bootcamp_live_tools_enforce_cross_tenant_isolation(bootcamp_test_env, d
     # Verify tool execution results: Tenant B's confidential service MUST NOT be returned!
     executed_tools = execution_meta.get("executed_tools", [])
     assert len(executed_tools) == 1
-    tool_result = executed_tools[0]["result"]
+    assert executed_tools[0]["argument_keys"] == ["service_id_or_slug"]
+    assert not ({"arguments", "result", "result_preview", "output"} & set(executed_tools[0]))
+
+    # The real, scoped tool result is still supplied only to the model's
+    # in-memory second turn, where it proves Tenant B data was not leaked.
+    turn_2_messages = mock_client.chat.completions.create.call_args_list[1][1]["messages"]
+    tool_msg = next(m for m in turn_2_messages if m.get("role") == "tool")
+    tool_result = json.loads(tool_msg["content"])
     assert tool_result["count"] == 0
     assert tool_result["services"] == []
 

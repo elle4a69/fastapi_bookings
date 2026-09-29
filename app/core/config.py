@@ -119,9 +119,11 @@ class Settings(BaseSettings):
     OSRM_BASE_URL: str = Field("https://router.project-osrm.org", description="OSRM routing base URL")
 
     # Chatwoot Settings
-    CHATWOOT_BASE_URL: str = Field("https://app.chatwoot.com", description="Chatwoot base URL")
-    CHATWOOT_API_ACCESS_TOKEN: str = Field("", description="Chatwoot API access token")
+    CHATWOOT_BASE_URL: str = Field("http://localhost:4000", description="Chatwoot base URL")
+    CHATWOOT_API_ACCESS_TOKEN: str = Field("4ULEfYYtAJAbPZmZYaVcr9Lb", description="Chatwoot API access token")
+    CHATWOOT_PLATFORM_API_TOKEN: str = Field("ReqRYyswSvVB8nVktQrZP1zg", description="Chatwoot Platform API access token for account provisioning")
     CHATWOOT_WEBHOOK_SECRET: str = Field("", description="Chatwoot webhook secret")
+    CHATWOOT_AUTO_PROVISION: bool = Field(False, description="Automatically provision Chatwoot account/inboxes on tenant creation")
 
     # Outbox settings
     OUTBOX_POLL_INTERVAL: float = Field(5.0, description="Outbox worker polling interval in seconds")

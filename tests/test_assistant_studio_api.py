@@ -311,14 +311,9 @@ def test_simulate_turn_executes_live_tool_against_db(studio_env, client: TestCli
     # Verify tool execution inspected
     tool_exec = data["executed_tools"][0]
     assert tool_exec["name"] == "service_lookup"
-    assert "Swedish" in tool_exec["arguments"]["service_id_or_slug"]
+    assert tool_exec["argument_keys"] == ["service_id_or_slug"]
     assert tool_exec["server_bound_keys"] == ["tenant_id"]
-
-    # Verify real DB service was found and output contains official price
-    services = tool_exec["output"]["services"]
-    assert len(services) >= 1
-    assert services[0]["name"] == "Swedish Remedial Massage"
-    assert services[0]["price"] == 140.0
+    assert not ({"arguments", "result", "result_preview", "output"} & set(tool_exec))
     assert "$140.00" in data["reply"] or "Swedish Remedial Massage" in data["reply"]
 
     # Verify prompt assembly tiers are returned
@@ -355,11 +350,11 @@ def test_examples_crud_workflow_mutates_database(studio_env, db_session, client:
 
     # 1. Create new example
     create_payload = {
-        "intent": "cancellation_policy",
-        "client_message": "What happens if I cancel within 12 hours?",
-        "assistant_reply": "Cancellations with less than 24 hours notice may incur a late cancellation fee.",
-        "category": "policy",
-        "tags": ["cancellation", "late_notice"],
+        "intent": "greeting",
+        "client_message": "Hi, I have a quick question about appointments.",
+        "assistant_reply": "Hello! I would be glad to help with that. How can I assist you?",
+        "category": "style",
+        "tags": ["greeting", "welcome"],
         "is_approved": True,
         "is_active": True,
     }
@@ -370,7 +365,7 @@ def test_examples_crud_workflow_mutates_database(studio_env, db_session, client:
     # Verify real DB row created
     db_ex = db_session.query(MessageStyleExample).filter(MessageStyleExample.id == example_id).first()
     assert db_ex is not None
-    assert db_ex.intent == "cancellation_policy"
+    assert db_ex.intent == "greeting"
     assert db_ex.tenant_id == env["tenant_a"].id
 
     # 2. List examples
@@ -434,6 +429,49 @@ def test_curator_proposals_workflow(studio_env, db_session, client: TestClient):
     assert mem.category == "parking"
     assert "Castlereagh" in mem.ideal_response
     assert mem.status == "active"
+
+
+def test_curator_approval_cannot_bypass_factual_safety_classifier(
+    studio_env, db_session, client: TestClient
+):
+    """An admin cannot promote a transient availability claim into memory."""
+    env = studio_env
+    proposal = KnowledgeProposal(
+        tenant_id=env["tenant_a"].id,
+        provider_id=env["prov_a"].id,
+        proposal_type="gap",
+        category="availability",
+        user_query="Can I come tomorrow?",
+        proposed_response="Yes, I have an open slot available tomorrow at 3pm.",
+        fingerprint="unsafe_availability_proposal",
+        reason_code="test_candidate",
+        status="pending",
+        knowledge_kind="durable_fact",
+        confidence_score=1.0,
+    )
+    db_session.add(proposal)
+    db_session.commit()
+    headers = _auth_headers(env["tenant_a"], env["admin_a"])
+
+    response = client.post(
+        f"/api/admin/assistant-studio/curator/proposals/{proposal.id}/curate",
+        json={"action": "approved"},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    db_session.refresh(proposal)
+    assert proposal.status == "rejected"
+    assert proposal.resolution_code == "rejected_by_curator_classifier"
+    assert (
+        db_session.query(CuratedMemory)
+        .filter(
+            CuratedMemory.tenant_id == env["tenant_a"].id,
+            CuratedMemory.ideal_response == proposal.proposed_response,
+        )
+        .count()
+        == 0
+    )
 
 
 def test_real_import_executes_with_sha256_verification(studio_env, client: TestClient):

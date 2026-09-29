@@ -25,7 +25,6 @@ frontend/src/pages/admin/sms/
 ├── assistant-messages-page.tsx # Dedicated 1:1 replica of Assistant UI MobileInboxView
 ├── assistant-thread-panel.tsx  # Unified reusable thread workspace component (live messages & bootcamp simulation)
 ├── bootcamp-settings-tab.tsx   # Isolated Bootcamp settings (agent config, system prompts, learned facts, style preview)
-├── bootcamp-tab.tsx            # Agent persona prompt tuning, guardrails & few-shot examples
 ├── chatwoot.tsx                # Chatwoot inbox mappings, webhook sync & token bindings
 ├── diagnostics.tsx             # Carrier latency, webhook health & message delivery telemetry
 ├── inbox.tsx                   # 3-pane SMS triage workspace, timeline stream, context & notes panel
@@ -62,6 +61,7 @@ frontend/src/pages/admin/sms/
   - **Middle Column (Interactive Conversation Stream)**: Embeds the unified `<AssistantThreadPanel mode="bootcamp" ... />`, rendering authentic bubble styling with primary theme tokens, live thinking pulse animation during turn processing, the high-visibility red Information Request Accordion for ground-truth learning capture (`POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond`), AI Correction Flagging (`POST /api/admin/sms/bootcamp/conversations/{id}/corrections`), and staff manual prompt injection.
   - **Right Column (Style Laboratory)**: Calibrate Tori's behavioral persona across 8 sliders (0 to 5 scale, step 1): `Flirtiness`, `Cheerfulness`, `Wit`, `Sarcasm`, `Warmth`, `Directness`, `Chattiness`, `Patience`. Values affect Boot Camp only until deliberately applied. Features **"Apply to Tori"** (`Save` icon) posting to `/api/admin/sms/bootcamp/profile/apply` and **"Undo"** (`Undo2` icon) posting to `/api/admin/sms/bootcamp/profile/undo`.
   - **Live Authentic Backend Wiring & Polling**: Connects directly to backend `POST /api/admin/sms/bootcamp/runs` and polls `GET /api/admin/sms/bootcamp/runs/latest` every 2.5 seconds. Directly maps backend conversation UUIDs, messages, draft statuses, and handoff flags into the active workspace, ensuring seamless real interaction. Cleanly eliminates any artificial or hardcoded prefixing (e.g. "We really care about taking great care of you!").
+  - **Single Bootcamp implementation**: This page is the only supported Bootcamp UI. The former `bootcamp-tab.tsx` local simulator was removed because it fabricated availability, prices, responses, metrics, and save outcomes instead of using tenant-scoped APIs. Do not reintroduce a local simulation path; extend this page and its backend contract when Bootcamp behaviour changes.
 - **Isolated Bootcamp Settings ([`bootcamp-settings-tab.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/sms/bootcamp-settings-tab.tsx))**:
   Clean settings view completely isolated from FastAPI Bookings's main business settings:
   - **Agent Configuration**: Agent name (default "Tori"), synthetic model identifier (`gpt-4o-mini`, etc.), and active role description.

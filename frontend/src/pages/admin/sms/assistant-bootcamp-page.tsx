@@ -1055,7 +1055,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const handleResolveLesson = async (answer: string) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const persona = PERSONAS.find((p) => p.id === activeConversation.personaId);
 
     try {
       const res = await apiClient.post<any>(
@@ -1075,37 +1074,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       toast.error(err?.message || "Failed to respond to information request");
       return;
     }
-
-    // Local simulation fallback
-    const resolvedReply =
-      persona?.handoffResolvedReply ||
-      `Got it! Based on your update: "${answer}". I've recorded this lesson and will proceed with the booking!`;
-
-    setConversations((prev) => {
-      const next = { ...prev };
-      const conv = next[convId];
-      if (!conv) return prev;
-
-      next[convId] = {
-        ...conv,
-        needsHandoff: false,
-        status: "running",
-        messages: [
-          ...conv.messages,
-          {
-            id: `msg-${convId}-tori-resolved-${Date.now()}`,
-            sender: "tori",
-            authorName: "Tori",
-            text: resolvedReply,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            status: "sent",
-          }
-        ]
-      };
-      return next;
-    });
-
-    toast.success("Lesson saved! Tori retried the message with the new knowledge.");
+    toast.error("The server did not return an updated Bootcamp conversation.");
   };
 
   const handleDismissHandoff = async () => {
@@ -1214,7 +1183,6 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
   const handleApproveDraft = async (msgId: string | number) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const pid = activeConversation.personaId;
 
     try {
       const res = await apiClient.post<any>(
@@ -1237,58 +1205,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       toast.error(err?.message || "Failed to approve draft");
       return;
     }
-
-    // Local fallback
-    setConversations((prev) => {
-      const next = { ...prev };
-      const conv = next[convId];
-      if (!conv) return prev;
-
-      const persona = PERSONAS.find((p) => p.id === pid);
-      const updatedMessages = conv.messages.map((m) =>
-        m.id === msgId ? { ...m, status: "sent" as const } : m
-      );
-
-      const nextTurn = conv.currentTurn + 1;
-      let nextMessages = updatedMessages;
-      let newTurn = conv.currentTurn;
-      let newStatus: typeof conv.status = "running";
-
-      if (nextTurn <= conv.maxTurns && persona) {
-        const nextScript = persona.dialogueScript[nextTurn - 1];
-        if (nextScript) {
-          newTurn = nextTurn;
-          nextMessages = [
-            ...updatedMessages,
-            {
-              id: `msg-${convId}-cust-${nextTurn}`,
-              sender: "customer",
-              authorName: persona.name,
-              text: nextScript.customer,
-              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              status: "received"
-            }
-          ];
-        } else {
-          newStatus = "completed";
-        }
-      } else {
-        newStatus = "completed";
-      }
-
-      next[convId] = {
-        ...conv,
-        currentTurn: newTurn,
-        status: newStatus,
-        messages: nextMessages,
-      };
-      return next;
-    });
-
-    if (runStatus === "paused") {
-      setRunStatus("running");
-    }
-    toast.success("Draft approved and sent. Turn advanced.");
+    toast.error("The server did not return an updated Bootcamp conversation.");
   };
 
   const handleDiscardDraft = async (msgId: string | number) => {
@@ -1313,24 +1230,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       toast.error(err?.message || "Failed to discard draft");
       return;
     }
-
-    setConversations((prev) => {
-      const next = { ...prev };
-      const conv = next[convId];
-      if (!conv) return prev;
-      next[convId] = {
-        ...conv,
-        messages: conv.messages.filter((m) => m.id !== msgId),
-      };
-      return next;
-    });
-    toast.info("Draft discarded.");
+    toast.error("The server did not return an updated Bootcamp conversation.");
   };
 
   const handleEditAndSendDraft = async (msgId: string | number, text: string) => {
     if (!activeConversation) return;
     const convId = activeConversation.id;
-    const pid = activeConversation.personaId;
 
     try {
       const res = await apiClient.post<any>(
@@ -1353,58 +1258,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       toast.error(err?.message || "Failed to send edited draft");
       return;
     }
-
-    // Local fallback
-    setConversations((prev) => {
-      const next = { ...prev };
-      const conv = next[convId];
-      if (!conv) return prev;
-
-      const persona = PERSONAS.find((p) => p.id === pid);
-      const updatedMessages = conv.messages.map((m) =>
-        m.id === msgId ? { ...m, text, status: "sent" as const } : m
-      );
-
-      const nextTurn = conv.currentTurn + 1;
-      let nextMessages = updatedMessages;
-      let newTurn = conv.currentTurn;
-      let newStatus: typeof conv.status = "running";
-
-      if (nextTurn <= conv.maxTurns && persona) {
-        const nextScript = persona.dialogueScript[nextTurn - 1];
-        if (nextScript) {
-          newTurn = nextTurn;
-          nextMessages = [
-            ...updatedMessages,
-            {
-              id: `msg-${convId}-cust-${nextTurn}`,
-              sender: "customer",
-              authorName: persona.name,
-              text: nextScript.customer,
-              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              status: "received"
-            }
-          ];
-        } else {
-          newStatus = "completed";
-        }
-      } else {
-        newStatus = "completed";
-      }
-
-      next[convId] = {
-        ...conv,
-        currentTurn: newTurn,
-        status: newStatus,
-        messages: nextMessages,
-      };
-      return next;
-    });
-
-    if (runStatus === "paused") {
-      setRunStatus("running");
-    }
-    toast.success("Edited draft sent. Turn advanced.");
+    toast.error("The server did not return an updated Bootcamp conversation.");
   };
 
   const handleToggleAi = async () => {
