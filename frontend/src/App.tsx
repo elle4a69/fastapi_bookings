@@ -38,6 +38,7 @@ const ReviewsPage = lazy(() => import("@/pages/admin/reviews"))
 const AdditionalFieldsPage = lazy(() => import("@/pages/admin/configuration/additional-fields"))
 const MediaPage = lazy(() => import("@/pages/admin/media"))
 const SmsAssistantPage = lazy(() => import("@/pages/admin/sms-assistant"))
+const AssistantStudioPage = lazy(() => import("@/pages/admin/assistant-studio"))
 
 const MessagesPage = lazy(() => import("@/pages/admin/notifications/messages"))
 const TemplatesPage = lazy(() => import("@/pages/admin/notifications/templates"))
@@ -207,11 +208,14 @@ function App() {
                       route.path === '/admin/telemetry' ? <TelemetryPage /> :
                       route.path === '/admin/resident-agent' ? <ResidentAgentPage /> :
                       route.path === '/admin/coding-studio' ? <ResidentAgentPage initialTab="coding" /> :
+                      route.path === '/admin/assistant-studio' ? <AssistantStudioPage /> :
                       route.path === '/admin/website' ? <WebsiteBuilderPage /> :
                       <RoutePlaceholder title={route.title} />
                     }
                   />
                 ))}
+                <Route path="/admin/assistant-studio" element={<AssistantStudioPage />} />
+                <Route path="/admin/assistant-studio/:tab" element={<AssistantStudioPage />} />
                 <Route path="/admin/resident-agent" element={<ResidentAgentPage />} />
                 <Route path="/admin/coding-studio" element={<ResidentAgentPage initialTab="coding" />} />
                 <Route path="/admin/settings/modules" element={<TenantModulesPage />} />

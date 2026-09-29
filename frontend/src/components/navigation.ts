@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import {
   Activity,
+  Bot,
   BriefcaseBusinessIcon,
   CalendarClockIcon,
   CalendarDaysIcon,
@@ -89,7 +90,16 @@ export const navigation: NavSection[] = [
   {
     label: "Operations",
     items: [
-      { title: "Relationships", url: "/admin/relationships", icon: GitBranchIcon, moduleKey: "multiple_providers" },
+      {
+        title: "Relationships",
+        icon: GitBranchIcon,
+        moduleKey: "relationship_matrix",
+        children: [
+          { title: "Relationship Matrix", url: "/admin/relationships-matrix", moduleKey: "relationship_matrix" },
+          { title: "Bulk Editor", url: "/admin/relationships", moduleKey: "relationship_matrix" },
+          { title: "Tree View", url: "/admin/relationships-tree", moduleKey: "relationship_matrix" },
+        ],
+      },
       {
         title: "Schedule",
         icon: CalendarClockIcon,
@@ -99,6 +109,7 @@ export const navigation: NavSection[] = [
         ],
       },
       { title: "Clients", url: "/admin/clients", icon: UsersIcon },
+      { title: "Assistant Studio", url: "/admin/assistant-studio", icon: Bot },
     ],
   },
   {
@@ -182,6 +193,11 @@ export function isKeyActive(key: string, moduleSet: Set<string>): boolean {
   }
   if (k === "addons" || k === "packages") {
     return moduleSet.has("addons") || moduleSet.has("packages")
+  }
+  if (k === "relationship_matrix" || k === "relationships_matrix") {
+    const hasRelMatrix = moduleSet.has("relationship_matrix") || moduleSet.has("relationships_matrix")
+    const hasMultiProviders = moduleSet.has("multiple_providers") || moduleSet.has("providers")
+    return hasRelMatrix && hasMultiProviders
   }
   return moduleSet.has(k)
 }

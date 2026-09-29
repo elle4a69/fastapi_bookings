@@ -137,6 +137,7 @@ from .api.routers import (
     sms_curator,
     travel,
     itinerary,
+    conversations,
 )
 
 
@@ -240,7 +241,18 @@ app = FastAPI(
     lifespan=app_lifespan,
     servers=servers
 )
+# Enable CORS for the specific origin
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5180"],
+    allow_credentials=True,
+    allow_methods=["POST"],
+    allow_headers=["*"],
+)
 
+@app.post("/codex/turns/steer")
+async def steer():
+    return {"message": "Success"}
 # Initialize OpenTelemetry instrumentation
 init_telemetry(app)
 
@@ -446,6 +458,7 @@ app.include_router(travel.router, prefix="/api/public")
 app.include_router(travel.router, prefix="/api")
 app.include_router(itinerary.router, prefix="/api/admin")
 app.include_router(itinerary.router, prefix="/api")
+app.include_router(conversations.router, prefix="/api/admin")
 
 
 

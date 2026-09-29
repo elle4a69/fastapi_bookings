@@ -408,6 +408,43 @@ python -m pytest tests/test_production_rollout_stages.py -v
 - Dynamic operational data (live calendar times, availability slots, real-time rates, one-off payment links) detected via `is_dynamic_operational_data` are immediately rejected (`REJECT_DYNAMIC`).
 - Pending proposals associated with dynamic facts are rejected with `reason_code="dynamic_operational_data"` strictly within the event's scoped provider partition.
 
+---
 
+## 11. Curator Safety, Example Store & Approved Dataset Importer (Workstream 3)
 
+### 11.1 Architectural Separation: Factual vs Procedural Knowledge
+To prevent graph pollution and instruction cross-talk, FastAPI Bookings strictly enforces a architectural partition between business facts and conversational style:
+- **`CuratedMemory` (`curated_memories` table)**: Authoritative, reviewed static business knowledge (e.g., parking facilities, clinic access, cancellation policies, amenities). Dynamic pricing, real-time availability, and conversational dialog flows are strictly prohibited.
+- **`MessageStyleExample` (`message_style_examples` table)**: Dedicated procedural store for approved conversational turns and tone exemplars. Stores sanitized customer/assistant dialog pairs to condition LLM phrasing and tone without polluting factual epistemic graphs.
 
+### 11.2 Fail-Closed Safety Classifier (`classifier.py`)
+Any candidate content proposed for durable storage is evaluated against deterministic safety classifiers:
+| Category | Evaluated Criteria | Safety Action | Store Target |
+| :--- | :--- | :--- | :--- |
+| `DYNAMIC_OPERATIONAL` | Mentions of specific dates, times, days, prices, slots, appointment lengths, or live schedule details | `REJECT` / `QUARANTINE` | Blocked from all durable stores |
+| `PII` | Unscrubbed mobile numbers (`04xx`), landlines, emails, street addresses, credit cards, full customer names | `REJECT` / `QUARANTINE` | Blocked from all durable stores |
+| `PROMPT_INJECTION` | System override instructions, jailbreak attempts, role manipulation, delimiter escapes (`[SYSTEM]`, `<\|im_start\|>`) | `REJECT` | Immediate rejection |
+| `FACTUAL_PROPOSAL` | Declarative, non-conversational static business truths | `ACCEPT` | `CuratedMemory` ONLY |
+| `PROCEDURAL_EXAMPLE` | Conversational dialogue turns, sanitized placeholders (`{name}`, `{time}`, `{date}`, `{suburb}`) | `ACCEPT` | `MessageStyleExample` ONLY |
+
+**Fail-Closed Policy**: If input text is empty, whitespace-only, corrupted, or exhibits ambiguous classifications, the classifier defaults strictly to `SafetyDecision.REJECT`.
+
+### 11.3 Safe Asset Importer (`asset_importer.py`)
+The asset importer provides deterministic, verified batch ingestion of approved intent examples from Assistant UI into the platform:
+- **Source Target**: `F:\Projects\assistant-ui\backend\data\approved_intent_examples.jsonl`
+- **Expected Line Count**: 180 lines.
+- **Cryptographic Fingerprint**: SHA-256 digest `F0C80D93EAB23D7772B7454C81F38027D23D1C6D6E88D4F1EF1314E5B54303A6`.
+- **Pre-Ingestion Verification**: Before parsing any records, the importer computes the full-file SHA-256 digest. If the hash does not match `EXPECTED_SHA256`, the importer halts immediately with a `ValueError`.
+- **Stream Ingestion & Safety Screening**: Reads lines sequentially, parsing JSON payloads and passing each `(client_message, assistant_reply)` pair through `classify_style_example`.
+- **Deterministic Idempotency**: Matches existing records via `compute_style_example_hash(intent, client_message)` (`SHA-256(intent::client_message)`). Re-running the importer incurs 0 duplicate insertions.
+- **Scope Customization**: Supports importing records as global platform defaults (`tenant_id=None, provider_id=None`) or targeted to specific tenants and providers.
+- **Invariant Guarantee**: Formally asserts that `CuratedMemory` row counts remain strictly unchanged before and after import.
+
+### 11.4 Bounded Procedural Example Retrieval (`example_service.py`)
+Procedural style examples are retrieved on-demand for system/few-shot prompt conditioning via `retrieve_style_examples`:
+- **Bounded Footprint**: Defaults to `limit=3` and enforces a maximum character budget (`max_char_budget=2400`, ~600 tokens) to prevent prompt bloat.
+- **Hierarchical Priority Scoping**:
+  1. **Provider-Specific Overrides**: Records matching both `tenant_id` and `provider_id`.
+  2. **Tenant Defaults**: Records matching `tenant_id` with `provider_id IS NULL`.
+  3. **Platform Seeds**: Platform-wide fallback records where `tenant_id IS NULL` and `provider_id IS NULL`.
+- **Prompt Formatter**: `format_style_examples_for_prompt` renders retrieved exemplars into structured Markdown blocks ready for LLM context injection.
