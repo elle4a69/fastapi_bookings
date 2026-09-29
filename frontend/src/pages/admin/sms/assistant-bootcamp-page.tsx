@@ -487,7 +487,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
     "curious-colin"
   ]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>("bootcamp-conv-cranky-carl");
-  const [activeRunId, setActiveRunId] = useState<number | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [providers, setProviders] = useState<{ id: number; name: string }[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null);
   const [turns, setTurns] = useState<number>(5);
@@ -702,7 +702,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
       const runData = res?.run || res;
       if (runData?.id) {
-        setActiveRunId(Number(runData.id));
+        setActiveRunId(String(runData.id));
       }
       if (runData && Array.isArray(runData.conversations) && runData.conversations.length > 0) {
         const nextConvs: Record<string, BootcampConversation> = {};
@@ -760,22 +760,35 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   // Run action: PAUSE
   const handlePause = async () => {
+    if (!activeRunId) {
+      toast.error("No active Bootcamp run found to pause.");
+      return;
+    }
     try {
-      if (activeRunId) {
-        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
-          operation: "pause",
-        });
-      }
-      setRunStatus("paused");
-      setConversations((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((k) => {
-          if (next[k].status === "running") {
-            next[k] = { ...next[k], status: "paused" };
+      const res = await apiClient.post<any>(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+        operation: "pause",
+      });
+      const runData = res?.run || res;
+      setRunStatus((runData?.status as RunStatus) || "paused");
+      if (runData && Array.isArray(runData.conversations) && runData.conversations.length > 0) {
+        const nextConvs: Record<string, BootcampConversation> = {};
+        runData.conversations.forEach((c: any) => {
+          if (c && c.id) {
+            nextConvs[String(c.id)] = mapBackendConversation(c);
           }
         });
-        return next;
-      });
+        setConversations(nextConvs);
+      } else {
+        setConversations((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k].status === "running") {
+              next[k] = { ...next[k], status: "paused" };
+            }
+          });
+          return next;
+        });
+      }
       toast.info("Boot Camp paused.");
     } catch (err: any) {
       toast.error(err?.message || "Failed to pause Boot Camp");
@@ -784,22 +797,35 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   // Run action: RESUME
   const handleResume = async () => {
+    if (!activeRunId) {
+      toast.error("No active Bootcamp run found to resume.");
+      return;
+    }
     try {
-      if (activeRunId) {
-        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
-          operation: "resume",
-        });
-      }
-      setRunStatus("running");
-      setConversations((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((k) => {
-          if (next[k].status === "paused") {
-            next[k] = { ...next[k], status: "running" };
+      const res = await apiClient.post<any>(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+        operation: "resume",
+      });
+      const runData = res?.run || res;
+      setRunStatus((runData?.status as RunStatus) || "running");
+      if (runData && Array.isArray(runData.conversations) && runData.conversations.length > 0) {
+        const nextConvs: Record<string, BootcampConversation> = {};
+        runData.conversations.forEach((c: any) => {
+          if (c && c.id) {
+            nextConvs[String(c.id)] = mapBackendConversation(c);
           }
         });
-        return next;
-      });
+        setConversations(nextConvs);
+      } else {
+        setConversations((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k].status === "paused") {
+              next[k] = { ...next[k], status: "running" };
+            }
+          });
+          return next;
+        });
+      }
       toast.success("Boot Camp resumed.");
     } catch (err: any) {
       toast.error(err?.message || "Failed to resume Boot Camp");
@@ -808,22 +834,35 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   // Run action: STOP
   const handleStop = async () => {
+    if (!activeRunId) {
+      toast.error("No active Bootcamp run found to stop.");
+      return;
+    }
     try {
-      if (activeRunId) {
-        await apiClient.post(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
-          operation: "stop",
-        });
-      }
-      setRunStatus("stopped");
-      setConversations((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((k) => {
-          if (next[k].status === "running" || next[k].status === "paused") {
-            next[k] = { ...next[k], status: "idle" };
+      const res = await apiClient.post<any>(`/api/admin/sms/bootcamp/runs/${activeRunId}/control`, {
+        operation: "stop",
+      });
+      const runData = res?.run || res;
+      setRunStatus((runData?.status as RunStatus) || "stopped");
+      if (runData && Array.isArray(runData.conversations) && runData.conversations.length > 0) {
+        const nextConvs: Record<string, BootcampConversation> = {};
+        runData.conversations.forEach((c: any) => {
+          if (c && c.id) {
+            nextConvs[String(c.id)] = mapBackendConversation(c);
           }
         });
-        return next;
-      });
+        setConversations(nextConvs);
+      } else {
+        setConversations((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k].status === "running" || next[k].status === "paused") {
+              next[k] = { ...next[k], status: "idle" };
+            }
+          });
+          return next;
+        });
+      }
       toast.info("Boot Camp stopped.");
     } catch (err: any) {
       toast.error(err?.message || "Failed to stop Boot Camp");
@@ -832,16 +871,21 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
 
   // Run action: RESET
   const handleReset = async () => {
+    const selectedProvider = providers.find((p) => p.id === selectedProviderId);
+    const label = selectedProvider ? `Reset Runs for ${selectedProvider.name}` : "Reset All Runs";
     try {
-      await apiClient.delete("/api/admin/sms/bootcamp/runs");
-    } catch {
-      // Ignored
+      const url = selectedProviderId !== null
+        ? `/api/admin/sms/bootcamp/runs?provider_id=${selectedProviderId}`
+        : "/api/admin/sms/bootcamp/runs";
+      await apiClient.delete(url);
+      setActiveRunId(null);
+      initializeConversations(selectedPersonaIds, turns);
+      setRunStatus("idle");
+      setNotice(null);
+      toast.info(selectedProvider ? `Cleared Boot Camp test runs for ${selectedProvider.name}.` : "Cleared all Boot Camp test run threads.");
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to ${label.toLowerCase()}`);
     }
-    setActiveRunId(null);
-    initializeConversations(selectedPersonaIds, turns);
-    setRunStatus("idle");
-    setNotice(null);
-    toast.info("Cleared all Boot Camp test run threads.");
   };
 
   // Live Simulation Pacing & Polling (Every 2.5 seconds when active)
@@ -860,7 +904,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         const latest = await apiClient.get<any>(url).catch(() => null);
         const runData = latest?.run || latest;
         if (runData?.id) {
-          setActiveRunId(Number(runData.id));
+          setActiveRunId(String(runData.id));
         }
         const convList: any[] = Array.isArray(runData?.conversations)
           ? runData.conversations
@@ -1648,10 +1692,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
             size="sm"
             onClick={handleReset}
             className="h-8 text-xs gap-1 text-muted-foreground hover:text-rose-600"
-            title="Clear all test run threads"
+            title={selectedProviderId !== null && providers.find((p) => p.id === selectedProviderId) ? `Reset Runs for ${providers.find((p) => p.id === selectedProviderId)?.name}` : "Reset All Runs"}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Reset</span>
+            <span className="hidden sm:inline">
+              {selectedProviderId !== null && providers.find((p) => p.id === selectedProviderId) ? `Reset (${providers.find((p) => p.id === selectedProviderId)?.name})` : "Reset All"}
+            </span>
           </Button>
 
           {/* Bootcamp Settings Shortcut Button */}

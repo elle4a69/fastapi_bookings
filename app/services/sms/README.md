@@ -981,11 +981,23 @@ The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped
    - System prompt template placeholders `{agent_name}`, `{traits}`, `{business_name}`, and `{provider_name}` are safely rendered without `KeyError`, falling back gracefully to defaults.
 
 5. **Execution Controls & Draft Review Lifecycle**:
-   - `POST /api/admin/sms/bootcamp/runs/{run_id}/control` accepts `{ operation: "pause" | "resume" | "stop" }`, updating run status and cascading stopped states to running conversations.
+   - Bootcamp run IDs are UUID strings (`String(run.id)`). `POST /api/admin/sms/bootcamp/runs/{run_id}/control` accepts `{ operation: "pause" | "resume" | "stop" }`, updating run status and cascading stopped states to running conversations.
+   - Run controls require a valid active run ID string before executing, rendering the returned backend run state directly.
    - Draft approval via `POST /api/admin/sms/bootcamp/conversations/{id}/drafts/{message_id}/review` transitions draft messages to `"sent"`, updates wording if edited, returns `{"success": True, "conversation": ...}`, and calls `BOOTCAMP_RUNNER.advance_turn` to progress the simulation to the next customer turn. Discarding halts the conversation thread.
 
-6. **Information Request Resolution**:
+6. **Provider-Scoped Reset & Conflict Protection**:
+   - `DELETE /api/admin/sms/bootcamp/runs` accepts an optional `provider_id: Optional[int] = Query(None)`.
+   - Validates provider tenant ownership via `_validate_provider_id(db, tenant.id, provider_id)`.
+   - Rejects resets with HTTP 409 Conflict if any target runs are in `"running"` or `"paused"` state, requiring operators to stop active runs before resetting.
+   - Restricts deletion exclusively to the specified provider's runs (and associated conversations, messages, and events), leaving all other providers' runs untouched.
+
+7. **Information Request Resolution & Configured Model Alignment**:
    - `POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond` ingests the operator's ground-truth fact into `KnowledgeProposal` (`proposal_type="gap"`), creates an authoritative `LearningEvent` (`event_type="knowledge_answer"`), generates Tori's response, clears handoff state, and marks the conversation completed.
+   - Information resolution and retry generation (`generate_bootcamp_information_resolution`) strictly respect the saved model in `SmsBootcampSettings` (`(settings_data or {}).get("model")`) with fallback to `BOOTCAMP_TORI_MODEL` / `gpt-4o-mini`.
+   - Prompt assembly across both initial turns and information request resolutions is unified through `_assemble_bootcamp_unified_prompt`, ensuring identical placeholder replacement (`{agent_name}`, `{traits}`, `{business_name}`, `{provider_name}`), provider-scoped `SmsPromptProfile` fallback, and safety guardrails.
+
+8. **Settings Reset Persistence**:
+   - `PUT /api/admin/sms/bootcamp/settings` explicitly supports resetting prompt templates, role descriptions, training notes, and learned facts back to `None` or defaults when keys are passed with `None` values, ensuring "Reset Defaults" persists to the database rather than existing purely in browser storage.
 
 ### Verification & Testing Commands
 
@@ -996,6 +1008,8 @@ The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped
 # Run the complete regression check across Bootcamp, UI Controls, and Prompt Builder:
 & ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_sms_assistant_ui_controls.py tests/test_sms_prompt_builder.py -v
 ```
+
+> **Testing Environment Note**: On Windows Python 3.11 runtimes, `pytest.ini` configures `addopts = -p no:schemathesis` to prevent the third-party `schemathesis` pytest plugin from causing an access violation deadlock during `hypothesis_jsonschema` setup in async test suites.
 
 ---
 

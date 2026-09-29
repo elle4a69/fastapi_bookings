@@ -275,7 +275,9 @@ Client sends SMS ("I'm here in bay 4")
    - The Bootcamp toolbar provides a **Provider Selector** dropdown populated dynamically from `/api/admin/providers`.
    - Selecting a provider scopes the entire Bootcamp context: run creation (`provider_id`), conversation threads, Style Lab traits, settings loading/saving, and active prompt assembly.
    - Run status is prominently tracked via the header Status Pill (`running` [emerald], `paused` [amber], `failed` [red], `completed`/`stopped` [slate]).
-   - **Active Run Controls**: Clicking **Pause**, **Resume**, or **Stop** issues `POST /api/admin/sms/bootcamp/runs/{run_id}/control` with `{ operation: "pause" | "resume" | "stop" }` using the active run ID. Server errors are surfaced immediately via `toast.error` instead of silently simulating success.
+   - **Active Run Controls & UUID Handling**: Bootcamp run IDs are stored as raw string UUIDs (`String(runData.id) | null`) rather than being converted to numbers (which yielded `NaN` and skipped API calls).
+   - Clicking **Pause**, **Resume**, or **Stop** requires an active run ID (displaying an error toast if absent) and dispatches `POST /api/admin/sms/bootcamp/runs/{run_id}/control` with `{ operation: "pause" | "resume" | "stop" }` using the UUID string. UI state updates reactively from the returned backend run object, preventing optimistic drift.
+   - **Provider-Scoped Reset**: Clicking **Reset** deletes simulation runs scoped to the selected provider (`DELETE /api/admin/sms/bootcamp/runs?provider_id={id}`), updating button labels dynamically ("Reset Provider Runs" vs "Reset All Runs"). If runs are active (`running` or `paused`), the backend returns a 409 Conflict, which the UI reports cleanly to the user without silent failure or error swallowing.
 
 2. **Persona Selection, Multi-Turn Setup & Multiple Scenarios**:
    - Operators select from 12 distinct customer personas covering diverse customer behaviors (`cranky-carl`, `sarcastic-sam`, `deadpan-dave`, `passive-paul`, `happy-harry`, `nervous-neil`, `time-waster-terry`, `chatty-charlie`, `budget-bob`, `curious-colin`, `discreet-dominic`, `pushy-pete`).
@@ -296,6 +298,7 @@ Client sends SMS ("I'm here in bay 4")
    - Dedicated provider-scoped settings interface persisting `agent_name`, `model` (e.g. `gpt-4o-mini`, `gpt-4o`), `role_description`, `training_notes`, and `learned_facts`.
    - Supports prompt template placeholders: `{agent_name}`, `{traits}`, `{business_name}`, and `{provider_name}` with quick-insert badge buttons.
    - Automatically synchronizes with provider selection and handles server response errors with explicit error toasts.
+   - **Reset Defaults Persistence**: Clicking "Reset Defaults" issues a `PUT /api/admin/sms/bootcamp/settings` call persisting cleared values to the database before updating local component state and cache, ensuring defaults survive browser refreshes.
 
 5. **Unified Thread Panel & Tori Information Request Workflow**:
    - The middle column of Bootcamp embeds the shared `<AssistantThreadPanel mode="bootcamp" ... />`.

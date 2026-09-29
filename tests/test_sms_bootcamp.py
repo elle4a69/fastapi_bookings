@@ -1355,3 +1355,516 @@ def test_multiple_scenarios_for_one_persona(client, synthetic_bootcamp_data):
     assert len(conv_ids) == 2
 
 
+def test_uuid_run_controls_pause_resume_stop(client, synthetic_bootcamp_data):
+    """Verify UUID run IDs properly reach Pause, Resume, and Stop controls and return formatted state."""
+    data = synthetic_bootcamp_data
+    headers = _auth_headers(data["tenant_a"], data["admin_a"])
+
+    # 1. Create a run with UUID
+    payload = {
+        "persona_ids": ["happy-harry"],
+        "turns": 2,
+        "autonomy_level": 2,
+    }
+    create_res = client.post("/api/admin/sms/bootcamp/runs", json=payload, headers=headers)
+    assert create_res.status_code == status.HTTP_200_OK
+    run_id = create_res.json()["id"]
+    assert isinstance(run_id, str)
+    uuid.UUID(run_id)  # Must be valid UUID string
+
+    # 2. Pause with UUID
+    pause_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "pause"},
+        headers=headers,
+    )
+    assert pause_res.status_code == status.HTTP_200_OK
+    assert pause_res.json()["status"] == "paused"
+    assert pause_res.json()["id"] == run_id
+
+    # 3. Resume with UUID
+    resume_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "resume"},
+        headers=headers,
+    )
+    assert resume_res.status_code == status.HTTP_200_OK
+    assert resume_res.json()["status"] == "running"
+
+    # 4. Stop with UUID
+    stop_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{run_id}/control",
+        json={"operation": "stop"},
+        headers=headers,
+    )
+    assert stop_res.status_code == status.HTTP_200_OK
+    assert stop_res.json()["status"] == "stopped"
+
+    # 5. Non-existent UUID control returns 404
+    fake_uuid = str(uuid.uuid4())
+    not_found_res = client.post(
+        f"/api/admin/sms/bootcamp/runs/{fake_uuid}/control",
+        json={"operation": "pause"},
+        headers=headers,
+    )
+    assert not_found_res.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_provider_scoped_reset_leaves_other_providers_runs_untouched(client, synthetic_bootcamp_data, db_session):
+    """Verify provider-scoped DELETE /runs leaves other providers' runs untouched."""
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+    headers = _auth_headers(tenant, data["admin_a"])
+
+    prov1 = Provider(tenant_id=tenant.id, name="Provider One", active=True)
+    prov2 = Provider(tenant_id=tenant.id, name="Provider Two", active=True)
+    db_session.add_all([prov1, prov2])
+    db_session.flush()
+
+    run1 = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov1.id,
+        status="stopped",
+        selected_personas=["happy-harry"],
+        max_turns=2,
+    )
+    run2 = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov2.id,
+        status="stopped",
+        selected_personas=["happy-harry"],
+        max_turns=2,
+    )
+    db_session.add_all([run1, run2])
+    db_session.commit()
+
+    # Reset only prov1
+    res = client.delete(f"/api/admin/sms/bootcamp/runs?provider_id={prov1.id}", headers=headers)
+    assert res.status_code == status.HTTP_200_OK
+
+    # prov1 run deleted, prov2 run preserved
+    assert db_session.query(SmsBootcampRun).filter_by(id=run1.id).first() is None
+    assert db_session.query(SmsBootcampRun).filter_by(id=run2.id).first() is not None
+
+    # Invalid provider returns 404
+    bad_prov_res = client.delete("/api/admin/sms/bootcamp/runs?provider_id=999999", headers=headers)
+    assert bad_prov_res.status_code == status.HTTP_404_NOT_FOUND
+
+    # Conflict check: active running run blocks reset
+    run3 = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov2.id,
+        status="running",
+        selected_personas=["happy-harry"],
+        max_turns=2,
+    )
+    db_session.add(run3)
+    db_session.commit()
+
+    conflict_res = client.delete(f"/api/admin/sms/bootcamp/runs?provider_id={prov2.id}", headers=headers)
+    assert conflict_res.status_code == status.HTTP_409_CONFLICT
+    assert db_session.query(SmsBootcampRun).filter_by(id=run2.id).first() is not None
+
+
+def test_settings_reset_persists_defaults_to_backend(client, synthetic_bootcamp_data, db_session):
+    """Verify Settings Reset action persists defaults to backend."""
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+    headers = _auth_headers(tenant, data["admin_a"])
+
+    prov = Provider(tenant_id=tenant.id, name="Dr. Provider Defaults", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    # Setup customized settings
+    custom_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="CustomName",
+        model="custom-gpt-model",
+        system_prompt_template="Custom template",
+        custom_training_notes="Custom notes",
+    )
+    db_session.add(custom_settings)
+    db_session.commit()
+
+    # Reset by PUTting default settings with provider_id
+    default_payload = {
+        "provider_id": prov.id,
+        "agent_name": "Tori",
+        "model": "gpt-4o-mini",
+        "role_description": None,
+        "system_prompt_template": None,
+        "training_notes": None,
+        "custom_training_notes": None,
+        "active_style_profile": DEFAULT_STYLE_PROFILE,
+    }
+    put_res = client.put("/api/admin/sms/bootcamp/settings", json=default_payload, headers=headers)
+    assert put_res.status_code == status.HTTP_200_OK
+
+    # Query DB to ensure persisted
+    db_session.expire_all()
+    saved = db_session.query(SmsBootcampSettings).filter_by(tenant_id=tenant.id, provider_id=prov.id).first()
+    assert saved is not None
+    assert saved.agent_name == "Tori"
+    assert saved.model == "gpt-4o-mini"
+    assert saved.system_prompt_template is None
+    assert saved.training_notes is None
+
+
+def test_mocked_openai_information_request_resolution_uses_saved_model_and_scoped_prompt(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify info request retries send configured model, rendered placeholders, and scoped provider data."""
+    import json
+    from unittest.mock import MagicMock
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+    headers = _auth_headers(tenant, data["admin_a"])
+
+    # 1. Setup Provider and Service
+    prov = Provider(tenant_id=tenant.id, name="Dr. Info Specialist", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    srv = Service(
+        tenant_id=tenant.id,
+        name="Target Laser Therapy",
+        price=200.0,
+        duration=45,
+        active=True,
+    )
+    db_session.add(srv)
+    db_session.flush()
+
+    link = ServiceProvider(service_id=srv.id, provider_id=prov.id, tenant_id=tenant.id)
+    db_session.add(link)
+
+    # 2. Add provider-scoped settings with specific model and prompt template
+    settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="Concierge Zoe",
+        model="gpt-4o",
+        system_prompt_template="Welcome to {business_name}! I am {agent_name} assisting {provider_name}. Traits: {traits}.",
+        custom_training_notes="Provider rule: Always mention parking is free.",
+    )
+    db_session.add(settings)
+
+    # 3. Create run, conversation in handoff, and customer question
+    run = SmsBootcampRun(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        status="running",
+        selected_personas=["curious-colin"],
+        max_turns=3,
+        style_profile=DEFAULT_STYLE_PROFILE,
+    )
+    db_session.add(run)
+    db_session.flush()
+
+    conv = SmsBootcampConversation(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        run_id=run.id,
+        provider_id=prov.id,
+        persona_id="curious-colin",
+        persona_name="Curious Colin",
+        status="handoff",
+        needs_handoff=True,
+        handoff_reason="Needs info about Sunday hours",
+        current_turn=1,
+    )
+    db_session.add(conv)
+    db_session.flush()
+
+    msg = SmsBootcampMessage(
+        id=str(uuid.uuid4()),
+        tenant_id=tenant.id,
+        conversation_id=conv.id,
+        role="persona",
+        text="Are you open on Sundays?",
+    )
+    db_session.add(msg)
+    db_session.commit()
+
+    # 4. Mock OpenAI client
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = json.dumps({
+        "customer_reply": "Yes, Dr. Info Specialist is open Sundays 10am-4pm!",
+        "knowledge_summary": "Open Sundays 10am to 4pm.",
+    })
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 5. Call information-request respond endpoint
+    respond_res = client.post(
+        f"/api/admin/sms/bootcamp/conversations/{conv.id}/information-request/respond",
+        json={"information": "Yes, we are open on Sundays from 10am to 4pm."},
+        headers=headers,
+    )
+    assert respond_res.status_code == status.HTTP_200_OK
+
+    # 6. Verify OpenAI completion call kwargs
+    mock_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_client.chat.completions.create.call_args[1]
+
+    # Model matches the saved provider model "gpt-4o"
+    assert call_kwargs["model"] == "gpt-4o"
+    assert call_kwargs["response_format"] == {"type": "json_object"}
+
+    # Messages contain rendered system prompt with provider details
+    system_msg = next(m["content"] for m in call_kwargs["messages"] if m.get("role") == "system")
+    assert "Concierge Zoe" in system_msg
+    assert "Dr. Info Specialist" in system_msg
+    assert "Target Laser Therapy" in system_msg
+    assert "Always mention parking is free" in system_msg
+    assert "Boot Camp information-request retry" in system_msg
+
+
+def test_tenant_default_inheritance_when_provider_settings_created(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify newly selected providers inherit all tenant-wide settings into OpenAI payload."""
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import generate_bootcamp_tori_reply
+    from app.api.routers.sms_bootcamp import _get_or_create_settings
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    # 1. Create tenant-level settings with distinctive template, role, notes, and facts
+    tenant_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=None,
+        agent_name="Tenant Tori",
+        model="gpt-4o-mini",
+        role_description="[TENANT_ROLE] Lead Clinical Concierge",
+        system_prompt_template="[TENANT_TEMPLATE] Welcome to {business_name}! I am {agent_name} assisting {provider_name}.",
+        custom_training_notes="[TENANT_NOTES] Always offer valet parking instructions.",
+        training_notes="[TENANT_NOTES] Always offer valet parking instructions.",
+        learned_facts="[TENANT_FACT] Practice founded in 2021.",
+    )
+    db_session.add(tenant_settings)
+    db_session.flush()
+
+    # 2. Create provider with no existing Bootcamp settings
+    prov = Provider(tenant_id=tenant.id, name="Dr. Inherited Defaults", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    srv = Service(
+        tenant_id=tenant.id,
+        name="Inherited Care Session",
+        price=180.0,
+        duration=60,
+        active=True,
+    )
+    db_session.add(srv)
+    db_session.flush()
+    link = ServiceProvider(service_id=srv.id, provider_id=prov.id, tenant_id=tenant.id)
+    db_session.add(link)
+    db_session.commit()
+
+    # 3. Call _get_or_create_settings for the new provider (as a run or settings fetch does)
+    prov_settings = _get_or_create_settings(db_session, tenant.id, prov.id)
+    assert prov_settings.role_description == "[TENANT_ROLE] Lead Clinical Concierge"
+    assert prov_settings.system_prompt_template == "[TENANT_TEMPLATE] Welcome to {business_name}! I am {agent_name} assisting {provider_name}."
+    assert "[TENANT_NOTES]" in (prov_settings.training_notes or "")
+    assert prov_settings.learned_facts == "[TENANT_FACT] Practice founded in 2021."
+
+    # 4. Mock OpenAI client
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Certainly! We have openings for Inherited Care Session."
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 5. Trigger generation for that provider
+    reply, _ = generate_bootcamp_tori_reply(
+        history=[{"role": "persona", "text": "What services do you provide?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+    )
+
+    mock_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_client.chat.completions.create.call_args[1]
+    system_msg = next(m["content"] for m in call_kwargs["messages"] if m.get("role") == "system")
+
+    # Assert inherited tenant values and scoped provider context reach the payload
+    assert "[TENANT_TEMPLATE]" in system_msg
+    assert "Dr. Inherited Defaults" in system_msg
+    assert "[TENANT_ROLE] Lead Clinical Concierge" in system_msg
+    assert "[TENANT_NOTES] Always offer valet parking instructions." in system_msg
+    assert "Inherited Care Session" in system_msg
+
+
+def test_provider_override_takes_precedence_over_tenant_defaults(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify explicit provider settings override tenant-wide defaults in OpenAI payload."""
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import generate_bootcamp_tori_reply
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    # 1. Tenant defaults
+    tenant_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=None,
+        agent_name="Tenant Tori",
+        model="gpt-4o-mini",
+        role_description="[TENANT_ROLE] Generic Role",
+        system_prompt_template="[TENANT_TEMPLATE] Welcome to our company.",
+        training_notes="[TENANT_NOTES] Generic notes.",
+    )
+    db_session.add(tenant_settings)
+
+    # 2. Provider with explicit overrides
+    prov = Provider(tenant_id=tenant.id, name="Dr. Override Pro", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    prov_settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="Custom Alexa",
+        model="gpt-4o",
+        role_description="[PROVIDER_OVERRIDE_ROLE] Chief Orthopedic Specialist",
+        system_prompt_template="[PROVIDER_OVERRIDE_TEMPLATE] Dedicated provider portal.",
+        training_notes="[PROVIDER_OVERRIDE_NOTES] Provider specific instructions.",
+    )
+    db_session.add(prov_settings)
+    db_session.commit()
+
+    # 3. Mock OpenAI client
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Hello from Custom Alexa!"
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 4. Trigger generation
+    generate_bootcamp_tori_reply(
+        history=[{"role": "persona", "text": "Hi"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+    )
+
+    call_kwargs = mock_client.chat.completions.create.call_args[1]
+    assert call_kwargs["model"] == "gpt-4o"
+    system_msg = next(m["content"] for m in call_kwargs["messages"] if m.get("role") == "system")
+
+    # Provider override values MUST appear
+    assert "[PROVIDER_OVERRIDE_ROLE] Chief Orthopedic Specialist" in system_msg
+    assert "[PROVIDER_OVERRIDE_TEMPLATE]" in system_msg
+    assert "[PROVIDER_OVERRIDE_NOTES]" in system_msg
+
+    # Tenant defaults MUST NOT appear
+    assert "[TENANT_ROLE]" not in system_msg
+    assert "[TENANT_TEMPLATE]" not in system_msg
+    assert "[TENANT_NOTES]" not in system_msg
+
+
+def test_role_description_influences_normal_and_information_resolution_generations(
+    client, synthetic_bootcamp_data, db_session, monkeypatch
+):
+    """Verify role_description reaches system prompt in both normal generation and info resolution."""
+    import json
+    from unittest.mock import MagicMock
+    from app.services.sms.bootcamp_service import (
+        generate_bootcamp_tori_reply,
+        generate_bootcamp_information_resolution,
+    )
+
+    data = synthetic_bootcamp_data
+    tenant = data["tenant_a"]
+
+    prov = Provider(tenant_id=tenant.id, name="Dr. Role Tester", active=True)
+    db_session.add(prov)
+    db_session.flush()
+
+    role_desc = "[DISTINCTIVE_ROLE] Emergency Triage Coordinator"
+
+    settings = SmsBootcampSettings(
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+        agent_name="Tori",
+        model="gpt-4o",
+        role_description=role_desc,
+        system_prompt_template="Role check: {role_description}",
+    )
+    db_session.add(settings)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = json.dumps({
+        "customer_reply": "I am the emergency triage coordinator.",
+        "knowledge_summary": "Triage coordinator active.",
+    })
+    mock_client.chat.completions.create.return_value = mock_response
+
+    monkeypatch.setattr("openai.OpenAI", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("app.services.sms.bootcamp_service._is_openai_available", lambda: True)
+
+    # 1. Test normal generation
+    generate_bootcamp_tori_reply(
+        history=[{"role": "persona", "text": "Who am I speaking with?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        db=db_session,
+        tenant_id=tenant.id,
+        provider_id=prov.id,
+    )
+
+    assert mock_client.chat.completions.create.call_count == 1
+    call_kwargs_normal = mock_client.chat.completions.create.call_args[1]
+    system_msg_normal = next(m["content"] for m in call_kwargs_normal["messages"] if m.get("role") == "system")
+    assert role_desc in system_msg_normal
+    assert "Role and Responsibilities:\n" + role_desc in system_msg_normal
+
+    # 2. Test information-resolution retry generation
+    mock_client.chat.completions.create.reset_mock()
+    generate_bootcamp_information_resolution(
+        history=[{"role": "persona", "text": "Do you offer emergency triage?"}],
+        style_profile=DEFAULT_STYLE_PROFILE,
+        supplied_information="Yes, triage is available 24/7.",
+        settings_data={
+            "agent_name": "Tori",
+            "model": "gpt-4o",
+            "role_description": role_desc,
+            "tenant_id": tenant.id,
+            "provider_id": prov.id,
+            "db": db_session,
+        },
+    )
+
+    assert mock_client.chat.completions.create.call_count == 1
+    call_kwargs_info = mock_client.chat.completions.create.call_args[1]
+    system_msg_info = next(m["content"] for m in call_kwargs_info["messages"] if m.get("role") == "system")
+    assert role_desc in system_msg_info
+    assert "Role and Responsibilities:\n" + role_desc in system_msg_info
+
+
+

@@ -198,12 +198,25 @@ export default function BootcampSettingsTab({ onBackToBootcamp, initialProviderI
     }
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (window.confirm("Reset all Bootcamp settings to defaults?")) {
-      setSettings(DEFAULT_BOOTCAMP_SETTINGS);
-      const storageKey = selectedProviderId ? `${STORAGE_KEY}_prov_${selectedProviderId}` : STORAGE_KEY;
-      localStorage.setItem(storageKey, JSON.stringify(DEFAULT_BOOTCAMP_SETTINGS));
-      toast.info("Bootcamp settings reset to factory defaults");
+      setSaving(true);
+      try {
+        const payload = {
+          ...DEFAULT_BOOTCAMP_SETTINGS,
+          provider_id: selectedProviderId,
+        };
+        const res = await apiClient.put<any>("/api/admin/sms/bootcamp/settings", payload);
+        const normalized = res ? normalizeBootcampSettings(res) : DEFAULT_BOOTCAMP_SETTINGS;
+        setSettings(normalized);
+        const storageKey = selectedProviderId ? `${STORAGE_KEY}_prov_${selectedProviderId}` : STORAGE_KEY;
+        localStorage.setItem(storageKey, JSON.stringify(normalized));
+        toast.info("Bootcamp settings reset to factory defaults");
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to reset settings to defaults");
+      } finally {
+        setSaving(false);
+      }
     }
   };
 

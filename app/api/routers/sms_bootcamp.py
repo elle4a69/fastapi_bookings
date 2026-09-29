@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_current_tenant, get_db
@@ -102,6 +102,11 @@ def _get_or_create_settings(db: Session, tenant_id: int, provider_id: Optional[i
         default_profile = dict(DEFAULT_STYLE_PROFILE)
         agent_name = "Tori"
         model = "gpt-4o-mini"
+        role_description = None
+        system_prompt_template = None
+        custom_training_notes = None
+        training_notes = None
+        learned_facts = None
         if provider_id is not None:
             tenant_settings = (
                 db.query(SmsBootcampSettings)
@@ -112,6 +117,11 @@ def _get_or_create_settings(db: Session, tenant_id: int, provider_id: Optional[i
                 default_profile = dict(tenant_settings.active_style_profile or DEFAULT_STYLE_PROFILE)
                 agent_name = tenant_settings.agent_name
                 model = getattr(tenant_settings, "model", "gpt-4o-mini") or "gpt-4o-mini"
+                role_description = getattr(tenant_settings, "role_description", None)
+                system_prompt_template = getattr(tenant_settings, "system_prompt_template", None)
+                custom_training_notes = getattr(tenant_settings, "custom_training_notes", None)
+                training_notes = getattr(tenant_settings, "training_notes", None) or custom_training_notes
+                learned_facts = getattr(tenant_settings, "learned_facts", None)
 
         settings_obj = SmsBootcampSettings(
             tenant_id=tenant_id,
@@ -120,11 +130,11 @@ def _get_or_create_settings(db: Session, tenant_id: int, provider_id: Optional[i
             previous_style_profile=None,
             agent_name=agent_name,
             model=model,
-            role_description=None,
-            system_prompt_template=None,
-            custom_training_notes=None,
-            training_notes=None,
-            learned_facts=None,
+            role_description=role_description,
+            system_prompt_template=system_prompt_template,
+            custom_training_notes=custom_training_notes,
+            training_notes=training_notes,
+            learned_facts=learned_facts,
             updated_at=datetime.now(timezone.utc),
         )
         db.add(settings_obj)
@@ -507,21 +517,27 @@ def control_bootcamp_run(
 
 @router.delete("/runs")
 def reset_bootcamp_runs(
+    provider_id: Optional[int] = Query(None),
     tenant: Tenant = Depends(get_current_tenant),
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
-    """Reset and clear simulation run history for the active tenant."""
+    """Reset and clear simulation run history for the active tenant (optionally scoped to a provider)."""
+    if provider_id is not None:
+        _validate_provider_id(db, tenant.id, provider_id)
+
+    query = db.query(SmsBootcampRun).filter(SmsBootcampRun.tenant_id == tenant.id)
+    if provider_id is not None:
+        query = query.filter(SmsBootcampRun.provider_id == provider_id)
+
     latest = (
-        db.query(SmsBootcampRun)
-        .filter(SmsBootcampRun.tenant_id == tenant.id)
-        .order_by(SmsBootcampRun.created_at.desc())
+        query.order_by(SmsBootcampRun.created_at.desc())
         .first()
     )
     if latest and latest.status in {"running", "paused"}:
         raise HTTPException(status_code=409, detail="Stop the active run before resetting")
 
-    db.query(SmsBootcampRun).filter(SmsBootcampRun.tenant_id == tenant.id).delete(synchronize_session="fetch")
+    query.delete(synchronize_session="fetch")
     db.commit()
     return {"status": "reset"}
 
@@ -588,9 +604,11 @@ def respond_to_bootcamp_information_request(
     settings_data = {
         "agent_name": settings_obj.agent_name,
         "model": getattr(settings_obj, "model", "gpt-4o-mini") or "gpt-4o-mini",
+        "role_description": getattr(settings_obj, "role_description", None),
         "custom_training_notes": settings_obj.training_notes or settings_obj.custom_training_notes,
         "training_notes": settings_obj.training_notes or settings_obj.custom_training_notes,
         "system_prompt_template": settings_obj.system_prompt_template,
+        "learned_facts": getattr(settings_obj, "learned_facts", None),
         "tenant_id": tenant.id,
         "provider_id": resolved_prov_id,
         "db": db,
@@ -1006,22 +1024,32 @@ def update_bootcamp_settings(
     if model_val is not None and str(model_val).strip():
         settings_obj.model = str(model_val).strip()
 
-    role_desc = raw.get("role_description") or raw.get("roleDescription")
-    if role_desc is not None:
-        settings_obj.role_description = str(role_desc).strip()
+    if "role_description" in raw or "roleDescription" in raw:
+        role_desc = raw.get("role_description") if "role_description" in raw else raw.get("roleDescription")
+        settings_obj.role_description = str(role_desc).strip() if role_desc else None
 
-    template = raw.get("system_prompt_template") or raw.get("systemPromptTemplate")
-    if template is not None:
-        settings_obj.system_prompt_template = str(template)
+    if "system_prompt_template" in raw or "systemPromptTemplate" in raw:
+        template = raw.get("system_prompt_template") if "system_prompt_template" in raw else raw.get("systemPromptTemplate")
+        settings_obj.system_prompt_template = str(template) if template else None
 
-    notes = raw.get("training_notes") or raw.get("trainingNotes") or raw.get("custom_training_notes") or raw.get("customTrainingNotes")
-    if notes is not None:
-        settings_obj.training_notes = str(notes)
-        settings_obj.custom_training_notes = str(notes)
+    if (
+        "training_notes" in raw
+        or "trainingNotes" in raw
+        or "custom_training_notes" in raw
+        or "customTrainingNotes" in raw
+    ):
+        for k in ("training_notes", "trainingNotes", "custom_training_notes", "customTrainingNotes"):
+            if k in raw:
+                notes = raw.get(k)
+                settings_obj.training_notes = str(notes) if notes else None
+                settings_obj.custom_training_notes = str(notes) if notes else None
+                break
 
-    facts = raw.get("learned_facts") or raw.get("learnedFacts")
-    if facts is not None:
-        if isinstance(facts, list):
+    if "learned_facts" in raw or "learnedFacts" in raw:
+        facts = raw.get("learned_facts") if "learned_facts" in raw else raw.get("learnedFacts")
+        if facts is None or facts == "":
+            settings_obj.learned_facts = None
+        elif isinstance(facts, list):
             settings_obj.learned_facts = "\n".join(str(f) for f in facts)
         else:
             settings_obj.learned_facts = str(facts)
