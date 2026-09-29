@@ -82,6 +82,22 @@ MODULE_CATALOG = [
         "icon": "MapPin",
     },
     {
+        "key": "relationship_matrix",
+        "name": "Relationship Matrix",
+        "description": "Interactive visual matrix mapping connected dependencies between providers, locations, services, add-ons, and categories.",
+        "category": "Operations",
+        "is_core": False,
+        "icon": "GitBranch",
+    },
+    {
+        "key": "relationships_matrix",
+        "name": "Relationship Matrix",
+        "description": "Legacy alias for Relationship Matrix.",
+        "category": "Operations",
+        "is_core": False,
+        "icon": "GitBranch",
+    },
+    {
         "key": "categories",
         "name": "Categories",
         "description": "Group services into categorized sections and tabs. When disabled, services are presented in a streamlined flat list without category management.",
@@ -174,7 +190,19 @@ def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
     for k in enabled_keys:
         if k in CORE_MODULE_KEYS:
             continue
-        canon_key = "multiple_providers" if k in ("multiple_providers", "providers") else ("addons" if k in ("addons", "packages") else k)
+        canon_key = (
+            "multiple_providers"
+            if k in ("multiple_providers", "providers")
+            else (
+                "addons"
+                if k in ("addons", "packages")
+                else (
+                    "relationship_matrix"
+                    if k in ("relationship_matrix", "relationships_matrix")
+                    else k
+                )
+            )
+        )
         unique_addon_keys.add(canon_key)
     used_addons = len(unique_addon_keys)
 
@@ -253,15 +281,50 @@ def toggle_tenant_module(
         target_keys = {"multiple_providers", "providers"}
     elif payload.module_key in ("addons", "packages"):
         target_keys = {"addons", "packages"}
+    elif payload.module_key in ("relationship_matrix", "relationships_matrix"):
+        target_keys = {"relationship_matrix", "relationships_matrix"}
 
     # Count unique active addons
     current_addons = {
-        ("multiple_providers" if k in ("multiple_providers", "providers") else ("addons" if k in ("addons", "packages") else k))
+        (
+            "multiple_providers"
+            if k in ("multiple_providers", "providers")
+            else (
+                "addons"
+                if k in ("addons", "packages")
+                else (
+                    "relationship_matrix"
+                    if k in ("relationship_matrix", "relationships_matrix")
+                    else k
+                )
+            )
+        )
         for k in current_enabled
         if k not in CORE_MODULE_KEYS
     }
 
-    canon_target = "multiple_providers" if payload.module_key in ("multiple_providers", "providers") else ("addons" if payload.module_key in ("addons", "packages") else payload.module_key)
+    canon_target = (
+        "multiple_providers"
+        if payload.module_key in ("multiple_providers", "providers")
+        else (
+            "addons"
+            if payload.module_key in ("addons", "packages")
+            else (
+                "relationship_matrix"
+                if payload.module_key in ("relationship_matrix", "relationships_matrix")
+                else payload.module_key
+            )
+        )
+    )
+
+    # Validate that relationship_matrix strictly requires multiple_providers to be active
+    if payload.enabled and canon_target == "relationship_matrix":
+        has_multi = any(k in current_enabled for k in ("multiple_providers", "providers"))
+        if not has_multi:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Relationship Matrix requires Multiple Service Providers to be enabled.",
+            )
 
     # Validate against quota when enabling an add-on
     if payload.enabled and canon_target not in current_addons:
@@ -367,6 +430,8 @@ def put_tenant_modules(
             target_keys.update(["multiple_providers", "providers"])
         if "addons" in target_keys or "packages" in target_keys:
             target_keys.update(["addons", "packages"])
+        if "relationship_matrix" in target_keys or "relationships_matrix" in target_keys:
+            target_keys.update(["relationship_matrix", "relationships_matrix"])
         tenant.enabled_modules = list(target_keys)
 
     elif payload.modules is not None:
@@ -376,6 +441,8 @@ def put_tenant_modules(
                 aliases = {"multiple_providers", "providers"}
             elif k in ("addons", "packages"):
                 aliases = {"addons", "packages"}
+            elif k in ("relationship_matrix", "relationships_matrix"):
+                aliases = {"relationship_matrix", "relationships_matrix"}
             if enabled:
                 current_enabled.update(aliases)
             else:
@@ -390,6 +457,8 @@ def put_tenant_modules(
             aliases = {"multiple_providers", "providers"}
         elif payload.module_key in ("addons", "packages"):
             aliases = {"addons", "packages"}
+        elif payload.module_key in ("relationship_matrix", "relationships_matrix"):
+            aliases = {"relationship_matrix", "relationships_matrix"}
         if enabled:
             current_enabled.update(aliases)
         else:

@@ -333,3 +333,52 @@ def test_get_and_put_tenant_modules_standardized(client, unlimited_tenant_and_ow
     assert "multiple_providers" not in active_after
     assert "providers" not in active_after
 
+
+def test_relationship_matrix_module_and_multi_provider_guard(client, unlimited_tenant_and_owner):
+    """Test relationship_matrix catalog registration and multi_provider guard."""
+    tenant, owner, headers = unlimited_tenant_and_owner
+
+    # 1. Verify relationship_matrix is present in module catalog
+    res_get = client.get("/api/admin/tenant/modules", headers=headers)
+    assert res_get.status_code == status.HTTP_200_OK
+    keys = {m["key"] for m in res_get.json()["modules"]}
+    assert "relationship_matrix" in keys
+
+    # 2. Disable multiple_providers first
+    res_disable_prov = client.post(
+        "/api/admin/tenant/modules/toggle",
+        json={"module_key": "multiple_providers", "enabled": False},
+        headers=headers,
+    )
+    assert res_disable_prov.status_code == status.HTTP_200_OK
+
+    # 3. Attempting to enable relationship_matrix without multiple_providers must fail (400)
+    res_fail = client.post(
+        "/api/admin/tenant/modules/toggle",
+        json={"module_key": "relationship_matrix", "enabled": True},
+        headers=headers,
+    )
+    assert res_fail.status_code == status.HTTP_400_BAD_REQUEST
+    res_data = res_fail.json()
+    err_msg = res_data.get("detail") or res_data.get("error", {}).get("message", "")
+    assert "Multiple Service Providers" in err_msg
+
+    # 4. Enable multiple_providers, then enable relationship_matrix
+    res_enable_prov = client.post(
+        "/api/admin/tenant/modules/toggle",
+        json={"module_key": "multiple_providers", "enabled": True},
+        headers=headers,
+    )
+    assert res_enable_prov.status_code == status.HTTP_200_OK
+
+    res_ok = client.post(
+        "/api/admin/tenant/modules/toggle",
+        json={"module_key": "relationship_matrix", "enabled": True},
+        headers=headers,
+    )
+    assert res_ok.status_code == status.HTTP_200_OK
+    enabled_mods = res_ok.json()["enabled_modules"]
+    assert "relationship_matrix" in enabled_mods
+    assert "relationships_matrix" in enabled_mods
+
+

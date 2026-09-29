@@ -29,6 +29,8 @@ ADDON_MODULE_KEYS: list[str] = [
     "products",
     "addons",
     "packages",
+    "relationship_matrix",
+    "relationships_matrix",
     "finance_invoicing",
     "media",
     "booking_forms",
@@ -115,6 +117,10 @@ class Tenant(Base):
             active.add("addons")
         if "addons" in active:
             active.add("packages")
+        if "relationships_matrix" in active:
+            active.add("relationship_matrix")
+        if "relationship_matrix" in active:
+            active.add("relationships_matrix")
 
         # Preserve standard order followed by any custom keys
         ordered = [k for k in ALL_MODULE_KEYS if k in active]

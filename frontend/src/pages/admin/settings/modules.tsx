@@ -37,6 +37,7 @@ import {
   TagsIcon,
   ShoppingBagIcon,
   CheckCircle2Icon,
+  GitBranchIcon,
 } from "lucide-react"
 
 // Map icon strings to Lucide components
@@ -57,10 +58,11 @@ const ICON_MAP: Record<string, any> = {
   Tags: TagsIcon,
   ShoppingBag: ShoppingBagIcon,
   Sparkles: SparklesIcon,
+  GitBranch: GitBranchIcon,
 }
 
 export default function TenantModulesPage() {
-  const { modulesData, loading, toggleModule, updateTier } = useTenantModules()
+  const { modulesData, loading, toggleModule, updateTier, multipleProvidersEnabled } = useTenantModules()
   const [activeCategory, setActiveCategory] = useState<string>("all")
   const [togglePendingKey, setTogglePendingKey] = useState<string | null>(null)
   const [quotaModalOpen, setQuotaModalOpen] = useState<boolean>(false)
@@ -71,9 +73,11 @@ export default function TenantModulesPage() {
     if (!modulesData) return []
     const hasMultipleProviders = modulesData.modules.some((m) => m.key === "multiple_providers")
     const hasAddons = modulesData.modules.some((m) => m.key === "addons")
+    const hasRelationshipMatrix = modulesData.modules.some((m) => m.key === "relationship_matrix")
     return modulesData.modules.filter((m) => {
       if (hasMultipleProviders && m.key === "providers") return false
       if (hasAddons && m.key === "packages") return false
+      if (hasRelationshipMatrix && m.key === "relationships_matrix") return false
       return true
     })
   }, [modulesData])
@@ -94,6 +98,11 @@ export default function TenantModulesPage() {
   const handleToggle = async (module: TenantModuleInfo, nextValue: boolean) => {
     if (module.is_core && !nextValue) {
       toast.error("Core modules are required and cannot be turned off.")
+      return
+    }
+
+    if (module.key === "relationship_matrix" && !multipleProvidersEnabled && nextValue) {
+      toast.error("Relationship Matrix requires Multiple Service Providers to be enabled.")
       return
     }
 
@@ -299,7 +308,7 @@ export default function TenantModulesPage() {
               <Card
                 key={mod.key}
                 className={`flex flex-col justify-between border transition-all duration-200 ${
-                  mod.enabled
+                  mod.enabled && (mod.key !== "relationship_matrix" || multipleProvidersEnabled)
                     ? "border-primary/30 bg-card shadow-xs"
                     : "border-border/60 bg-muted/20 opacity-80 hover:opacity-100"
                 }`}
@@ -309,7 +318,9 @@ export default function TenantModulesPage() {
                     <div className="flex items-center gap-3">
                       <div
                         className={`p-2.5 rounded-xl transition-colors shrink-0 ${
-                          mod.enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                          mod.enabled && (mod.key !== "relationship_matrix" || multipleProvidersEnabled)
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
                         }`}
                       >
                         <IconComponent className="h-5 w-5" />
@@ -327,6 +338,13 @@ export default function TenantModulesPage() {
                     {mod.is_core ? (
                       <Badge variant="outline" className="text-[10px] font-semibold uppercase bg-muted/50 shrink-0">
                         Core
+                      </Badge>
+                    ) : mod.key === "relationship_matrix" && !multipleProvidersEnabled ? (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-semibold uppercase border-amber-500/40 text-amber-600 dark:text-amber-400 shrink-0"
+                      >
+                        Requires Multi-Provider
                       </Badge>
                     ) : (
                       <Badge
@@ -395,6 +413,28 @@ export default function TenantModulesPage() {
                       <span>{mod.enabled ? "Service add-on upsells active" : "Direct booking: add-on steps hidden"}</span>
                     </div>
                   )}
+                  {mod.key === "relationship_matrix" && (
+                    <div className={`p-2 rounded-md text-[11px] font-medium border flex items-center gap-1.5 ${
+                      !multipleProvidersEnabled
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                        : mod.enabled
+                        ? "bg-primary/5 text-primary border-primary/20"
+                        : "bg-muted text-muted-foreground border-border/40"
+                    }`}>
+                      {!multipleProvidersEnabled ? (
+                        <AlertCircleIcon className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <CheckCircle2Icon className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span>
+                        {!multipleProvidersEnabled
+                          ? "Requires Multiple Service Providers to be enabled"
+                          : mod.enabled
+                          ? "6-column interactive dependency matrix active"
+                          : "Matrix hidden: direct catalog management"}
+                      </span>
+                    </div>
+                  )}
                 </CardContent>
 
                 <CardFooter className="p-4 pt-3 border-t border-border/40 flex items-center justify-between bg-muted/10">
@@ -402,6 +442,11 @@ export default function TenantModulesPage() {
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
                       <LockIcon className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                       <span>Included in all plans</span>
+                    </div>
+                  ) : mod.key === "relationship_matrix" && !multipleProvidersEnabled ? (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      <LockIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span>Locked (Requires Multi-Provider)</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
@@ -417,8 +462,12 @@ export default function TenantModulesPage() {
 
                   <div className="min-h-[44px] min-w-[44px] flex items-center justify-end">
                     <Switch
-                      checked={mod.enabled}
-                      disabled={mod.is_core || isToggling}
+                      checked={mod.key === "relationship_matrix" && !multipleProvidersEnabled ? false : mod.enabled}
+                      disabled={
+                        mod.is_core ||
+                        isToggling ||
+                        (mod.key === "relationship_matrix" && !multipleProvidersEnabled)
+                      }
                       onCheckedChange={(checked) => handleToggle(mod, checked)}
                       aria-label={`Toggle ${mod.name}`}
                       className="touch-manipulation"

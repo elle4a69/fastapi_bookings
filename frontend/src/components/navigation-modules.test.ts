@@ -48,7 +48,7 @@ test("filterNavigationByModules cleanly removes disabled modules from sidebar na
 });
 
 test("filterNavigationByModules preserves all items when all modules are enabled", () => {
-  const allModules = ["multiple_providers", "locations", "categories", "products", "addons", "sms", "scheduling"];
+  const allModules = ["multiple_providers", "locations", "categories", "products", "addons", "relationship_matrix", "sms", "scheduling"];
   const filtered = filterNavigationByModules(navigation, allModules);
 
   const catalogSection = filtered.find(s => s.label === "Catalog");
@@ -66,4 +66,47 @@ test("filterNavigationByModules preserves all items when all modules are enabled
   assert.ok(operationsSection);
   const opTitles = operationsSection!.items.map(i => i.title);
   assert.ok(opTitles.includes("Relationships"));
+});
+
+test("relationship_matrix strictly requires multiple_providers to be enabled", () => {
+  // 1. Both enabled -> active
+  assert.equal(
+    isKeyActive("relationship_matrix", new Set(["relationship_matrix", "multiple_providers"])),
+    true
+  );
+  assert.equal(
+    isKeyActive("relationships_matrix", new Set(["relationships_matrix", "providers"])),
+    true
+  );
+
+  // 2. relationship_matrix enabled but multiple_providers disabled -> inactive (killed!)
+  assert.equal(
+    isKeyActive("relationship_matrix", new Set(["relationship_matrix", "locations"])),
+    false
+  );
+  assert.equal(
+    isKeyActive("relationship_matrix", new Set(["relationship_matrix"])),
+    false
+  );
+
+  // 3. multiple_providers enabled but relationship_matrix disabled -> inactive
+  assert.equal(
+    isKeyActive("relationship_matrix", new Set(["multiple_providers"])),
+    false
+  );
+
+  // 4. Navigation filtering: with relationship_matrix enabled without multiple_providers, Relationships is hidden
+  const singleProviderWithMatrix = filterNavigationByModules(navigation, ["relationship_matrix", "locations"]);
+  const ops1 = singleProviderWithMatrix.find(s => s.label === "Operations");
+  assert.ok(ops1);
+  const titles1 = ops1!.items.map(i => i.title);
+  assert.ok(!titles1.includes("Relationships"), "Relationships must be hidden without multiple_providers");
+
+  // 5. Navigation filtering: with both enabled, Relationships and all children are visible
+  const multiProviderWithMatrix = filterNavigationByModules(navigation, ["relationship_matrix", "multiple_providers"]);
+  const ops2 = multiProviderWithMatrix.find(s => s.label === "Operations");
+  assert.ok(ops2);
+  const relItem = ops2!.items.find(i => i.title === "Relationships");
+  assert.ok(relItem, "Relationships must be visible when both modules are enabled");
+  assert.equal(relItem!.children?.length, 3, "All 3 child views must be present");
 });

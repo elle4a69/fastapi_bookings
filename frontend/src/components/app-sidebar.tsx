@@ -34,7 +34,8 @@ import { useSidebar } from "@/components/ui/sidebar-context"
 import { UserMenu } from "@/components/user-menu"
 
 function isCurrentPath(currentPath: string, url: string) {
-  return url === "/admin" ? currentPath === url : currentPath.startsWith(url)
+  if (url === "/admin") return currentPath === url
+  return currentPath === url || currentPath.startsWith(`${url}/`)
 }
 
 function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {

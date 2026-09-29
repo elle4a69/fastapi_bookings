@@ -33,11 +33,13 @@ export interface TenantModulesContextType {
   categoriesEnabled: boolean
   productsEnabled: boolean
   addonsEnabled: boolean
+  relationshipMatrixEnabled: boolean
   hasMultipleProviders: boolean
   hasLocations: boolean
   hasCategories: boolean
   hasProducts: boolean
   hasAddons: boolean
+  hasRelationshipMatrix: boolean
 }
 
 const TenantModulesContext = createContext<TenantModulesContextType | null>(null)
@@ -61,6 +63,7 @@ const DEFAULT_FALLBACK_MODULES = [
   "booking_forms",
   "reviews",
   "calcom_scheduling",
+  "relationship_matrix",
 ]
 
 export function TenantModulesProvider({ children }: { children: React.ReactNode }) {
@@ -102,6 +105,9 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
       if (k === "addons" || k === "packages") {
         return enabledModules.some((m) => m.toLowerCase() === "addons" || m.toLowerCase() === "packages")
       }
+      if (k === "relationship_matrix" || k === "relationships_matrix") {
+        return enabledModules.some((m) => m.toLowerCase() === "relationship_matrix" || m.toLowerCase() === "relationships_matrix")
+      }
       return enabledModules.some((m) => m.toLowerCase() === k)
     },
     [enabledModules]
@@ -112,6 +118,10 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
   const categoriesEnabled = useMemo(() => isModuleEnabled("categories"), [isModuleEnabled])
   const productsEnabled = useMemo(() => isModuleEnabled("products"), [isModuleEnabled])
   const addonsEnabled = useMemo(() => isModuleEnabled("addons"), [isModuleEnabled])
+  const relationshipMatrixEnabled = useMemo(
+    () => isModuleEnabled("relationship_matrix") && multipleProvidersEnabled,
+    [isModuleEnabled, multipleProvidersEnabled]
+  )
 
   const toggleModule = useCallback(
     async (moduleKey: string, enabled: boolean): Promise<{ ok: boolean; message: string }> => {
@@ -163,11 +173,13 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
       categoriesEnabled,
       productsEnabled,
       addonsEnabled,
+      relationshipMatrixEnabled,
       hasMultipleProviders: multipleProvidersEnabled,
       hasLocations: locationsEnabled,
       hasCategories: categoriesEnabled,
       hasProducts: productsEnabled,
       hasAddons: addonsEnabled,
+      hasRelationshipMatrix: relationshipMatrixEnabled,
     }),
     [
       modulesData,
@@ -183,6 +195,7 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
       categoriesEnabled,
       productsEnabled,
       addonsEnabled,
+      relationshipMatrixEnabled,
     ]
   )
 

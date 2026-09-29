@@ -39,7 +39,7 @@ export function AdminLayout() {
             className={
               isOperationalRoute
                 ? "min-h-0 flex-1 flex flex-col p-0 overflow-hidden"
-                : "min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 min-w-0 overflow-x-hidden pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                : "min-h-0 flex-1 overflow-y-auto px-1.5 py-2 sm:p-4 md:p-5 min-w-0 overflow-x-hidden pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             } 
             tabIndex={-1}
           >
