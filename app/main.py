@@ -138,6 +138,7 @@ from .api.routers import (
     travel,
     itinerary,
     conversations,
+    assistant_studio,
 )
 
 
@@ -459,6 +460,7 @@ app.include_router(travel.router, prefix="/api")
 app.include_router(itinerary.router, prefix="/api/admin")
 app.include_router(itinerary.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api/admin")
+app.include_router(assistant_studio.router, prefix="/api/admin/assistant-studio", tags=["Assistant Studio"])
 
 
 

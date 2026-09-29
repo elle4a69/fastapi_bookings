@@ -64,15 +64,16 @@ app/
 ## 3. Setup, Configuration & Dependencies
 
 ### Environment Configuration
-- `SECRET_KEY` / `PUBLIC_API_KEY`: Used as the symmetric encryption key for credential encryption (`Fernet`).
+- `SECRET_KEY` / `ENCRYPTION_KEY`: Used as the symmetric encryption key for credential encryption (`Fernet`). Must be explicitly configured; fails closed (`RuntimeError`) if absent.
 - Standard tenant and database settings configured in `app/core/config.py`.
 
-### Database Tables
+### Database Tables & Migrations
 - `channel_accounts`
 - `conversations`
 - `messages`
+- `message_style_examples`
 
-No destructive migration is needed; tables are discovered by SQLAlchemy `Base.metadata` and can be created via Alembic migration or `Base.metadata.create_all(engine)` in tests.
+Managed via Alembic migration `alembic/versions/a1c2e3g4i5k6_add_channel_neutral_and_style_example_tables.py` (revises `f6a7b8c9d0e1`).
 
 ---
 
@@ -100,6 +101,10 @@ No destructive migration is needed; tables are discovered by SQLAlchemy `Base.me
 - **Retrieve Conversation Detail**: `GET /api/admin/conversations/{id}`
   - Query parameters: `include_legacy` (default true).
   - Response: `ConversationDetailOut` including ordered `messages: List[MessageOut]`.
+- **Create Conversation**: `POST /api/admin/conversations`
+  - Request body: `ConversationCreate` (`provider_id`, `channel_account_id`, `external_conversation_id`, `contact_identifier`, `contact_name`, `status`, `metadata_payload`).
+  - Strict tenant ownership validation: validates `provider_id` and `channel_account_id` belong to caller's `tenant_id`, and that dedicated channel accounts match provider. Fails with HTTP 400 Bad Request if invalid.
+  - Response: `ConversationOut` (HTTP 201 Created).
 - **Send/Record Outbound Message**: `POST /api/admin/conversations/{id}/messages`
   - Request body: `MessageCreate` (`content`, `direction`, `source`, `delivery_status`, `external_message_id`, `tool_calls`, `metadata_payload`).
   - Response: `MessageOut` (HTTP 201 Created).
@@ -120,9 +125,14 @@ Preserves critical cross-system attributes across transports:
 ## 5. Data Safety & Isolation
 
 1. **Multi-Tenant Boundaries**:
-   Every query in `ChannelService`, `ChannelCompatibilityFacade`, and `conversations.py` is strictly partitioned by `tenant_id`. Cross-tenant lookups raise `404 Not Found` or return `None`.
-2. **Credential Privacy**:
-   Channel account credentials (`credentials_encrypted`) are encrypted at rest using AES/Fernet encryption derived from `SECRET_KEY`. Raw decrypted credentials are never exposed via API endpoints or logged in traces.
+   Every query in `ChannelService`, `ChannelCompatibilityFacade`, and `conversations.py` is strictly partitioned by `tenant_id`.
+   - `create_channel_account`: asserts `provider.tenant_id == tenant_id`.
+   - `create_conversation`: asserts `provider.tenant_id == tenant_id` and `account.tenant_id == tenant_id`, and ensures dedicated accounts match provider. Cross-tenant injections raise `ValueError` (API returns HTTP 400 Bad Request) and persist zero rows.
+2. **Hardened Credential Privacy & Fail-Closed**:
+   Channel account credentials (`credentials_encrypted`) are encrypted at rest using AES/Fernet encryption derived from `SECRET_KEY` or `ENCRYPTION_KEY`.
+   - Never falls back to plaintext or hardcoded dummy secrets.
+   - If no key is set or encryption fails, it raises `RuntimeError("Encryption key is not configured; failing closed")` or `RuntimeError("Encryption failed; failing closed")`.
+   - Raw decrypted credentials are never exposed via API endpoints or logged in traces.
 3. **Legacy Preservation**:
    Existing `SmsConversation` and `SmsMessage` rows remain unmodified in their native tables. The facade translates them on read, eliminating any data loss or breaking changes to existing SMS features.
 
@@ -139,9 +149,9 @@ Preserves critical cross-system attributes across transports:
 
 ## 7. Verification & Testing Commands
 
-To run the unit and integration tests verifying channel-neutral models, schemas, and endpoints:
+To run the full channel-neutral test suite (foundation, neutral, and auditor edge cases):
 ```bash
-.\.venv\Scripts\python -m pytest tests/test_channel_neutral.py -v
+.\.venv\Scripts\python -m pytest -q tests/test_channel_neutral_foundation.py tests/test_channel_neutral.py tests/test_channel_neutral_auditor_edge_cases.py
 ```
 
 To run the baseline SMS test suite and ensure no regressions occurred:

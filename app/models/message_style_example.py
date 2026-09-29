@@ -81,6 +81,24 @@ class MessageStyleExample(Base):
     tenant = relationship("Tenant", foreign_keys=[tenant_id])
     provider = relationship("Provider", foreign_keys=[provider_id])
 
+    @property
+    def user_query(self) -> str:
+        """Alias for client_message to align with prompt policy assembly."""
+        return self.client_message
+
+    @user_query.setter
+    def user_query(self, value: str) -> None:
+        self.client_message = value
+
+    @property
+    def ideal_response(self) -> str:
+        """Alias for assistant_reply to align with prompt policy assembly."""
+        return self.assistant_reply
+
+    @ideal_response.setter
+    def ideal_response(self, value: str) -> None:
+        self.assistant_reply = value
+
     def __repr__(self) -> str:
         return (
             f"<MessageStyleExample id={self.id} tenant_id={self.tenant_id} "

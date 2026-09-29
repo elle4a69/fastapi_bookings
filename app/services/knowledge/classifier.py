@@ -10,7 +10,7 @@ from __future__ import annotations
 from enum import Enum
 import logging
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -56,6 +56,10 @@ _PROMPT_INJECTION_PATTERNS = [
     r"\bact\s+as\s+(?:a|an)\b",
     r"\bdisregard\s+(?:system|all)\s+prompts?\b",
     r"(?:```\s*system|<\|im_start\|>|<\|im_end\|>|---BEGIN PROMPT---|---END PROMPT---|\[SYSTEM\]|system:)",
+    # Raw template / SSTI / execution injection syntax
+    r"\{\{.*?\}\}",
+    r"\$\{.*?\}",
+    r"<%#?.*?%>",
 ]
 _PROMPT_INJECTION_RE = [re.compile(p, re.IGNORECASE) for p in _PROMPT_INJECTION_PATTERNS]
 
@@ -96,9 +100,9 @@ _ADDRESS_PATTERNS = [
 ]
 _ADDRESS_RE = [re.compile(p, re.IGNORECASE) for p in _ADDRESS_PATTERNS]
 
-# Customer name intros: "My name is John Doe", "I am Jane Doe"
+# Customer name intros: "My name is John Doe", "my name is John Doe", "this is Jane Doe"
 _NAME_INTRO_RE = re.compile(
-    r"\b(?:my\s+name\s+is|i\s+am|this\s+is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b"
+    r"\b(?i:my\s+name\s+is|this\s+is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b"
 )
 
 
@@ -334,6 +338,85 @@ def classify_proposed_knowledge(text: str) -> ClassificationResult:
     )
 
 
+# -------------------------------------------------------------------------
+# Placeholder Variable Allowlist Rules
+# -------------------------------------------------------------------------
+ALLOWED_STYLE_PLACEHOLDERS: Set[str] = {
+    "business_name",
+    "provider_name",
+    "location_name",
+    "location_address",
+    "booking_link",
+    "service_name",
+}
+
+LEGACY_SEED_PLACEHOLDERS: Set[str] = {
+    "address",
+    "building_number",
+    "date",
+    "hotel_name",
+    "level_number",
+    "name",
+    "phone",
+    "provider_name",
+    "room_number",
+    "suburb",
+    "time",
+    "website",
+}
+
+
+def validate_style_placeholders(
+    text: str,
+    is_approved_source: bool = False,
+) -> Tuple[bool, Optional[str]]:
+    """Validate placeholder variables in message style text against allowlist.
+
+    Allowed standard variables:
+      {business_name}, {provider_name}, {location_name}, {location_address}, {booking_link}, {service_name}
+    When is_approved_source is True (packaged seed asset), legacy seed placeholders are also accepted.
+    Any raw execution variables ({{...}}, ${...}, <%...%>) or unapproved variables are strictly rejected.
+    """
+    if not text:
+        return True, None
+
+    # Check for raw execution syntax or Jinja/ES6 template tags
+    raw_syntax_patterns = [
+        r"\{\{.*?\}\}",  # Jinja {{ ... }}
+        r"\{%.*?%\}",    # Jinja {% ... %}
+        r"\$\{.*?\}",    # JS/Bash ${ ... }
+        r"<%#?.*?%>",    # ERB/ASP <% ... %>
+    ]
+    for pattern in raw_syntax_patterns:
+        match = re.search(pattern, text)
+        if match:
+            return False, f"Raw execution / template syntax rejected: '{match.group(0)}'"
+
+    # Extract all {variable} occurrences
+    matches = re.findall(r"\{([^{}]+)\}", text)
+    allowed = (
+        ALLOWED_STYLE_PLACEHOLDERS | LEGACY_SEED_PLACEHOLDERS
+        if is_approved_source
+        else ALLOWED_STYLE_PLACEHOLDERS
+    )
+
+    for m in matches:
+        var_name = m.strip()
+        if var_name not in allowed:
+            return False, (
+                f"Unapproved placeholder variable: '{{{var_name}}}'. "
+                f"Approved variables: {sorted(list(ALLOWED_STYLE_PLACEHOLDERS))}"
+            )
+
+    # Check for unclosed braces or invalid syntax
+    if "{" in text or "}" in text:
+        cleaned = re.sub(r"\{[^{}]+\}", "", text)
+        if "{" in cleaned or "}" in cleaned:
+            return False, "Malformed or unclosed placeholder braces detected."
+
+    return True, None
+
+
 def classify_style_example(
     client_message: str,
     assistant_reply: str,
@@ -375,7 +458,7 @@ def classify_style_example(
             details={"pii_type": pii_type, "snippet": snippet},
         )
 
-    # 3. Dynamic Payment Links Check (live stripe or pay URLs never permitted)
+    # 3. Dynamic Payment Links & Operational Data Check
     payment_link_match = re.search(
         r"https?://(?:buy\.|checkout\.)?stripe\.com/\S+|https?://[^\s/]+/pay/\S+",
         combined,
@@ -389,7 +472,42 @@ def classify_style_example(
             is_safe=False,
         )
 
-    # 4. Invariant: Factual proposals must NOT enter MessageStyleExample
+    dyn_match = detect_dynamic_operational(combined)
+    if dyn_match:
+        return ClassificationResult(
+            category=ClassificationCategory.DYNAMIC_OPERATIONAL,
+            decision=SafetyDecision.REJECT,
+            reason=f"Dynamic operational data detected in style example: '{dyn_match}'",
+            is_safe=False,
+            details={"match": dyn_match},
+        )
+
+    # 4. Placeholder Allowlist & Raw Execution Variable Validation
+    is_valid_client, err_client = validate_style_placeholders(
+        client_message, is_approved_source=is_approved_source
+    )
+    if not is_valid_client:
+        return ClassificationResult(
+            category=ClassificationCategory.PROMPT_INJECTION,
+            decision=SafetyDecision.REJECT,
+            reason=f"Client message failed placeholder validation: {err_client}",
+            is_safe=False,
+            details={"error": err_client},
+        )
+
+    is_valid_reply, err_reply = validate_style_placeholders(
+        assistant_reply, is_approved_source=is_approved_source
+    )
+    if not is_valid_reply:
+        return ClassificationResult(
+            category=ClassificationCategory.PROMPT_INJECTION,
+            decision=SafetyDecision.REJECT,
+            reason=f"Assistant reply failed placeholder validation: {err_reply}",
+            is_safe=False,
+            details={"error": err_reply},
+        )
+
+    # 5. Invariant: Factual proposals must NOT enter MessageStyleExample
     # If the candidate pair is just a static business truth (e.g. identical or non-dialogue static fact)
     if not is_approved_source:
         norm_client = client_message.strip().lower()

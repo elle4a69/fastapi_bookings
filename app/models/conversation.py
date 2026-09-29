@@ -124,15 +124,17 @@ class ChannelAccount(Base):
         """Decrypts and returns credentials from the database JSON field."""
         if not self.credentials_encrypted:
             return {}
+        import os
+        secret = os.getenv("SECRET_KEY") or os.getenv("ENCRYPTION_KEY")
+        if not secret:
+            raise RuntimeError("Encryption key is not configured; failing closed")
         if isinstance(self.credentials_encrypted, dict) and "encrypted_data" in self.credentials_encrypted:
             try:
-                import os
                 import base64
                 import hashlib
                 import json
                 from cryptography.fernet import Fernet
 
-                secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
                 key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
                 fernet_key = base64.urlsafe_b64encode(key_bytes)
                 f = Fernet(fernet_key)
@@ -140,8 +142,8 @@ class ChannelAccount(Base):
                 encrypted_str = self.credentials_encrypted["encrypted_data"]
                 decrypted_bytes = f.decrypt(encrypted_str.encode("utf-8"))
                 return json.loads(decrypted_bytes.decode("utf-8"))
-            except Exception:
-                return {}
+            except Exception as e:
+                raise RuntimeError("Encryption failed; failing closed") from e
         return self.credentials_encrypted if isinstance(self.credentials_encrypted, dict) else {}
 
     @credentials.setter
@@ -150,14 +152,16 @@ class ChannelAccount(Base):
         if not value:
             self.credentials_encrypted = {}
             return
+        import os
+        secret = os.getenv("SECRET_KEY") or os.getenv("ENCRYPTION_KEY")
+        if not secret:
+            raise RuntimeError("Encryption key is not configured; failing closed")
         try:
-            import os
             import base64
             import hashlib
             import json
             from cryptography.fernet import Fernet
 
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
             key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
             fernet_key = base64.urlsafe_b64encode(key_bytes)
             f = Fernet(fernet_key)
@@ -165,8 +169,8 @@ class ChannelAccount(Base):
             serialized = json.dumps(value)
             encrypted_str = f.encrypt(serialized.encode("utf-8")).decode("utf-8")
             self.credentials_encrypted = {"encrypted_data": encrypted_str}
-        except Exception:
-            self.credentials_encrypted = value
+        except Exception as e:
+            raise RuntimeError("Encryption failed; failing closed") from e
 
     def __repr__(self) -> str:
         return f"<ChannelAccount id={self.id} channel_type={self.channel_type} account_identifier={self.account_identifier}>"

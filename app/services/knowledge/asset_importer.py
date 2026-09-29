@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -29,7 +30,9 @@ from app.services.knowledge.classifier import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_APPROVED_EXAMPLES_PATH = r"F:\Projects\assistant-ui\backend\data\approved_intent_examples.jsonl"
+DEFAULT_APPROVED_EXAMPLES_PATH = str(
+    Path(__file__).parent / "data" / "approved_intent_examples.jsonl"
+)
 EXPECTED_SHA256 = "F0C80D93EAB23D7772B7454C81F38027D23D1C6D6E88D4F1EF1314E5B54303A6"
 EXPECTED_LINE_COUNT = 180
 

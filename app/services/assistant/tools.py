@@ -436,16 +436,61 @@ class AssistantToolEngine:
 
     def execute_tool(
         self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        context: RuntimeContext,
+        tool_name: Any,
+        arguments: Any = None,
+        context: Optional[RuntimeContext] = None,
         db: Optional[Session] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Execute a tool with server-enforced tenant and provider isolation.
 
-        Strips any attempt by the LLM or client to supply 'tenant_id' or 'provider_id'.
-        Authoritative tenant_id and provider_id are injected directly from context.
+        Supports both instance and classmethod calls, and both (tool_name, args, context, db)
+        and (db, tool_name, args, context) argument patterns.
         """
+        if not isinstance(self, AssistantToolEngine):
+            # Called as AssistantToolEngine.execute_tool(...) without instantiation
+            engine = AssistantToolEngine()
+            # If first arg is a db session: (db, tool_name, args, context)
+            if hasattr(self, "query") or hasattr(self, "execute"):
+                return engine._execute_tool_internal(
+                    tool_name=str(tool_name),
+                    arguments=arguments if isinstance(arguments, dict) else {},
+                    context=context,
+                    db=self,
+                )
+            else:
+                return engine._execute_tool_internal(
+                    tool_name=str(self),
+                    arguments=tool_name if isinstance(tool_name, dict) else {},
+                    context=arguments,
+                    db=context if hasattr(context, "query") else db,
+                )
+
+        # Instance call: check if first arg was db
+        if hasattr(tool_name, "query") or hasattr(tool_name, "execute"):
+            return self._execute_tool_internal(
+                tool_name=str(arguments),
+                arguments=context if isinstance(context, dict) else {},
+                context=db,
+                db=tool_name,
+            )
+
+        return self._execute_tool_internal(
+            tool_name=str(tool_name),
+            arguments=arguments if isinstance(arguments, dict) else {},
+            context=context,
+            db=db,
+        )
+
+    def _execute_tool_internal(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        context: Optional[RuntimeContext],
+        db: Optional[Session] = None,
+    ) -> Dict[str, Any]:
+        if context is None:
+            return {"error": "RuntimeContext is required for tool execution.", "success": False}
         # 1. Allowlist verification
         if tool_name not in ALLOWED_TOOL_NAMES or tool_name not in self._handlers:
             err = f"Tool '{tool_name}' is not in the approved tool allowlist."

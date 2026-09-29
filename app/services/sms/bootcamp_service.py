@@ -7,17 +7,27 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from ...core.config import settings
+from ...models.conversation import ChannelType
+from ..assistant import (
+    AssistantToolEngine,
+    ClientInfo,
+    LocationInfo,
+    PromptPolicyAssembler,
+    RuntimeContext,
+    get_assistant_tool_definitions,
+)
 from .bootcamp import (
     BOOTCAMP_HANDOFF_RE,
     BOOTCAMP_REFUSAL_RE,
     clarification_for_handoff,
     render_style_profile,
 )
-from .prompt_builder import UnifiedPromptBuilder
+from .prompt_builder import UnifiedPromptBuilder, format_structured_operational_data
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +260,257 @@ def _assemble_bootcamp_unified_prompt(
     return system_prompt
 
 
+def _build_bootcamp_runtime_and_prompt(
+    history: List[Dict[str, Any]],
+    style_profile: Dict[str, int],
+    settings_data: Optional[Dict[str, Any]] = None,
+    scenario: Optional[Dict[str, Any]] = None,
+    tenant_id: Optional[int] = None,
+    provider_id: Optional[int] = None,
+    db: Optional[Session] = None,
+    active_retrieval_result: Optional[Any] = None,
+    **kwargs: Any,
+) -> Tuple[RuntimeContext, Any, str, str, Optional[Session], Optional[int], Optional[int]]:
+    resolved_tenant_id = tenant_id or (settings_data or {}).get("tenant_id")
+    resolved_provider_id = provider_id or (settings_data or {}).get("provider_id")
+    resolved_db = db or (settings_data or {}).get("db")
+
+    if resolved_db and resolved_tenant_id:
+        from ...models.sms_bootcamp import SmsBootcampSettings
+        query = resolved_db.query(SmsBootcampSettings).filter(SmsBootcampSettings.tenant_id == resolved_tenant_id)
+        if resolved_provider_id is not None:
+            query = query.filter(SmsBootcampSettings.provider_id == resolved_provider_id)
+        else:
+            query = query.filter(SmsBootcampSettings.provider_id.is_(None))
+        settings_obj = query.first()
+        if not settings_obj and resolved_provider_id is not None:
+            settings_obj = (
+                resolved_db.query(SmsBootcampSettings)
+                .filter(SmsBootcampSettings.tenant_id == resolved_tenant_id, SmsBootcampSettings.provider_id.is_(None))
+                .first()
+            )
+        if settings_obj:
+            db_data = {
+                "agent_name": settings_obj.agent_name,
+                "model": getattr(settings_obj, "model", "gpt-4o-mini") or "gpt-4o-mini",
+                "role_description": getattr(settings_obj, "role_description", None),
+                "custom_training_notes": settings_obj.training_notes or settings_obj.custom_training_notes,
+                "system_prompt_template": settings_obj.system_prompt_template,
+                "learned_facts": getattr(settings_obj, "learned_facts", None),
+            }
+            if not settings_data:
+                settings_data = db_data
+            else:
+                merged = dict(db_data)
+                for k, v in settings_data.items():
+                    if v is not None:
+                        merged[k] = v
+                settings_data = merged
+
+    agent_name = (settings_data or {}).get("agent_name", "Tori")
+    role_description = (settings_data or {}).get("role_description")
+    custom_notes = (settings_data or {}).get("training_notes") or (settings_data or {}).get("custom_training_notes")
+    system_template = (settings_data or {}).get("system_prompt_template")
+    configured_model = (settings_data or {}).get("model") or os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini")
+    learned_facts = (settings_data or {}).get("learned_facts") or ""
+
+    services = []
+    provider_obj = None
+    business_name = "Booking Services"
+    location_obj = None
+
+    if resolved_db and resolved_tenant_id:
+        from ...models.service import Service
+        from ...models.provider import Provider
+        from ...models.tenant import Tenant
+        from ...models.location import Location
+
+        t_obj = resolved_db.query(Tenant).filter(Tenant.id == resolved_tenant_id).first()
+        if t_obj and t_obj.name:
+            business_name = t_obj.name
+
+        if resolved_provider_id:
+            provider_obj = (
+                resolved_db.query(Provider)
+                .filter(Provider.id == resolved_provider_id, Provider.tenant_id == resolved_tenant_id)
+                .first()
+            )
+            from ...models.service_provider import ServiceProvider
+            services = (
+                resolved_db.query(Service)
+                .join(ServiceProvider, ServiceProvider.service_id == Service.id)
+                .filter(
+                    Service.tenant_id == resolved_tenant_id,
+                    Service.active.is_(True),
+                    ServiceProvider.provider_id == resolved_provider_id,
+                    ServiceProvider.tenant_id == resolved_tenant_id,
+                )
+                .all()
+            )
+        else:
+            services = (
+                resolved_db.query(Service)
+                .filter(Service.tenant_id == resolved_tenant_id, Service.active.is_(True))
+                .all()
+            )
+
+        location_obj = (
+            resolved_db.query(Location)
+            .filter(Location.tenant_id == resolved_tenant_id, Location.active.is_(True))
+            .first()
+        )
+
+    provider_name = provider_obj.name if provider_obj else agent_name
+    traits_list = [f"{k.capitalize()}: {v}/5" for k, v in (style_profile or {}).items()]
+    traits_str = ", ".join(traits_list) if traits_list else "Professional: 4/5, Warm: 4/5"
+
+    def _safe_render_template(tpl: str) -> str:
+        replacements = {
+            "agent_name": agent_name,
+            "traits": traits_str,
+            "business_name": business_name,
+            "provider_name": provider_name,
+            "role_description": role_description or "",
+        }
+        res = tpl
+        for k, v in replacements.items():
+            res = res.replace(f"{{{k}}}", str(v))
+        return res
+
+    tenant_policy = None
+    if system_template:
+        tenant_policy = _safe_render_template(system_template)
+    elif resolved_db and resolved_tenant_id:
+        from ...models.sms_knowledge import SmsPromptProfile
+        if resolved_provider_id:
+            prov_profile = (
+                resolved_db.query(SmsPromptProfile)
+                .filter(
+                    SmsPromptProfile.tenant_id == resolved_tenant_id,
+                    SmsPromptProfile.provider_id == resolved_provider_id,
+                    SmsPromptProfile.is_active.is_(True),
+                )
+                .first()
+            )
+            if prov_profile and prov_profile.system_prompt:
+                tenant_policy = _safe_render_template(prov_profile.system_prompt)
+
+        if not tenant_policy:
+            global_profile = (
+                resolved_db.query(SmsPromptProfile)
+                .filter(
+                    SmsPromptProfile.tenant_id == resolved_tenant_id,
+                    SmsPromptProfile.provider_id.is_(None),
+                    SmsPromptProfile.sms_account_id.is_(None),
+                    SmsPromptProfile.is_active.is_(True),
+                )
+                .first()
+            )
+            if global_profile and global_profile.system_prompt:
+                tenant_policy = _safe_render_template(global_profile.system_prompt)
+
+    if not tenant_policy:
+        tenant_policy = f"You are {agent_name}, a helpful and professional booking assistant for {business_name}."
+
+    persona_parts = [f"Agent Persona: {agent_name}"]
+    if provider_obj and provider_obj.name:
+        persona_parts.append(f"Provider: {provider_obj.name}")
+    if role_description and str(role_description).strip():
+        persona_parts.append(f"Role and Responsibilities:\n{str(role_description).strip()}")
+    if services or provider_obj:
+        structured_info = format_structured_operational_data(
+            provider_obj,
+            services,
+            [location_obj] if location_obj else None,
+        )
+        if structured_info:
+            persona_parts.append(structured_info)
+    provider_overlay_text = "\n\n".join(persona_parts)
+
+    client_info = None
+    if scenario and isinstance(scenario, dict) and "persona" in scenario:
+        p = scenario["persona"]
+        if isinstance(p, dict):
+            client_info = ClientInfo(
+                name=p.get("name"),
+                notes=p.get("profile"),
+            )
+    elif kwargs.get("client_info"):
+        client_info = kwargs["client_info"]
+
+    location_info = None
+    if location_obj:
+        location_info = LocationInfo(
+            id=location_obj.id,
+            name=location_obj.name,
+            address=getattr(location_obj, "address", None),
+            timezone=getattr(location_obj, "timezone", "UTC") or "UTC",
+        )
+    elif provider_obj and provider_obj.in_call_address:
+        location_info = LocationInfo(
+            name=f"{provider_obj.name}'s Studio",
+            address=provider_obj.in_call_address,
+            timezone="UTC",
+        )
+
+    runtime_context = RuntimeContext(
+        tenant_id=resolved_tenant_id or 1,
+        provider_id=resolved_provider_id,
+        channel_type=ChannelType.SIMULATED.value,
+        client=client_info,
+        location=location_info,
+    )
+
+    for item in history[-12:]:
+        item_role = item.get("role")
+        if item_role == "persona":
+            r_role = "user"
+            src = "simulated"
+        elif item_role == "tori":
+            r_role = "assistant"
+            src = "assistant"
+        elif item_role in ("user", "assistant", "system", "tool"):
+            r_role = item_role
+            src = item.get("source") or ("client" if item_role == "user" else "assistant")
+        else:
+            r_role = "user"
+            src = "simulated"
+        runtime_context.add_turn(
+            role=r_role,
+            content=item.get("text", "") or item.get("content", ""),
+            source=src,
+            tool_calls=item.get("tool_calls"),
+            tool_call_id=item.get("tool_call_id"),
+        )
+
+    curated_memories: List[Any] = []
+    if active_retrieval_result and getattr(active_retrieval_result, "facts", None):
+        curated_memories.extend(active_retrieval_result.facts)
+
+    assembler = PromptPolicyAssembler()
+    assembled = assembler.assemble(
+        context=runtime_context,
+        tenant_policy=tenant_policy,
+        provider_overlay=provider_overlay_text,
+        style_profile=style_profile,
+        curated_memories=curated_memories,
+        db=resolved_db,
+        training_notes=custom_notes,
+        learned_facts=learned_facts,
+        style_prior=style_profile,
+    )
+
+    return (
+        runtime_context,
+        assembled,
+        configured_model,
+        agent_name,
+        resolved_db,
+        resolved_tenant_id,
+        resolved_provider_id,
+    )
+
+
 def generate_bootcamp_tori_reply(
     history: List[Dict[str, Any]],
     style_profile: Dict[str, int],
@@ -318,64 +579,134 @@ def generate_bootcamp_tori_reply(
         openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
         client = OpenAI(api_key=openai_key)
 
-        if not settings_data and resolved_db and resolved_tenant_id:
-            from ...models.sms_bootcamp import SmsBootcampSettings
-            query = resolved_db.query(SmsBootcampSettings).filter(SmsBootcampSettings.tenant_id == resolved_tenant_id)
-            if resolved_provider_id is not None:
-                query = query.filter(SmsBootcampSettings.provider_id == resolved_provider_id)
-            else:
-                query = query.filter(SmsBootcampSettings.provider_id.is_(None))
-            settings_obj = query.first()
-            if not settings_obj and resolved_provider_id is not None:
-                settings_obj = (
-                    resolved_db.query(SmsBootcampSettings)
-                    .filter(SmsBootcampSettings.tenant_id == resolved_tenant_id, SmsBootcampSettings.provider_id.is_(None))
-                    .first()
-                )
-            if settings_obj:
-                settings_data = {
-                    "agent_name": settings_obj.agent_name,
-                    "model": getattr(settings_obj, "model", "gpt-4o-mini") or "gpt-4o-mini",
-                    "role_description": getattr(settings_obj, "role_description", None),
-                    "custom_training_notes": settings_obj.training_notes or settings_obj.custom_training_notes,
-                    "system_prompt_template": settings_obj.system_prompt_template,
-                    "learned_facts": getattr(settings_obj, "learned_facts", None),
-                }
-
-        agent_name = (settings_data or {}).get("agent_name", "Tori")
-        role_description = (settings_data or {}).get("role_description")
-        custom_notes = (settings_data or {}).get("training_notes") or (settings_data or {}).get("custom_training_notes")
-        system_template = (settings_data or {}).get("system_prompt_template")
-        configured_model = (settings_data or {}).get("model") or os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini")
-        learned_facts = (settings_data or {}).get("learned_facts") or ""
-
-        instructions = _assemble_bootcamp_unified_prompt(
-            agent_name=agent_name,
-            role_description=role_description,
-            custom_notes=custom_notes,
-            system_template=system_template,
-            style_profile=style_profile,
-            resolved_tenant_id=resolved_tenant_id,
-            resolved_provider_id=resolved_provider_id,
-            resolved_db=resolved_db,
-            latest_customer_text=latest,
+        (
+            runtime_context,
+            assembled,
+            configured_model,
+            agent_name,
+            resolved_db,
+            resolved_tenant_id,
+            resolved_provider_id,
+        ) = _build_bootcamp_runtime_and_prompt(
             history=history,
+            style_profile=style_profile,
+            settings_data=settings_data,
+            scenario=scenario,
+            tenant_id=resolved_tenant_id,
+            provider_id=resolved_provider_id,
+            db=resolved_db,
             active_retrieval_result=active_retrieval_result,
-            learned_facts=learned_facts,
+            **kwargs,
         )
 
-        messages = [{"role": "system", "content": instructions}]
-        for item in history[-12:]:
-            role = "user" if item.get("role") == "persona" else "assistant"
-            messages.append({"role": role, "content": item.get("text", "")})
+        messages = list(assembled.messages)
+        tools = get_assistant_tool_definitions()
 
         response = client.chat.completions.create(
             model=configured_model,
             messages=messages,
+            tools=tools,
+            tool_choice="auto",
             temperature=0.7,
             max_tokens=250,
         )
+
+        tool_engine = AssistantToolEngine()
+        executed_tools_meta: List[Dict[str, Any]] = []
+        max_tool_turns = 3
+        tool_turns = 0
+
+        while tool_turns < max_tool_turns:
+            choice = response.choices[0]
+            tool_calls = getattr(choice.message, "tool_calls", None)
+            if not (tool_calls and isinstance(tool_calls, (list, tuple))):
+                break
+
+            assistant_tool_msg: Dict[str, Any] = {
+                "role": "assistant",
+                "content": choice.message.content or "",
+                "tool_calls": [
+                    {
+                        "id": getattr(tc, "id", f"call_{i}"),
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments if isinstance(tc.function.arguments, str) else json.dumps(tc.function.arguments),
+                        },
+                    }
+                    for i, tc in enumerate(tool_calls)
+                ],
+            }
+            messages.append(assistant_tool_msg)
+            runtime_context.add_turn(
+                role="assistant",
+                content=choice.message.content or "",
+                source="assistant",
+                tool_calls=assistant_tool_msg["tool_calls"],
+            )
+
+            for tc in tool_calls:
+                func_name = tc.function.name
+                raw_args = tc.function.arguments
+                if isinstance(raw_args, str):
+                    try:
+                        parsed_args = json.loads(raw_args)
+                    except Exception:
+                        parsed_args = {}
+                elif isinstance(raw_args, dict):
+                    parsed_args = dict(raw_args)
+                else:
+                    parsed_args = {}
+
+                tool_result = tool_engine.execute_tool(
+                    tool_name=func_name,
+                    arguments=parsed_args,
+                    context=runtime_context,
+                    db=resolved_db,
+                )
+
+                call_id = getattr(tc, "id", f"call_{tool_turns}_{func_name}")
+                res_json = json.dumps(tool_result)
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": res_json,
+                })
+                runtime_context.add_turn(
+                    role="tool",
+                    content=res_json,
+                    source="assistant",
+                    tool_call_id=call_id,
+                )
+
+                executed_tools_meta.append({
+                    "tool_name": func_name,
+                    "arguments": parsed_args,
+                    "result": tool_result,
+                    "success": tool_result.get("success", True) if isinstance(tool_result, dict) else True,
+                })
+
+            tool_turns += 1
+
+            response = client.chat.completions.create(
+                model=configured_model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.7,
+                max_tokens=250,
+            )
+
         reply = (response.choices[0].message.content or "").strip()
+
+        if "metadata" in kwargs and isinstance(kwargs["metadata"], dict):
+            kwargs["metadata"]["executed_tools"] = executed_tools_meta
+        if "telemetry" in kwargs and isinstance(kwargs["telemetry"], dict):
+            kwargs["telemetry"]["executed_tools"] = executed_tools_meta
+        if "execution_meta" in kwargs and isinstance(kwargs["execution_meta"], dict):
+            kwargs["execution_meta"]["executed_tools"] = executed_tools_meta
+            kwargs["execution_meta"]["runtime_context"] = runtime_context
     except Exception as exc:
         logger.warning("OpenAI Tori generation error in Bootcamp: %s", exc)
         return "", f"AI service error: {exc}"
@@ -419,14 +750,10 @@ def generate_bootcamp_information_resolution(
         openai_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
         client = OpenAI(api_key=openai_key)
 
-        agent_name = (settings_data or {}).get("agent_name", "Tori")
-        role_description = (settings_data or {}).get("role_description")
-        custom_notes = (settings_data or {}).get("training_notes") or (settings_data or {}).get("custom_training_notes")
-        system_template = (settings_data or {}).get("system_prompt_template")
-        configured_model = (settings_data or {}).get("model") or os.getenv("BOOTCAMP_TORI_MODEL", "gpt-4o-mini")
         resolved_tenant_id = (settings_data or {}).get("tenant_id")
         resolved_provider_id = (settings_data or {}).get("provider_id")
         resolved_db = (settings_data or {}).get("db")
+
         from app.services.knowledge.gateway import knowledge_gateway
         from app.services.knowledge.types import RetrievalQuery
 
@@ -444,22 +771,26 @@ def generate_bootcamp_information_resolution(
             except Exception as exc:
                 logger.warning("Knowledge gateway retrieval in bootcamp info resolution failed: %s", exc)
 
-        learned_facts = (settings_data or {}).get("learned_facts") or ""
-
-        instructions = _assemble_bootcamp_unified_prompt(
-            agent_name=agent_name,
-            role_description=role_description,
-            custom_notes=custom_notes,
-            system_template=system_template,
-            style_profile=style_profile,
-            resolved_tenant_id=resolved_tenant_id,
-            resolved_provider_id=resolved_provider_id,
-            resolved_db=resolved_db,
-            latest_customer_text=latest,
+        (
+            runtime_context,
+            assembled,
+            configured_model,
+            agent_name,
+            resolved_db,
+            resolved_tenant_id,
+            resolved_provider_id,
+        ) = _build_bootcamp_runtime_and_prompt(
             history=history,
+            style_profile=style_profile,
+            settings_data=settings_data,
+            scenario=None,
+            tenant_id=resolved_tenant_id,
+            provider_id=resolved_provider_id,
+            db=resolved_db,
             active_retrieval_result=active_retrieval_result,
-            learned_facts=learned_facts,
         )
+
+        instructions = assembled.system_prompt
         instructions += (
             "\n\nThis is a Boot Camp information-request retry. The business owner supplied "
             "the missing facts below. Treat them as authoritative business information. Reply "

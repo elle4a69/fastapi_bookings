@@ -413,9 +413,10 @@ python -m pytest tests/test_production_rollout_stages.py -v
 ## 11. Curator Safety, Example Store & Approved Dataset Importer (Workstream 3)
 
 ### 11.1 Architectural Separation: Factual vs Procedural Knowledge
-To prevent graph pollution and instruction cross-talk, FastAPI Bookings strictly enforces a architectural partition between business facts and conversational style:
+To prevent graph pollution and instruction cross-talk, FastAPI Bookings strictly enforces an architectural partition between business facts and conversational style:
 - **`CuratedMemory` (`curated_memories` table)**: Authoritative, reviewed static business knowledge (e.g., parking facilities, clinic access, cancellation policies, amenities). Dynamic pricing, real-time availability, and conversational dialog flows are strictly prohibited.
 - **`MessageStyleExample` (`message_style_examples` table)**: Dedicated procedural store for approved conversational turns and tone exemplars. Stores sanitized customer/assistant dialog pairs to condition LLM phrasing and tone without polluting factual epistemic graphs.
+- **Epistemic Invariant Guarantee**: Factual knowledge MUST NEVER be written to `MessageStyleExample`, and style examples MUST NEVER be written to `CuratedMemory`. Tested and verified across all curation and import paths.
 
 ### 11.2 Fail-Closed Safety Classifier (`classifier.py`)
 Any candidate content proposed for durable storage is evaluated against deterministic safety classifiers:
@@ -425,14 +426,31 @@ Any candidate content proposed for durable storage is evaluated against determin
 | `PII` | Unscrubbed mobile numbers (`04xx`), landlines, emails, street addresses, credit cards, full customer names | `REJECT` / `QUARANTINE` | Blocked from all durable stores |
 | `PROMPT_INJECTION` | System override instructions, jailbreak attempts, role manipulation, delimiter escapes (`[SYSTEM]`, `<\|im_start\|>`) | `REJECT` | Immediate rejection |
 | `FACTUAL_PROPOSAL` | Declarative, non-conversational static business truths | `ACCEPT` | `CuratedMemory` ONLY |
-| `PROCEDURAL_EXAMPLE` | Conversational dialogue turns, sanitized placeholders (`{name}`, `{time}`, `{date}`, `{suburb}`) | `ACCEPT` | `MessageStyleExample` ONLY |
+| `PROCEDURAL_EXAMPLE` | Conversational dialogue turns, sanitized tone exemplars | `ACCEPT` | `MessageStyleExample` ONLY |
 
 **Fail-Closed Policy**: If input text is empty, whitespace-only, corrupted, or exhibits ambiguous classifications, the classifier defaults strictly to `SafetyDecision.REJECT`.
 
-### 11.3 Safe Asset Importer (`asset_importer.py`)
-The asset importer provides deterministic, verified batch ingestion of approved intent examples from Assistant UI into the platform:
-- **Source Target**: `F:\Projects\assistant-ui\backend\data\approved_intent_examples.jsonl`
-- **Expected Line Count**: 180 lines.
+### 11.3 Typed Variables & Placeholder Allowlist Validation
+To prevent prompt injection, server-side template injection (SSTI), or variable hallucination, all procedural style examples must conform to a strict placeholder allowlist:
+- **Approved Standard Placeholders**:
+  - `{business_name}`: Resolved business or clinic name.
+  - `{provider_name}`: Active provider's display name.
+  - `{location_name}`: Location / clinic branch title.
+  - `{location_address}`: Physical location address.
+  - `{booking_link}`: Canonical tenant booking widget URL.
+  - `{service_name}`: Requested or confirmed service title.
+- **Legacy Seed Placeholders**: Permitted exclusively when `is_approved_source=True` for the cryptographically verified seed dataset (`{address}`, `{building_number}`, `{date}`, `{hotel_name}`, `{level_number}`, `{name}`, `{phone}`, `{provider_name}`, `{room_number}`, `{suburb}`, `{time}`, `{website}`).
+- **Strict Prohibition of Raw Execution Syntax**: Any Jinja tags (`{{...}}`, `{%...%}`), shell variables (`${...}`), server tags (`<%...%>`), evaluation expressions (`{eval(...)}`), or unapproved custom variables are rejected immediately with `SafetyDecision.REJECT` and blocked by Pydantic schema validation.
+
+### 11.4 ORM & Schema Field Alignment with Prompt Policy
+- **Primary Schema / Column Contract**: `client_message` and `assistant_reply`.
+- **Prompt Policy Assembly Compatibility**: `MessageStyleExample` ORM and Pydantic schemas expose bidirectional `@property` aliases for `user_query` (maps to `client_message`) and `ideal_response` (maps to `assistant_reply`).
+- **Prompt Policy Assembly**: In `PromptPolicyAssembler` (Tier 8), style examples seamlessly project into few-shot guidance prompts regardless of attribute naming.
+
+### 11.5 Packaged Safe Asset Importer (`asset_importer.py`)
+The asset importer provides deterministic, verified batch ingestion of approved intent examples packaged directly within the platform:
+- **Packaged Internal Asset**: `app/services/knowledge/data/approved_intent_examples.jsonl` (resolved dynamically via `Path(__file__).parent / "data" / "approved_intent_examples.jsonl"`, removing any external system dependencies).
+- **Line Count**: Exactly 180 lines.
 - **Cryptographic Fingerprint**: SHA-256 digest `F0C80D93EAB23D7772B7454C81F38027D23D1C6D6E88D4F1EF1314E5B54303A6`.
 - **Pre-Ingestion Verification**: Before parsing any records, the importer computes the full-file SHA-256 digest. If the hash does not match `EXPECTED_SHA256`, the importer halts immediately with a `ValueError`.
 - **Stream Ingestion & Safety Screening**: Reads lines sequentially, parsing JSON payloads and passing each `(client_message, assistant_reply)` pair through `classify_style_example`.
@@ -440,7 +458,7 @@ The asset importer provides deterministic, verified batch ingestion of approved 
 - **Scope Customization**: Supports importing records as global platform defaults (`tenant_id=None, provider_id=None`) or targeted to specific tenants and providers.
 - **Invariant Guarantee**: Formally asserts that `CuratedMemory` row counts remain strictly unchanged before and after import.
 
-### 11.4 Bounded Procedural Example Retrieval (`example_service.py`)
+### 11.6 Bounded Procedural Example Retrieval (`example_service.py`)
 Procedural style examples are retrieved on-demand for system/few-shot prompt conditioning via `retrieve_style_examples`:
 - **Bounded Footprint**: Defaults to `limit=3` and enforces a maximum character budget (`max_char_budget=2400`, ~600 tokens) to prevent prompt bloat.
 - **Hierarchical Priority Scoping**:

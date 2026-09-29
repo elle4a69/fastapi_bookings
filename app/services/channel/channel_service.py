@@ -18,6 +18,7 @@ from ...models.conversation import (
     MessageDirection,
     MessageSource,
 )
+from ...models.provider import Provider
 from ...schemas.channel import ChannelAccountCreate, ChannelAccountUpdate
 from ...schemas.conversation import ConversationCreate, MessageCreate
 
@@ -37,6 +38,11 @@ class ChannelService:
         tenant_id: int,
         data: ChannelAccountCreate,
     ) -> ChannelAccount:
+        if data.provider_id is not None:
+            provider = db.query(Provider).filter(Provider.id == data.provider_id).first()
+            if not provider or provider.tenant_id != tenant_id:
+                raise ValueError(f"Provider {data.provider_id} does not belong to tenant {tenant_id}")
+
         account = ChannelAccount(
             tenant_id=tenant_id,
             provider_id=data.provider_id,
@@ -121,6 +127,21 @@ class ChannelService:
         tenant_id: int,
         data: ConversationCreate,
     ) -> Conversation:
+        account = None
+        if data.provider_id is not None:
+            provider = db.query(Provider).filter(Provider.id == data.provider_id).first()
+            if not provider or provider.tenant_id != tenant_id:
+                raise ValueError(f"Provider {data.provider_id} does not belong to tenant {tenant_id}")
+
+        if data.channel_account_id is not None:
+            account = db.query(ChannelAccount).filter(ChannelAccount.id == data.channel_account_id).first()
+            if not account or account.tenant_id != tenant_id:
+                raise ValueError(f"ChannelAccount {data.channel_account_id} does not belong to tenant {tenant_id}")
+
+        if data.provider_id is not None and account is not None:
+            if account.provider_id is not None and account.provider_id != data.provider_id:
+                raise ValueError("Channel account is dedicated to a different provider")
+
         metadata = dict(data.metadata_payload or {})
         if data.channel_type:
             metadata["channel_type"] = (

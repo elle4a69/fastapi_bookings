@@ -108,9 +108,15 @@ def create_conversation(
     db: Session = Depends(get_db),
 ) -> ConversationOut:
     """Create a new channel-neutral conversation."""
-    conv = ChannelService.create_conversation(
-        db=db,
-        tenant_id=tenant.id,
-        data=payload,
-    )
-    return ConversationOut.model_validate(conv)
+    try:
+        conv = ChannelService.create_conversation(
+            db=db,
+            tenant_id=tenant.id,
+            data=payload,
+        )
+        return ConversationOut.model_validate(conv)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

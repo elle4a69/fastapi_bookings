@@ -1014,14 +1014,32 @@ The Bootcamp Simulation subsystem operates as a fully persisted, provider-scoped
 9. **Settings Reset Persistence**:
    - `PUT /api/admin/sms/bootcamp/settings` explicitly supports resetting prompt templates, role descriptions, training notes, and learned facts back to `None` or defaults when keys are passed with `None` values, ensuring "Reset Defaults" persists to the database rather than existing purely in browser storage.
 
+10. **10-Tier Prompt Hierarchy & Live AssistantToolEngine Integration**:
+   - `_build_bootcamp_runtime_and_prompt` constructs a strongly typed `RuntimeContext` and invokes `PromptPolicyAssembler.assemble(...)` to enforce the authoritative 10-tier precedence hierarchy across all simulation turns:
+     1. Immutable platform safety and privacy rules.
+     2. Authoritative live tool truth (live tool outputs supersede memory).
+     3. Tenant/business operational policy.
+     4. Base assistant policy (`Default Agent Policy v1`).
+     5. Provider prompt overlay (`role_description`).
+     6. Style Lab behavioral prior (`style_profile`) with situational frustration suppression.
+     7. Approved factual knowledge (`CuratedMemory` retrieved via `knowledge_gateway`).
+     8. Approved procedural style examples (`MessageStyleExample`).
+     9. Current simulation/dialogue state.
+     10. Recent turn history window.
+   - **Multi-Turn Live Tool Calling**:
+     - `generate_bootcamp_tori_reply` passes `get_assistant_tool_definitions()` to OpenAI.
+     - When the model emits tool calls (`check_availability`, `quote_travel`, `service_lookup`, `provider_lookup`, `address_validation`), `AssistantToolEngine` executes them locally against live booking/travel services with server-enforced `tenant_id` and `provider_id` parameters.
+     - The tool responses are fed back into the OpenAI dialogue stream (supporting up to 3 tool execution turns) before the final Tori reply is synthesized.
+     - Tool execution telemetry is attached to simulation metadata for real-time inspection.
+
 ### Verification & Testing Commands
 
 ```powershell
-# Run the complete Bootcamp test suite:
-& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py -v
+# Run the complete Bootcamp test suite including tool integration:
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py -v
 
 # Run the complete regression check across Bootcamp, UI Controls, and Prompt Builder:
-& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_sms_assistant_ui_controls.py tests/test_sms_prompt_builder.py -v
+& ".\.venv\Scripts\python.exe" -m pytest tests/test_sms_bootcamp.py tests/test_bootcamp_tool_integration.py tests/test_assistant_tools_and_prompts.py -v
 ```
 
 > **Testing Environment Note**: On Windows Python 3.11 runtimes, `pytest.ini` configures `addopts = -p no:schemathesis` to prevent the third-party `schemathesis` pytest plugin from causing an access violation deadlock during `hypothesis_jsonschema` setup in async test suites.

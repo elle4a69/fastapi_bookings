@@ -70,7 +70,25 @@ Before editing:
 One task must address one coherent outcome. Finish, verify, and commit it
 before starting unrelated remediation.
 
-## 3. Business and data safety
+## 3. Absolute prohibition of mock implementations
+
+- **Mock implementations are not allowed under any circumstances. End of story.**
+- There are no ifs, there are no buts. There is no such thing as a mock implementation.
+  They do not exist on this platform.
+- If an agent cannot code a real, complete, end-to-end implementation, it must not code it at all.
+- Every feature must be real, fully plumbed, and functional from the database layer, through
+  the backend APIs, all the way to the frontend UI.
+- Strictly forbidden:
+  - Synthetic `setTimeout` handlers simulating backend processing or delays.
+  - Fake, hardcoded frontend state masquerading as real backend data.
+  - Parallel "greenfield" unused scaffold code sitting disconnected from the production call graph.
+  - Creating ORM models without real Alembic database migrations.
+  - Writing tests that assert success for insecure or cross-tenant behavior.
+  - Stub endpoints returning fake success without mutating real database state.
+- Every UI interaction must call a real, authenticated, tenant-scoped API.
+- Every service, tool, and prompt policy must be wired into the live execution path.
+
+## 4. Business and data safety
 
 - Never create a payment, refund, cancellation, booking confirmation, SMS,
   or external-provider action merely to satisfy a missing route or test.
@@ -83,7 +101,7 @@ before starting unrelated remediation.
 - Do not send live SMS, create real bookings, or contact real customers during
   tests. Use labelled synthetic fixtures and cancel any created test AI jobs.
 
-## 4. Secrets, privacy, and telemetry
+## 5. Secrets, privacy, and telemetry
 
 - Never print, commit, return to the frontend, or put into logs/traces:
   credentials, API keys, webhook secrets, authorization headers, cookies,
@@ -97,7 +115,7 @@ before starting unrelated remediation.
 - Do not claim telemetry works until traces, metrics, and logs are visibly
   verified in the configured collector with a privacy-safety test.
 
-## 5. Git and change-control protocol
+## 6. Git and change-control protocol
 
 - Work on the current approved branch or a dedicated task branch.
 - Preserve unrelated user changes and untracked files.
@@ -115,7 +133,7 @@ before starting unrelated remediation.
   known limitations. Do not report success based only on imports or static
   checks when runtime behavior is in scope.
 
-## 6. Verification requirements
+## 7. Verification requirements
 
 For any code change:
 
@@ -132,7 +150,7 @@ For any code change:
 - For external integrations, prove the real local integration path works using
   synthetic labelled data only.
 
-## 7. Runtime process management
+## 8. Runtime process management
 
 - Before starting a server, inspect listening ports and existing processes.
 - Run at most one intended FastAPI backend and one intended frontend dev
@@ -141,7 +159,7 @@ For any code change:
   services unless the task explicitly requires it.
 - Report the local URLs and health/smoke result after a requested start.
 
-## 8. Stop conditions
+## 9. Stop conditions
 
 Stop and ask for direction when:
 
@@ -155,7 +173,7 @@ Stop and ask for direction when:
 When uncertain, prefer a small documented diagnostic or a proposal over an
 invented implementation.
 
-## 9. Living Module Documentation and README Maintenance
+## 10. Living Module Documentation and README Maintenance
 
 Comprehensive, living documentation is a mandatory deliverable of the development process.
 To preserve application integrity and eliminate reliance on ad-hoc handoff notes:

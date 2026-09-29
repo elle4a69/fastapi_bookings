@@ -122,10 +122,22 @@ def format_style_examples_for_prompt(examples: List[MessageStyleExample]) -> str
         "### Conversational Tone & Style Exemplars (Follow this phrasing & tone):"
     ]
     for idx, ex in enumerate(examples, start=1):
+        client_text = (
+            getattr(ex, "client_message", None)
+            or getattr(ex, "user_query", "")
+            or ""
+        ).strip()
+        reply_text = (
+            getattr(ex, "assistant_reply", None)
+            or getattr(ex, "ideal_response", "")
+            or ""
+        ).strip()
+        intent = getattr(ex, "intent", "")
+        intent_label = f" ({intent})" if intent else ""
         blocks.append(
-            f"Example {idx} ({ex.intent}):\n"
-            f"Client: {ex.client_message.strip()}\n"
-            f"Assistant: {ex.assistant_reply.strip()}"
+            f"Example {idx}{intent_label}:\n"
+            f"Client: {client_text}\n"
+            f"Assistant: {reply_text}"
         )
 
     return "\n\n".join(blocks)

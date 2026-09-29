@@ -1,8 +1,10 @@
 """Pydantic schemas for MessageStyleExample domain model."""
 
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.services.knowledge.classifier import validate_style_placeholders
 
 
 class MessageStyleExampleBase(BaseModel):
@@ -17,6 +19,35 @@ class MessageStyleExampleBase(BaseModel):
     is_approved: bool = Field(default=True, description="Whether verified and approved for prompt conditioning")
     is_active: bool = Field(default=True, description="Whether currently active for retrieval")
     source: str = Field(default="assistant_ui_import", max_length=64, description="Provenance source")
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "client_message" not in data and "user_query" in data:
+                data["client_message"] = data["user_query"]
+            if "assistant_reply" not in data and "ideal_response" in data:
+                data["assistant_reply"] = data["ideal_response"]
+        return data
+
+    @property
+    def user_query(self) -> str:
+        """Alias for client_message for prompt policy alignment."""
+        return self.client_message
+
+    @property
+    def ideal_response(self) -> str:
+        """Alias for assistant_reply for prompt policy alignment."""
+        return self.assistant_reply
+
+    @field_validator("client_message", "assistant_reply")
+    @classmethod
+    def validate_message_placeholders(cls, v: str) -> str:
+        if v:
+            is_valid, err = validate_style_placeholders(v, is_approved_source=False)
+            if not is_valid:
+                raise ValueError(err)
+        return v
 
 
 class MessageStyleExampleCreate(MessageStyleExampleBase):
@@ -37,6 +68,15 @@ class MessageStyleExampleUpdate(BaseModel):
     is_approved: Optional[bool] = None
     is_active: Optional[bool] = None
 
+    @field_validator("client_message", "assistant_reply")
+    @classmethod
+    def validate_update_placeholders(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            is_valid, err = validate_style_placeholders(v, is_approved_source=False)
+            if not is_valid:
+                raise ValueError(err)
+        return v
+
 
 class MessageStyleExampleRead(MessageStyleExampleBase):
     """Schema for reading a MessageStyleExample."""
@@ -46,3 +86,4 @@ class MessageStyleExampleRead(MessageStyleExampleBase):
     content_hash: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+

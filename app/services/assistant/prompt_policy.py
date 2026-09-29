@@ -187,6 +187,9 @@ class PromptPolicyAssembler:
         conversation_state: Optional[Dict[str, Any]] = None,
         max_history_turns: int = 10,
         db: Optional[Session] = None,
+        training_notes: Optional[str] = None,
+        learned_facts: Optional[Union[str, List[Any]]] = None,
+        style_prior: Optional[Dict[str, Any]] = None,
     ) -> AssembledPrompt:
         """Assemble the complete prompt following the 10-tier precedence hierarchy."""
         unresolved_vars: List[str] = []
@@ -253,9 +256,18 @@ class PromptPolicyAssembler:
         # -------------------------------------------------------------------
         # Tier 5: Provider Prompt Overlay
         # -------------------------------------------------------------------
+        overlay_elements = []
         if provider_overlay and provider_overlay.strip():
+            overlay_elements.append(provider_overlay.strip())
+        if training_notes and training_notes.strip():
+            notes_str = training_notes.strip()
+            if notes_str not in (provider_overlay or ""):
+                overlay_elements.append(f"Custom Training Notes:\n{notes_str}")
+        combined_overlay = "\n\n".join(overlay_elements)
+
+        if combined_overlay.strip():
             prov_interp = self.variable_registry.interpolate(
-                provider_overlay.strip(), context, db=db, unresolved_vars=unresolved_vars
+                combined_overlay.strip(), context, db=db, unresolved_vars=unresolved_vars
             )
             tier5_text = (
                 "=== TIER 5: PROVIDER PROMPT OVERLAY ===\n"
@@ -273,7 +285,7 @@ class PromptPolicyAssembler:
         # -------------------------------------------------------------------
         # Tier 6: Style Lab Profile
         # -------------------------------------------------------------------
-        effective_style = dict(style_profile or {})
+        effective_style = dict(style_profile or style_prior or {})
         frustration_detected = self.detect_frustration(context)
         if frustration_detected:
             context.set_flag("frustration_detected", True)
@@ -326,6 +338,21 @@ class PromptPolicyAssembler:
                     cat = mem.get("category", "general")
                     if q and a:
                         knowledge_items.append(f"[{cat.upper()}] Q: {q} -> A: {a}")
+                elif isinstance(mem, str) and mem.strip():
+                    knowledge_items.append(mem.strip())
+                elif hasattr(mem, "text") and getattr(mem, "text"):
+                    knowledge_items.append(str(mem.text).strip())
+
+        if learned_facts:
+            if isinstance(learned_facts, str) and learned_facts.strip():
+                facts_str = learned_facts.strip()
+                if not any(facts_str in k for k in knowledge_items):
+                    knowledge_items.append(f"Known Business Facts:\n{facts_str}")
+            elif isinstance(learned_facts, list):
+                for fact in learned_facts:
+                    f_str = str(fact).strip()
+                    if f_str and not any(f_str in k for k in knowledge_items):
+                        knowledge_items.append(f"Known Business Facts:\n{f_str}")
 
         if knowledge_items:
             tier7_body = "\n".join(knowledge_items)
@@ -443,6 +470,9 @@ def assemble_assistant_prompt(
     max_history_turns: int = 10,
     db: Optional[Session] = None,
     variable_registry: Optional[VariableRegistry] = None,
+    training_notes: Optional[str] = None,
+    learned_facts: Optional[Union[str, List[Any]]] = None,
+    style_prior: Optional[Dict[str, Any]] = None,
 ) -> AssembledPrompt:
     """Convenience functional interface for assembling the 10-tier prompt."""
     assembler = PromptPolicyAssembler(variable_registry=variable_registry)
@@ -456,4 +486,7 @@ def assemble_assistant_prompt(
         conversation_state=conversation_state,
         max_history_turns=max_history_turns,
         db=db,
+        training_notes=training_notes,
+        learned_facts=learned_facts,
+        style_prior=style_prior,
     )

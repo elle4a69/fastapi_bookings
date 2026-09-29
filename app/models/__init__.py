@@ -102,6 +102,18 @@ from .sms_bootcamp import (
     SmsBootcampSettings,
 )
 
+# Channel-Neutral Messaging models
+from .conversation import (
+    ChannelAccount,
+    Conversation,
+    Message,
+    ChannelType,
+    MessageDirection,
+    MessageSource,
+    DeliveryStatus,
+)
+from .message_style_example import MessageStyleExample
+
 __all__ = [
     "User",
     "Service",
@@ -190,5 +202,14 @@ __all__ = [
     "SmsBootcampConversation",
     "SmsBootcampMessage",
     "SmsBootcampSettings",
+    # Channel-Neutral Messaging
+    "ChannelAccount",
+    "Conversation",
+    "Message",
+    "ChannelType",
+    "MessageDirection",
+    "MessageSource",
+    "DeliveryStatus",
+    "MessageStyleExample",
 ]
 

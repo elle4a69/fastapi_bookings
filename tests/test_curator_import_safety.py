@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.curated_memory import CuratedMemory
 from app.models.message_style_example import MessageStyleExample, compute_style_example_hash
+from app.schemas.message_style_example import MessageStyleExampleCreate
 from app.services.knowledge.asset_importer import (
     DEFAULT_APPROVED_EXAMPLES_PATH,
     EXPECTED_SHA256,
@@ -24,11 +25,13 @@ from app.services.knowledge.asset_importer import (
     verify_asset_file,
 )
 from app.services.knowledge.classifier import (
+    ALLOWED_STYLE_PLACEHOLDERS,
     ClassificationCategory,
     SafetyDecision,
     classify_proposed_knowledge,
     classify_style_example,
     classify_text,
+    validate_style_placeholders,
 )
 from app.services.knowledge.example_service import (
     format_style_examples_for_prompt,
@@ -359,3 +362,130 @@ def test_invariant_procedural_never_enters_curated_memory_and_vice_versa(db_sess
     assert style_res.category == ClassificationCategory.FACTUAL_PROPOSAL
     assert style_res.decision == SafetyDecision.REJECT
     assert "cannot be stored in MessageStyleExample" in style_res.reason
+
+
+# =========================================================================
+# Test 6: Placeholder variable allowlist validation
+# =========================================================================
+def test_placeholder_variable_allowlist_validation():
+    """Verify that placeholder variable allowlist strictly controls style templating."""
+    # 1. Approved standard placeholders must pass
+    valid_examples = [
+        "Welcome to {business_name}! I can help you book.",
+        "Your appointment is with {provider_name} at our {location_name} location.",
+        "The clinic is located at {location_address}.",
+        "You can manage your booking online here: {booking_link}",
+        "We are pleased to offer our premier {service_name}.",
+        "Hi from {business_name}, {provider_name} looks forward to seeing you at {location_name} for your {service_name}!",
+    ]
+    for sample in valid_examples:
+        is_valid, err = validate_style_placeholders(sample, is_approved_source=False)
+        assert is_valid is True, f"Expected valid for '{sample}', got error: {err}"
+        # Test classifier accepts it
+        res = classify_style_example(
+            client_message="Hi, where are you located?",
+            assistant_reply=sample,
+            is_approved_source=False,
+        )
+        assert res.is_safe is True, f"Classifier rejected valid placeholder in '{sample}': {res.reason}"
+        assert res.decision == SafetyDecision.ACCEPT
+
+    # 2. Unapproved template variables must be rejected
+    unapproved_examples = [
+        "Your secret token is {secret_token}",
+        "Please provide your {client_ssn} and {credit_card_number}",
+        "Database password: {db_password}",
+        "Hello {custom_unregistered_tag}",
+        "Contact me at {unapproved_contact_field}",
+    ]
+    for sample in unapproved_examples:
+        is_valid, err = validate_style_placeholders(sample, is_approved_source=False)
+        assert is_valid is False, f"Expected invalid for '{sample}'"
+        assert "Unapproved placeholder variable" in err
+
+        res = classify_style_example(
+            client_message="Can I get details?",
+            assistant_reply=sample,
+            is_approved_source=False,
+        )
+        assert res.is_safe is False
+        assert res.decision == SafetyDecision.REJECT
+        assert "placeholder validation" in res.reason
+
+    # 3. Raw execution variables & injection syntax must be rejected
+    raw_syntax_samples = [
+        "Hello {{ business_name }}",
+        "Config: {% if admin %} granted {% endif %}",
+        "Shell: ${PATH}",
+        "Script: <% response.write('hi') %>",
+        "Eval: {eval('__import__(\"os\").system(\"id\")')}",
+    ]
+    for sample in raw_syntax_samples:
+        is_valid, err = validate_style_placeholders(sample, is_approved_source=False)
+        assert is_valid is False, f"Expected invalid for raw syntax '{sample}'"
+
+        res = classify_style_example(
+            client_message="Test",
+            assistant_reply=sample,
+            is_approved_source=False,
+        )
+        assert res.is_safe is False
+        assert res.decision == SafetyDecision.REJECT
+
+    # 4. Schema enforcement via MessageStyleExampleCreate
+    # Valid placeholder create
+    valid_schema = MessageStyleExampleCreate(
+        intent="booking_inquiry",
+        client_message="Where is the clinic?",
+        assistant_reply="We are located at {location_address}, {business_name}.",
+    )
+    assert valid_schema.client_message == "Where is the clinic?"
+    assert "{location_address}" in valid_schema.assistant_reply
+
+    # Invalid placeholder create raises ValueError
+    with pytest.raises(ValueError, match="Unapproved placeholder variable"):
+        MessageStyleExampleCreate(
+            intent="booking_inquiry",
+            client_message="What is the key?",
+            assistant_reply="Here is your key: {unapproved_key}",
+        )
+
+
+# =========================================================================
+# Test 7: ORM field alignment and alias properties with prompt policy
+# =========================================================================
+def test_orm_field_alignment_and_alias_properties():
+    """Verify ORM model field alignment and property aliases for prompt policy assembly."""
+    example = MessageStyleExample(
+        intent="greeting",
+        client_message="Hello there!",
+        assistant_reply="Hi! Welcome to {business_name}.",
+        category="procedural",
+    )
+
+    # 1. Direct ORM attributes
+    assert example.client_message == "Hello there!"
+    assert example.assistant_reply == "Hi! Welcome to {business_name}."
+
+    # 2. Prompt policy alias properties (user_query, ideal_response)
+    assert example.user_query == "Hello there!"
+    assert example.ideal_response == "Hi! Welcome to {business_name}."
+
+    # 3. Setter properties update underlying columns
+    example.user_query = "Good morning"
+    assert example.client_message == "Good morning"
+
+    example.ideal_response = "Good morning! How can I help today?"
+    assert example.assistant_reply == "Good morning! How can I help today?"
+
+    # 4. Schema alias support on input
+    schema_with_aliases = MessageStyleExampleCreate(
+        intent="greeting",
+        user_query="Hi from client",
+        ideal_response="Hello from {provider_name}",
+    )
+    assert schema_with_aliases.client_message == "Hi from client"
+    assert schema_with_aliases.assistant_reply == "Hello from {provider_name}"
+    assert schema_with_aliases.user_query == "Hi from client"
+    assert schema_with_aliases.ideal_response == "Hello from {provider_name}"
+

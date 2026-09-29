@@ -52,9 +52,6 @@ export default function AssistantStudioPage() {
   // Provider Scoping State
   const [providers, setProviders] = useState<ProviderItem[]>([
     { id: null, name: 'Tenant Default (All Providers)', is_active: true },
-    { id: 101, name: 'Dr. Alex Mercer', email: 'alex@clinic.example', is_active: true },
-    { id: 102, name: 'Sarah Chen (Senior PT)', email: 'sarah@clinic.example', is_active: true },
-    { id: 103, name: 'James Wilson (Remedial)', email: 'james@clinic.example', is_active: true },
   ]);
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null);
 
