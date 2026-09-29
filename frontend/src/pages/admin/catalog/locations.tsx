@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Accordion,
@@ -644,25 +645,23 @@ export default function LocationsPage() {
                         />
                       </div>
 
-                      <div className="grid gap-2">
-                        <Label htmlFor="address" className="text-sm font-medium">Location Address</Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            id="address" 
-                            value={formData.address || ""} 
-                            onChange={(e) => {
-                              const updated = { ...formData, address: e.target.value };
-                              setFormData(updated);
-                              if (selectedLocation) {
-                                triggerSave(updated);
-                              }
-                            }}
-                            disabled={!isEditing}
-                            placeholder="e.g. 73 Market Street, Sydney NSW 2000, Australia"
-                            className="pl-10 min-h-[40px]"
-                          />
-                        </div>
+                      <div>
+                        <AddressAutocomplete
+                          id="address"
+                          label="Location Address"
+                          value={formData.address || ""}
+                          onChange={(formatted) => {
+                            const updated = { ...formData, address: formatted };
+                            setFormData(updated);
+                            if (selectedLocation) {
+                              triggerSave(updated);
+                            }
+                          }}
+                          disabled={!isEditing}
+                          placeholder="Search verified location address..."
+                          helperText="Physical clinic, salon, or studio address for in-call bookings."
+                          noticeText="This is the location that will be used to calculate outcall travel times and travel requirements."
+                        />
                       </div>
 
                       <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">

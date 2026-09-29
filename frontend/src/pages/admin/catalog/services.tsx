@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, GripVertical, Upload, X, Eye, EyeOff, Circle, CircleSlash, ImageIcon, Clock, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAutoSave } from '@/hooks/use-auto-save';
@@ -361,7 +361,15 @@ export default function ServicesPage() {
       return null;
     }
 
+    if (!formData.allow_in_call && !formData.allow_out_call) {
+      toast.error('At least one delivery mode (In-Call or Out-Call) must be enabled');
+      return null;
+    }
+
     const payload = { ...formData };
+    if (!payload.allow_in_call && (payload.price === 0 || !payload.price) && payload.outcall_price != null) {
+      payload.price = payload.outcall_price;
+    }
     if (!multipleProvidersEnabled && providers.length > 0) {
       if (!payload.provider_ids || payload.provider_ids.length === 0) {
         payload.provider_ids = [String(providers[0].id)];
@@ -658,7 +666,7 @@ export default function ServicesPage() {
                     <div className="flex-1 min-w-0 flex flex-col gap-0.5 justify-center py-0.5">
                       <span className="text-sm font-semibold text-foreground leading-tight truncate block" title={svc.name}>{svc.name}</span>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        ${svc.price} &bull; {svc.duration} mins
+                        ${!svc.allow_in_call && svc.outcall_price != null ? svc.outcall_price : svc.price} &bull; {svc.duration} mins
                         {svc.allow_out_call && <span className="ml-1 text-[10px] text-primary font-medium">&bull; Mobile</span>}
                       </div>
                     </div>
@@ -1034,33 +1042,161 @@ export default function ServicesPage() {
                   />
                   <p className="text-sm text-muted-foreground">Provide details about what clients can expect</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <Label className="text-base font-semibold">Duration (mins)</Label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        type="number"
-                        className="pl-9"
-                        value={formData.duration}
-                        onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+
+                {/* Delivery Modes directly under Description */}
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <Label className="text-base font-semibold">Delivery Modes</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Specify whether this service is offered in-studio, mobile out-call, or both.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${formData.allow_in_call ? 'bg-primary/5 border-primary/40' : 'bg-card/50'}`}>
+                      <div>
+                        <Label htmlFor="create_allow_in_call" className="font-medium cursor-pointer">In-Call Service</Label>
+                        <p className="text-xs text-muted-foreground">Client travels to provider location</p>
+                      </div>
+                      <Switch
+                        id="create_allow_in_call"
+                        checked={formData.allow_in_call ?? true}
+                        onCheckedChange={(checked) => {
+                          if (!checked && !formData.allow_out_call) {
+                            toast.error("At least one delivery mode (In-Call or Out-Call) must be active");
+                            return;
+                          }
+                          setFormData({ ...formData, allow_in_call: checked });
+                        }}
                       />
                     </div>
-                    <p className="text-sm text-muted-foreground">How long the service takes</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-base font-semibold">Price ($)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
-                      <Input 
-                        type="number"
-                        className="pl-7"
-                        value={formData.price}
-                        onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    <div className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${formData.allow_out_call ? 'bg-primary/5 border-primary/40' : 'bg-card/50'}`}>
+                      <div>
+                        <Label htmlFor="create_allow_out_call" className="font-medium cursor-pointer">Out-Call / Mobile</Label>
+                        <p className="text-xs text-muted-foreground">Provider travels to client address</p>
+                      </div>
+                      <Switch
+                        id="create_allow_out_call"
+                        checked={formData.allow_out_call ?? false}
+                        onCheckedChange={(checked) => {
+                          if (!checked && !formData.allow_in_call) {
+                            toast.error("At least one delivery mode (In-Call or Out-Call) must be active");
+                            return;
+                          }
+                          setFormData({ ...formData, allow_out_call: checked });
+                        }}
                       />
                     </div>
-                    <p className="text-sm text-muted-foreground">The cost of this service</p>
                   </div>
+                </div>
+
+                {/* Dynamic Conditional In-Call */}
+                {formData.allow_in_call && (
+                  <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">In-Call Pricing & Buffers</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">In-Call Price ($)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                          <Input 
+                            type="number"
+                            className="pl-7"
+                            value={formData.price}
+                            onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">In-Call Prep Buffer Before (mins)</Label>
+                        <Input 
+                          type="number"
+                          value={formData.buffer_before}
+                          onChange={e => setFormData({ ...formData, buffer_before: parseInt(e.target.value) || 0 })}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Studio intake & prep before appointment.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">In-Call Reset Buffer After (mins)</Label>
+                        <Input 
+                          type="number"
+                          value={formData.buffer_after}
+                          onChange={e => setFormData({ ...formData, buffer_after: parseInt(e.target.value) || 0 })}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Sanitizing & room reset after appointment.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dynamic Conditional Out-Call */}
+                {formData.allow_out_call && (
+                  <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out-Call Pricing & Travel Buffers</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Out-Call Price ($)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                          <Input
+                            type="number"
+                            className="pl-7"
+                            placeholder={String(formData.price || 0)}
+                            value={formData.outcall_price ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
+                              setFormData({ ...formData, outcall_price: val });
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Pre-Service Prep Buffer (mins)</Label>
+                        <Input
+                          type="number"
+                          value={formData.outcall_buffer_before ?? 0}
+                          onChange={(e) => setFormData({ ...formData, outcall_buffer_before: parseInt(e.target.value) || 0 })}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Parking, entry, unpacking & setup (in addition to travel time).</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Post-Service Pack-up Buffer (mins)</Label>
+                        <Input
+                          type="number"
+                          value={formData.outcall_buffer_after ?? 0}
+                          onChange={(e) => setFormData({ ...formData, outcall_buffer_after: parseInt(e.target.value) || 0 })}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Packing equipment & departure (in addition to travel time).</p>
+                      </div>
+                    </div>
+
+                    {/* 5-Segment Operational Model Callout */}
+                    <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 text-xs space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-semibold text-blue-900 dark:text-blue-300">
+                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>5-Segment Operational Travel & Buffer Clarification</span>
+                      </div>
+                      <div className="space-y-1 text-muted-foreground text-[11px] leading-relaxed">
+                        <p>
+                          • <strong>Travel Time</strong> is dynamically computed and blocked in the provider calendar based on real road driving distance to the client address.
+                        </p>
+                        <p>
+                          • <strong>Prep & Pack Buffers</strong> above are <strong>in addition to travel time</strong>, giving the provider dedicated time to park, enter, unpack, sanitize, and pack up without eating into appointment duration or driving transit.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-base font-semibold">Duration (mins)</Label>
+                  <div className="relative sm:max-w-xs">
+                    <Clock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      type="number"
+                      className="pl-9"
+                      value={formData.duration}
+                      onChange={e => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">How long the service takes</p>
                 </div>
               </CardContent>
               <CardFooter className="flex justify-end gap-2 border-t p-4 md:pt-4 mt-auto shrink-0 sticky bottom-0 bg-background z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] md:shadow-none">
@@ -1148,38 +1284,234 @@ export default function ServicesPage() {
                         />
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Delivery Modes directly under Description */}
+                      <div className="space-y-3 pt-2">
+                        <div>
+                          <Label className="text-sm font-semibold">Delivery Modes</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Specify whether this service can be booked in-studio, as mobile out-call, or both.</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${formData.allow_in_call ? 'bg-primary/5 border-primary/40' : 'bg-card/50'}`}>
+                            <div>
+                              <Label htmlFor="allow_in_call" className="font-medium cursor-pointer">In-Call Service</Label>
+                              <p className="text-xs text-muted-foreground">Client travels to provider location</p>
+                            </div>
+                            <Switch
+                              id="allow_in_call"
+                              checked={formData.allow_in_call ?? true}
+                              onCheckedChange={(checked) => {
+                                if (!checked && !formData.allow_out_call) {
+                                  toast.error("At least one delivery mode (In-Call or Out-Call) must be active");
+                                  return;
+                                }
+                                const next = { ...formData, allow_in_call: checked };
+                                setFormData(next);
+                                triggerSave(next, true);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
+                          <div className={`flex items-center justify-between p-3 border rounded-lg transition-colors ${formData.allow_out_call ? 'bg-primary/5 border-primary/40' : 'bg-card/50'}`}>
+                            <div>
+                              <Label htmlFor="allow_out_call" className="font-medium cursor-pointer">Out-Call / Mobile</Label>
+                              <p className="text-xs text-muted-foreground">Provider travels to client address</p>
+                            </div>
+                            <Switch
+                              id="allow_out_call"
+                              checked={formData.allow_out_call ?? false}
+                              onCheckedChange={(checked) => {
+                                if (!checked && !formData.allow_in_call) {
+                                  toast.error("At least one delivery mode (In-Call or Out-Call) must be active");
+                                  return;
+                                }
+                                const next = { ...formData, allow_out_call: checked };
+                                setFormData(next);
+                                triggerSave(next, true);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Conditional In-Call */}
+                      {formData.allow_in_call && (
+                        <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
+                          <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">In-Call Pricing & Buffers</h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="price">In-Call Price ($)</Label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                                <Input 
+                                  id="price" 
+                                  type="number"
+                                  className="pl-7"
+                                  value={formData.price} 
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    const next = { ...formData, price: val };
+                                    setFormData(next);
+                                    triggerSave(next);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="buffer_before">In-Call Prep Buffer Before (mins)</Label>
+                              <Input 
+                                id="buffer_before" 
+                                type="number"
+                                value={formData.buffer_before} 
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const next = { ...formData, buffer_before: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Studio intake & prep before appointment.</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="buffer_after">In-Call Reset Buffer After (mins)</Label>
+                              <Input 
+                                id="buffer_after" 
+                                type="number"
+                                value={formData.buffer_after} 
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const next = { ...formData, buffer_after: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Sanitizing & room reset after appointment.</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dynamic Conditional Out-Call */}
+                      {formData.allow_out_call && (
+                        <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
+                          <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out-Call Pricing & Travel Buffers</h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="outcall_price">Out-Call Price ($)</Label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                                <Input
+                                  id="outcall_price"
+                                  type="number"
+                                  className="pl-7"
+                                  placeholder={String(formData.price || 0)}
+                                  value={formData.outcall_price ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
+                                    const next = { ...formData, outcall_price: val };
+                                    setFormData(next);
+                                    triggerSave(next);
+                                  }}
+                                  disabled={!isEditing}
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="outcall_buffer_before">Pre-Service Prep Buffer (mins)</Label>
+                              <Input
+                                id="outcall_buffer_before"
+                                type="number"
+                                value={formData.outcall_buffer_before ?? 0}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const next = { ...formData, outcall_buffer_before: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Parking, entry, unpacking & setup (in addition to travel time).</p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="outcall_buffer_after">Post-Service Pack-up Buffer (mins)</Label>
+                              <Input
+                                id="outcall_buffer_after"
+                                type="number"
+                                value={formData.outcall_buffer_after ?? 0}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const next = { ...formData, outcall_buffer_after: val };
+                                  setFormData(next);
+                                  triggerSave(next);
+                                }}
+                                disabled={!isEditing}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Packing equipment & departure (in addition to travel time).</p>
+                            </div>
+                          </div>
+
+                          {/* 5-Segment Operational Model Callout */}
+                          <div className="p-3 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 text-xs space-y-1.5">
+                            <div className="flex items-center gap-1.5 font-semibold text-blue-900 dark:text-blue-300">
+                              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>5-Segment Operational Travel & Buffer Clarification</span>
+                            </div>
+                            <div className="space-y-1 text-muted-foreground text-[11px] leading-relaxed">
+                              <p>
+                                • <strong>Travel Time</strong> is dynamically computed and blocked in the provider calendar based on real road driving distance to the client address.
+                              </p>
+                              <p>
+                                • <strong>Prep & Pack Buffers</strong> above are <strong>in addition to travel time</strong>, giving the provider dedicated time to park, enter, unpack, sanitize, and pack up without eating into appointment duration or driving transit.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* General Service Details (Duration, Deposit, Tax) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t">
                         <div className="space-y-2">
-                          <Label htmlFor="price">Price</Label>
-                          <Input 
-                            id="price" 
-                            type="number"
-                            value={formData.price} 
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              const next = { ...formData, price: val };
-                              setFormData(next);
-                              triggerSave(next);
-                            }}
-                            disabled={!isEditing}
-                          />
+                          <Label htmlFor="duration">Duration (mins)</Label>
+                          <div className="relative">
+                            <Clock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                              id="duration" 
+                              type="number"
+                              className="pl-9"
+                              value={formData.duration} 
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                const next = { ...formData, duration: val };
+                                setFormData(next);
+                                triggerSave(next);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="deposit_amount">Deposit Amount</Label>
-                          <Input 
-                            id="deposit_amount" 
-                            type="number"
-                            value={formData.deposit_amount} 
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              const next = { ...formData, deposit_amount: val };
-                              setFormData(next);
-                              triggerSave(next);
-                            }}
-                            disabled={!isEditing}
-                          />
+                          <Label htmlFor="deposit_amount">Deposit Amount ($)</Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">$</span>
+                            <Input 
+                              id="deposit_amount" 
+                              type="number"
+                              className="pl-7"
+                              value={formData.deposit_amount} 
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const next = { ...formData, deposit_amount: val };
+                                setFormData(next);
+                                triggerSave(next);
+                              }}
+                              disabled={!isEditing}
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2 col-span-2">
+                        <div className="space-y-2">
                           <Label htmlFor="tax_rate_id">Tax Rate</Label>
                           <Select 
                             disabled={!isEditing} 
@@ -1201,153 +1533,8 @@ export default function ServicesPage() {
                               <SelectItem value="hst_13">HST 13%</SelectItem>
                             </SelectContent>
                           </Select>
-                          <p className="text-[10px] text-muted-foreground">Tax rates are configured in Settings &gt; Tax Rates</p>
+                          <p className="text-[10px] text-muted-foreground">Configured in Settings &gt; Tax Rates</p>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t">
-                        <div className="space-y-2">
-                          <Label htmlFor="duration">Duration (mins)</Label>
-                          <Input 
-                            id="duration" 
-                            type="number"
-                            value={formData.duration} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              const next = { ...formData, duration: val };
-                              setFormData(next);
-                              triggerSave(next);
-                            }}
-                            disabled={!isEditing}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="buffer_before">Buffer Before (mins)</Label>
-                          <Input 
-                            id="buffer_before" 
-                            type="number"
-                            value={formData.buffer_before} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              const next = { ...formData, buffer_before: val };
-                              setFormData(next);
-                              triggerSave(next);
-                            }}
-                            disabled={!isEditing}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="buffer_after">Buffer After (mins)</Label>
-                          <Input 
-                            id="buffer_after" 
-                            type="number"
-                            value={formData.buffer_after} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              const next = { ...formData, buffer_after: val };
-                              setFormData(next);
-                              triggerSave(next);
-                            }}
-                            disabled={!isEditing}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Delivery Modes & Out-Call Settings */}
-                      <div className="space-y-4 pt-4 border-t">
-                        <div>
-                          <h4 className="font-semibold text-sm">Delivery Modes</h4>
-                          <p className="text-xs text-muted-foreground mt-0.5">Specify whether this service can be booked in-studio, as mobile out-call, or both.</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
-                            <div>
-                              <Label htmlFor="allow_in_call" className="font-medium cursor-pointer">In-Call Service</Label>
-                              <p className="text-xs text-muted-foreground">Client travels to provider location</p>
-                            </div>
-                            <Switch
-                              id="allow_in_call"
-                              checked={formData.allow_in_call ?? true}
-                              onCheckedChange={(checked) => {
-                                const next = { ...formData, allow_in_call: checked };
-                                setFormData(next);
-                                triggerSave(next, true);
-                              }}
-                              disabled={!isEditing}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
-                            <div>
-                              <Label htmlFor="allow_out_call" className="font-medium cursor-pointer">Out-Call / Mobile</Label>
-                              <p className="text-xs text-muted-foreground">Provider travels to client address</p>
-                            </div>
-                            <Switch
-                              id="allow_out_call"
-                              checked={formData.allow_out_call ?? false}
-                              onCheckedChange={(checked) => {
-                                const next = { ...formData, allow_out_call: checked };
-                                setFormData(next);
-                                triggerSave(next, true);
-                              }}
-                              disabled={!isEditing}
-                            />
-                          </div>
-                        </div>
-
-                        {formData.allow_out_call && (
-                          <div className="p-4 rounded-lg border bg-muted/10 space-y-4 animate-in fade-in">
-                            <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Out-Call Pricing & Travel Buffers</h5>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="outcall_price">Out-Call Price ($)</Label>
-                                <Input
-                                  id="outcall_price"
-                                  type="number"
-                                  placeholder={String(formData.price || 0)}
-                                  value={formData.outcall_price ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value === '' ? null : (parseFloat(e.target.value) || 0);
-                                    const next = { ...formData, outcall_price: val };
-                                    setFormData(next);
-                                    triggerSave(next);
-                                  }}
-                                  disabled={!isEditing}
-                                />
-                                <p className="text-[10px] text-muted-foreground">Blank = base price (${formData.price})</p>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="outcall_buffer_before">Travel Buffer Before (mins)</Label>
-                                <Input
-                                  id="outcall_buffer_before"
-                                  type="number"
-                                  value={formData.outcall_buffer_before ?? 0}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    const next = { ...formData, outcall_buffer_before: val };
-                                    setFormData(next);
-                                    triggerSave(next);
-                                  }}
-                                  disabled={!isEditing}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="outcall_buffer_after">Travel Buffer After (mins)</Label>
-                                <Input
-                                  id="outcall_buffer_after"
-                                  type="number"
-                                  value={formData.outcall_buffer_after ?? 0}
-                                  onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    const next = { ...formData, outcall_buffer_after: val };
-                                    setFormData(next);
-                                    triggerSave(next);
-                                  }}
-                                  disabled={!isEditing}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </AccordionContent>
                   </AccordionItem>

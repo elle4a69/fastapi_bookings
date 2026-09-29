@@ -1,9 +1,10 @@
-import { useState, useEffect , useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from 'react-router-dom';
 import { Search, Loader2, LayoutGrid, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
+import { useTenantModules } from '@/context/tenant-modules-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -26,19 +27,33 @@ type TabConfig = {
   leftUrl: string;
   rightType: string;
   rightUrl: string;
+  moduleKey?: string;
 };
 
 const TABS: TabConfig[] = [
-  { id: 'service-provider', label: 'Service ↔ Provider', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'providers', rightUrl: '/api/admin/providers' },
-  { id: 'service-location', label: 'Service ↔ Location', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'locations', rightUrl: '/api/admin/locations' },
-  { id: 'provider-location', label: 'Provider ↔ Location', leftType: 'providers', leftUrl: '/api/admin/providers', rightType: 'locations', rightUrl: '/api/admin/locations' },
-  { id: 'service-category', label: 'Service ↔ Category', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'categories', rightUrl: '/api/admin/categories' },
-  { id: 'service-addon', label: 'Service ↔ Add-on', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'add-ons', rightUrl: '/api/admin/add-ons' },
-  { id: 'service-product', label: 'Service ↔ Product', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'products', rightUrl: '/api/admin/products' },
+  { id: 'service-provider', label: 'Service ↔ Provider', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'providers', rightUrl: '/api/admin/providers', moduleKey: 'multiple_providers' },
+  { id: 'service-location', label: 'Service ↔ Location', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'locations', rightUrl: '/api/admin/locations', moduleKey: 'locations' },
+  { id: 'provider-location', label: 'Provider ↔ Location', leftType: 'providers', leftUrl: '/api/admin/providers', rightType: 'locations', rightUrl: '/api/admin/locations', moduleKey: 'multiple_providers' },
+  { id: 'service-category', label: 'Service ↔ Category', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'categories', rightUrl: '/api/admin/categories', moduleKey: 'categories' },
+  { id: 'service-addon', label: 'Service ↔ Add-on', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'add-ons', rightUrl: '/api/admin/add-ons', moduleKey: 'addons' },
+  { id: 'service-product', label: 'Service ↔ Product', leftType: 'services', leftUrl: '/api/admin/services', rightType: 'products', rightUrl: '/api/admin/products', moduleKey: 'products' },
 ];
 
 export default function RelationshipsPage() {
+  const { isModuleEnabled } = useTenantModules();
+
+  const availableTabs = useMemo(() => {
+    return TABS.filter(t => !t.moduleKey || isModuleEnabled(t.moduleKey));
+  }, [isModuleEnabled]);
+
   const [activeTab, setActiveTab] = useState<string>(TABS[0].id);
+
+  useEffect(() => {
+    if (availableTabs.length > 0 && !availableTabs.some(t => t.id === activeTab)) {
+      setActiveTab(availableTabs[0].id);
+    }
+  }, [availableTabs, activeTab]);
+
   const [leftItems, setLeftItems] = useState<BaseItem[]>([]);
   const [rightItems, setRightItems] = useState<BaseItem[]>([]);
   const [selectedLeftId, setSelectedLeftId] = useState<number | string | null>(null);
@@ -53,7 +68,7 @@ export default function RelationshipsPage() {
   
   const [updatingIds, setUpdatingIds] = useState<Set<number | string>>(new Set());
 
-  const currentTab = TABS.find(t => t.id === activeTab)!;
+  const currentTab = availableTabs.find(t => t.id === activeTab) || availableTabs[0] || TABS[0];
 
   const loadLists = useCallback(async () => {
     setLeftLoading(true);
@@ -160,7 +175,7 @@ export default function RelationshipsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Link to="/admin/relationships-matrix">
             <Button variant="outline" size="sm" className="gap-1.5 font-semibold">
-              <LayoutGrid className="w-4 h-4 text-primary" /> 5-Column Matrix
+              <LayoutGrid className="w-4 h-4 text-primary" /> Relationship Matrix
             </Button>
           </Link>
           <Link to="/admin/relationships-tree">
@@ -173,7 +188,7 @@ export default function RelationshipsPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col">
         <div className="flex flex-wrap gap-2 pb-2 border-b mb-6">
-          {TABS.map(tab => {
+          {availableTabs.map(tab => {
             const isActive = activeTab === tab.id;
             return (
               <button

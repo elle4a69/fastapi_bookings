@@ -226,7 +226,6 @@ export function WeeklyScheduleEditor({
               <Switch
                 id={'wse-' + day.key + '-recurring'}
                 checked={isRecur}
-                disabled={!isActive}
                 onCheckedChange={(v) => onFieldChange(day.key, 'recurring', v, dateStr)}
               />
               <Label
@@ -237,6 +236,12 @@ export function WeeklyScheduleEditor({
               </Label>
             </div>
           </div>
+
+          {!isRecur && (
+            <div className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-md">
+              One-off date exception: changes apply only to {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, not future {day.label}s.
+            </div>
+          )}
         </div>
 
         {/* Slot grid */}

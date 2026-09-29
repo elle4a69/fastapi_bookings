@@ -93,27 +93,61 @@ Features whose backend audit contract is not yet available—such as escalation 
    - **Enabled**: Service add-ons and extra options during service booking.
    - **Disabled**: Hidden from navigation, service forms, and booking intake wizard tabs.
 
+### Relationship Matrix Module (`relationship_matrix`) & Multi-Provider Guard
+- **Visual Dependency Mapping**: 6-column interactive matrix mapping connections between providers, locations, services, add-ons, products, and categories.
+- **Strict Multi-Provider Requirement**:
+  - In solo/single-practitioner mode, the 6-column matrix is overkill. The module is strictly dependent on `multiple_providers`.
+  - In **Settings > Modules (`/admin/settings/modules`)**: When `multiple_providers` is OFF, the Relationship Matrix card is locked with an amber warning badge, callout ("Requires Multiple Service Providers to be enabled"), and its switch is disabled and locked OFF.
+  - In **Context (`TenantModulesContext`)**: Exposes `relationshipMatrixEnabled = isModuleEnabled('relationship_matrix') && multipleProvidersEnabled`.
+  - In **Navigation (`filterNavigationByModules`)**: "Relationships" menu item and its children (Matrix, Bulk Editor, Tree View) declare `moduleKey: "relationship_matrix"`. If either `relationship_matrix` or `multiple_providers` is OFF, the entire section is omitted from the sidebar.
+  - In **Backend (`/api/admin/tenant/modules/toggle`)**: Attempting to enable `relationship_matrix` without `multiple_providers` active raises `400 Bad Request`.
+
 ### Solo Provider & Primary Location Configuration — Settings > Business Profile (`/admin/settings/business`)
 When either the **Multiple Service Providers** or **Multiple Locations** modules are disabled, the system provides dedicated configuration panels directly inside **Settings > Business Profile**:
+- **Balanced Side-by-Side Responsive Layout**:
+  - Replaced oversized full-width stacked cards with a balanced 2-column grid (`grid-cols-1 lg:grid-cols-2`).
+  - Column 1 contains **Business Contact Details** and **Primary Location Details**; Column 2 contains **Solo Service Provider Details**, providing a balanced, compact dashboard appearance without horizontal stretching.
 - **Operator Name Field**: Labeled `"Business / Operator / Owner Name"` to reflect solo practitioner and business identity.
 - **Solo Service Provider Panel** (active when `!multipleProvidersEnabled`):
-  - Practitioner Name with instant `"Sync with Operator Name"` action.
-  - Direct Email, Phone, and In-Call Studio physical address (with `"Use Business Address"` shortcut).
+  - Compact **Provider Photo / Avatar Dropzone**: In-browser client-side WebP thumbnail optimization (<120KB) with preview, change, and remove controls.
+  - Practitioner Name with `"Copy Contact Info"` action (syncs operator name, email, and phone).
+  - Direct Email and Phone (providers operate from their assigned location(s) and do not own an address field on their profile).
   - Bio / Professional Description for public appointment cards.
-  - Delivery mode switches: **Allow In-Call Studio Bookings** and **Allow Out-Call Mobile Bookings**.
+  - Delivery mode switches: **Allow In-Call Studio Bookings** and **Allow Out-Call Mobile Bookings** (with automatic tenant capability alignment).
   - Out-Call travel parameters: Out-Call Radius (km), Base Surcharge ($), Per-KM Fee ($), and Turnaround / Travel Buffer (mins).
   - Directly saved to `PUT /api/admin/providers/{id}`.
 - **Primary Location Panel** (active when `!locationsEnabled`):
-  - Primary Location / Branch Name.
-  - Structured Physical Address breakdown: Street Address, City / Suburb, State / Province, and Postal Code (with `"Use Business Address"` shortcut).
-  - Timezone selector with comprehensive Australian and international IANA options.
-  - **Discreet / Private Location Toggle** (`is_client_hidden`): Hides full street address from the public booking directory until appointment confirmation.
+  - Primary Location / Branch Name and Timezone selector with comprehensive Australian and international IANA options.
+  - Compact **Location Studio Photo Dropzone**: WebP thumbnail optimization (<120KB) with preview and remove actions.
+  - Structured Physical Address via `AddressAutocomplete` with notice callout and detailed breakdown (Street, Suburb, State, Postcode) with zero corrupting string-split syncs.
+  - **Discreet / Private Location Toggle** (`is_client_hidden`): Positioned directly beneath the address field with an explanatory callout.
+  - **Live Google Map Preview**: Embedded interactive Google Map dynamically rendered and centered on the verified location address.
   - Directly saved to `PUT /api/admin/locations/{id}`.
-- **Unified & Granular Persistence**: Changes can be saved individually via section buttons or in one atomic batch via the primary `"Save All Changes"` action.
+- **Save on Change (Debounced Auto-Save & Manual Buttons Removed)**:
+  - All fields on the Business Profile page save automatically on change (600ms debounce for text/numbers, immediate execution for image uploads, capability toggles, timezone, private location, and address autocomplete).
+  - Visual `AutoSaveStatus` badge indicator (`Saving...` / `✓ Saved` / `Save failed` with retry) in the page header.
+  - All manual save buttons ("Save All Changes", "Save Business Details", "Save Provider Details", "Save Location Details") and error-prone "Use Business Address" sync shortcuts have been cleanly removed.
 - **Redundant Operating Hours Removed**: Business-level operating hours are removed from business settings to establish provider schedules and workdays as the single source of truth for availability.
 
----
+### Standardized Address Verification & Autocomplete (`AddressAutocomplete`)
+- **Component**: `src/components/ui/address-autocomplete.tsx`
+- **Multi-Tier Resolution**: Queries `GET /api/public/travel/addresses` (Mapbox Places API → OpenStreetMap Nominatim → Local AU Postcodes fast-path) with instant debounced typeahead suggestions.
+- **Verification Metadata & Badges**:
+  - `[✓ Verified via Address Search]`: Visual emerald badge displayed when an address is chosen from standardized lookup.
+  - `[Manual Entry / Unverified]`: Amber badge when an address is manually edited or overridden.
+- **Location Travel Calculation Notice**: Displays standard explanatory callout beneath location address fields:
+  *"This is the location that will be used to calculate outcall travel times and travel requirements."*
+- **5-Segment Operational Travel & Buffer Clarification**:
+  - **Dynamic Travel Time**: Calculated and reserved dynamically based on real road driving distance to/from the location base address.
+  - **Dedicated Buffer Times**: Turnaround cooldown, Pre-Service Prep (parking, building entry, unpacking) and Post-Service Pack-up (sanitation, repacking, departure) are reserved **in addition to travel time**, preventing double-buffering or appointment clashes.
+- **Universal Application**:
+  - **Business Profile**: Business HQ Physical Address.
+  - **Solo Provider Settings**: Clean practitioner details (Name, Email, Phone, Bio, Capabilities, Buffers); provider address field removed as providers operate from assigned Locations.
+  - **Primary Location Settings**: Physical address autocomplete with travel origin notice, auto-sync to street, suburb, state, and postcode breakdown.
+  - **Multi-Provider Editor (`/admin/catalog/providers`)**: Turnaround buffer, out-call radius, and delivery capabilities; provider address removed as providers operate from assigned Locations.
+  - **Location Catalog (`/admin/catalog/locations` & provider location modal)**: Standardized address autocomplete with travel origin notice for all physical branches.
 
+---
 
 ## Development & Build Commands
 ```bash

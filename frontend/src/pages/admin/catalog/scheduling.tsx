@@ -64,7 +64,7 @@ console.error('Failed to load providers from backend:', err);
   const [specialDaysMap, setSpecialDaysMap] = useState<Record<string, { is_working: boolean; active_slots: string[]; reason?: string | null }>>({});
 
   useEffect(() => {
-    if (!selectedProvider) return;
+    if (!selectedProvider?.id) return;
     const fetchSpecialDays = async () => {
       try {
         const res = await apiClient.get<any>(`/api/admin/providers/${selectedProvider.id}/special-days`);
@@ -85,7 +85,7 @@ console.error('Failed to load providers from backend:', err);
       }
     };
     fetchSpecialDays();
-  }, [selectedProvider]);
+  }, [selectedProvider?.id]);
 
   const saveSchedule = async (updatedProvider: Provider) => {
     try {
@@ -159,12 +159,17 @@ console.warn('Failed to save special day', err);
           // Ignore
         }
 
+        // When toggling Recurring back ON, revert to the baseline weekly template
+        const baseWeekly = selectedProvider.weekly_schedule?.[dayKey] ?? {
+          is_working: true,
+          recurring: true,
+          active_slots: [],
+        };
         const updatedWeeklySchedule = {
           ...(selectedProvider.weekly_schedule || {}),
           [dayKey]: {
-            is_working: updatedEffective.is_working,
+            ...baseWeekly,
             recurring: true,
-            active_slots: updatedEffective.active_slots,
           }
         };
         const updatedProvider = { ...selectedProvider, weekly_schedule: updatedWeeklySchedule };

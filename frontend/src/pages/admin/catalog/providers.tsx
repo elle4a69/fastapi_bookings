@@ -25,6 +25,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { WeeklyScheduleEditor } from '@/components/ui/weekly-schedule-editor';
+import { AddressAutocomplete } from '@/components/ui/address-autocomplete';
 
 
 // Types based on the MCD specifications
@@ -38,6 +39,11 @@ interface Provider {
   is_visible: boolean;
   allow_in_call?: boolean;
   allow_out_call?: boolean;
+  in_call_address?: string;
+  out_call_radius_km?: number;
+  base_outcall_surcharge?: number;
+  per_km_fee?: number;
+  turnaround_buffer_mins?: number;
   capacity?: number;
   color?: string;
   avatar?: string;
@@ -184,6 +190,10 @@ export default function ProvidersPage() {
         ignore_company_hours: updatedData.ignore_company_hours ?? false,
         allow_in_call: updatedData.allow_in_call ?? true,
         allow_out_call: updatedData.allow_out_call ?? false,
+        out_call_radius_km: updatedData.out_call_radius_km !== undefined ? Number(updatedData.out_call_radius_km) : 25,
+        base_outcall_surcharge: updatedData.base_outcall_surcharge !== undefined ? Number(updatedData.base_outcall_surcharge) : 0,
+        per_km_fee: updatedData.per_km_fee !== undefined ? Number(updatedData.per_km_fee) : 0,
+        turnaround_buffer_mins: updatedData.turnaround_buffer_mins !== undefined ? Number(updatedData.turnaround_buffer_mins) : 15,
       };
 
       // Collection responses deliberately omit large base64 images.  Do not
@@ -648,7 +658,7 @@ console.warn("Backend delete error:", err);
   const [specialDaysMap, setSpecialDaysMap] = useState<Record<string, { is_working: boolean; active_slots: string[]; reason?: string | null }>>({});
 
   useEffect(() => {
-    if (!selectedProvider) return;
+    if (!selectedProvider?.id) return;
     const fetchSpecialDays = async () => {
       try {
         const res = await apiClient.get<any>(`/api/admin/providers/${selectedProvider.id}/special-days`);
@@ -669,7 +679,7 @@ console.warn("Backend delete error:", err);
       }
     };
     fetchSpecialDays();
-  }, [selectedProvider]);
+  }, [selectedProvider?.id]);
 
   const autoSaveProviderSchedule = async (updatedProvider: Provider) => {
     try {
@@ -753,12 +763,17 @@ console.warn('Failed to save special day', err);
           // Ignore
         }
 
+        // When toggling Recurring back ON, revert to the baseline weekly template
+        const baseWeekly = selectedProvider.weekly_schedule?.[day] ?? {
+          is_working: true,
+          recurring: true,
+          active_slots: [],
+        };
         const updatedWeeklySchedule = {
           ...(selectedProvider.weekly_schedule || {}),
           [day]: {
-            is_working: updatedEffective.is_working,
+            ...baseWeekly,
             recurring: true,
-            active_slots: updatedEffective.active_slots,
           }
         };
         const updatedProvider = { ...selectedProvider, weekly_schedule: updatedWeeklySchedule };
@@ -1170,16 +1185,18 @@ console.warn('Failed to update special day slot', err);
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="loc-address">Address</Label>
-                <Input 
+                <AddressAutocomplete
                   id="loc-address"
+                  label="Address"
                   value={locationFormData.address}
-                  onChange={(e) => {
-                    const next = { ...locationFormData, address: e.target.value };
+                  onChange={(formatted) => {
+                    const next = { ...locationFormData, address: formatted };
                     setLocationFormData(next);
                     if (selectedLocationId) triggerLocSave(next);
                   }}
-                  placeholder="e.g. 123 Main St"
+                  placeholder="Search verified location address..."
+                  helperText="Physical clinic, salon, or studio address for in-call bookings."
+                  noticeText="This is the location that will be used to calculate outcall travel times and travel requirements."
                 />
               </div>
 
@@ -1530,10 +1547,10 @@ console.warn("Shortener API offline:", err);
                         </div>
                       </div>
 
-                      {/* 7. Delivery Capabilities */}
+                      {/* 7. Delivery Capabilities & Provider Travel Location */}
                       <div className="space-y-4 pt-4 border-t">
                         <div>
-                          <Label className="font-semibold text-sm">Delivery Capabilities</Label>
+                          <Label className="font-semibold text-sm">Delivery Capabilities & Travel Setup</Label>
                           <p className="text-xs text-muted-foreground mt-0.5">Toggle whether this provider offers in-call appointments, mobile out-call services, or both.</p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1558,6 +1575,98 @@ console.warn("Shortener API offline:", err);
                               checked={selectedProvider.allow_out_call ?? false}
                               onCheckedChange={(checked) => handleProviderChange('allow_out_call', checked, true)}
                             />
+                          </div>
+                        </div>
+
+                        {/* Travel Parameters & Turnaround Buffer */}
+                        <div className="p-4 rounded-xl border bg-muted/20 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <Label htmlFor="prov-turnaround" className="text-xs font-semibold text-muted-foreground">
+                                Turnaround Buffer / Cooldown (mins)
+                              </Label>
+                              <Input
+                                id="prov-turnaround"
+                                type="number"
+                                min={0}
+                                step={5}
+                                value={selectedProvider.turnaround_buffer_mins ?? 15}
+                                onChange={(e) => handleProviderChange('turnaround_buffer_mins', parseInt(e.target.value, 10) || 0, true)}
+                                className="h-10"
+                              />
+                              <p className="text-[11px] text-muted-foreground">
+                                Cooldown buffer reserved between bookings (in addition to travel time).
+                              </p>
+                            </div>
+
+                            {selectedProvider.allow_out_call && (
+                              <div className="space-y-1.5">
+                                <Label htmlFor="prov-radius" className="text-xs font-semibold text-muted-foreground">
+                                  Out-Call Travel Radius (km)
+                                </Label>
+                                <Input
+                                  id="prov-radius"
+                                  type="number"
+                                  min={1}
+                                  step={5}
+                                  value={selectedProvider.out_call_radius_km ?? 25}
+                                  onChange={(e) => handleProviderChange('out_call_radius_km', parseFloat(e.target.value) || 0, true)}
+                                  className="h-10"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                  Maximum allowable service travel distance from base location.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {selectedProvider.allow_out_call && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <Label htmlFor="prov-base-surcharge" className="text-xs font-semibold text-muted-foreground">
+                                  Base Out-Call Surcharge ($)
+                                </Label>
+                                <Input
+                                  id="prov-base-surcharge"
+                                  type="number"
+                                  min={0}
+                                  step={5}
+                                  value={selectedProvider.base_outcall_surcharge ?? 0}
+                                  onChange={(e) => handleProviderChange('base_outcall_surcharge', parseFloat(e.target.value) || 0, true)}
+                                  className="h-10"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label htmlFor="prov-per-km" className="text-xs font-semibold text-muted-foreground">
+                                  Per-KM Travel Surcharge ($/km)
+                                </Label>
+                                <Input
+                                  id="prov-per-km"
+                                  type="number"
+                                  min={0}
+                                  step={0.5}
+                                  value={selectedProvider.per_km_fee ?? 0}
+                                  onChange={(e) => handleProviderChange('per_km_fee', parseFloat(e.target.value) || 0, true)}
+                                  className="h-10"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 5-Segment Operational Model Explainer */}
+                          <div className="p-3.5 rounded-lg border bg-blue-50/50 dark:bg-blue-950/20 text-xs space-y-2 mt-2">
+                            <div className="flex items-center gap-1.5 font-semibold text-blue-900 dark:text-blue-300">
+                              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span>5-Segment Operational Travel & Buffer Architecture</span>
+                            </div>
+                            <div className="space-y-1 text-muted-foreground text-[11px] leading-relaxed">
+                              <p>
+                                • <strong>Travel Time</strong> is dynamically calculated and reserved based on actual driving distance to/from this address.
+                              </p>
+                              <p>
+                                • <strong>Buffer Times</strong> (Turnaround, Pre-Service Prep & Post-Service Pack-up) are <strong>in addition to travel time</strong>, ensuring dedicated time to park, enter, unpack, sanitize, and pack up without eating into client appointment time or driving transit.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>

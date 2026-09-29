@@ -36,6 +36,16 @@ frontend/src/pages/admin/catalog/
 
 ---
 
+## Delivery Modes & Conditional Expansion (In-Call & Out-Call)
+- **Ergonomic Positioning**: In both the "Add New Service" creation view and the "Service Details" accordion editor, delivery mode toggles (**In-Call** and **Out-Call / Mobile**) are positioned directly underneath the Service Description.
+- **Dynamic Conditional Sections**:
+  - **In-Call Enabled**: Dynamically expands an In-Call section containing **In-Call Price ($)** and in-studio buffer times (**Buffer Before**, **Buffer After**).
+  - **Out-Call Enabled**: Dynamically expands an Out-Call section containing **Out-Call Price ($)**, **Travel Buffer Before (mins)**, and **Travel Buffer After (mins)** without redundant helper notes.
+  - **Dual Mode**: When both delivery modes are toggled on, both distinct pricing and buffer panels render sequentially.
+- **Validation Guard**: At least one delivery mode must remain active at all times; disabling both is blocked with clear user feedback.
+
+---
+
 ## Verification & Testing Commands
 ```bash
 # Verify frontend bundle builds cleanly

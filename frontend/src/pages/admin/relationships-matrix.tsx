@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef , useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { 
   Search, 
   Loader2, 
@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 
 import { apiClient } from '@/lib/api';
+import { useTenantModules } from '@/context/tenant-modules-context';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,15 +61,16 @@ interface ColumnDef {
   label: string;
   apiEndpoint: string;
   plural: string;
+  moduleKey?: string;
 }
 
 const DEFAULT_COLUMNS: ColumnDef[] = [
-  { id: 'location', label: 'Locations', apiEndpoint: '/api/admin/locations', plural: 'locations' },
-  { id: 'provider', label: 'Service Providers', apiEndpoint: '/api/admin/providers', plural: 'providers' },
+  { id: 'location', label: 'Locations', apiEndpoint: '/api/admin/locations', plural: 'locations', moduleKey: 'locations' },
+  { id: 'provider', label: 'Service Providers', apiEndpoint: '/api/admin/providers', plural: 'providers', moduleKey: 'multiple_providers' },
   { id: 'service', label: 'Services', apiEndpoint: '/api/admin/services', plural: 'services' },
-  { id: 'addon', label: 'Service Add-ons', apiEndpoint: '/api/admin/add-ons', plural: 'add-ons' },
-  { id: 'product', label: 'Products', apiEndpoint: '/api/admin/products', plural: 'products' },
-  { id: 'category', label: 'Categories', apiEndpoint: '/api/admin/categories', plural: 'categories' },
+  { id: 'addon', label: 'Service Add-ons', apiEndpoint: '/api/admin/add-ons', plural: 'add-ons', moduleKey: 'addons' },
+  { id: 'product', label: 'Products', apiEndpoint: '/api/admin/products', plural: 'products', moduleKey: 'products' },
+  { id: 'category', label: 'Categories', apiEndpoint: '/api/admin/categories', plural: 'categories', moduleKey: 'categories' },
 ];
 
 const STORAGE_COL_ORDER_KEY = 'relationships_matrix_column_order';
@@ -121,8 +123,23 @@ const applySavedItemOrder = (col: ColumnType, items: EntityItem[]): EntityItem[]
 };
 
 export default function RelationshipsMatrixPage() {
+  const { isModuleEnabled } = useTenantModules();
+  const [showInactiveModules, setShowInactiveModules] = useState(false);
   const [columns, setColumns] = useState<ColumnDef[]>(loadSavedColumns);
-  const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
+  const [draggedColId, setDraggedColId] = useState<ColumnType | null>(null);
+
+  const isColActive = useCallback((col: ColumnDef): boolean => {
+    if (!col.moduleKey) return true;
+    return isModuleEnabled(col.moduleKey);
+  }, [isModuleEnabled]);
+
+  const displayedColumns = useMemo(() => {
+    return columns.filter(col => isColActive(col) || showInactiveModules);
+  }, [columns, isColActive, showInactiveModules]);
+
+  const inactiveCount = useMemo(() => {
+    return columns.filter(col => !isColActive(col)).length;
+  }, [columns, isColActive]);
 
   const columnsScrollRef = useRef<HTMLDivElement>(null);
   const [scrollPercentage, setScrollPercentage] = useState(0);
@@ -187,6 +204,15 @@ export default function RelationshipsMatrixPage() {
   const [formVisible, setFormVisible] = useState(true);
   const [modalSaving, setModalSaving] = useState(false);
 
+  // If focusColumn is not in displayedColumns, fallback to first displayed or 'service'
+  useEffect(() => {
+    if (displayedColumns.length > 0 && !displayedColumns.some(c => c.id === focusColumn)) {
+      const fallback = displayedColumns.find(c => isColActive(c))?.id || displayedColumns[0].id;
+      setFocusColumn(fallback);
+      setFocusId(null);
+    }
+  }, [displayedColumns, focusColumn, isColActive]);
+
   useEffect(() => {
     fetchAllColumns();
   }, []);
@@ -200,7 +226,7 @@ export default function RelationshipsMatrixPage() {
         const ordered = applySavedItemOrder(col.id, raw);
         setData(prev => ({ ...prev, [col.id]: ordered }));
       } catch {
-        toast.error(`Failed to load ${col.label}`);
+        // Silently tolerate if disabled module endpoint is unreachable
       } finally {
         setLoading(prev => ({ ...prev, [col.id]: false }));
       }
@@ -210,8 +236,10 @@ export default function RelationshipsMatrixPage() {
   const fetchFocusMappings = useCallback(async () => {
     if (!focusId) return;
 
-    const sourcePlural = DEFAULT_COLUMNS.find(c => c.id === focusColumn)!.plural;
-    const targetCols = DEFAULT_COLUMNS.filter(c => c.id !== focusColumn);
+    const sourceCol = DEFAULT_COLUMNS.find(c => c.id === focusColumn);
+    if (!sourceCol) return;
+    const sourcePlural = sourceCol.plural;
+    const targetCols = displayedColumns.filter(c => c.id !== focusColumn);
 
     const newLinked: Record<ColumnType, Set<number>> = {
       location: new Set(),
@@ -237,7 +265,7 @@ export default function RelationshipsMatrixPage() {
     );
 
     setLinkedIds(newLinked);
-  }, [focusId, focusColumn]);
+  }, [focusId, focusColumn, displayedColumns]);
 
   useEffect(() => {
     if (!focusId) {
@@ -552,21 +580,25 @@ export default function RelationshipsMatrixPage() {
     toast.success('Item order saved!');
   };
 
-  const handleColDragStart = (colIndex: number) => {
-    setDraggedColIndex(colIndex);
+  const handleColDragStart = (colId: ColumnType) => {
+    setDraggedColId(colId);
   };
 
   const handleColDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
 
-  const handleColDrop = (dropIndex: number) => {
-    if (draggedColIndex === null || draggedColIndex === dropIndex) return;
+  const handleColDrop = (dropColId: ColumnType) => {
+    if (!draggedColId || draggedColId === dropColId) return;
+    const srcIndex = columns.findIndex(c => c.id === draggedColId);
+    const dstIndex = columns.findIndex(c => c.id === dropColId);
+    if (srcIndex === -1 || dstIndex === -1) return;
+
     const nextCols = [...columns];
-    const [moved] = nextCols.splice(draggedColIndex, 1);
-    nextCols.splice(dropIndex, 0, moved);
+    const [moved] = nextCols.splice(srcIndex, 1);
+    nextCols.splice(dstIndex, 0, moved);
     setColumns(nextCols);
-    setDraggedColIndex(null);
+    setDraggedColId(null);
 
     try {
       const ids = nextCols.map(c => c.id);
@@ -599,7 +631,14 @@ export default function RelationshipsMatrixPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <h1 className="text-lg font-extrabold tracking-tight text-foreground">6-Column Relationship Matrix</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-extrabold tracking-tight text-foreground">
+              {displayedColumns.length === 6 ? "6-Column " : ""}Relationship Matrix
+            </h1>
+            <Badge variant="secondary" className="text-xs px-2 py-0.5 font-semibold hidden sm:inline-flex">
+              {displayedColumns.length} Active {inactiveCount > 0 ? `• ${inactiveCount} Inactive` : ""}
+            </Badge>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -609,6 +648,34 @@ export default function RelationshipsMatrixPage() {
               Focus: {currentFocusItem.name} ({DEFAULT_COLUMNS.find(c => c.id === focusColumn)?.label})
             </Badge>
           )}
+
+          {inactiveCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowInactiveModules(!showInactiveModules)}
+              className={`h-7 text-xs gap-1.5 px-2.5 ${showInactiveModules ? 'bg-muted font-medium' : ''}`}
+              title={showInactiveModules ? "Hide modules that are turned off in Settings" : "Show columns for disabled modules"}
+            >
+              {showInactiveModules ? (
+                <>
+                  <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Hide Inactive ({inactiveCount})</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Show Inactive ({inactiveCount})</span>
+                </>
+              )}
+            </Button>
+          )}
+
+          <Link to="/admin/relationships">
+            <Button variant="outline" size="sm" className="h-7 text-xs font-semibold gap-1.5 px-2.5">
+              Bulk Editor
+            </Button>
+          </Link>
           <Link to="/admin/relationships-tree">
             <Button variant="outline" size="sm" className="h-7 text-xs font-semibold gap-1.5 px-2.5">
               <Layers className="w-3.5 h-3.5 text-primary" /> Nested Tree
@@ -642,33 +709,41 @@ export default function RelationshipsMatrixPage() {
         </span>
       </div>
 
-      {/* ── 6 Columns Horizontally Scrollable Container ────────────── */}
+      {/* ── Horizontally Scrollable Container ────────────── */}
       <div 
         ref={columnsScrollRef}
         onScroll={handleContainerScroll}
         className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin pb-1"
       >
-        <div className="flex gap-2.5 h-full min-w-[1380px]">
-          {columns.map((col, colIndex) => {
+        <div 
+          className="flex gap-2.5 h-full"
+          style={{ minWidth: `${Math.max(displayedColumns.length * 235, 100)}px` }}
+        >
+          {displayedColumns.map((col) => {
             const items = data[col.id] || [];
             const isLoading = loading[col.id];
             const query = search[col.id] || '';
             const isFocusCol = focusColumn === col.id;
             const linkedSet = linkedIds[col.id];
+            const isColModuleActive = isColActive(col);
 
             const filtered = items.filter(item => (item.name || '').toLowerCase().includes(query.toLowerCase()));
 
             return (
               <Card 
                 key={col.id} 
-                className="w-[225px] flex-shrink-0 h-full flex flex-col overflow-hidden border border-border/60 bg-card/80 shadow-xs"
+                className={`w-[225px] flex-shrink-0 h-full flex flex-col overflow-hidden border shadow-xs ${
+                  isColModuleActive 
+                    ? "border-border/60 bg-card/80" 
+                    : "border-dashed border-amber-500/40 bg-amber-500/[0.03] opacity-85"
+                }`}
               >
                 {/* Column Header (Draggable left/right via Title Grab Handle) */}
                 <CardHeader 
                   draggable
-                  onDragStart={() => handleColDragStart(colIndex)}
+                  onDragStart={() => handleColDragStart(col.id)}
                   onDragOver={handleColDragOver}
-                  onDrop={() => handleColDrop(colIndex)}
+                  onDrop={() => handleColDrop(col.id)}
                   className="p-2 pb-1.5 shrink-0 border-b border-border/30 bg-muted/20 cursor-grab active:cursor-grabbing select-none"
                   title="Drag header left or right to reorder columns"
                 >
@@ -678,7 +753,21 @@ export default function RelationshipsMatrixPage() {
                     <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground text-center truncate">
                       {col.label}
                     </CardTitle>
+                    {!isColModuleActive && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-amber-500/40 text-amber-600 bg-amber-500/10 dark:text-amber-400">
+                        Inactive
+                      </Badge>
+                    )}
                   </div>
+
+                  {!isColModuleActive && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400 flex items-center justify-between mt-1">
+                      <span>Module disabled</span>
+                      <Link to="/admin/settings/modules" className="underline font-semibold hover:text-amber-800">
+                        Enable
+                      </Link>
+                    </div>
+                  )}
 
                   {/* Single Compact Search + Badge Count + Plus Button Row */}
                   <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
@@ -698,9 +787,10 @@ export default function RelationshipsMatrixPage() {
                     <Button
                       variant="outline"
                       size="icon"
+                      disabled={!isColModuleActive}
                       onClick={() => openCreateModal(col.id)}
-                      className="h-7 w-7 rounded-lg hover:bg-primary hover:text-primary-foreground transition-colors shrink-0"
-                      title={`Add new ${col.label.slice(0, -1)}`}
+                      className="h-7 w-7 rounded-lg hover:bg-primary hover:text-primary-foreground transition-colors shrink-0 disabled:opacity-40"
+                      title={!isColModuleActive ? `Module ${col.label} is disabled` : `Add new ${col.label.slice(0, -1)}`}
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </Button>

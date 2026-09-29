@@ -54,8 +54,8 @@ frontend/src/pages/admin/
 │   └── webhooks.tsx             # Outbound webhook registrations
 ├── sms/                         # SMS Assistant suite (inbox, triage, arrivals, simulator)
 ├── audit.tsx                    # System audit trail viewer
-├── booking-form-editor.tsx      # Drag-and-drop dynamic intake form designer
-├── booking-forms.tsx            # Form template listing & publication status
+├── booking-form-editor.tsx      # Split-canvas studio with live device viewport preview, layout mode switch & strict tenant module suppression
+├── booking-forms.tsx            # Modern card/table booking forms manager with search/filter, templates, direct links & embed generator
 ├── bookings.tsx                 # Bookings tabular list, search & bulk operations
 ├── dashboard.tsx                # Configurable operational dashboard with customizable cards and deep module linking
 ├── calendar.tsx                 # Full interactive agenda & timeline calendar
@@ -75,6 +75,7 @@ frontend/src/pages/admin/
 
 ### Core Architecture Components
 - **Dynamic Navigation Filtering ([`frontend/src/components/navigation.ts`](file:///F:/Projects/fastapi_bookings/frontend/src/components/navigation.ts))**: The sidebar navigation items declare optional `moduleKey` attributes. The function `filterNavigationByModules(sections, enabledModules)` strips disabled modules dynamically so staff only see features permitted by their tenant's plan.
+- **Relationship Suite & Module-Aware Matrix ([`frontend/src/pages/admin/relationships-matrix.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/relationships-matrix.tsx), [`relationships.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/relationships.tsx), [`relationships-tree.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/relationships-tree.tsx))**: Anchored under Operations in the main navigation. Fully functional in both single-provider and multi-provider modes. Automatically adapts to active tenant modules via `useTenantModules()`—cleanly hiding columns and tabs for disabled modules (such as Add-ons or Products) while keeping Services, Categories, and Locations completely operational, with an on-demand toggle to inspect inactive columns.
 - **Tenant Modules Context ([`frontend/src/context/tenant-modules-context.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/context/tenant-modules-context.tsx))**: Exposes `modulesData`, `enabledModules`, and API actions `toggleModule()` and `updateTier()`. Manages the optimistic UI updates and validation guards.
 - **Modular App Store ([`frontend/src/pages/admin/settings/modules.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/settings/modules.tsx))**: Visual marketplace allowing tenant admins to enable or disable add-on capabilities (e.g., Resident Agent, Advanced Finance, Cal.com Scheduling). Enforces tier limits with an upgrade modal when add-on quotas are exceeded.
 - **Responsive Layout Shell ([`frontend/src/layouts/admin-layout.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/layouts/admin-layout.tsx))**: Houses the collapsible `AppSidebar`, mobile topbar, tenant switch indicator, user profile dropdown, and child page routing outlet.
@@ -118,6 +119,12 @@ The admin views depend on:
 
 ### 2. Provider Schedule Redirection
 When a practitioner logs in who lacks full administrative rights (`isProvider = true`, `isAdmin = false`), `App.tsx` routes them automatically away from the main dashboard to `/admin/my-schedule`, restricting their navigation to assigned appointments and personal working hours.
+
+### 3. Booking Forms Studio & Strict Tenant Module Enforcement
+- **Tenant Entitlement Filtering**: The form designer (`booking-form-editor.tsx`) and forms manager (`booking-forms.tsx`) hook directly into `useTenantModules()`. Any capability disabled in the tenant's package (`locations`, `multiple_providers`, `categories`, `products`, `addons`) is strictly stripped from available form steps, relational pre-selection locks, embed code query filters, and live preview canvases.
+- **Split-Canvas Live Preview**: Designers can toggle between Multi-Step Wizard and Single Page Scroll modes while previewing live responsive layouts across Desktop, Tablet (768px), and Mobile (390px) viewports with instant visual feedback.
+- **Relational Funnel Locks**: Pre-selecting a location, staff member, or service auto-locks that step and causes incoming clients on that public URL to bypass selection steps directly into slot scheduling.
+- **Widget Distribution**: Forms can be copied as 1-click shareable public links (`/book/{slug}`), embedded responsive iframes, or modal button scripts.
 
 ---
 
