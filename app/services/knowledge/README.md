@@ -389,5 +389,25 @@ Implementation codified in [`tests/test_production_rollout_stages.py`](file:///f
 python -m pytest tests/test_production_rollout_stages.py -v
 ```
 
+---
+
+## 10. Continuous Curation Governance & Provider Isolation Rules
+
+### 10.1 Strict Provider Proposal Scoping & Isolation
+`UnifiedCurator` enforces strict provider and tenant boundary isolation across proposal matching, resolution, and quarantine:
+- **Explicit Scoping (`proposal_matches_scope`)**: When an event has a specific `provider_id`, only proposals with `KnowledgeProposal.provider_id == event.provider_id` are eligible for matching, resolution, or safety quarantine. If `event.provider_id is None`, only tenant-shared proposals (`KnowledgeProposal.provider_id.is_(None)`) match.
+- **Cross-Provider Protection**: Provider A's events never resolve, supersede, quarantine, or reject Provider B's proposals.
+- **Target Memory Linking**: Resolved proposals point to `CuratedMemory.id` via `target_memory_id` strictly within the matching provider/tenant scope.
+
+### 10.2 Flag-Only Corrections (Telemetry & Evidence Only)
+- **Zero Factual Invention**: When an operator flags an assistant response with a critique or correction reason but does not provide explicit replacement wording (`human_content=None`), the curator treats the signal as feedback/telemetry evidence only.
+- **Evidence-Only Decision**: Returns `CuratorActionValue("EVIDENCE", ...)` with `status="processed"`, `retained_as_evidence=True`, and `memory_id=None`. No factual `CuratedMemory` or canonical knowledge proposal is created from operator criticism alone.
+- **Behavioral Distinctions**: Only explicit, clean human replacement text (`clean_human`) or genuine behavioral instructions create new knowledge entries.
+
+### 10.3 Dynamic Operational Fact Rejection
+- Dynamic operational data (live calendar times, availability slots, real-time rates, one-off payment links) detected via `is_dynamic_operational_data` are immediately rejected (`REJECT_DYNAMIC`).
+- Pending proposals associated with dynamic facts are rejected with `reason_code="dynamic_operational_data"` strictly within the event's scoped provider partition.
+
+
 
 

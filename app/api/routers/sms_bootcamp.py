@@ -17,6 +17,7 @@ from ...models.learning_event import LearningEvent, compute_text_diff
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...services.sms.pii_scrubber import scrub_pii
+from ...services.knowledge.policy import is_dynamic_operational_data
 from ...models.sms_bootcamp import (
     SmsBootcampConversation,
     SmsBootcampMessage,
@@ -621,19 +622,11 @@ def respond_to_bootcamp_information_request(
         settings_data=settings_data,
     )
 
-    # 1. Save lesson into isolated SmsBootcampSettings
-    lesson_entry = f"- Q: {persona_msg.text} | A: {generated['knowledge_summary']}"
-    if settings_obj.custom_training_notes:
-        settings_obj.custom_training_notes = f"{settings_obj.custom_training_notes}\n{lesson_entry}"
-    else:
-        settings_obj.custom_training_notes = lesson_entry
-    settings_obj.training_notes = settings_obj.custom_training_notes
-    settings_obj.updated_at = datetime.now(timezone.utc)
-
-    # 2. Ingest into central curator KnowledgeProposal
+    # 1. Ingest into central curator KnowledgeProposal (pending curation)
     now = datetime.now(timezone.utc)
     scrubbed_query = scrub_pii(persona_msg.text) if persona_msg.text else ""
     scrubbed_response = scrub_pii(payload.information) if payload.information else ""
+    has_dynamic = is_dynamic_operational_data(scrubbed_response) or is_dynamic_operational_data(scrubbed_query)
     info_proposal = KnowledgeProposal(
         tenant_id=tenant.id,
         provider_id=resolved_prov_id,
@@ -649,7 +642,7 @@ def respond_to_bootcamp_information_request(
         ).hexdigest(),
         reason_code=f"bootcamp_info_request: {conv.id}"[:64],
         confidence_score=1.0,
-        contains_dynamic_fact=False,
+        contains_dynamic_fact=has_dynamic,
         requires_review=True,
         evidence_count=1,
         created_at=now,
@@ -657,10 +650,10 @@ def respond_to_bootcamp_information_request(
     )
     db.add(info_proposal)
 
-    # 3. LearningEvent is authoritative
+    # 2. LearningEvent is authoritative
     knowledge_source = "learning_event"
 
-    # 4. Add Tori's reply message to conversation
+    # 3. Add Tori's reply message to conversation
     tori_msg = SmsBootcampMessage(
         id=str(uuid.uuid4()),
         conversation_id=conv.id,
@@ -676,7 +669,7 @@ def respond_to_bootcamp_information_request(
     )
     db.add(tori_msg)
 
-    # 4b. Ingest LearningEvent and curate through UnifiedCurator (Phase 12)
+    # 4. Ingest LearningEvent and curate through UnifiedCurator (Phase 12)
     learning_event = LearningEvent(
         tenant_id=tenant.id,
         provider_id=resolved_prov_id,
@@ -686,6 +679,10 @@ def respond_to_bootcamp_information_request(
         source="bootcamp",
         customer_message=scrubbed_query,
         human_content=scrubbed_response,
+        metadata_payload={
+            "contains_dynamic_facts": has_dynamic,
+            "category": "faq",
+        },
         status="pending",
         confidence_score=1.0,
         created_at=now,
@@ -782,43 +779,35 @@ def record_bootcamp_correction(
     if not resolved_prov_id and getattr(conv, "run", None):
         resolved_prov_id = getattr(conv.run, "provider_id", None)
 
-    # Append correction lesson into SmsBootcampSettings.custom_training_notes
-    settings_obj = _get_or_create_settings(db, tenant.id, resolved_prov_id)
-    corrected_display = (payload.corrected_wording or "").strip() or old_text
-    lesson_entry = f"- Correction: for query '{user_query}', replied '{old_text}' -> corrected to '{corrected_display}'. Reason: {payload.reason.strip()}"
-    if settings_obj.custom_training_notes:
-        settings_obj.custom_training_notes = f"{settings_obj.custom_training_notes}\n{lesson_entry}"
-    else:
-        settings_obj.custom_training_notes = lesson_entry
-    settings_obj.training_notes = settings_obj.custom_training_notes
-    settings_obj.updated_at = now
-
-    reason_str = payload.reason.strip()
+    reason_str = payload.reason.strip() if payload.reason else ""
     scrubbed_query = scrub_pii(user_query) if user_query else ""
-    raw_response = payload.corrected_wording or payload.reason
-    scrubbed_response = scrub_pii(raw_response) if raw_response else ""
-    proposal = KnowledgeProposal(
-        tenant_id=tenant.id,
-        provider_id=resolved_prov_id,
-        proposal_type="conflict",
-        status="pending",
-        category="faq",
-        knowledge_kind="durable_fact",
-        authority="bootcamp_correction",
-        user_query=scrubbed_query,
-        proposed_response=scrubbed_response,
-        fingerprint=hashlib.sha256(
-            f"bootcamp:{tenant.id}:{conversation_id}:{msg.id}:{now.isoformat()}".encode()
-        ).hexdigest(),
-        reason_code=f"bootcamp_correction: {reason_str}"[:64],
-        confidence_score=1.0,
-        contains_dynamic_fact=payload.contains_dynamic_facts,
-        requires_review=True,
-        evidence_count=1,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(proposal)
+    has_corrected_wording = bool(payload.corrected_wording and payload.corrected_wording.strip())
+    scrubbed_response = scrub_pii(payload.corrected_wording.strip()) if has_corrected_wording else None
+
+    proposal = None
+    if has_corrected_wording:
+        proposal = KnowledgeProposal(
+            tenant_id=tenant.id,
+            provider_id=resolved_prov_id,
+            proposal_type="conflict",
+            status="pending",
+            category="faq",
+            knowledge_kind="durable_fact",
+            authority="bootcamp_correction",
+            user_query=scrubbed_query,
+            proposed_response=scrubbed_response,
+            fingerprint=hashlib.sha256(
+                f"bootcamp:{tenant.id}:{conversation_id}:{msg.id}:{now.isoformat()}".encode()
+            ).hexdigest(),
+            reason_code=f"bootcamp_correction: {reason_str}"[:64],
+            confidence_score=1.0,
+            contains_dynamic_fact=payload.contains_dynamic_facts,
+            requires_review=True,
+            evidence_count=1,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(proposal)
 
     learning_event = LearningEvent(
         tenant_id=tenant.id,
@@ -833,20 +822,22 @@ def record_bootcamp_correction(
         metadata_payload={
             "reason": reason_str,
             "contains_dynamic_facts": payload.contains_dynamic_facts,
+            "has_corrected_wording": has_corrected_wording,
         },
         status="pending",
-        confidence_score=1.0,
+        confidence_score=1.0 if has_corrected_wording else 0.5,
         created_at=now,
     )
     db.add(learning_event)
 
     db.commit()
-    db.refresh(proposal)
+    if proposal:
+        db.refresh(proposal)
     db.refresh(msg)
 
     return {
         "ok": True,
-        "proposal_id": proposal.id,
+        "proposal_id": proposal.id if proposal else None,
         "learning_event_id": learning_event.id,
         "updated_text": msg.text,
     }

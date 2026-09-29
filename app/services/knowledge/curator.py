@@ -208,6 +208,46 @@ class UnifiedCurator:
                 return cand
         return None
 
+    @classmethod
+    def get_scoped_proposals_query(
+        cls,
+        db: Session,
+        tenant_id: int,
+        provider_id: Optional[int],
+        status: Optional[str] = "pending",
+    ):
+        """Build a query for KnowledgeProposal records strictly isolated by scope.
+
+        - If provider_id is provided, matches that exact provider_id.
+        - If provider_id is None, matches only tenant-shared proposals (provider_id is NULL).
+        """
+        q = db.query(KnowledgeProposal).filter(KnowledgeProposal.tenant_id == tenant_id)
+        if provider_id is not None:
+            q = q.filter(KnowledgeProposal.provider_id == provider_id)
+        else:
+            q = q.filter(KnowledgeProposal.provider_id.is_(None))
+        if status is not None:
+            q = q.filter(KnowledgeProposal.status == status)
+        return q
+
+    @classmethod
+    def get_scoped_pending_proposals(
+        cls, db: Session, tenant_id: int, provider_id: Optional[int]
+    ) -> List[KnowledgeProposal]:
+        """Fetch all pending proposals strictly within tenant and provider scope."""
+        return cls.get_scoped_proposals_query(db, tenant_id, provider_id, status="pending").all()
+
+    @classmethod
+    def proposal_matches_scope(
+        cls, proposal: KnowledgeProposal, tenant_id: int, provider_id: Optional[int]
+    ) -> bool:
+        """Validate if a proposal strictly matches the given tenant and provider scope."""
+        if proposal.tenant_id != tenant_id:
+            return False
+        if provider_id is not None:
+            return proposal.provider_id == provider_id
+        return proposal.provider_id is None
+
     def process_learning_event(
         self,
         db: Session,
@@ -291,20 +331,13 @@ class UnifiedCurator:
                 event.id,
                 combined_text[:60],
             )
-            # Find and update any matching pending proposal
-            proposals = (
-                db.query(KnowledgeProposal)
-                .filter(
-                    KnowledgeProposal.tenant_id == event.tenant_id,
-                    KnowledgeProposal.status == "pending",
-                )
-                .all()
-            )
+            # Find and update any matching pending proposal strictly within scope
+            proposals = self.get_scoped_pending_proposals(db, event.tenant_id, event.provider_id)
             quarantined_prop_id = None
             for p in proposals:
                 if (
-                    (event.message_id and event.message_id in p.fingerprint)
-                    or (event.conversation_id and event.conversation_id in p.fingerprint)
+                    (event.message_id and event.message_id in (p.fingerprint or ""))
+                    or (event.conversation_id and event.conversation_id in (p.fingerprint or ""))
                     or p.proposed_response == event.human_content
                     or (clean_human and p.proposed_response == clean_human)
                 ):
@@ -365,6 +398,20 @@ class UnifiedCurator:
                 event.id,
                 f"{clean_query} {clean_human}"[:60],
             )
+            proposals = self.get_scoped_pending_proposals(db, event.tenant_id, event.provider_id)
+            for p in proposals:
+                if (
+                    (event.message_id and event.message_id in (p.fingerprint or ""))
+                    or (event.conversation_id and event.conversation_id in (p.fingerprint or ""))
+                    or p.proposed_response == event.human_content
+                    or (clean_human and p.proposed_response == clean_human)
+                ):
+                    p.status = "rejected"
+                    p.reason_code = "dynamic_operational_data"
+                    p.resolution_code = "rejected_dynamic_operational_data"
+                    p.reviewed_at = now
+                    p.updated_at = now
+
             event.status = "rejected"
             return CuratorDecision(
                 action=CuratorActionValue("REJECT_DYNAMIC", ("reject_dynamic", "rejected")),
@@ -402,13 +449,10 @@ class UnifiedCurator:
 
             # Material Edit: Record behavioural signal and increment evidence count
             existing_proposal = (
-                db.query(KnowledgeProposal)
-                .filter(
-                    KnowledgeProposal.tenant_id == event.tenant_id,
-                    KnowledgeProposal.provider_id == event.provider_id,
-                    KnowledgeProposal.category == "style",
-                    KnowledgeProposal.status == "pending",
+                self.get_scoped_proposals_query(
+                    db, event.tenant_id, event.provider_id, status="pending"
                 )
+                .filter(KnowledgeProposal.category == "style")
                 .first()
             )
 
@@ -464,6 +508,31 @@ class UnifiedCurator:
                 status="processed",
                 telemetry_recorded=True,
                 rationale="Positive reinforcement telemetry recorded for approved draft",
+            )
+
+        # Flag-only corrections / absence of corrected wording:
+        # A correction without replacement wording is feedback/telemetry only.
+        # It must NOT create a factual proposal or durable curated memory.
+        # Factual curation requires non-empty corrected wording.
+        if event_type == "flagged_response" and not clean_human:
+            event.status = "processed"
+            return CuratorDecision(
+                action=CuratorActionValue("EVIDENCE", ("feedback_only", "telemetry", "evidence")),
+                status="processed",
+                telemetry_recorded=True,
+                retained_as_evidence=True,
+                user_query=clean_query or None,
+                reason_code=clean_reason or "flag_only_correction",
+                rationale="Correction without replacement wording recorded as feedback/evidence only",
+            )
+
+        if not is_behavioural and not clean_human:
+            event.status = "processed"
+            return CuratorDecision(
+                action=CuratorActionValue("NOOP", ("no_content", "ignored", "evidence")),
+                status="processed",
+                retained_as_evidence=True,
+                rationale="No factual content provided for durable memory creation",
             )
 
         # -------------------------------------------------------------
@@ -571,21 +640,14 @@ class UnifiedCurator:
         # -------------------------------------------------------------
         knowledge_gateway.invalidate(event.tenant_id, event.provider_id)
 
-        # Resolve any pending proposals associated with this event/content
-        proposals = (
-            db.query(KnowledgeProposal)
-            .filter(
-                KnowledgeProposal.tenant_id == event.tenant_id,
-                KnowledgeProposal.status == "pending",
-            )
-            .all()
-        )
+        # Resolve any pending proposals associated with this event/content strictly within scope
+        proposals = self.get_scoped_pending_proposals(db, event.tenant_id, event.provider_id)
         for prop in proposals:
             if (
                 prop.user_query == effective_query
                 or prop.proposed_response == effective_response
-                or (event.message_id and event.message_id in prop.fingerprint)
-                or (event.conversation_id and event.conversation_id in prop.fingerprint)
+                or (event.message_id and event.message_id in (prop.fingerprint or ""))
+                or (event.conversation_id and event.conversation_id in (prop.fingerprint or ""))
             ):
                 prop.status = "resolved"
                 prop.resolution_code = (

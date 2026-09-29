@@ -427,6 +427,23 @@ def generate_bootcamp_information_resolution(
         resolved_tenant_id = (settings_data or {}).get("tenant_id")
         resolved_provider_id = (settings_data or {}).get("provider_id")
         resolved_db = (settings_data or {}).get("db")
+        from app.services.knowledge.gateway import knowledge_gateway
+        from app.services.knowledge.types import RetrievalQuery
+
+        active_retrieval_result = None
+        if resolved_tenant_id:
+            try:
+                active_retrieval_result = knowledge_gateway.retrieve(
+                    RetrievalQuery(
+                        tenant_id=resolved_tenant_id,
+                        provider_id=resolved_provider_id,
+                        query=latest,
+                    ),
+                    db=resolved_db,
+                )
+            except Exception as exc:
+                logger.warning("Knowledge gateway retrieval in bootcamp info resolution failed: %s", exc)
+
         learned_facts = (settings_data or {}).get("learned_facts") or ""
 
         instructions = _assemble_bootcamp_unified_prompt(
@@ -440,6 +457,7 @@ def generate_bootcamp_information_resolution(
             resolved_db=resolved_db,
             latest_customer_text=latest,
             history=history,
+            active_retrieval_result=active_retrieval_result,
             learned_facts=learned_facts,
         )
         instructions += (

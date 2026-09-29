@@ -645,10 +645,15 @@ flowchart TD
   - Query and aggregate learning events scoped strictly by authenticated tenant.
 
 #### 2. Bootcamp Ingestion (`app/api/routers/sms_bootcamp.py`)
+- **No Uncurated Prompt Pollution**: Information requests and corrections no longer write raw text directly into `SmsBootcampSettings.custom_training_notes`, `training_notes`, or `learned_facts`. Rejected, quarantined, or dynamic operational data never reaches settings or agent prompts.
 - **`POST /conversations/{conversation_id}/information-request/respond`**:
+  - Validates dynamic operational data via `is_dynamic_operational_data`.
+  - Ingests `KnowledgeProposal` (`proposal_type="gap"`, `authority="bootcamp_info_request"`).
   - Ingests `LearningEvent` (`event_type="knowledge_answer"`, `source="bootcamp"`, `confidence_score=1.0`).
+  - Accepted curation creates `CuratedMemory`, retrieved dynamically via `knowledge_gateway.retrieve()`.
 - **`POST /conversations/{conversation_id}/corrections`**:
-  - Ingests `LearningEvent` (`event_type="flagged_response"`, `source="bootcamp"`, `confidence_score=1.0`).
+  - **With replacement wording (`correctedWording`)**: Ingests `KnowledgeProposal` (`proposal_type="conflict"`, `authority="bootcamp_correction"`) and `LearningEvent` (`human_content=scrubbed_replacement`).
+  - **Flag-only correction (reason only)**: Does NOT create a `KnowledgeProposal`. Ingests `LearningEvent` with `human_content=None` and preserves the critique reason strictly in `metadata_payload` as feedback/telemetry evidence.
 - **`POST /conversations/{conversation_id}/drafts/{message_id}/review`**:
   - Modified text: `LearningEvent` (`event_type="draft_edit"`, `source="bootcamp"`, `confidence_score=0.5`).
   - Unchanged text: `LearningEvent` (`event_type="approved_draft"`, `source="bootcamp"`, `confidence_score=0.2`).
