@@ -6,6 +6,7 @@ until an authorised operator makes an explicit, audited decision.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -178,6 +179,15 @@ class KnowledgeProposal(Base):
     provider = relationship("Provider")
     target_memory = relationship("CuratedMemory", foreign_keys=[target_memory_id])
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
+
+    @property
+    def proposed_fact(self) -> Optional[str]:
+        """Alias for proposed_response representing the proposed factual knowledge."""
+        return self.proposed_response
+
+    @proposed_fact.setter
+    def proposed_fact(self, value: Optional[str]) -> None:
+        self.proposed_response = value
 
     def __repr__(self) -> str:
         return (

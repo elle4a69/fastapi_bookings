@@ -223,12 +223,12 @@ export default function SmsAssistantPage() {
             <SmsInboxTab onNavigate={setActiveTab} />
           </TabsContent>
           <TabsContent value="arrivals" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Arrivals panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsArrivalsTab />
             </div>
           </TabsContent>
           <TabsContent value="triage" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Triage panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsTriageTab />
             </div>
           </TabsContent>
@@ -236,37 +236,37 @@ export default function SmsAssistantPage() {
             <AssistantBootcampPage onNavigate={handleTabChange} />
           </TabsContent>
           <TabsContent value="bootcamp-settings" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Bootcamp settings panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <BootcampSettingsTab onBackToBootcamp={() => handleTabChange("bootcamp")} />
             </div>
           </TabsContent>
           <TabsContent value="console" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Agent console panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsAgentConsoleTab />
             </div>
           </TabsContent>
           <TabsContent value="accounts" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Accounts panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsAccountsTab />
             </div>
           </TabsContent>
           <TabsContent value="chatwoot" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Chatwoot panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsChatwootTab />
             </div>
           </TabsContent>
           <TabsContent value="settings" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="SMS settings panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsSettingsTab />
             </div>
           </TabsContent>
           <TabsContent value="simulator" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Simulator panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsSimulatorTab onNavigate={setActiveTab} />
             </div>
           </TabsContent>
           <TabsContent value="diagnostics" className="mt-0 flex-1 min-h-0 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+            <div tabIndex={0} role="region" aria-label="Diagnostics panel" className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 focus:outline-none">
               <SmsDiagnosticsTab />
             </div>
           </TabsContent>

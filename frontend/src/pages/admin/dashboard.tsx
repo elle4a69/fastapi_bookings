@@ -298,7 +298,7 @@ export default function DashboardPage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-3 py-3 max-h-[60vh] overflow-y-auto pr-1">
+              <div tabIndex={0} role="region" aria-label="Dashboard widget options" className="space-y-3 py-3 max-h-[60vh] overflow-y-auto pr-1 focus:outline-none">
                 {widgets.map((widget) => (
                   <div
                     key={widget.id}
@@ -312,6 +312,7 @@ export default function DashboardPage() {
                     </div>
                     <Switch
                       id={`toggle-${widget.id}`}
+                      aria-label={`Toggle ${widget.title}`}
                       checked={widget.enabled}
                       onCheckedChange={() => toggleWidget(widget.id)}
                     />

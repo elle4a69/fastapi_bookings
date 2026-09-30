@@ -475,3 +475,38 @@ Procedural style examples are retrieved on-demand for system/few-shot prompt con
   2. **Tenant Defaults**: Records matching `tenant_id` with `provider_id IS NULL`.
   3. **Platform Seeds**: Platform-wide fallback records where `tenant_id IS NULL` and `provider_id IS NULL`.
 - **Prompt Formatter**: `format_style_examples_for_prompt` renders retrieved exemplars into structured Markdown blocks ready for LLM context injection.
+
+---
+
+## 12. Unified Curator, Variable Normalization & Harmonized Bootcamp Learning (Stream C)
+
+### 12.1 Classifier Screening at Write & Approval Gates
+To prevent unreviewed or unsafe content from bypassing classification:
+- **Assistant Studio Example Gates (`POST /examples`, `PUT /examples/{id}`)**: Both `client_message` and `assistant_reply` are screened through `classify_text` and `normalize_template_variables`. Any input containing `DYNAMIC_OPERATIONAL` facts (dates, clock times, live quotes), `PII`, or `PROMPT_INJECTION` is rejected immediately with HTTP 422.
+- **Curator Proposal Approval Gate (`POST /curator/proposals/{id}/curate`)**: Screened at the moment of approval (`proposal.proposed_fact`). Forbids acceptance if it contains dynamic operational data or PII, transitioning the proposal to `rejected` (or `quarantine`) with `resolution_code="rejected_by_curator_classifier"`. Only proposals classified as static `FACTUAL_PROPOSAL` are promoted into `CuratedMemory`. Style guidance proposals promote strictly into `MessageStyleExample` and never touch `CuratedMemory`.
+
+### 12.2 Variable Normalization & Central Registry
+- **Canonical Placeholders**: Standard templates support `{business_name}`, `{provider_name}`, `{location_name}`, `{location_address}`, `{service_name}`, `{service_area}`, `{booking_link}`, and `{cancellation_window}`.
+- **Syntax Normalization (`normalize_template_variables`)**: Normalizes double braces (`{{var}}` -> `{var}`) and interior whitespace (`{ var }` -> `{var}`).
+- **Forbidden Operational Placeholders**: Dynamic operational variables (`{date}`, `{time}`, `{slot}`, `{price}`, `{deposit}`, `{customer_name}`, etc.) are rejected with `ValueError` to guarantee live tool routing at runtime.
+- **Variable Registry Extensions**: `VariableRegistry` registers `service_area` and `cancellation_window` resolvers.
+
+### 12.3 Harmonized Bootcamp Learning Flows
+1. **Information Requests**: Lessons submitted via `/conversations/{id}/information-request/respond` are stored as pending `KnowledgeProposal` (`proposal_type="gap"`) and processed through `UnifiedCurator` / worker. They are NEVER written directly into prompt-bearing `SmsBootcampSettings.custom_training_notes`.
+2. **Corrections**: Flag-only corrections (reason without replacement text) are recorded strictly as `evidence_only` feedback telemetry (`decision_code="evidence_only"`). They NEVER create durable facts in `CuratedMemory`. Only corrections with non-empty `corrected_wording` passing the classifier propose factual knowledge.
+3. **Draft Approvals / Edits**: When an operator edits a draft, it is retained as evidence. Minor edits produce `decision_code="evidence_only"`. Material edits propose procedural style guidance (`knowledge_kind="style_example"`, `category="style"`) which upon approval creates `MessageStyleExample` and NEVER pollutes `CuratedMemory`.
+
+### 12.4 Standardized Auditable Decision Codes
+Every curator decision emits one of the 6 standardized auditable codes:
+- `accepted`: Factual candidate approved into `CuratedMemory`.
+- `evidence_only`: Incidental edits, approved drafts, and flag-only critique retained for telemetry.
+- `pending_review`: Material draft edits and gap suggestions awaiting operator review.
+- `quarantined`: Safety violations or dynamic facts quarantined for safety inspection.
+- `rejected`: Policy failures, scope mismatches, and classifier rejections.
+- `superseded`: Prior durable knowledge replaced by newer approved truth.
+
+### 12.5 Verification Commands
+```bash
+.venv\Scripts\python.exe -m pytest -q tests/test_curator_unified_learning.py tests/test_curator_import_safety.py tests/test_assistant_studio_api.py tests/test_sms_bootcamp.py
+```
+

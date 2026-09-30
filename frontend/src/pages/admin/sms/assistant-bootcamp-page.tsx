@@ -1460,6 +1460,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                     value={selectedProviderId ?? ""}
                     disabled={runStatus === "running"}
                     onChange={(e) => setSelectedProviderId(e.target.value ? Number(e.target.value) : null)}
+                    aria-label="Select provider"
                     className="h-6 text-xs rounded-md border border-border bg-card px-2 py-0 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-50"
                   >
                     <option value="">Tenant Global</option>
@@ -1683,6 +1684,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                   setTurns(val);
                   initializeConversations(selectedPersonaIds, val);
                 }}
+                aria-label="Turns per thread"
                 className="flex-1 h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary disabled:opacity-50"
                 title={`Turns per thread: ${turns} (range 2 - 12)`}
               />
@@ -1825,6 +1827,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                             e.stopPropagation();
                             togglePersona(persona.id);
                           }}
+                          aria-label={`Select ${persona.name}`}
                           className="rounded border-slate-300 text-primary focus:ring-primary accent-primary h-3.5 w-3.5 cursor-pointer"
                         />
                         <span className="font-bold truncate text-foreground">
@@ -2000,6 +2003,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
                     step="1"
                     value={val}
                     onChange={(e) => handleSliderChange(key, Number(e.target.value))}
+                    aria-label={label}
                     className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
                   />
                   <div className="flex justify-between text-[9px] text-muted-foreground">

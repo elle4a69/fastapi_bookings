@@ -1231,7 +1231,7 @@ export default function BusinessSettings() {
                     executeSaveLocation(updated, composeAddress(locStreet, locCity, locState, locPostalCode))
                   }}
                 >
-                  <SelectTrigger id="primary-location-timezone" className="h-11 min-h-[44px] w-full">
+                  <SelectTrigger id="primary-location-timezone" className="h-11 min-h-[44px] w-full" aria-label="Select timezone">
                     <SelectValue placeholder="Select timezone" />
                   </SelectTrigger>
                   <SelectContent>

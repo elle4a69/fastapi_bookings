@@ -92,6 +92,26 @@ def _validate_provider_id(db: Session, tenant_id: int, provider_id: Optional[int
     return prov.id
 
 
+def _get_tenant_preserved_names(db: Session, tenant_id: int) -> List[str]:
+    from ...models.provider import Provider
+    from ...models.tenant import Tenant
+    preserved_names: List[str] = []
+    providers = db.query(Provider).filter(Provider.tenant_id == tenant_id).all()
+    for p in providers:
+        if p.name:
+            preserved_names.append(p.name)
+            parts = p.name.split()
+            if len(parts) > 1:
+                preserved_names.append(parts[-1])
+                preserved_names.append(f"{parts[0]} {parts[-1]}")
+                clean_first = parts[0].replace(".", "")
+                preserved_names.append(f"{clean_first} {parts[-1]}")
+    tenant_obj = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant_obj and tenant_obj.name:
+        preserved_names.append(tenant_obj.name)
+    return preserved_names
+
+
 def _get_or_create_settings(db: Session, tenant_id: int, provider_id: Optional[int] = None) -> SmsBootcampSettings:
     query = db.query(SmsBootcampSettings).filter(SmsBootcampSettings.tenant_id == tenant_id)
     if provider_id is not None:
@@ -624,8 +644,9 @@ def respond_to_bootcamp_information_request(
 
     # 1. Ingest into central curator KnowledgeProposal (pending curation)
     now = datetime.now(timezone.utc)
-    scrubbed_query = scrub_pii(persona_msg.text) if persona_msg.text else ""
-    scrubbed_response = scrub_pii(payload.information) if payload.information else ""
+    preserved_names = _get_tenant_preserved_names(db, tenant.id)
+    scrubbed_query = scrub_pii(persona_msg.text, preserve_names=preserved_names) if persona_msg.text else ""
+    scrubbed_response = scrub_pii(payload.information, preserve_names=preserved_names) if payload.information else ""
     has_dynamic = is_dynamic_operational_data(scrubbed_response) or is_dynamic_operational_data(scrubbed_query)
     info_proposal = KnowledgeProposal(
         tenant_id=tenant.id,
@@ -780,9 +801,10 @@ def record_bootcamp_correction(
         resolved_prov_id = getattr(conv.run, "provider_id", None)
 
     reason_str = payload.reason.strip() if payload.reason else ""
-    scrubbed_query = scrub_pii(user_query) if user_query else ""
+    preserved_names = _get_tenant_preserved_names(db, tenant.id)
+    scrubbed_query = scrub_pii(user_query, preserve_names=preserved_names) if user_query else ""
     has_corrected_wording = bool(payload.corrected_wording and payload.corrected_wording.strip())
-    scrubbed_response = scrub_pii(payload.corrected_wording.strip()) if has_corrected_wording else None
+    scrubbed_response = scrub_pii(payload.corrected_wording.strip(), preserve_names=preserved_names) if has_corrected_wording else None
 
     proposal = None
     if has_corrected_wording:
@@ -817,7 +839,7 @@ def record_bootcamp_correction(
         event_type="flagged_response",
         source="bootcamp",
         customer_message=scrubbed_query,
-        original_ai_content=scrub_pii(old_text) if old_text else None,
+        original_ai_content=scrub_pii(old_text, preserve_names=preserved_names) if old_text else None,
         human_content=scrubbed_response,
         metadata_payload={
             "reason": reason_str,
@@ -887,6 +909,7 @@ def review_bootcamp_draft(
         original_text = msg.text or ""
         clean_new = payload.text.strip() if payload.text and payload.text.strip() else None
 
+        preserved_names = _get_tenant_preserved_names(db, tenant.id)
         if clean_new and clean_new != original_text.strip():
             diff_data = compute_text_diff(original_text, clean_new)
             learning_event = LearningEvent(
@@ -896,8 +919,8 @@ def review_bootcamp_draft(
                 message_id=msg.id,
                 event_type="draft_edit",
                 source="bootcamp",
-                original_ai_content=scrub_pii(original_text),
-                human_content=scrub_pii(clean_new),
+                original_ai_content=scrub_pii(original_text, preserve_names=preserved_names),
+                human_content=scrub_pii(clean_new, preserve_names=preserved_names),
                 diff_payload=diff_data,
                 status="pending",
                 confidence_score=0.5,
@@ -913,8 +936,8 @@ def review_bootcamp_draft(
                 message_id=msg.id,
                 event_type="approved_draft",
                 source="bootcamp",
-                original_ai_content=scrub_pii(original_text) if original_text else None,
-                human_content=scrub_pii(original_text) if original_text else None,
+                original_ai_content=scrub_pii(original_text, preserve_names=preserved_names) if original_text else None,
+                human_content=scrub_pii(original_text, preserve_names=preserved_names) if original_text else None,
                 status="pending",
                 confidence_score=0.2,
                 created_at=now,

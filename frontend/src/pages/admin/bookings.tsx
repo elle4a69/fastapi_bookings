@@ -59,15 +59,15 @@ const getStatusBadge = (status: string) => {
   const s = (status || "").toLowerCase();
   switch (s) {
     case "confirmed":
-      return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20"><CheckCircle2 className="w-3 h-3 mr-1" /> Confirmed</Badge>;
+      return <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30"><CheckCircle2 className="w-3 h-3 mr-1" /> Confirmed</Badge>;
     case "pending":
-      return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>;
+      return <Badge className="bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/30"><Clock className="w-3 h-3 mr-1" /> Pending</Badge>;
     case "completed":
-      return <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"><CheckCircle2 className="w-3 h-3 mr-1" /> Completed</Badge>;
+      return <Badge className="bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30"><CheckCircle2 className="w-3 h-3 mr-1" /> Completed</Badge>;
     case "cancelled":
-      return <Badge className="bg-red-500/10 text-red-600 border-red-500/20"><XCircle className="w-3 h-3 mr-1" /> Cancelled</Badge>;
+      return <Badge className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30"><XCircle className="w-3 h-3 mr-1" /> Cancelled</Badge>;
     case "noshow":
-      return <Badge className="bg-zinc-500/10 text-zinc-600 border-zinc-500/20"><Ban className="w-3 h-3 mr-1" /> No Show</Badge>;
+      return <Badge className="bg-zinc-500/10 text-zinc-700 dark:text-zinc-300 border-zinc-500/30"><Ban className="w-3 h-3 mr-1" /> No Show</Badge>;
     default:
       return <Badge variant="outline">{status}</Badge>;
   }
@@ -170,8 +170,8 @@ export default function BookingsAdminPage() {
           <div className="font-semibold text-sm text-foreground">{b.date}</div>
           <div className="text-xs text-muted-foreground">{b.time}</div>
           {b.has_itinerary_conflict && (
-            <Badge variant="destructive" className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] px-1.5 py-0 mt-1 flex items-center gap-1 w-fit">
-              <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-600" /> Conflict
+            <Badge variant="destructive" className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30 text-[10px] px-1.5 py-0 mt-1 flex items-center gap-1 w-fit">
+              <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-800 dark:text-amber-300" /> Conflict
             </Badge>
           )}
         </div>
@@ -235,7 +235,7 @@ export default function BookingsAdminPage() {
       cell: (b) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" className="h-8 w-8 min-h-0 min-w-0 p-0 touch-manipulation">
+            <Button variant="ghost" className="h-8 w-8 min-h-0 min-w-0 p-0 touch-manipulation" aria-label="Actions">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -272,6 +272,7 @@ export default function BookingsAdminPage() {
             variant="outline" 
             size="sm" 
             onClick={loadData}
+            aria-label="Refresh bookings"
             className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
           >
             <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
@@ -303,7 +304,7 @@ export default function BookingsAdminPage() {
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[150px] h-8 sm:h-9 min-h-0 text-xs sm:text-sm">
+              <SelectTrigger className="w-full sm:w-[150px] h-8 sm:h-9 min-h-0 text-xs sm:text-sm" aria-label="Filter status">
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -319,6 +320,7 @@ export default function BookingsAdminPage() {
             <Button 
               variant="outline" 
               size="sm" 
+              aria-label="Export bookings"
               className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 shrink-0 touch-manipulation gap-1.5 text-xs sm:text-sm" 
               onClick={() => toast.success("Exporting CSV...")}
             >
@@ -373,7 +375,7 @@ export default function BookingsAdminPage() {
                       title="Call"
                       asChild
                     >
-                      <a href={`tel:${b.clientPhone}`}><Phone className="h-4 w-4" /></a>
+                      <a href={`tel:${b.clientPhone}`} aria-label="Call client"><Phone className="h-4 w-4" /></a>
                     </Button>
                   )}
                   {b.clientEmail && (
@@ -384,12 +386,12 @@ export default function BookingsAdminPage() {
                       title="Email"
                       asChild
                     >
-                      <a href={`mailto:${b.clientEmail}`}><Mail className="h-4 w-4" /></a>
+                      <a href={`mailto:${b.clientEmail}`} aria-label="Email client"><Mail className="h-4 w-4" /></a>
                     </Button>
                   )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px] touch-manipulation">
+                      <Button variant="ghost" size="icon" className="h-9 w-9 min-h-[44px] min-w-[44px] touch-manipulation" aria-label="Actions">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -567,7 +569,7 @@ export default function BookingsAdminPage() {
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {selectedBooking?.status !== 'completed' && (
                 <Button 
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs" 
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white h-10 min-h-[44px] flex-1 sm:flex-initial touch-manipulation text-xs" 
                   onClick={() => handleUpdateStatus(selectedBooking!.id, 'completed')}
                 >
                   Complete

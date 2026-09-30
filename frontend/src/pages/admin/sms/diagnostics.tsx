@@ -115,11 +115,11 @@ export default function SmsDiagnosticsTab() {
                     <TableCell className="font-mono text-xs">#{job.message_id}</TableCell>
                     <TableCell>
                       {job.status === "SUCCESS" ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Success</Badge>
+                        <Badge className="bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30">Success</Badge>
                       ) : job.status === "FAILED" ? (
-                        <Badge className="bg-red-500/10 text-red-600 border-red-500/20">Failed</Badge>
+                        <Badge className="bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30">Failed</Badge>
                       ) : job.status === "PROCESSING" ? (
-                        <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">Leased</Badge>
+                        <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30">Leased</Badge>
                       ) : (
                         <Badge variant="outline">{job.status}</Badge>
                       )}
@@ -128,12 +128,12 @@ export default function SmsDiagnosticsTab() {
                     <TableCell className="text-muted-foreground">{new Date(job.created_at).toLocaleString()}</TableCell>
                     <TableCell className="text-right space-x-1">
                       {job.error_log && (
-                        <Button variant="ghost" size="icon" onClick={() => setSelectedLog(job.error_log || "")}>
+                        <Button variant="ghost" size="icon" aria-label="View error log" onClick={() => setSelectedLog(job.error_log || "")}>
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
                       )}
                       {job.status === "FAILED" && (
-                        <Button variant="ghost" size="icon" className="text-blue-500" onClick={() => handleRetry(job.id)}>
+                        <Button variant="ghost" size="icon" aria-label="Retry failed job" className="text-blue-500" onClick={() => handleRetry(job.id)}>
                           <RefreshCw className="w-3.5 h-3.5" />
                         </Button>
                       )}
@@ -152,7 +152,7 @@ export default function SmsDiagnosticsTab() {
             <DialogTitle>Error Log / Stacktrace</DialogTitle>
             <DialogDescription>Detailed error context returned by the SMS gateway or transport protocol.</DialogDescription>
           </DialogHeader>
-          <pre className="bg-muted p-4 rounded text-[10px] font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+          <pre tabIndex={0} role="region" aria-label="Error log details" className="bg-muted p-4 rounded text-[10px] font-mono whitespace-pre-wrap max-h-[300px] overflow-y-auto focus:outline-none focus:ring-1 focus:ring-ring">
             {selectedLog}
           </pre>
           <div className="flex justify-end pt-2">

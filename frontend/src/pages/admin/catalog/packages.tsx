@@ -368,7 +368,7 @@ export default function PackagesPage() {
                           <div className="space-y-2">
                             <Label className="text-xs">Service</Label>
                             <Select value={step.service_id} onValueChange={val => updateStep(index, { service_id: val })}>
-                              <SelectTrigger className="h-10"><SelectValue placeholder="Select service" /></SelectTrigger>
+                              <SelectTrigger className="h-10" aria-label="Select service"><SelectValue placeholder="Select service" /></SelectTrigger>
                               <SelectContent>
                                 {services.map(svc => <SelectItem key={svc.id} value={svc.id}>{svc.name}</SelectItem>)}
                               </SelectContent>

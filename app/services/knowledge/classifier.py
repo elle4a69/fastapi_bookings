@@ -58,6 +58,7 @@ class TypedVariableKind(str, Enum):
     SERVICE_NAME = "service_name"
     SERVICE_AREA = "service_area"
     BOOKING_LINK = "booking_link"
+    CANCELLATION_WINDOW = "cancellation_window"
 
 
 class TypedVariableAssessment(BaseModel):
@@ -447,6 +448,7 @@ APPROVED_TYPED_VARIABLES: Dict[str, TypedVariableKind] = {
     TypedVariableKind.SERVICE_NAME.value: TypedVariableKind.SERVICE_NAME,
     TypedVariableKind.SERVICE_AREA.value: TypedVariableKind.SERVICE_AREA,
     TypedVariableKind.BOOKING_LINK.value: TypedVariableKind.BOOKING_LINK,
+    TypedVariableKind.CANCELLATION_WINDOW.value: TypedVariableKind.CANCELLATION_WINDOW,
 }
 
 ALLOWED_STYLE_PLACEHOLDERS: Set[str] = set(APPROVED_TYPED_VARIABLES)
@@ -534,7 +536,7 @@ def validate_style_placeholders(
     """Validate placeholder variables in message style text against allowlist.
 
     Allowed standard variables:
-      {business_name}, {provider_name}, {location_name}, {location_address}, {booking_link}, {service_name}
+      {business_name}, {provider_name}, {location_name}, {location_address}, {booking_link}, {service_name}, {service_area}, {cancellation_window}
     When is_approved_source is True (packaged seed asset), legacy seed placeholders are also accepted.
     Any raw execution variables ({{...}}, ${...}, <%...%>) or unapproved variables are strictly rejected.
     """
@@ -542,6 +544,83 @@ def validate_style_placeholders(
     if not assessment.is_safe:
         return False, assessment.reason
     return True, None
+
+
+FORBIDDEN_DYNAMIC_PLACEHOLDERS: Set[str] = {
+    "date",
+    "time",
+    "clock_time",
+    "slot",
+    "slots",
+    "slot_time",
+    "available_slots",
+    "availability",
+    "price",
+    "quote",
+    "deposit",
+    "balance",
+    "payment_link",
+    "today",
+    "tomorrow",
+    "yesterday",
+    "current_date",
+    "current_time",
+    "customer_name",
+    "client_name",
+    "phone",
+    "email",
+    "address",
+}
+
+
+def normalize_template_variables(text: str) -> str:
+    """Normalize and validate template placeholders in text.
+
+    Converts double braces '{{var}}' or spaced braces '{ var }' to canonical '{var}'.
+    Validates that placeholders match ALLOWED_STYLE_PLACEHOLDERS (e.g. {business_name},
+    {provider_name}, {location_name}, {location_address}, {service_name}, {service_area},
+    {booking_link}, {cancellation_window}).
+
+    Explicitly rejects attempts to embed dynamic dates, clock times, live availability,
+    live pricing, quotes, payment links, or customer PII, raising ValueError.
+    """
+    if not text:
+        return text or ""
+
+    raw_syntax_patterns = (
+        r"\{%.*?%\}",
+        r"\$\{.*?\}",
+        r"<%#?.*?%>",
+    )
+    for pat in raw_syntax_patterns:
+        if re.search(pat, text):
+            raise ValueError(f"Raw execution syntax detected in template: {pat}")
+
+    if _REDACTION_MARKER_RE.search(text):
+        raise ValueError("Redacted customer or address data cannot be retained in template variables")
+
+    # Normalize {{ var }} -> {var}
+    normalized = re.sub(r"\{\{\s*([^{}]+?)\s*\}\}", r"{\1}", text)
+    # Normalize {  var  } -> {var}
+    normalized = re.sub(r"\{\s*([^{}]+?)\s*\}", r"{\1}", normalized)
+
+    tokens = re.findall(r"\{([^{}]+)\}", normalized)
+    for tok in tokens:
+        clean_tok = tok.strip()
+        if clean_tok in FORBIDDEN_DYNAMIC_PLACEHOLDERS:
+            raise ValueError(
+                f"Dynamic operational variable '{clean_tok}' is forbidden in templates; dynamic state must be resolved via live tools"
+            )
+        if clean_tok not in ALLOWED_STYLE_PLACEHOLDERS:
+            raise ValueError(
+                f"Unapproved template placeholder '{clean_tok}' not in ALLOWED_STYLE_PLACEHOLDERS"
+            )
+
+    stripped_tokens = re.sub(r"\{[^{}]+\}", "", normalized)
+    if "{" in stripped_tokens or "}" in stripped_tokens:
+        raise ValueError("Malformed placeholder braces detected in template")
+
+    return normalized
 
 
 def classify_style_example(

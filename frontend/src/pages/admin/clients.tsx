@@ -172,6 +172,7 @@ export default function ClientsPage() {
             checked={selectedIds.includes(client.id)}
             onCheckedChange={() => handleToggleSelect(client.id)}
             className="h-4 w-4"
+            aria-label="Select client row"
           />
         </div>
       ),
@@ -216,7 +217,7 @@ export default function ClientsPage() {
       cell: (client) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 min-h-0 min-w-0 touch-manipulation">
+            <Button variant="ghost" size="icon" className="h-8 w-8 min-h-0 min-w-0 touch-manipulation" aria-label="Actions">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -334,6 +335,7 @@ export default function ClientsPage() {
                         checked={selectedIds.includes(client.id)}
                         onCheckedChange={() => handleToggleSelect(client.id)}
                         className="h-4 w-4"
+                        aria-label="Select client row"
                       />
                       <span className="text-muted-foreground">Select</span>
                     </label>
@@ -374,13 +376,14 @@ export default function ClientsPage() {
                       checked={isEditing} 
                       onCheckedChange={setIsEditing} 
                       id="edit-mode"
+                      aria-label="Edit mode"
                       className="touch-manipulation"
                     />
                     <Label htmlFor="edit-mode" className="text-xs cursor-pointer hidden sm:inline-block">Edit Mode</Label>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto">
+              <CardContent tabIndex={0} aria-label="Client details panel" className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto focus:outline-none">
                 <Accordion type="multiple" defaultValue={["profile", "compliance", "history"]} className="w-full">
                   {/* Section 1: Client Profile */}
                   <AccordionItem value="profile" className="px-4">
@@ -420,6 +423,7 @@ export default function ClientsPage() {
                             checked={formData.active || false} 
                             onCheckedChange={v => setFormData({...formData, active: v})} 
                             disabled={!isEditing}
+                            aria-label="Toggle active status"
                             className="touch-manipulation"
                           />
                         </div>
@@ -482,6 +486,7 @@ export default function ClientsPage() {
                           checked={formData.management_approval_required || false}
                           onCheckedChange={v => setFormData({...formData, management_approval_required: v})}
                           disabled={!isEditing}
+                          aria-label="Toggle management approval requirement"
                           className="touch-manipulation"
                         />
                       </div>

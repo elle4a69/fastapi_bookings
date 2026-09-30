@@ -85,11 +85,15 @@ export interface KnowledgeProposalItem {
   category: string;
   user_query: string;
   ideal_response: string;
-  status: 'pending' | 'quarantined' | 'approved' | 'rejected' | 'accepted';
+  proposed_fact?: string;
+  knowledge_kind?: string;
+  status: 'pending' | 'quarantined' | 'approved' | 'rejected' | 'accepted' | 'evidence_only' | 'superseded' | string;
   reason_code?: string;
   resolution_code?: string;
   confidence_score: number;
   is_dynamic_risk?: boolean;
+  extracted_variables?: Record<string, string> | string[];
+  variables?: Record<string, string> | string[];
   created_at: string;
 }
 

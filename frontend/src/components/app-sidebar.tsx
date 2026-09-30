@@ -53,11 +53,11 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
           className={`relative transition-all duration-200 rounded-lg px-3 py-2 text-sm font-medium ${
             isActive
               ? "bg-gradient-to-r from-primary/15 via-primary/10 to-transparent text-primary font-semibold border-l-2 border-primary shadow-xs"
-              : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+              : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
           }`}
         >
           <NavLink to={item.url ?? "/admin"} onClick={onNavigate} className="flex items-center gap-3">
-            <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover/menu-button:scale-110 ${isActive ? "text-primary" : "text-sidebar-foreground/60"}`} />
+            <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover/menu-button:scale-110 ${isActive ? "text-primary" : "text-sidebar-foreground/75"}`} />
             <span className="truncate">{item.title}</span>
           </NavLink>
         </SidebarMenuButton>
@@ -68,7 +68,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
   const hasActiveChild = item.children.some((child) => isCurrentPath(pathname, child.url))
 
   return (
-    <Collapsible defaultOpen={hasActiveChild} className="group/collapsible">
+    <Collapsible asChild defaultOpen={hasActiveChild} className="group/collapsible">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
@@ -77,12 +77,12 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
             className={`relative transition-all duration-200 rounded-lg px-3 py-2 text-sm font-medium ${
               hasActiveChild
                 ? "bg-sidebar-accent/50 text-sidebar-foreground font-semibold"
-                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
             }`}
           >
-            <Icon className={`h-4 w-4 shrink-0 ${hasActiveChild ? "text-primary" : "text-sidebar-foreground/60"}`} />
+            <Icon className={`h-4 w-4 shrink-0 ${hasActiveChild ? "text-primary" : "text-sidebar-foreground/75"}`} />
             <span className="truncate">{item.title}</span>
-            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+            <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-sidebar-foreground/70 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent className="data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up">
@@ -97,7 +97,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
                     className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                       isChildActive
                         ? "bg-primary/10 text-primary font-semibold"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                     }`}
                   >
                     <NavLink to={child.url} onClick={onNavigate} className="truncate">
@@ -148,7 +148,7 @@ export function AppSidebar() {
               BookMe Pro
               <Sparkles className="h-3 w-3 text-primary animate-pulse" />
             </span>
-            <span className="block truncate text-[11px] font-medium text-sidebar-foreground/50">
+            <span className="block truncate text-[11px] font-medium text-sidebar-foreground/75">
               {isProvider || role === 'provider' ? 'Technician Portal' : 'Admin workspace'}
             </span>
           </span>
@@ -157,7 +157,7 @@ export function AppSidebar() {
       <SidebarContent className="px-2 py-3 space-y-4">
         {filteredNavigation.map((section) => (
           <SidebarGroup key={section.label} className="p-0">
-            <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-sidebar-foreground/50 uppercase px-3 py-1.5">
+            <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-sidebar-foreground/75 uppercase px-3 py-1.5">
               {section.label}
             </SidebarGroupLabel>
             <SidebarGroupContent>

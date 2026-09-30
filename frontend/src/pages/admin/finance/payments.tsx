@@ -197,7 +197,7 @@ export function PaymentsPage() {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[160px] h-10 min-h-[44px]">
+            <SelectTrigger className="w-full sm:w-[160px] h-10 min-h-[44px]" aria-label="Filter by status">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>

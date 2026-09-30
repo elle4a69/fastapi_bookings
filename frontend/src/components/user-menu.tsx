@@ -42,6 +42,7 @@ export function UserMenu({ compact = false, className }: UserMenuProps) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          aria-label={user?.login ? `${user.login} (${roleLabel})` : "User profile menu"}
           className={cn(
             "flex min-w-0 items-center gap-2 rounded-lg p-1.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
             compact ? "max-w-48" : "w-full",
@@ -49,7 +50,7 @@ export function UserMenu({ compact = false, className }: UserMenuProps) {
           )}
         >
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs bg-primary/15 text-primary font-semibold">{initials}</AvatarFallback>
+            <AvatarFallback className="text-xs bg-primary text-primary-foreground font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-sm font-medium">{user?.login || 'Staff Member'}</span>

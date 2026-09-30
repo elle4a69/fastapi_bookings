@@ -57,8 +57,10 @@ from ...services.assistant.prompt_policy import (
 )
 from ...services.knowledge.asset_importer import import_approved_style_examples
 from ...services.knowledge.classifier import (
+    ClassificationCategory,
     classify_curated_memory_candidate,
     classify_style_example,
+    classify_text,
 )
 from ...services.knowledge.gateway import knowledge_gateway
 from ...services.sms.bootcamp import DEFAULT_STYLE_PROFILE
@@ -99,6 +101,25 @@ def validate_tenant_provider(
 
 def _validate_style_example_pair(client_message: str, assistant_reply: str) -> None:
     """Fail closed before any Studio example reaches the prompt store."""
+    for text, role in [(client_message, "client_message"), (assistant_reply, "assistant_reply")]:
+        c = classify_text(text)
+        if c.category in (
+            ClassificationCategory.DYNAMIC_OPERATIONAL,
+            ClassificationCategory.PII,
+            ClassificationCategory.PROMPT_INJECTION,
+        ) or not c.is_safe:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Style example {role} rejected by safety classifier: {c.reason}",
+            )
+    try:
+        from ...services.assistant.variable_registry import normalize_template_variables
+        normalize_template_variables(assistant_reply)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Style example assistant_reply rejected by variable normalizer: {ve}",
+        )
     classification = classify_style_example(client_message, assistant_reply)
     if not classification.is_safe:
         raise HTTPException(
@@ -165,7 +186,8 @@ class SimulateTurnResponse(BaseModel):
 
 
 class CurateProposalRequest(BaseModel):
-    action: str = Field(..., description="'approved', 'quarantined', or 'rejected'")
+    action: Optional[str] = Field(None, description="'approved', 'accept', 'quarantined', or 'rejected'")
+    decision: Optional[str] = Field(None, description="Alias for action ('accept', 'reject', 'quarantine')")
     notes: Optional[str] = None
 
 
@@ -918,15 +940,89 @@ def curate_proposal(
     if proposal.provider_id is not None:
         validate_tenant_provider(db, tenant.id, proposal.provider_id)
 
-    action = payload.action.lower()
+    action = (payload.decision or payload.action or "").lower()
+    if not action:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Curation action or decision is required.",
+        )
     now = _utc_now()
 
     if action in ("approved", "accept", "active"):
-        # An administrative click is never an authority bypass.  Proposals can
-        # originate from imported or legacy learning paths, so classify again
-        # immediately before the irreversible promotion to durable memory.
+        # Style guidance proposals must go to MessageStyleExample and NEVER pollute CuratedMemory
+        if proposal.knowledge_kind == "style_example" or proposal.category == "style":
+            style_c = classify_style_example(
+                proposal.user_query or "Client Query",
+                proposal.proposed_response or "",
+            )
+            if not style_c.is_safe:
+                proposal.status = "rejected"
+                proposal.reason_code = f"classifier_{style_c.category.value.lower()}"
+                proposal.resolution_code = "rejected_by_curator_classifier"
+                proposal.reviewed_at = now
+                proposal.updated_at = now
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Style example proposal cannot be promoted because it fails safety classifier: {style_c.reason}",
+                )
+
+            c_hash = compute_style_example_hash(
+                proposal.category or "style",
+                proposal.user_query or "Client Query",
+            )
+            style_ex = MessageStyleExample(
+                tenant_id=tenant.id,
+                provider_id=proposal.provider_id,
+                intent=proposal.category or "style",
+                client_message=proposal.user_query or "Client Query",
+                assistant_reply=proposal.proposed_response or "",
+                category=proposal.category or "style",
+                is_approved=True,
+                is_active=True,
+                source="curator_proposal",
+                content_hash=c_hash,
+            )
+            db.add(style_ex)
+            proposal.status = "accepted"
+            proposal.resolution_code = "approved_into_style_example"
+            proposal.reviewed_at = now
+            proposal.updated_at = now
+            db.commit()
+            db.refresh(style_ex)
+            return {
+                "ok": True,
+                "proposal_id": proposal.id,
+                "status": "approved",
+                "message_style_example_id": style_ex.id,
+            }
+
+        # Otherwise, screen factual proposal through classify_text
+        fact_to_screen = proposal.proposed_fact or proposal.proposed_response or ""
+        fact_classification = classify_text(fact_to_screen)
+        if (
+            fact_classification.category in (
+                ClassificationCategory.DYNAMIC_OPERATIONAL,
+                ClassificationCategory.PII,
+                ClassificationCategory.PROMPT_INJECTION,
+            )
+            or fact_classification.category != ClassificationCategory.FACTUAL_PROPOSAL
+            or not fact_classification.is_safe
+        ):
+            proposal.status = "rejected"
+            proposal.reason_code = f"classifier_{fact_classification.category.value.lower()}"
+            proposal.resolution_code = "rejected_by_curator_classifier"
+            proposal.reviewed_at = now
+            proposal.updated_at = now
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Proposal cannot be promoted because it fails the knowledge safety classifier: {fact_classification.reason}",
+            )
+
+        # Validate candidate pair for durable CuratedMemory
         classification = classify_curated_memory_candidate(
-            proposal.user_query or "", proposal.proposed_response or ""
+            proposal.user_query or "", fact_to_screen
         )
         if not classification.is_safe:
             proposal.status = "rejected"
@@ -937,7 +1033,7 @@ def curate_proposal(
             db.commit()
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Proposal cannot be promoted because it fails the knowledge safety classifier.",
+                detail=f"Proposal cannot be promoted because it fails the knowledge safety classifier: {classification.reason}",
             )
 
         # 1. Promote to CuratedMemory
@@ -946,7 +1042,7 @@ def curate_proposal(
             provider_id=proposal.provider_id,
             category=proposal.category or "faq",
             user_query=proposal.user_query or "General Query",
-            ideal_response=proposal.proposed_response or "",
+            ideal_response=fact_to_screen,
             knowledge_kind="durable_fact",
             authority="owner_verified",
             status="active",
@@ -979,6 +1075,7 @@ def curate_proposal(
 
     elif action in ("quarantined", "quarantine"):
         proposal.status = "rejected"
+        proposal.proposal_type = "quarantine"
         proposal.reason_code = "quarantined"
         proposal.resolution_code = payload.notes or "quarantined_by_curator"
         proposal.reviewed_at = now

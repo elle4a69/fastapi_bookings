@@ -588,7 +588,7 @@ export default function ResourcesPage() {
                           value={selectedGroup.location_id}
                           onValueChange={(val) => setSelectedGroup({ ...selectedGroup, location_id: val })}
                         >
-                          <SelectTrigger className="min-h-[40px]">
+                          <SelectTrigger className="min-h-[40px]" aria-label="Select location">
                             <SelectValue placeholder="Select location" />
                           </SelectTrigger>
                           <SelectContent>

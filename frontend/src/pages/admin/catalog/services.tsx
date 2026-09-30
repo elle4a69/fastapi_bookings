@@ -128,7 +128,7 @@ function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: {
         <>
           <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
           {!disabled && (
-            <button type="button" onClick={(e) => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
+            <button type="button" aria-label="Remove image" onClick={(e) => { e.stopPropagation(); onImageRemove(); }} className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -137,7 +137,7 @@ function ImageUpload({ imagePreview, onImageSelect, onImageRemove, disabled }: {
         <div className="flex flex-col items-center text-muted-foreground pointer-events-none">
           <Upload className="w-8 h-8 mb-2 opacity-50" />
           <span className="text-sm">Drag & drop image here or click to upload</span>
-          <span className="text-xs opacity-70">JPG, PNG, GIF up to 5MB</span>
+          <span className="text-xs text-muted-foreground font-medium">JPG, PNG, GIF up to 5MB</span>
         </div>
       )}
     </div>
@@ -603,6 +603,7 @@ export default function ServicesPage() {
               }} 
               className="min-h-[44px] min-w-[44px] shrink-0" 
               title="Add Category"
+              aria-label="Add Category"
             >
               <Plus className="w-5 h-5" />
             </Button>
@@ -625,6 +626,7 @@ export default function ServicesPage() {
             }} 
             className="min-h-[44px] min-w-[44px] shrink-0" 
             title="Add Service"
+            aria-label="Add Service"
           >
             <Plus className="w-5 h-5" />
           </Button>
@@ -682,6 +684,7 @@ export default function ServicesPage() {
                           onClick={() => handleToggleActive(svc)} 
                           className="p-0.5 hover:bg-muted rounded transition-colors"
                           title={svc.active ? 'Deactivate service' : 'Activate service'}
+                          aria-label={svc.active ? 'Deactivate service' : 'Activate service'}
                         >
                           {svc.active ? (
                             <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
@@ -694,6 +697,7 @@ export default function ServicesPage() {
                           onClick={() => svc.active && updateServiceQuick(svc.id, { is_visible: !svc.is_visible })} 
                           className={`p-0.5 rounded transition-colors ${svc.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
                           title={!svc.active ? 'Deactivated' : (svc.is_visible ? 'Hide' : 'Show')}
+                          aria-label={!svc.active ? 'Deactivated service' : (svc.is_visible ? 'Hide service' : 'Show service')}
                         >
                           {svc.is_visible && svc.active ? (
                             <Eye className="w-3.5 h-3.5 text-emerald-500" />
@@ -743,6 +747,7 @@ export default function ServicesPage() {
                       variant="ghost" 
                       className="h-6 w-6 p-0 hover:bg-muted text-muted-foreground hover:text-foreground rounded-md shrink-0" 
                       title="Add Service to Category"
+                      aria-label="Add Service to Category"
                       onClick={(e) => {
                         e.stopPropagation();
                         setRightPaneType("service");
@@ -798,6 +803,7 @@ export default function ServicesPage() {
                                 onClick={() => handleToggleActive(svc)} 
                                 className="p-0.5 hover:bg-muted rounded transition-colors"
                                 title={svc.active ? 'Deactivate service' : 'Activate service'}
+                                aria-label={svc.active ? 'Deactivate service' : 'Activate service'}
                               >
                                 {svc.active ? (
                                   <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
@@ -810,6 +816,7 @@ export default function ServicesPage() {
                                 onClick={() => svc.active && updateServiceQuick(svc.id, { is_visible: !svc.is_visible })} 
                                 className={`p-0.5 rounded transition-colors ${svc.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
                                 title={!svc.active ? 'Deactivated' : (svc.is_visible ? 'Hide' : 'Show')}
+                                aria-label={!svc.active ? 'Deactivated service' : (svc.is_visible ? 'Hide service' : 'Show service')}
                               >
                                 {svc.is_visible && svc.active ? (
                                   <Eye className="w-3.5 h-3.5 text-emerald-500" />
@@ -877,6 +884,7 @@ export default function ServicesPage() {
                                 onClick={() => handleToggleActive(svc)} 
                                 className="p-0.5 hover:bg-muted rounded transition-colors"
                                 title={svc.active ? 'Deactivate service' : 'Activate service'}
+                                aria-label={svc.active ? 'Deactivate service' : 'Activate service'}
                               >
                                 {svc.active ? (
                                   <Circle className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
@@ -889,6 +897,7 @@ export default function ServicesPage() {
                                 onClick={() => svc.active && updateServiceQuick(svc.id, { is_visible: !svc.is_visible })} 
                                 className={`p-0.5 rounded transition-colors ${svc.active ? 'hover:bg-muted' : 'opacity-30 cursor-not-allowed'}`}
                                 title={!svc.active ? 'Deactivated' : (svc.is_visible ? 'Hide' : 'Show')}
+                                aria-label={!svc.active ? 'Deactivated service' : (svc.is_visible ? 'Hide service' : 'Show service')}
                               >
                                 {svc.is_visible && svc.active ? (
                                   <Eye className="w-3.5 h-3.5 text-emerald-500" />
@@ -1522,7 +1531,7 @@ export default function ServicesPage() {
                               triggerSave(next, true);
                             }}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger id="tax_rate_id" aria-label="Select tax rate">
                               <SelectValue placeholder="Select tax rate" />
                             </SelectTrigger>
                             <SelectContent>

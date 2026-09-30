@@ -200,6 +200,7 @@ export function SmsAgentConsoleTab() {
             size="xs"
             variant="outline"
             onClick={handleDownloadLogs}
+            aria-label="Export trace logs"
             className="h-8 text-xs gap-1"
           >
             <Download className="w-3 h-3" /> <span className="hidden sm:inline">Export Trace</span>
@@ -210,6 +211,7 @@ export function SmsAgentConsoleTab() {
             size="xs"
             variant="ghost"
             onClick={handleClearLogs}
+            aria-label="Clear console logs"
             className="h-8 text-xs text-muted-foreground"
           >
             <Trash2 className="w-3 h-3" />
@@ -236,7 +238,7 @@ export function SmsAgentConsoleTab() {
         </div>
 
         {/* Scrollable logs */}
-        <div className="flex-1 overflow-y-auto space-y-1.5 pr-2">
+        <div tabIndex={0} role="region" aria-label="Agent console logs" className="flex-1 overflow-y-auto space-y-1.5 pr-2 focus:outline-none focus:ring-1 focus:ring-emerald-500">
           {logs.map((log) => (
             <div key={log.id} className="flex items-start gap-2 leading-relaxed">
               <span className="text-zinc-600 select-none">[{log.timestamp}]</span>
@@ -256,13 +258,14 @@ export function SmsAgentConsoleTab() {
             value={inputCommand}
             onChange={(e) => setInputCommand(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleInjectCommand()}
+            aria-label="Inject console command"
             placeholder="Inject test SMS text or agent instruction (e.g. 'Can I book for tomorrow?')..."
             className="flex-1 h-8 text-xs font-mono bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 focus-visible:ring-emerald-500"
           />
           <Button
             size="xs"
             onClick={handleInjectCommand}
-            className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-mono gap-1 text-xs"
+            className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white font-mono gap-1 text-xs"
           >
             <Send className="w-3 h-3" /> Inject
           </Button>

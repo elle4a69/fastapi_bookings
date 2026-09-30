@@ -458,7 +458,7 @@ export default function ExceptionsPage() {
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="provider" className="text-right font-medium">Staff</Label>
                     <Select value={newBlockProvider} onValueChange={setNewBlockProvider}>
-                      <SelectTrigger className="col-span-3">
+                      <SelectTrigger id="provider" aria-label="Select staff member" className="col-span-3">
                         <SelectValue placeholder="Select staff member" />
                       </SelectTrigger>
                       <SelectContent>
@@ -475,7 +475,7 @@ export default function ExceptionsPage() {
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="location" className="text-right font-medium">Location</Label>
                     <Select value={newBlockLocation} onValueChange={setNewBlockLocation}>
-                      <SelectTrigger className="col-span-3">
+                      <SelectTrigger id="location" aria-label="Select location" className="col-span-3">
                         <SelectValue placeholder="All locations (Optional)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -578,7 +578,7 @@ export default function ExceptionsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {multipleProvidersEnabled && (
                   <Select value={filterProvider} onValueChange={setFilterProvider}>
-                    <SelectTrigger className="w-[160px] h-8 text-xs">
+                    <SelectTrigger className="w-[160px] h-8 text-xs" aria-label="Filter staff">
                       <SelectValue placeholder="All Staff" />
                     </SelectTrigger>
                     <SelectContent>
@@ -591,7 +591,7 @@ export default function ExceptionsPage() {
                 )}
 
                 <Select value={filterType} onValueChange={(val: any) => setFilterType(val)}>
-                  <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectTrigger className="w-[140px] h-8 text-xs" aria-label="Filter type">
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
@@ -638,7 +638,7 @@ export default function ExceptionsPage() {
                         )}
                         <TableCell>
                           {item.isDayOff ? (
-                            <Badge variant="destructive" className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700">
+                            <Badge variant="destructive" className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 font-semibold">
                               Full Day Off
                             </Badge>
                           ) : item.sourceType === 'special_day' ? (
@@ -666,6 +666,7 @@ export default function ExceptionsPage() {
                             onClick={() => handleDeleteException(item)}
                             className="text-destructive hover:text-destructive hover:bg-destructive/10"
                             title="Delete exception and restore normal schedule"
+                            aria-label="Delete exception"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -716,7 +717,7 @@ export default function ExceptionsPage() {
                         <TableCell>{formatDateSafe(res.start_time)} {formatTimeSafe(res.start_time)}</TableCell>
                         <TableCell>{formatDateSafe(res.end_time)} {formatTimeSafe(res.end_time)}</TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-500">
+                          <Badge variant="secondary" className="bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 font-semibold">
                             {res.status}
                           </Badge>
                         </TableCell>

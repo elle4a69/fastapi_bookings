@@ -712,6 +712,7 @@ export default function WorkdaysPage() {
                 size="icon"
                 className="md:hidden shrink-0 min-h-[44px] min-w-[44px]"
                 onClick={() => setSelectedProvider(null)}
+                aria-label="Back to providers list"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
@@ -796,6 +797,7 @@ export default function WorkdaysPage() {
                     onClick={() => navigateWeek(-1)}
                     className="h-8 w-8 sm:h-9 sm:w-9"
                     title="Previous week"
+                    aria-label="Previous week"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -805,6 +807,7 @@ export default function WorkdaysPage() {
                     onClick={() => navigateWeek(1)}
                     className="h-8 w-8 sm:h-9 sm:w-9"
                     title="Next week"
+                    aria-label="Next week"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -879,7 +882,7 @@ export default function WorkdaysPage() {
                             </span>
                           </h4>
                           {day.isOverride ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
                               <Sparkles className="w-3 h-3" />
                               Date Override
                             </span>
@@ -919,7 +922,7 @@ export default function WorkdaysPage() {
 
                       {/* Explanation note when recurring is turned OFF */}
                       {!day.isRecurring && (
-                        <div className="text-xs text-amber-700 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md flex items-center justify-between">
+                        <div className="text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-md flex items-center justify-between">
                           <span>
                             <strong>One-off date exception:</strong> Changes apply only to{' '}
                             {day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, without altering future {day.dayName}s.
@@ -928,7 +931,7 @@ export default function WorkdaysPage() {
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-2 text-xs text-amber-800 hover:text-amber-950 hover:bg-amber-500/20 underline"
+                            className="h-6 px-2 text-xs text-amber-900 dark:text-amber-200 hover:text-amber-950 hover:bg-amber-500/20 underline"
                             onClick={() => updateDay(idx, { isRecurring: true })}
                           >
                             Revert to weekly template

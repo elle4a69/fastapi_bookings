@@ -953,7 +953,7 @@ export default function SmsSettingsTab() {
               <div className="space-y-1">
                 <Label>Category</Label>
                 <Select value={knowCategory} onValueChange={setKnowCategory}>
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Knowledge category">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -970,7 +970,7 @@ export default function SmsSettingsTab() {
                 <div className="space-y-1">
                   <Label>Provider Scope *</Label>
                   <Select value={knowProviderId} onValueChange={setKnowProviderId}>
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Provider scope">
                       <SelectValue placeholder="Select Provider" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1025,7 +1025,7 @@ export default function SmsSettingsTab() {
                 <div className="space-y-1">
                   <Label>Provider Scope *</Label>
                   <Select value={promptProviderId} onValueChange={setPromptProviderId}>
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Provider scope">
                       <SelectValue placeholder="Select Provider" />
                     </SelectTrigger>
                     <SelectContent>

@@ -285,6 +285,7 @@ export default function BootcampSettingsTab({ onBackToBootcamp, initialProviderI
               <select
                 value={selectedProviderId ?? ""}
                 onChange={(e) => setSelectedProviderId(e.target.value ? Number(e.target.value) : null)}
+                aria-label="Select provider"
                 className="h-8 text-xs rounded-md border border-slate-200 dark:border-slate-800 bg-background px-2 py-1 font-medium text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
               >
                 <option value="">Tenant Global</option>

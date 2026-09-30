@@ -951,7 +951,7 @@ export default function BookingFormEditorPage() {
                         updateAutoNameAndSlug(val, "none", "none");
                       }}
                     >
-                      <SelectTrigger className="h-9 text-xs bg-background">
+                      <SelectTrigger className="h-9 text-xs bg-background" aria-label="Pre-select location">
                         <SelectValue placeholder="None (Customer chooses)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -989,7 +989,7 @@ export default function BookingFormEditorPage() {
                         updateAutoNameAndSlug(presetLocationId, val, "none");
                       }}
                     >
-                      <SelectTrigger className="h-9 text-xs bg-background">
+                      <SelectTrigger className="h-9 text-xs bg-background" aria-label="Pre-select provider">
                         <SelectValue placeholder="None (Customer chooses)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1025,7 +1025,7 @@ export default function BookingFormEditorPage() {
                       updateAutoNameAndSlug(presetLocationId, presetProviderId, val);
                     }}
                   >
-                    <SelectTrigger className="h-9 text-xs bg-background">
+                    <SelectTrigger className="h-9 text-xs bg-background" aria-label="Pre-select service">
                       <SelectValue placeholder="None (Customer chooses)" />
                     </SelectTrigger>
                     <SelectContent>

@@ -102,7 +102,7 @@ export const PromptComposerTab: React.FC<PromptComposerTabProps> = ({ selectedPr
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await apiClient.put<PolicyReadResponse>('/api/admin/assistant-studio/policy', {
+      const updated = await apiClient.put<PolicyReadResponse>('/api/admin/assistant-studio/policy', {
         provider_id: selectedProvider?.id ?? null,
         agent_name: agentName,
         tenant_policy: tenantPolicy,
@@ -111,8 +111,17 @@ export const PromptComposerTab: React.FC<PromptComposerTabProps> = ({ selectedPr
         system_prompt_template: systemPromptTemplate,
         style_profile: stylePriors,
       });
+      if (updated) {
+        setTenantPolicy(updated.tenant_policy ?? '');
+        setAgentName(updated.agent_name || 'Tori');
+        setProviderOverlay(updated.provider_overlay || '');
+        setCustomNotes(updated.custom_training_notes || '');
+        setSystemPromptTemplate(updated.system_prompt_template || '');
+        if (updated.style_profile) {
+          setStylePriors(updated.style_profile);
+        }
+      }
       toast.success('Prompt hierarchy & Style Lab configuration saved to database!');
-      loadPolicy();
     } catch (err: any) {
       console.error('Failed to save policy:', err);
       toast.error(err?.message || 'Failed to save configuration');
@@ -217,6 +226,9 @@ export const PromptComposerTab: React.FC<PromptComposerTabProps> = ({ selectedPr
                   <Badge variant="secondary" className="text-[10px]">
                     Clinic-Wide Scope
                   </Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {tenantPolicy.trim() ? `${tenantPolicy.trim().split(/\s+/).filter(Boolean).length} words` : 'Empty'}
+                  </Badge>
                 </div>
                 {expandedTiers[3] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </div>
@@ -224,14 +236,17 @@ export const PromptComposerTab: React.FC<PromptComposerTabProps> = ({ selectedPr
             {expandedTiers[3] && (
               <CardContent className="pt-0 pb-3 px-4 space-y-2 border-t">
                 <Label className="text-xs text-muted-foreground">
-                  Operating policies, cancellation terms, and general business invariants:
+                  Operating policies, cancellation terms, and clinic-wide business invariants (persisted to tenant record):
                 </Label>
                 <Textarea
                   value={tenantPolicy}
                   onChange={(e) => setTenantPolicy(e.target.value)}
                   className="font-mono text-xs min-h-[70px] resize-y"
-                  placeholder="Enter tenant-level policy..."
+                  placeholder="Enter tenant-level policy (e.g. 24h cancellation terms, clinic operating hours)..."
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Binds directly to <code className="text-primary font-mono text-[10px]">tenant.assistant_policy</code>. Injected into simulator and production prompt assemblies at Tier 3.
+                </p>
               </CardContent>
             )}
           </Card>

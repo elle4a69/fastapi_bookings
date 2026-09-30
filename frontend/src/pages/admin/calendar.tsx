@@ -88,11 +88,11 @@ interface CalendarBooking {
 }
 
 const STATUS_PILL: Record<string, string> = {
-  confirmed: "bg-teal-600 text-white",
-  pending: "bg-amber-500 text-white",
-  completed: "bg-emerald-600 text-white",
-  cancelled: "bg-rose-500 text-white",
-  noshow: "bg-zinc-500 text-white",
+  confirmed: "bg-teal-700 text-white",
+  pending: "bg-amber-700 text-white",
+  completed: "bg-emerald-700 text-white",
+  cancelled: "bg-rose-700 text-white",
+  noshow: "bg-zinc-600 text-white",
 };
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
@@ -191,7 +191,7 @@ function MonthGrid({
                     key={di}
                     onClick={() => onNewBooking(cell.date)}
                     className={`border-r border-b border-border last:border-r-0 flex flex-col p-1.5 cursor-pointer transition-colors hover:bg-primary/5
-                      ${!cell.thisMonth ? "bg-muted/30 opacity-60" : "bg-card"}
+                      ${!cell.thisMonth ? "bg-muted/20" : "bg-card"}
                       ${isToday(cell) ? "bg-primary/5 ring-1 ring-primary/20" : ""}
                     `}
                     style={closed ? { backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(234,179,8,0.06) 6px, rgba(234,179,8,0.06) 12px)" } : {}}
@@ -199,7 +199,7 @@ function MonthGrid({
                     <div className="flex items-center justify-between px-1 mb-1">
                       <span className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full
                         ${isToday(cell) ? "bg-primary text-primary-foreground font-bold shadow-xs" : ""}
-                        ${!cell.thisMonth ? "text-muted-foreground/50" : "text-foreground"}
+                        ${!cell.thisMonth ? "text-muted-foreground/85 font-medium" : "text-foreground"}
                       `}>
                         {cell.day}
                       </span>
@@ -858,7 +858,7 @@ export default function CalendarPage() {
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {multipleProvidersEnabled && (
             <Select value={filterProvider} onValueChange={setFilterProvider}>
-              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]" aria-label="Filter provider">
                 <SelectValue placeholder="All Providers" />
               </SelectTrigger>
               <SelectContent>
@@ -870,7 +870,7 @@ export default function CalendarPage() {
 
           {locationsEnabled && (
             <Select value={filterLocation} onValueChange={setFilterLocation}>
-              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]">
+              <SelectTrigger className="h-7 text-xs w-[130px] sm:w-[150px]" aria-label="Filter location">
                 <SelectValue placeholder="All Locations" />
               </SelectTrigger>
               <SelectContent>
@@ -902,7 +902,7 @@ export default function CalendarPage() {
           </Button>
           <Button
             size="sm"
-            className="h-7 px-2 text-xs gap-1 bg-teal-600 hover:bg-teal-700 text-white border-0"
+            className="h-7 px-2 text-xs gap-1 bg-teal-700 hover:bg-teal-800 text-white border-0"
             onClick={() => window.location.href = '/admin/bookings'}
           >
             <CalendarCheck className="w-3 h-3" /> <span className="hidden sm:inline">Manage bookings</span><span className="sm:hidden">Bookings</span>
@@ -1140,7 +1140,7 @@ export default function CalendarPage() {
 
             <div className="flex items-center gap-2">
               {selectedBooking?.status !== 'completed' && (
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleUpdateBookingStatus(selectedBooking!, 'completed')}>
+                <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white" onClick={() => handleUpdateBookingStatus(selectedBooking!, 'completed')}>
                   Complete
                 </Button>
               )}
@@ -1172,7 +1172,7 @@ export default function CalendarPage() {
                 </Button>
               </div>
               <Select value={formClientId} onValueChange={setFormClientId}>
-                <SelectTrigger id="create_client"><SelectValue placeholder="Select client" /></SelectTrigger>
+                <SelectTrigger id="create_client" aria-label="Select client"><SelectValue placeholder="Select client" /></SelectTrigger>
                 <SelectContent>
                   {clients.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name} ({c.email || 'No email'})</SelectItem>)}
                 </SelectContent>
@@ -1184,7 +1184,7 @@ export default function CalendarPage() {
               <div className="space-y-2">
                 <Label htmlFor="create_service">Service *</Label>
                 <Select value={formServiceId} onValueChange={setFormServiceId}>
-                  <SelectTrigger id="create_service"><SelectValue placeholder="Select service" /></SelectTrigger>
+                  <SelectTrigger id="create_service" aria-label="Select service"><SelectValue placeholder="Select service" /></SelectTrigger>
                   <SelectContent>
                     {services.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.duration}m - ${s.price || 0})</SelectItem>)}
                   </SelectContent>
@@ -1195,7 +1195,7 @@ export default function CalendarPage() {
                 <div className="space-y-2">
                   <Label htmlFor="create_provider">Provider *</Label>
                   <Select value={formProviderId} onValueChange={setFormProviderId}>
-                    <SelectTrigger id="create_provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                    <SelectTrigger id="create_provider" aria-label="Select provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
                     <SelectContent>
                       {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                     </SelectContent>
@@ -1210,7 +1210,7 @@ export default function CalendarPage() {
                 <div className="space-y-2">
                   <Label htmlFor="create_location">Location</Label>
                   <Select value={formLocationId} onValueChange={setFormLocationId}>
-                    <SelectTrigger id="create_location"><SelectValue placeholder="Select location" /></SelectTrigger>
+                    <SelectTrigger id="create_location" aria-label="Select location"><SelectValue placeholder="Select location" /></SelectTrigger>
                     <SelectContent>
                       {locations.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}
                     </SelectContent>
@@ -1221,7 +1221,7 @@ export default function CalendarPage() {
               <div className="space-y-2">
                 <Label htmlFor="create_status">Status</Label>
                 <Select value={formStatus} onValueChange={setFormStatus}>
-                  <SelectTrigger id="create_status"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="create_status" aria-label="Select booking status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="confirmed">Confirmed</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
@@ -1270,7 +1270,7 @@ export default function CalendarPage() {
               <div className="space-y-2">
                 <Label>Service *</Label>
                 <Select value={formServiceId} onValueChange={setFormServiceId}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Select service"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {services.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
                   </SelectContent>
@@ -1280,7 +1280,7 @@ export default function CalendarPage() {
                 <div className="space-y-2">
                   <Label>Provider *</Label>
                   <Select value={formProviderId} onValueChange={setFormProviderId}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Select provider"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
                     </SelectContent>
@@ -1303,7 +1303,7 @@ export default function CalendarPage() {
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={formStatus} onValueChange={setFormStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Select status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
@@ -1371,7 +1371,7 @@ export default function CalendarPage() {
               <div className="space-y-2">
                 <Label htmlFor="note_provider">Provider</Label>
                 <Select value={noteProviderId} onValueChange={setNoteProviderId}>
-                  <SelectTrigger id="note_provider"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="note_provider" aria-label="Select provider"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Providers</SelectItem>
                     {providers.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}

@@ -273,7 +273,7 @@ export default function AdditionalFieldsPage() {
                     value={formData.type} 
                     onValueChange={(val: any) => setFormData({ ...formData, type: val })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Select field type">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -292,7 +292,7 @@ export default function AdditionalFieldsPage() {
                     value={formData.entity_type} 
                     onValueChange={(val: any) => setFormData({ ...formData, entity_type: val })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Select entity type">
                       <SelectValue placeholder="Select entity" />
                     </SelectTrigger>
                     <SelectContent>

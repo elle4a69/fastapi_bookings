@@ -786,7 +786,7 @@ export default function PortalDashboardPage() {
                 Select Time Slot
               </Label>
               <Select value={rescheduleTime} onValueChange={setRescheduleTime}>
-                <SelectTrigger id="rTime" className="text-xs">
+                <SelectTrigger id="rTime" className="text-xs" aria-label="Select time slot">
                   <SelectValue placeholder="Select a time slot" />
                 </SelectTrigger>
                 <SelectContent>
@@ -904,7 +904,7 @@ export default function PortalDashboardPage() {
                   Associated Appointment
                 </Label>
                 <Select value={disputeBookingId} onValueChange={setDisputeBookingId}>
-                  <SelectTrigger id="dBooking" className="text-xs">
+                  <SelectTrigger id="dBooking" className="text-xs" aria-label="Associated appointment">
                     <SelectValue placeholder="Select appointment" />
                   </SelectTrigger>
                   <SelectContent>
@@ -924,7 +924,7 @@ export default function PortalDashboardPage() {
                   Issue Reason
                 </Label>
                 <Select value={disputeReason} onValueChange={setDisputeReason}>
-                  <SelectTrigger id="dReason" className="text-xs">
+                  <SelectTrigger id="dReason" className="text-xs" aria-label="Issue reason">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -943,7 +943,7 @@ export default function PortalDashboardPage() {
                   Preferred Remedy / Resolution
                 </Label>
                 <Select value={disputeResolution} onValueChange={setDisputeResolution}>
-                  <SelectTrigger id="dResolution" className="text-xs">
+                  <SelectTrigger id="dResolution" className="text-xs" aria-label="Preferred remedy / resolution">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

@@ -863,7 +863,7 @@ export default function MediaPage() {
                       <Clock className="h-3.5 w-3.5 text-primary" /> Auto-Destruct / Expiry Period
                     </Label>
                     <Select value={linkExpiryDuration} onValueChange={setLinkExpiryDuration}>
-                      <SelectTrigger id="link-expiry" className="h-9">
+                      <SelectTrigger id="link-expiry" className="h-9" aria-label="Auto-destruct / expiry period">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -881,7 +881,7 @@ export default function MediaPage() {
                       <Lock className="h-3.5 w-3.5 text-primary" /> Max Upload File Quota
                     </Label>
                     <Select value={linkMaxUploads} onValueChange={setLinkMaxUploads}>
-                      <SelectTrigger id="link-max-uploads" className="h-9">
+                      <SelectTrigger id="link-max-uploads" className="h-9" aria-label="Max upload file quota">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -899,7 +899,7 @@ export default function MediaPage() {
                   <div className="grid gap-1.5">
                     <Label htmlFor="link-target-album" className="text-xs font-semibold">Pre-Assign to Album</Label>
                     <Select value={linkTargetAlbumId} onValueChange={setLinkTargetAlbumId}>
-                      <SelectTrigger id="link-target-album" className="h-9">
+                      <SelectTrigger id="link-target-album" className="h-9" aria-label="Pre-assign to album">
                         <SelectValue placeholder="Select Album" />
                       </SelectTrigger>
                       <SelectContent>
@@ -914,7 +914,7 @@ export default function MediaPage() {
                   <div className="grid gap-1.5">
                     <Label htmlFor="link-target-provider" className="text-xs font-semibold">Pre-Assign to Provider</Label>
                     <Select value={linkTargetProviderId} onValueChange={setLinkTargetProviderId}>
-                      <SelectTrigger id="link-target-provider" className="h-9">
+                      <SelectTrigger id="link-target-provider" className="h-9" aria-label="Pre-assign to provider">
                         <SelectValue placeholder="Select Provider" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1044,7 +1044,7 @@ export default function MediaPage() {
                 <div className="grid gap-2">
                   <Label htmlFor="album-provider">Assign Service Provider</Label>
                   <Select value={albumProviderId} onValueChange={setAlbumProviderId}>
-                    <SelectTrigger id="album-provider">
+                    <SelectTrigger id="album-provider" aria-label="Assign service provider">
                       <SelectValue placeholder="Select Service Provider" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1183,7 +1183,7 @@ export default function MediaPage() {
                   <div className="grid gap-2">
                     <Label htmlFor="upload-album">Target Library / Album</Label>
                     <Select value={uploadAlbumId} onValueChange={setUploadAlbumId}>
-                      <SelectTrigger id="upload-album">
+                      <SelectTrigger id="upload-album" aria-label="Target library / album">
                         <SelectValue placeholder="Select Album" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1198,7 +1198,7 @@ export default function MediaPage() {
                   <div className="grid gap-2">
                     <Label htmlFor="upload-provider">Assigned Service Provider</Label>
                     <Select value={uploadProviderId} onValueChange={setUploadProviderId}>
-                      <SelectTrigger id="upload-provider">
+                      <SelectTrigger id="upload-provider" aria-label="Assigned service provider">
                         <SelectValue placeholder="Select Service Provider" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1309,7 +1309,7 @@ export default function MediaPage() {
 
               <div className="w-full sm:w-auto min-w-[160px]">
                 <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-9 text-xs" aria-label="Filter by provider">
                     <UserRoundCog className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
                     <SelectValue placeholder="All Providers" />
                   </SelectTrigger>
@@ -1325,7 +1325,7 @@ export default function MediaPage() {
 
               <div className="w-full sm:w-auto min-w-[170px]">
                 <Select value={selectedAlbumId} onValueChange={setSelectedAlbumId}>
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-9 text-xs" aria-label="Filter by library">
                     <Folder className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
                     <SelectValue placeholder="All Libraries" />
                   </SelectTrigger>
@@ -1341,7 +1341,7 @@ export default function MediaPage() {
 
               <div className="w-full sm:w-auto min-w-[130px]">
                 <Select value={mediaTypeFilter} onValueChange={(val: any) => setMediaTypeFilter(val)}>
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="h-9 text-xs" aria-label="Filter by media type">
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1458,7 +1458,7 @@ export default function MediaPage() {
                       </h4>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0" aria-label="More options">
                             <MoreVertical className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -1875,7 +1875,7 @@ export default function MediaPage() {
                   <div className="grid gap-1">
                     <Label className="text-[11px] font-medium text-muted-foreground">Crop Position Alignment</Label>
                     <Select value={cropPosition} onValueChange={(val: any) => setCropPosition(val)}>
-                      <SelectTrigger className="h-7 text-xs bg-card">
+                      <SelectTrigger className="h-7 text-xs bg-card" aria-label="Crop position alignment">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1987,7 +1987,7 @@ export default function MediaPage() {
                   value={selectedItem.providerId || "none"} 
                   onValueChange={(val) => handleUpdateItemAssignment(selectedItem.id, "providerId", val)}
                 >
-                  <SelectTrigger className="h-8 text-xs bg-card">
+                  <SelectTrigger className="h-8 text-xs bg-card" aria-label="Service provider assignment">
                     <SelectValue placeholder="Assign Provider" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2007,7 +2007,7 @@ export default function MediaPage() {
                   value={selectedItem.albumId || "none"} 
                   onValueChange={(val) => handleUpdateItemAssignment(selectedItem.id, "albumId", val)}
                 >
-                  <SelectTrigger className="h-8 text-xs bg-card">
+                  <SelectTrigger className="h-8 text-xs bg-card" aria-label="Library / album assignment">
                     <SelectValue placeholder="Assign Album" />
                   </SelectTrigger>
                   <SelectContent>

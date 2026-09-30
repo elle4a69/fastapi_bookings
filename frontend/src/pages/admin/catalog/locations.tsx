@@ -740,7 +740,7 @@ export default function LocationsPage() {
                             }
                           }}
                         >
-                          <SelectTrigger id="timezone" className="min-h-[40px]">
+                          <SelectTrigger id="timezone" className="min-h-[40px]" aria-label="Select timezone">
                             <SelectValue placeholder="Select a timezone" />
                           </SelectTrigger>
                           <SelectContent>

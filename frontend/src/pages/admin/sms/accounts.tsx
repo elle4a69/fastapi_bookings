@@ -268,7 +268,7 @@ export default function SmsAccountsTab() {
               <div className="space-y-1">
                 <Label>Provider Scope</Label>
                 <Select value={providerId} onValueChange={setProviderId}>
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Provider scope">
                     <SelectValue placeholder="Select Provider" />
                   </SelectTrigger>
                   <SelectContent>
@@ -281,7 +281,7 @@ export default function SmsAccountsTab() {
               <div className="space-y-1">
                 <Label>Transport Adapter</Label>
                 <Select value={transportType} onValueChange={setTransportType}>
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Transport adapter">
                     <SelectValue placeholder="Simulator" />
                   </SelectTrigger>
                   <SelectContent>
@@ -352,7 +352,7 @@ export default function SmsAccountsTab() {
                   <div className="space-y-1">
                     <Label>AI Mode</Label>
                     <Select value={aiMode} onValueChange={setAiMode}>
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="AI mode">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

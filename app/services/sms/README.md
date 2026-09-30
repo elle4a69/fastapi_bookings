@@ -1214,3 +1214,34 @@ flowchart TD
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
 ```
 
+---
+
+## 8. Harmonized Bootcamp Learning & Curator Integration (Stream C)
+
+Bootcamp simulation conversations support continuous learning without bypassing safety classifiers or corrupting prompt-bearing settings:
+
+### 8.1 Information Requests
+- Submitted via `POST /api/admin/sms/bootcamp/conversations/{id}/information-request/respond`.
+- Preserves tenant and provider names during PII scrubbing to prevent false-positive redacting of business identities.
+- Generates Tori customer replies and concise reusable knowledge summaries.
+- Created as pending `KnowledgeProposal` (`proposal_type="gap"`) and ingested into `LearningEvent` (`event_type="knowledge_answer"`).
+- Processed via `UnifiedCurator` and background workers.
+- **Strict Invariant**: Prompt-bearing settings (`SmsBootcampSettings.custom_training_notes`) are NEVER modified directly by information requests.
+
+### 8.2 Corrections
+- Submitted via `POST /api/admin/sms/bootcamp/conversations/{id}/corrections`.
+- **Flag-Only Corrections**: When submitted without replacement wording (`corrected_wording=None`), recorded strictly as `evidence_only` feedback telemetry. Returns `proposal_id=None` and NEVER creates durable facts in `CuratedMemory`.
+- **Factual Corrections**: Submitted with non-empty `corrected_wording`. Screened through `classify_text` and only accepted if classified as safe static facts (`FACTUAL_PROPOSAL`). Creates pending `KnowledgeProposal` (`proposal_type="conflict"`).
+
+### 8.3 Draft Approvals & Edits
+- Submitted via `POST /api/admin/sms/bootcamp/conversations/{id}/drafts/{id}/review`.
+- Minor edits (`ratio > 0.85` and `delta < 5`) produce `decision_code="evidence_only"` retained without creating universal rules.
+- Material edits create evidence proposals (`knowledge_kind="style_example"`, `category="style"`, `decision_code="pending_review"`).
+- When curated and approved, promote strictly into `MessageStyleExample` and NEVER pollute `CuratedMemory`.
+
+### 8.4 Verification
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_curator_unified_learning.py tests/test_sms_bootcamp.py
+```
+
+

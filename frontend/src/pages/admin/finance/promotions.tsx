@@ -276,7 +276,7 @@ export function PromotionsPage() {
                     value={formData.discount_type} 
                     onValueChange={(val: 'Percentage' | 'Fixed Amount') => setFormData({ ...formData, discount_type: val })}
                   >
-                    <SelectTrigger id="discount-type" className="h-11 min-h-[44px]">
+                    <SelectTrigger id="discount-type" className="h-11 min-h-[44px]" aria-label="Select discount type">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>

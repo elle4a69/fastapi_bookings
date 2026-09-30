@@ -211,6 +211,18 @@ def _resolve_booking_link(context: RuntimeContext, db: Optional[Session]) -> str
     return link
 
 
+def _resolve_service_area(context: RuntimeContext, db: Optional[Session]) -> str:
+    """Resolve service area name from context, location, or tenant."""
+    if context.location and getattr(context.location, "name", None):
+        return context.location.name
+    return "our service area"
+
+
+def _resolve_cancellation_window(context: RuntimeContext, db: Optional[Session]) -> str:
+    """Resolve standard cancellation window."""
+    return "24 hours"
+
+
 def create_default_variable_registry() -> VariableRegistry:
     """Instantiate and populate the central registry with standard variables."""
     reg = VariableRegistry()
@@ -286,7 +298,32 @@ def create_default_variable_registry() -> VariableRegistry:
             description="Canonical online booking URL.",
         )
     )
+    reg.register(
+        VariableDefinition(
+            name="service_area",
+            source="database",
+            scope="tenant",
+            resolver_func=_resolve_service_area,
+            description="Operational service area or region.",
+        )
+    )
+    reg.register(
+        VariableDefinition(
+            name="cancellation_window",
+            source="system",
+            scope="tenant",
+            resolver_func=_resolve_cancellation_window,
+            description="Required advance cancellation notification window.",
+        )
+    )
     return reg
 
 
 default_variable_registry = create_default_variable_registry()
+
+
+def normalize_template_variables(text: str) -> str:
+    """Re-export of canonical template variable normalizer."""
+    from ..knowledge.classifier import normalize_template_variables as _norm
+    return _norm(text)
+

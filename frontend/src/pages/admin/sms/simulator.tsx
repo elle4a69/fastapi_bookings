@@ -390,7 +390,7 @@ export default function SmsSimulatorTab({ onNavigate }: SmsSimulatorTabProps) {
             <div className="space-y-1">
               <Label>Select Target Line / Account</Label>
               <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Select target line / account">
                   <SelectValue placeholder="Select Account" />
                 </SelectTrigger>
                 <SelectContent>

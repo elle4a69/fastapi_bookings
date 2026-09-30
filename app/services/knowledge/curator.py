@@ -108,6 +108,7 @@ class CuratorDecision(BaseModel):
 
     action: Any  # CuratorActionValue, CuratorAction, or str
     status: str = "processed"
+    decision_code: Optional[str] = None
     memory_id: Optional[int] = None
     target_memory_id: Optional[int] = None
     superseded_id: Optional[int] = None
@@ -320,6 +321,7 @@ class UnifiedCurator:
             return CuratorDecision(
                 action=CuratorActionValue("REJECT_SCOPE", ("rejected", "reject_scope")),
                 status="rejected",
+                decision_code="rejected",
                 rationale="Scope validation failed",
                 reason_code="invalid_scope",
             )
@@ -331,9 +333,26 @@ class UnifiedCurator:
         raw_human = (event.human_content or "").strip()
         reason_str = str(metadata.get("reason", "")).strip()
 
-        clean_query = scrub_pii(raw_query) if raw_query else ""
-        clean_human = scrub_pii(raw_human) if raw_human else ""
-        clean_reason = scrub_pii(reason_str) if reason_str else ""
+        # Collect provider names and business names for this tenant to preserve them from false-positive PII redaction
+        preserved_names: List[str] = []
+        if db and event.tenant_id:
+            from app.models.provider import Provider
+            from app.models.tenant import Tenant
+            providers = db.query(Provider).filter(Provider.tenant_id == event.tenant_id).all()
+            for p in providers:
+                if p.name:
+                    preserved_names.append(p.name)
+                    parts = p.name.split()
+                    if len(parts) > 1:
+                        preserved_names.append(parts[-1])
+                        preserved_names.append(f"{parts[0]} {parts[-1]}")
+            tenant_obj = db.query(Tenant).filter(Tenant.id == event.tenant_id).first()
+            if tenant_obj and tenant_obj.name:
+                preserved_names.append(tenant_obj.name)
+
+        clean_query = scrub_pii(raw_query, preserve_names=preserved_names) if raw_query else ""
+        clean_human = scrub_pii(raw_human, preserve_names=preserved_names) if raw_human else ""
+        clean_reason = scrub_pii(reason_str, preserve_names=preserved_names) if reason_str else ""
         category = metadata.get("category") or "faq"
 
         is_behavioural = self.is_behavioural_correction(clean_reason, clean_human, metadata)
@@ -416,6 +435,7 @@ class UnifiedCurator:
             return CuratorDecision(
                 action=CuratorActionValue("QUARANTINE", ("quarantine", "quarantined")),
                 status="quarantined",
+                decision_code="quarantined",
                 proposal_id=quarantined_prop_id,
                 user_query=clean_query,
                 ideal_response=clean_human,
@@ -441,8 +461,9 @@ class UnifiedCurator:
                 )
                 event.status = "processed"
                 return CuratorDecision(
-                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit")),
+                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit", "evidence_only")),
                     status="processed",
+                    decision_code="evidence_only",
                     classification="incidental",
                     retained_as_evidence=True,
                     contains_dynamic_fact=True,
@@ -467,6 +488,7 @@ class UnifiedCurator:
             return CuratorDecision(
                 action=CuratorActionValue("REJECT_DYNAMIC", ("reject_dynamic", "rejected")),
                 status="rejected",
+                decision_code="rejected",
                 user_query=clean_query,
                 ideal_response=clean_human,
                 category=category,
@@ -496,6 +518,7 @@ class UnifiedCurator:
                 return CuratorDecision(
                     action=CuratorActionValue("REJECT", ("rejected", "classifier_rejected")),
                     status="rejected",
+                    decision_code="rejected",
                     classification="unsafe_draft",
                     reason_code=f"classifier_{draft_classification.category.value.lower()}",
                     requires_review=True,
@@ -515,8 +538,9 @@ class UnifiedCurator:
                 # Minor / Incidental Edit: Retain as evidence, do not invent universal rules
                 event.status = "processed"
                 return CuratorDecision(
-                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit")),
+                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit", "evidence_only")),
                     status="processed",
+                    decision_code="evidence_only",
                     classification="incidental",
                     retained_as_evidence=True,
                     rationale="Minor draft edit retained as evidence without universal rule creation",
@@ -566,8 +590,9 @@ class UnifiedCurator:
 
             event.status = "processed"
             return CuratorDecision(
-                action=CuratorActionValue("EVIDENCE", ("material_edit", "evidence")),
+                action=CuratorActionValue("EVIDENCE", ("material_edit", "evidence", "evidence_only", "pending_review")),
                 status="processed",
+                decision_code="pending_review",
                 proposal_id=prop_id,
                 classification="material",
                 evidence_count=evidence_count,
@@ -578,9 +603,10 @@ class UnifiedCurator:
             event.status = "processed"
             return CuratorDecision(
                 action=CuratorActionValue(
-                    "WEAK_REINFORCEMENT", ("positive_reinforcement", "weak_reinforcement")
+                    "WEAK_REINFORCEMENT", ("positive_reinforcement", "weak_reinforcement", "evidence_only")
                 ),
                 status="processed",
+                decision_code="evidence_only",
                 telemetry_recorded=True,
                 rationale="Positive reinforcement telemetry recorded for approved draft",
             )
@@ -592,8 +618,9 @@ class UnifiedCurator:
         if event_type == "flagged_response" and not clean_human:
             event.status = "processed"
             return CuratorDecision(
-                action=CuratorActionValue("EVIDENCE", ("feedback_only", "telemetry", "evidence")),
+                action=CuratorActionValue("EVIDENCE", ("feedback_only", "telemetry", "evidence", "evidence_only")),
                 status="processed",
+                decision_code="evidence_only",
                 telemetry_recorded=True,
                 retained_as_evidence=True,
                 user_query=clean_query or None,
@@ -604,8 +631,9 @@ class UnifiedCurator:
         if not is_behavioural and not clean_human:
             event.status = "processed"
             return CuratorDecision(
-                action=CuratorActionValue("NOOP", ("no_content", "ignored", "evidence")),
+                action=CuratorActionValue("NOOP", ("no_content", "ignored", "evidence", "evidence_only")),
                 status="processed",
+                decision_code="evidence_only",
                 retained_as_evidence=True,
                 rationale="No factual content provided for durable memory creation",
             )
@@ -640,6 +668,7 @@ class UnifiedCurator:
             return CuratorDecision(
                 action=CuratorActionValue("REJECT", ("rejected", "classifier_rejected")),
                 status="rejected",
+                decision_code="rejected",
                 category=category,
                 reason_code=(
                     f"classifier_{candidate_classification.category.value.lower()}"
@@ -776,12 +805,14 @@ class UnifiedCurator:
 
         action_name = "behavioural_guidance_curated" if is_behavioural else "knowledge_curated"
         canonical_action = "SUPERSEDE" if superseded_id else "AUTO_CURATE"
+        dec_code = "superseded" if superseded_id else "accepted"
 
         return CuratorDecision(
             action=CuratorActionValue(
-                canonical_action, (action_name, "knowledge_curated", "superseded")
+                canonical_action, (action_name, "knowledge_curated", "superseded", dec_code)
             ),
             status="processed",
+            decision_code=dec_code,
             memory_id=new_memory.id,
             target_memory_id=new_memory.id,
             superseded_id=superseded_id,

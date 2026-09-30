@@ -266,7 +266,7 @@ export default function SmsChatwootTab() {
               <div className="grid gap-2">
                 <Label htmlFor="provider">Booking Provider</Label>
                 <Select value={providerId} onValueChange={setProviderId}>
-                  <SelectTrigger id="provider">
+                  <SelectTrigger id="provider" aria-label="Select booking provider">
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
                   <SelectContent>
