@@ -89,6 +89,8 @@ function buildSpawnEnv(extra = {}) {
     'C:\\Python312',
     'C:\\Program Files\\Python312',
     'C:\\Program Files\\Python311',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Python', 'Python311') : '',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Python', 'Python312') : '',
     process.env.USERPROFILE ? path.join(process.env.USERPROFILE, '.local', 'bin') : '',
     process.env.APPDATA ? path.join(process.env.APPDATA, 'uv', 'bin') : '',
   ].filter(Boolean);
@@ -554,8 +556,16 @@ app.get('/api/modules/:name/logs', (req, res) => {
 
 app.get('/api/anti-gravity/state', async (req, res) => {
   try {
-    const cmd = `python -c "import sys; sys.path.append(r'e:\\Projects\\King of Kings'); from anti_gravity_system.storage.database import DatabaseManager; import json; db = DatabaseManager(); print(json.dumps({'projects': db.get_all_projects(), 'sub_projects': db.get_all_sub_projects(), 'tasks': db.get_all_tasks(), 'logs': db.get_latest_logs(30)}, default=str))"`;
-    const { stdout } = await execAsync(cmd);
+    const pythonCode = "import sys; sys.path.append(r'e:\\\\Projects\\\\King of Kings'); from anti_gravity_system.storage.database import DatabaseManager; import json; db = DatabaseManager(); print(json.dumps({'projects': db.get_all_projects(), 'sub_projects': db.get_all_sub_projects(), 'tasks': db.get_all_tasks(), 'logs': db.get_latest_logs(30)}, default=str))";
+    const env = buildSpawnEnv();
+    let stdout;
+    try {
+      const res = await execAsync(`py -c "${pythonCode}"`, { env });
+      stdout = res.stdout;
+    } catch {
+      const res = await execAsync(`python -c "${pythonCode}"`, { env });
+      stdout = res.stdout;
+    }
     res.json(JSON.parse(stdout));
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
