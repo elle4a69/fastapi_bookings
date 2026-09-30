@@ -31,6 +31,11 @@ Key environment variables in `.env`:
 - `SECRET_KEY`: High-entropy key for JWT signature validation.
 - `OPENAI_API_KEY`: API key for GPT-4o autonomous dialogue agent.
 - `CALCOM_API_KEY`: Optional Cal.com API key for headless scheduling federation.
+- `CHATWOOT_BASE_URL`: Chatwoot server URL (default: `http://localhost:4000`).
+- `CHATWOOT_API_ACCESS_TOKEN`: Tenant-level Chatwoot API token.
+- `CHATWOOT_PLATFORM_API_TOKEN`: Superadmin Platform API token for automated account/inbox provisioning.
+- `CHATWOOT_AUTO_PROVISION`: Boolean flag to trigger automatic Chatwoot provisioning during tenant onboarding.
+- `LOCAL_AUTH_BYPASS`: Boolean flag strictly for local development on localhost/127.0.0.1 (forbidden in production).
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: SigNoz or OpenTelemetry collector endpoint (e.g. `http://localhost:4318`).
 
 ---

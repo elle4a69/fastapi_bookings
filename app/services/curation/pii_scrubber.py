@@ -156,8 +156,21 @@ class PIIScrubber:
         text: str,
         customer_names: Optional[Sequence[str]] = None,
         placeholder: str = "[NAME]",
+        preserve_names: Optional[Sequence[str]] = None,
     ) -> str:
         """Scrub customer names from text using patterns and optional known names."""
+        temp_map: dict[str, str] = {}
+        if preserve_names:
+            for idx, p_name in enumerate(sorted(preserve_names, key=len, reverse=True)):
+                clean_p = p_name.strip()
+                if len(clean_p) >= 2:
+                    p_pat = re.compile(rf"\b{re.escape(clean_p)}\b", re.IGNORECASE)
+                    def _preserve_repl(m: re.Match[str], i: int = idx) -> str:
+                        tok = f"__PRESERVED_NAME_{i}__"
+                        temp_map[tok] = m.group(0)
+                        return tok
+                    text = p_pat.sub(_preserve_repl, text)
+
         # 1. Scrub explicit customer names if provided
         if customer_names:
             for name in sorted(customer_names, key=len, reverse=True):
@@ -205,6 +218,9 @@ class PIIScrubber:
 
         text = _SIGNOFF_NAME_RE.sub(_replace_signoff, text)
 
+        for tok, orig in temp_map.items():
+            text = text.replace(tok, orig)
+
         return text
 
     @classmethod
@@ -212,6 +228,7 @@ class PIIScrubber:
         cls,
         text: str,
         customer_names: Optional[Sequence[str]] = None,
+        preserve_names: Optional[Sequence[str]] = None,
     ) -> str:
         """Execute full PII scrubbing pipeline in priority order.
 
@@ -228,10 +245,22 @@ class PIIScrubber:
         scrubbed = cls.scrub_emails(scrubbed)
         scrubbed = cls.scrub_phone_numbers(scrubbed)
         scrubbed = cls.scrub_addresses(scrubbed)
-        scrubbed = cls.scrub_names(scrubbed, customer_names=customer_names)
+        scrubbed = cls.scrub_names(
+            scrubbed,
+            customer_names=customer_names,
+            preserve_names=preserve_names,
+        )
         return scrubbed
 
 
-def scrub_pii(text: str, customer_names: Optional[Sequence[str]] = None) -> str:
+def scrub_pii(
+    text: str,
+    customer_names: Optional[Sequence[str]] = None,
+    preserve_names: Optional[Sequence[str]] = None,
+) -> str:
     """Convenience entrypoint to scrub all PII from text."""
-    return PIIScrubber.scrub(text, customer_names=customer_names)
+    return PIIScrubber.scrub(
+        text,
+        customer_names=customer_names,
+        preserve_names=preserve_names,
+    )

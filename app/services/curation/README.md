@@ -18,7 +18,8 @@ FastAPI Bookings domain at response time. Assistant UI is not a dependency.
   trusted-ingestion gate and accept/reject/dismiss/resolve controls.
 - `retrieval.py`: tenant/provider-scoped hybrid lexical/vector ranking after
   hard governance filters.
-- `pii_scrubber.py`: local PII redaction before candidate retention.
+- `pii_scrubber.py`: local PII redaction before candidate retention; supports
+  `preserve_names` to protect authorized business and practitioner names from false-positive scrubbing.
 - `app/models/curated_memory.py`: accepted `CuratedMemory` records and isolated
   `KnowledgeProposal` review queue.
 

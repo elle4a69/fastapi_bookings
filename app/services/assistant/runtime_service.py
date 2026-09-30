@@ -324,6 +324,36 @@ class AssistantRuntimeService:
             role_block = f"Role and Responsibilities:\n{str(role_description).strip()}"
             provider_overlay = "\n\n".join(part for part in (provider_overlay, role_block) if part)
 
+        if db and tenant_id:
+            from ..sms.bootcamp_service import format_structured_operational_data
+            from ...models.service_provider import ServiceProvider
+            if provider_id:
+                services = (
+                    db.query(Service)
+                    .join(ServiceProvider, ServiceProvider.service_id == Service.id)
+                    .filter(
+                        Service.tenant_id == tenant_id,
+                        Service.active.is_(True),
+                        ServiceProvider.provider_id == provider_id,
+                        ServiceProvider.tenant_id == tenant_id,
+                    )
+                    .all()
+                )
+            else:
+                services = (
+                    db.query(Service)
+                    .filter(Service.tenant_id == tenant_id, Service.active.is_(True))
+                    .all()
+                )
+            if (services or provider_obj) and ("Services Offered:" not in (provider_overlay or "")):
+                structured_info = format_structured_operational_data(
+                    provider_obj,
+                    services,
+                    [location_obj] if location_obj else None,
+                )
+                if structured_info:
+                    provider_overlay = "\n\n".join(part for part in (provider_overlay, structured_info) if part)
+
         configured_model = model or settings_dict.get("model") or "gpt-4o-mini"
         effective_temp = temperature if temperature is not None else settings_dict.get("temperature", 0.7)
 
