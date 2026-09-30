@@ -103,6 +103,16 @@ test('clears the retired mock admin token', { concurrency: false }, async () => 
   assert.equal(storage.getItem('token'), null);
 });
 
+test('uses the local authentication bypass only on localhost', { concurrency: false }, async () => {
+  installBrowser('localhost', '/', 'ordinary-token');
+  const localApi = await loadApi();
+  assert.equal(localApi.getAdminAccessToken(), 'local-development-bypass');
+
+  installBrowser('tenant.localhost', '/', 'ordinary-token');
+  const tenantApi = await loadApi();
+  assert.equal(tenantApi.getAdminAccessToken(), 'ordinary-token');
+});
+
 test('accepts only safe admin return paths', { concurrency: false }, async () => {
   installBrowser('tenant.localhost');
   const { safePostLoginReturnPath } = await loadApi();

@@ -54,13 +54,15 @@ def _get_chatwoot_config(
     u_token = (
         api_token
         or os.getenv("CHATWOOT_API_ACCESS_TOKEN")
-        or getattr(settings, "CHATWOOT_API_ACCESS_TOKEN", "4ULEfYYtAJAbPZmZYaVcr9Lb")
+        or getattr(settings, "CHATWOOT_API_ACCESS_TOKEN", None)
+        or ""
     )
 
     p_token = (
         platform_token
         or os.getenv("CHATWOOT_PLATFORM_API_TOKEN")
-        or getattr(settings, "CHATWOOT_PLATFORM_API_TOKEN", "ReqRYyswSvVB8nVktQrZP1zg")
+        or getattr(settings, "CHATWOOT_PLATFORM_API_TOKEN", None)
+        or ""
     )
 
     wh_base = (

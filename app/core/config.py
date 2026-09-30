@@ -77,6 +77,10 @@ class Settings(BaseSettings):
         60 * 24 * 7,
         description="Number of minutes an access token is valid",
     )
+    LOCAL_AUTH_BYPASS: bool = Field(
+        False,
+        description="Allow the local-development admin authentication bypass. Never enable in production.",
+    )
     # Public API key for client tokens
     PUBLIC_API_KEY: str = Field(
         "local-public-key-change-me",
@@ -120,8 +124,8 @@ class Settings(BaseSettings):
 
     # Chatwoot Settings
     CHATWOOT_BASE_URL: str = Field("http://localhost:4000", description="Chatwoot base URL")
-    CHATWOOT_API_ACCESS_TOKEN: str = Field("4ULEfYYtAJAbPZmZYaVcr9Lb", description="Chatwoot API access token")
-    CHATWOOT_PLATFORM_API_TOKEN: str = Field("ReqRYyswSvVB8nVktQrZP1zg", description="Chatwoot Platform API access token for account provisioning")
+    CHATWOOT_API_ACCESS_TOKEN: str = Field("", description="Chatwoot API access token")
+    CHATWOOT_PLATFORM_API_TOKEN: str = Field("", description="Chatwoot Platform API access token for account provisioning")
     CHATWOOT_WEBHOOK_SECRET: str = Field("", description="Chatwoot webhook secret")
     CHATWOOT_AUTO_PROVISION: bool = Field(False, description="Automatically provision Chatwoot account/inboxes on tenant creation")
 
@@ -173,6 +177,8 @@ class Settings(BaseSettings):
         if self.OUTBOX_SHUTDOWN_GRACE_SECONDS >= self.OUTBOX_LEASE_SECONDS:
             raise ValueError("OUTBOX_SHUTDOWN_GRACE_SECONDS must be shorter than OUTBOX_LEASE_SECONDS")
         if self.APP_ENV in ("production", "prod"):
+            if self.LOCAL_AUTH_BYPASS:
+                raise ValueError("LOCAL_AUTH_BYPASS must not be enabled in production")
             if self.SECRET_KEY == "changeme":
                 raise ValueError("SECRET_KEY must not be 'changeme' in production environment")
             if self.PUBLIC_API_KEY == "local-public-key-change-me":

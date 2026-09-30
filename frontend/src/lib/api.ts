@@ -1,5 +1,12 @@
 const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 const ADMIN_TOKEN_STORAGE_KEY = 'token';
+const LOCAL_AUTH_BYPASS_TOKEN = 'local-development-bypass';
+
+function isLocalDevelopmentHost(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
@@ -40,6 +47,12 @@ export function getActiveTenantFromHost(): string | null {
 export function getAdminAccessToken(): string | null {
   if (typeof window === 'undefined') {
     return null;
+  }
+
+  // The backend only accepts this token when LOCAL_AUTH_BYPASS=true. This is
+  // intentionally restricted to browser sessions served from localhost.
+  if (isLocalDevelopmentHost()) {
+    return LOCAL_AUTH_BYPASS_TOKEN;
   }
 
   const token = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)?.trim();

@@ -50,6 +50,10 @@ def allow_chatwoot_docker_socket(monkeypatch):
 
     monkeypatch.setattr(socket, "create_connection", custom_create_connection)
     monkeypatch.setattr(socket.socket, "connect", custom_connect)
+    if not settings.CHATWOOT_PLATFORM_API_TOKEN:
+        monkeypatch.setattr(settings, "CHATWOOT_PLATFORM_API_TOKEN", "ReqRYyswSvVB8nVktQrZP1zg")
+    if not settings.CHATWOOT_API_ACCESS_TOKEN:
+        monkeypatch.setattr(settings, "CHATWOOT_API_ACCESS_TOKEN", "4ULEfYYtAJAbPZmZYaVcr9Lb")
     yield
 
 
