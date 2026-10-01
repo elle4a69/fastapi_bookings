@@ -510,3 +510,30 @@ Every curator decision emits one of the 6 standardized auditable codes:
 .venv\Scripts\python.exe -m pytest -q tests/test_curator_unified_learning.py tests/test_curator_import_safety.py tests/test_assistant_studio_api.py tests/test_sms_bootcamp.py
 ```
 
+---
+
+## 13. Assistant Studio Knowledge Curator API (`assistant_studio_curator.py`)
+
+The **Knowledge Curator API** powers the Assistant Studio Curator visual interfaces (Screens A, B, C, D) with real-time, zero-mock database and graph management endpoints mounted under `/api/admin/assistant-studio/curator`:
+
+### 13.1 Endpoints & Responsibilities
+- `GET /pipeline-status`: Returns 6 evolutionary pipeline stages with real-time queue counters (`pending_curation`, `active_memories`, `pending_projections`, `neo4j_node_count`, `redis_cache_hit_ratio`, `dead_letters`).
+- `GET /memories`: Scoped list of `CuratedMemory` records with query search, category/kind filtering, provider vs. tenant-shared partitioning, and joined `KnowledgeGraphProjection` state.
+- `POST /memories`: Authoring endpoint for new durable facts with dynamic leak detection (`classify_text`), PII scrubbing, content hashing, outbox projection queueing (`knowledge_graph_projections`), and dual-epoch Redis cache invalidation.
+- `PUT /memories/{id}`: Immutable supersession edit and status transitions:
+  - When content or category is edited: atomically sets prior record to `status="superseded"` and inserts a new `CuratedMemory` with `supersedes_id` pointing to the previous record, enqueuing an `upsert_fact` outbox projection.
+  - When toggling quarantine: updates `status="quarantined"` or `status="active"`.
+- `DELETE /memories/{id}`: Retraction/archival with cache purging and outbox projection invalidation.
+- `POST /memories/{id}/reproject`: Reschedules outbox projection in `knowledge_graph_projections` (`status="pending"`, `attempt_count=0`) for immediate Graphiti resynchronization.
+- `GET /graph-nodes`: Generates real epistemic graph nodes and directed ontological edges (`PREFERS`, `AVOIDS`, `SUPERSEDES`, `APPLIES_WHEN`, `HAS_BOUNDARY`, `SUPPORTED_BY`) reflecting provider-specific and tenant-shared partitions.
+
+### 13.2 Partition Isolation & Zero-Mock Guarantee
+- Every query enforces `tenant_id` isolation from the authenticated JWT session.
+- Dual-partition scoping separates `tenant:{id}:shared` and `tenant:{id}:provider:{id}` knowledge.
+- In accordance with **AGENTS.md Rule 3**, no mock data or synthetic timeouts are used; every action writes to PostgreSQL and signals Redis cache invalidation via `gateway.invalidate(tenant_id, provider_id)`.
+
+### 13.3 Verification Commands
+```bash
+.venv\Scripts\python.exe -m pytest -v tests/test_knowledge_curator_api.py
+```
+

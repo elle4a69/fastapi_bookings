@@ -173,3 +173,102 @@ export interface ImportReportData {
   dryRunUsed: boolean;
   errors?: string[];
 }
+
+export interface CuratedMemoryItem {
+  id: number;
+  tenant_id: number;
+  provider_id: number | null;
+  category: string;
+  user_query: string;
+  ideal_response: string;
+  knowledge_kind: string;
+  authority: string;
+  status: 'active' | 'quarantined' | 'superseded' | string;
+  conflict_state: 'clear' | 'needs_review' | string;
+  confidence_score: number;
+  content_hash?: string;
+  source_reference?: string;
+  effective_from: string;
+  effective_until?: string | null;
+  supersedes_id?: number | null;
+  is_tenant_shared: boolean;
+  graph_projection_status: 'none' | 'pending' | 'processing' | 'projected' | 'retry' | 'dead_letter' | string;
+  projection_id?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: 'provider' | 'tenant' | 'topic' | 'fact' | 'preference' | 'behaviour' | 'policy' | 'boundary' | string;
+  title: string;
+  content?: string | null;
+  scope: 'tenant_shared' | 'provider_private' | string;
+  status: 'active' | 'superseded' | 'quarantined' | string;
+  category?: string | null;
+  authority?: string | null;
+  confidence_score?: number | null;
+  curated_memory_id?: number | null;
+  projection_status?: string | null;
+  group_id: string;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: 'PREFERS' | 'AVOIDS' | 'SUPERSEDES' | 'APPLIES_WHEN' | 'HAS_BOUNDARY' | 'SUPPORTED_BY' | 'OWNS' | string;
+  label: string;
+}
+
+export interface EpistemicGraphData {
+  ok: boolean;
+  provider_id?: number | null;
+  provider_name: string;
+  tenant_id: number;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: {
+    node_count: number;
+    edge_count: number;
+    provider_nodes: number;
+    shared_nodes: number;
+    neo4j_online: boolean;
+  };
+}
+
+export interface PipelineStageMetric {
+  stage_id: number;
+  name: string;
+  status: 'active' | 'idle' | 'warning' | 'error';
+  pending_count: number;
+  total_processed: number;
+  details: Record<string, any>;
+}
+
+export interface PipelineStatusData {
+  ok: boolean;
+  tenant_id: number;
+  provider_id?: number | null;
+  stages: PipelineStageMetric[];
+  queue_counters: {
+    pending_curation: number;
+    active_memories: number;
+    pending_projections: number;
+    neo4j_node_count: number;
+    redis_cache_hit_ratio: number;
+    dead_letters: number;
+  };
+  redis_epoch: number;
+  neo4j_online: boolean;
+  updated_at: string;
+}
+
+export interface DrawerDetailContext {
+  itemType: 'memory' | 'node' | 'proposal' | 'stage';
+  memory?: CuratedMemoryItem | null;
+  node?: GraphNode | null;
+  stage?: PipelineStageMetric | null;
+}

@@ -64,10 +64,12 @@ from ...services.knowledge.classifier import (
 )
 from ...services.knowledge.gateway import knowledge_gateway
 from ...services.sms.bootcamp import DEFAULT_STYLE_PROFILE
+from .assistant_studio_curator import router as curator_router
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Assistant Studio"])
+router.include_router(curator_router, prefix="/curator")
 
 
 def _utc_now() -> datetime:

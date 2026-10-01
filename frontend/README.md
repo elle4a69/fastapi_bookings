@@ -149,6 +149,48 @@ When either the **Multiple Service Providers** or **Multiple Locations** modules
 
 ---
 
+## Assistant Studio — Knowledge Curator UI (`/admin/assistant-studio`)
+
+The **Knowledge Curator** tab (`src/pages/admin/assistant-studio/tabs/knowledge-curator-tab.tsx`) provides staff with end-to-end governance and visual inspection of autonomous learning and epistemic graphs across 4 dedicated interfaces:
+
+### 1. Screen A: Autonomous Learning Pipeline Flow (`learning-pipeline-flow.tsx`)
+- **6-Stage Interactive Visualizer**: Models the epistemic lifecycle from customer interactions to runtime prompt injection:
+  1. *Raw Conversation Turns* (SMS turns, drafts, bootcamp answers)
+  2. *Ingested Learning Events* (PII-scrubbed transactional queue)
+  3. *Autonomous Curator Decision* (Dynamic operational data rejection, policy guards)
+  4. *Authoritative Curated Memory* (PostgreSQL durable fact store)
+  5. *Canonical Graph Projection* (Outbox queue to Neo4j/Graphiti)
+  6. *Runtime Prompt Retrieval* (Bounded multi-channel context assembly)
+- **Live Metrics & Counters**: Displays live queue depths, cache hit ratios, dead letters, and node counts from `GET /api/admin/assistant-studio/curator/pipeline-status`.
+- **Interactive Filtering**: Clicking any stage filters the knowledge ledger below to relevant items.
+
+### 2. Screen B: Interactive Epistemic Graph Canvas (`epistemic-graph-canvas.tsx`)
+- **Visual Ontological Graph**: Scalable Vector Graphics (SVG) node-link diagram rendering active knowledge relationships:
+  - Directed Edge Types: `PREFERS`, `AVOIDS`, `SUPERSEDES`, `APPLIES_WHEN`, `HAS_BOUNDARY`, `SUPPORTED_BY`.
+  - Node Types: Central Provider, Category Clusters (policy, scheduling, location, amenities, pricing, general), and discrete Curated Facts.
+- **Scope & Partition Badges**: Explicitly renders partition boundaries (`tenant:{id}:shared` vs `tenant:{id}:provider:{id}`) with color-coded nodes.
+- **Canvas Controls**: Interactive zoom in/out, fit-to-canvas, reset, and edge type filtering.
+- **Node Inspector Trigger**: Clicking any node opens the provenance lifecycle drawer directly.
+
+### 3. Screen C: Knowledge Ledger & Admin Management Table (`knowledge-ledger-table.tsx`)
+- **Full Operational CRUD Table**: Paginated, sortable, and searchable index of curated knowledge linked to Graphiti projection state.
+- **Add Fact Modal**: Add durable facts with instant client-side and server-side leak detection (`classify_text`), PII scrubbing, and category classification.
+- **Edit Supersession Modal**: Enforces immutable knowledge revisioning: editing an active fact marks the prior version as `superseded` and creates a new `CuratedMemory` pointing to `supersedes_id`.
+- **Administrative Actions**: Quarantine/Activate toggle, Retract (soft-delete/archive), and manual Reproject trigger (`POST /reproject`).
+
+### 4. Screen D: End-to-End Provenance & Lifecycle Drawer (`provenance-lifecycle-drawer.tsx`)
+- **Radix Sheet Drawer**: Deep inspection of memory lineage across 5 audit sections:
+  1. *Overview & Scope*: Partition badges, kinds (`durable_fact`, `response_guidance`, `style_example`), status, and timestamps.
+  2. *Source Context & Scrubbing Audit*: Original trigger type, conversation turn references, and proof of automated PII sanitization.
+  3. *Epistemic Graph Details & Outbox Status*: Ontological classifications, projection ledger status (`pending`, `projected`, `retry`, `dead_letter`), attempt counters, and Graphiti episode UUIDs.
+  4. *Redis Cache & Dual-Epoch Invalidation*: Visual representation of cache keys (`fb:tenant:{t}:provider:{p}:knowledge:{epoch}:{query_hash}`) and composite epoch invalidation status.
+  5. *Spec 54 Precedence Preview*: Live demonstration showing that Layer 2 Real-Time Calendar/Tool Truth takes precedence over Layer 6 Curated Factual Knowledge in system prompts.
+
+### Zero-Mock Rule Compliance
+In strict adherence to **AGENTS.md Rule 3**, no mock data, synthetic timeouts, or fake states exist in the Knowledge Curator UI. Every button, filter, and modal calls authenticated, tenant-scoped FastAPI endpoints (`/api/admin/assistant-studio/curator/*`) and updates real database/cache state.
+
+---
+
 ## Development & Build Commands
 ```bash
 # Start frontend development server on port 7070
