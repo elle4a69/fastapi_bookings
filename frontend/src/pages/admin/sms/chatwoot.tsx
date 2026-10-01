@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, Link2, KeyRound } from "lucide-react";
+import { Plus, Edit2, Trash2, Link2, KeyRound, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,18 @@ interface SmsChatwootBinding {
   is_enabled: boolean;
 }
 
+interface GovernanceLinks {
+  ok: boolean;
+  super_admin_url: string;
+  account_url?: string | null;
+  chatwoot_account_id?: number | null;
+  base_url: string;
+}
+
 export default function SmsChatwootTab() {
   const [bindings, setBindings] = useState<SmsChatwootBinding[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
+  const [govLinks, setGovLinks] = useState<GovernanceLinks | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBinding, setEditingBinding] = useState<SmsChatwootBinding | null>(null);
@@ -52,6 +61,13 @@ export default function SmsChatwootTab() {
       ]);
       setBindings(bindRes);
       setProviders(Array.isArray(provRes) ? provRes : (provRes?.data ?? []));
+
+      try {
+        const govRes: any = await apiClient.get('/api/admin/governance/chatwoot-links');
+        setGovLinks(govRes?.data ?? govRes);
+      } catch {
+        // non-fatal
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to load Chatwoot bindings.");
     } finally {
@@ -128,16 +144,50 @@ export default function SmsChatwootTab() {
   return (
     <Card>
       <CardContent className="pt-6 overflow-x-auto">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Chatwoot Integrations</h2>
             <p className="text-sm text-muted-foreground">
               Map booking providers to Chatwoot accounts and inboxes to synchronize customer conversations.
             </p>
           </div>
-          <Button onClick={handleOpenCreate} size="sm" className="gap-2">
-            <Plus className="w-4 h-4" /> Add Binding
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {govLinks?.super_admin_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => {
+                  if (govLinks?.super_admin_url) {
+                    window.open(govLinks.super_admin_url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                title="Open Chatwoot SuperAdmin"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                SuperAdmin
+              </Button>
+            )}
+            {govLinks?.account_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => {
+                  if (govLinks?.account_url) {
+                    window.open(govLinks.account_url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                title="Open Tenant Chatwoot Account"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Tenant Workspace
+              </Button>
+            )}
+            <Button onClick={handleOpenCreate} size="sm" className="gap-2">
+              <Plus className="w-4 h-4" /> Add Binding
+            </Button>
+          </div>
         </div>
 
         {loading ? (

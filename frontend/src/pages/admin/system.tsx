@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Activity, Database, Server, Trash2 } from 'lucide-react';
+import { Activity, Database, ExternalLink, Server, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../../lib/api';
 
@@ -12,14 +12,33 @@ interface SystemHealth {
   background_queues_active: number;
 }
 
+interface GovernanceLinks {
+  ok: boolean;
+  super_admin_url: string;
+  account_url?: string | null;
+  chatwoot_account_id?: number | null;
+  base_url: string;
+}
+
 export default function SystemPage() {
   const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [govLinks, setGovLinks] = useState<GovernanceLinks | null>(null);
   const [, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
 
   useEffect(() => {
     fetchHealth();
+    fetchGovernance();
   }, []);
+
+  const fetchGovernance = async () => {
+    try {
+      const res: any = await apiClient.get('/api/admin/governance/chatwoot-links');
+      setGovLinks(res?.data ?? res);
+    } catch {
+      console.warn('Failed to fetch governance links');
+    }
+  };
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -103,6 +122,62 @@ export default function SystemPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              Platform Owner Governance & Chatwoot
+            </CardTitle>
+            <CardDescription>
+              Direct deep links for platform SuperAdmin operations and Chatwoot inbox management.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Chatwoot Instance:</span>
+              <Badge variant="outline" className="font-mono text-xs">
+                {govLinks?.base_url || 'http://localhost:4000'}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Tenant Chatwoot ID:</span>
+              <Badge variant={govLinks?.chatwoot_account_id ? 'secondary' : 'outline'} className="font-mono text-xs">
+                {govLinks?.chatwoot_account_id ? `#${govLinks.chatwoot_account_id}` : 'Not provisioned'}
+              </Badge>
+            </div>
+            <div className="pt-2 flex flex-wrap gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  if (govLinks?.super_admin_url) {
+                    window.open(govLinks.super_admin_url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                disabled={!govLinks?.super_admin_url}
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open SuperAdmin Console
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  if (govLinks?.account_url) {
+                    window.open(govLinks.account_url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                disabled={!govLinks?.account_url}
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open Tenant Workspace
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Maintenance Actions</CardTitle>
