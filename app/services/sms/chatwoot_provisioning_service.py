@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ...core.config import settings
 from ...models.provider import Provider
+from ...models.location import Location
 from ...models.sms_chatwoot import SmsChatwootBinding
 from ...models.tenant import Tenant
 from ...models.user import User
@@ -78,6 +79,7 @@ def provision_tenant_chatwoot(
     db: Session,
     tenant_id: int,
     provider_ids: Optional[List[int]] = None,
+    location_ids: Optional[List[int]] = None,
     chatwoot_base_url: Optional[str] = None,
     api_token: Optional[str] = None,
     platform_token: Optional[str] = None,
@@ -87,7 +89,7 @@ def provision_tenant_chatwoot(
 
     Executes 6 core phases:
     1. Account Provisioning: Resolves or creates Chatwoot Account, commits tenant.chatwoot_account_id.
-    2. Inbox Provisioning: Resolves or creates API Channel inboxes for default/active providers.
+    2. Inbox Provisioning: Resolves or creates API Channel inboxes for providers and locations.
     3. Binding Provisioning: Creates or updates SmsChatwootBinding with timing-safe webhook_secret.
     4. Webhook Subscription: Subscribes FastAPI webhook to message_created and message_updated.
     5. Staff Provisioning: Syncs tenant staff/admin users to Chatwoot agents and inbox members.
@@ -358,6 +360,112 @@ def provision_tenant_chatwoot(
                     })
 
             # -------------------------------------------------------------
+            # Phase 4b: Location Inboxes Provisioning & Webhook Setup
+            # -------------------------------------------------------------
+            if location_ids:
+                locations = db.query(Location).filter(
+                    Location.tenant_id == tenant.id,
+                    Location.id.in_(location_ids),
+                    Location.active == True,
+                ).all()
+                for location in locations:
+                    loc_inbox_name = f"{tenant.name} - Location: {location.name}"
+
+                    binding = db.query(SmsChatwootBinding).filter(
+                        SmsChatwootBinding.tenant_id == tenant.id,
+                        SmsChatwootBinding.location_id == location.id,
+                        SmsChatwootBinding.chatwoot_account_id == account_id,
+                    ).first()
+
+                    inbox_id = None
+                    if binding and binding.chatwoot_inbox_id in inboxes_by_id:
+                        inbox_id = binding.chatwoot_inbox_id
+                    elif loc_inbox_name.lower() in inboxes_by_name:
+                        inbox_id = int(inboxes_by_name[loc_inbox_name.lower()]["id"])
+                    else:
+                        create_inb_resp = client.post(
+                            f"{base_url}/api/v1/accounts/{account_id}/inboxes",
+                            headers={"api_access_token": u_token},
+                            json={
+                                "name": loc_inbox_name,
+                                "channel": {
+                                    "type": "api",
+                                    "webhook_url": f"{wh_base}/api/sms/chatwoot/webhook",
+                                },
+                            },
+                        )
+                        create_inb_resp.raise_for_status()
+                        inb_data = create_inb_resp.json()
+                        inbox_id = int(inb_data["id"])
+                        inboxes_by_name[loc_inbox_name.lower()] = inb_data
+                        inboxes_by_id[inbox_id] = inb_data
+
+                    result.inboxes_provisioned.append({
+                        "location_id": location.id,
+                        "inbox_id": inbox_id,
+                        "inbox_name": loc_inbox_name,
+                    })
+
+                    if not binding:
+                        webhook_secret = secrets.token_hex(32)
+                        binding = SmsChatwootBinding(
+                            tenant_id=tenant.id,
+                            provider_id=None,
+                            location_id=location.id,
+                            chatwoot_account_id=account_id,
+                            chatwoot_inbox_id=inbox_id,
+                            chatwoot_base_url=base_url,
+                            chatwoot_api_token=u_token,
+                            webhook_secret=webhook_secret,
+                            is_enabled=True,
+                            channel_metadata={"ai_mode": "autopilot", "ai_enabled": True},
+                        )
+                        db.add(binding)
+                        db.commit()
+                        db.refresh(binding)
+                    else:
+                        binding.chatwoot_inbox_id = inbox_id
+                        binding.chatwoot_base_url = base_url
+                        binding.is_enabled = True
+                        if not binding.webhook_secret:
+                            binding.webhook_secret = secrets.token_hex(32)
+                        db.commit()
+                        db.refresh(binding)
+
+                    result.bindings_created.append(binding.id)
+
+                    webhook_url = f"{wh_base}/api/sms/chatwoot/webhook?token={binding.webhook_secret}"
+                    webhook_already_registered = any(
+                        wh.get("url") == webhook_url for wh in existing_webhooks
+                    )
+                    if not webhook_already_registered:
+                        try:
+                            wh_create_resp = client.post(
+                                f"{base_url}/api/v1/accounts/{account_id}/webhooks",
+                                headers={"api_access_token": u_token},
+                                json={
+                                    "url": webhook_url,
+                                    "subscriptions": ["message_created", "message_updated"],
+                                },
+                            )
+                            if wh_create_resp.status_code in (200, 201):
+                                wh_info = wh_create_resp.json()
+                                result.webhooks_registered.append({
+                                    "url": webhook_url,
+                                    "inbox_id": inbox_id,
+                                    "status": "registered",
+                                    "details": wh_info,
+                                })
+                        except Exception as e:
+                            logger.warning(f"Failed to register webhook for location inbox {inbox_id}: {e}")
+                    else:
+                        result.webhooks_registered.append({
+                            "url": webhook_url,
+                            "inbox_id": inbox_id,
+                            "status": "already_registered",
+                        })
+
+            # -------------------------------------------------------------
             # Phase 6: Staff Provisioning & Inbox Membership
             # -------------------------------------------------------------
             staff_users = db.query(User).filter(
@@ -445,3 +553,24 @@ def provision_tenant_chatwoot(
         result.error_message = str(exc)
 
     return result
+
+
+def provision_location_chatwoot(
+    db: Session,
+    tenant_id: int,
+    location_id: int,
+    chatwoot_base_url: Optional[str] = None,
+    api_token: Optional[str] = None,
+    platform_token: Optional[str] = None,
+    webhook_base_url: Optional[str] = None,
+) -> ProvisioningResult:
+    """Convenience helper to provision a dedicated location inbox."""
+    return provision_tenant_chatwoot(
+        db=db,
+        tenant_id=tenant_id,
+        location_ids=[location_id],
+        chatwoot_base_url=chatwoot_base_url,
+        api_token=api_token,
+        platform_token=platform_token,
+        webhook_base_url=webhook_base_url,
+    )

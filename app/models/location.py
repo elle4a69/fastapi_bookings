@@ -5,7 +5,7 @@ have their own working hours and time zone. They are linked to
 bookings.
 """
 
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Boolean, Index
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -46,6 +46,9 @@ class Location(Base):
     location_products = relationship(
         "LocationProduct", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
     )
+    chatwoot_bindings = relationship(
+        "SmsChatwootBinding", back_populates="location", cascade="all, delete-orphan", lazy="selectin"
+    )
 
     @property
     def provider_ids(self) -> list[int]:
@@ -69,7 +72,11 @@ class Location(Base):
 
 class LocationProvider(Base):
     __tablename__ = "location_providers"
-    __table_args__ = (UniqueConstraint("tenant_id", "location_id", "provider_id", name="uq_location_providers_pair"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "location_id", "provider_id", name="uq_location_providers_pair"),
+        Index("ix_location_providers_location_provider", "location_id", "provider_id"),
+        Index("ix_location_providers_provider_location", "provider_id", "location_id"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     location_id = Column(Integer, ForeignKey("locations.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -77,7 +84,7 @@ class LocationProvider(Base):
     
     tenant = relationship("Tenant")
     location = relationship("Location", back_populates="location_providers")
-    provider = relationship("Provider")
+    provider = relationship("Provider", back_populates="location_providers")
 
 
 class LocationService(Base):

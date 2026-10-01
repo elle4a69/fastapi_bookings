@@ -16,6 +16,7 @@ from ..models import (
     Service,
     Provider,
     Location,
+    LocationProvider,
     Booking,
     BlockedTime,
     ProviderWorkDay,
@@ -69,6 +70,10 @@ def compute_availability(
     horizon_limit = datetime.now(timezone.utc) + timedelta(days=max_days)
     end_time = min(end_time, horizon_limit)
 
+    # Enforce Location active status
+    if location is not None and not getattr(location, "active", True):
+        return []
+
     # Step 1: Gather candidate providers
     providers: List[Provider] = []
     if provider:
@@ -83,6 +88,21 @@ def compute_availability(
             service.tenant_id,
             {"service": service.id, "location": location.id if location else None},
         )
+
+    # When location is supplied, strictly enforce provider assignment via location_providers
+    if location is not None:
+        loc_provider_ids = {
+            lp.provider_id
+            for lp in db.query(LocationProvider.provider_id)
+            .filter(
+                LocationProvider.location_id == location.id,
+                LocationProvider.tenant_id == service.tenant_id,
+            )
+            .all()
+        }
+        providers = [p for p in providers if p.id in loc_provider_ids]
+        if not providers:
+            return []
 
     results: List[dict] = []
 
@@ -102,6 +122,7 @@ def compute_availability(
                     ProviderSpecialDay.tenant_id == prov.tenant_id,
                     ProviderSpecialDay.date == current_date,
                     ProviderSpecialDay.provider_id == prov.id,
+                    ProviderSpecialDay.location_id.is_(None),
                 )
                 .first()
             )
@@ -112,6 +133,7 @@ def compute_availability(
                         ProviderSpecialDay.tenant_id == prov.tenant_id,
                         ProviderSpecialDay.date == current_date,
                         ProviderSpecialDay.provider_id.is_(None),
+                        ProviderSpecialDay.location_id.is_(None),
                     )
                     .first()
                 )
@@ -135,6 +157,7 @@ def compute_availability(
                         ProviderWorkDay.tenant_id == prov.tenant_id,
                         ProviderWorkDay.weekday == weekday_num,
                         ProviderWorkDay.provider_id == prov.id,
+                        ProviderWorkDay.location_id.is_(None),
                     )
                     .first()
                 )
@@ -145,6 +168,7 @@ def compute_availability(
                             ProviderWorkDay.tenant_id == prov.tenant_id,
                             ProviderWorkDay.weekday == weekday_num,
                             ProviderWorkDay.provider_id.is_(None),
+                            ProviderWorkDay.location_id.is_(None),
                         )
                         .first()
                     )
@@ -157,6 +181,71 @@ def compute_availability(
 
             if not is_working_day or working_start is None or working_end is None:
                 continue
+
+            # Step 3b: Location-specific schedules & holiday overrides
+            loc_special_day = None
+            loc_work_day = None
+            if location is not None:
+                loc_special_day = (
+                    db.query(ProviderSpecialDay)
+                    .filter(
+                        ProviderSpecialDay.tenant_id == prov.tenant_id,
+                        ProviderSpecialDay.location_id == location.id,
+                        ProviderSpecialDay.date == current_date,
+                        ProviderSpecialDay.provider_id == prov.id,
+                    )
+                    .first()
+                )
+                if not loc_special_day:
+                    loc_special_day = (
+                        db.query(ProviderSpecialDay)
+                        .filter(
+                            ProviderSpecialDay.tenant_id == prov.tenant_id,
+                            ProviderSpecialDay.location_id == location.id,
+                            ProviderSpecialDay.date == current_date,
+                            ProviderSpecialDay.provider_id.is_(None),
+                        )
+                        .first()
+                    )
+                if loc_special_day and not loc_special_day.is_working:
+                    continue
+
+                if not loc_special_day:
+                    loc_work_day = (
+                        db.query(ProviderWorkDay)
+                        .filter(
+                            ProviderWorkDay.tenant_id == prov.tenant_id,
+                            ProviderWorkDay.location_id == location.id,
+                            ProviderWorkDay.weekday == weekday_num,
+                            ProviderWorkDay.provider_id == prov.id,
+                        )
+                        .first()
+                    )
+                    if not loc_work_day:
+                        loc_work_day = (
+                            db.query(ProviderWorkDay)
+                            .filter(
+                                ProviderWorkDay.tenant_id == prov.tenant_id,
+                                ProviderWorkDay.location_id == location.id,
+                                ProviderWorkDay.weekday == weekday_num,
+                                ProviderWorkDay.provider_id.is_(None),
+                            )
+                            .first()
+                        )
+                    if loc_work_day and not loc_work_day.is_working:
+                        continue
+
+                # Clamp working window by location operating hours
+                if loc_special_day and loc_special_day.is_working:
+                    l_start, l_end = parse_working_hours(current_date, loc_special_day.start_time, loc_special_day.end_time)
+                    if l_start and l_end:
+                        working_start = max(working_start, l_start)
+                        working_end = min(working_end, l_end)
+                elif loc_work_day and loc_work_day.is_working:
+                    l_start, l_end = parse_working_hours(current_date, loc_work_day.start_time, loc_work_day.end_time)
+                    if l_start and l_end:
+                        working_start = max(working_start, l_start)
+                        working_end = min(working_end, l_end)
 
             # Step 4: Clamp the identified working window to the search window [start_time, end_time]
             working_start = max(working_start, start_time)
@@ -186,6 +275,21 @@ def compute_availability(
                 .all()
             )
 
+            if location is not None:
+                blocked_cond = (
+                    (BlockedTime.provider_id.is_(None) & BlockedTime.location_id.is_(None))
+                    | (BlockedTime.location_id == location.id)
+                    | (
+                        (BlockedTime.provider_id == prov.id)
+                        & ((BlockedTime.location_id.is_(None)) | (BlockedTime.location_id == location.id))
+                    )
+                )
+            else:
+                blocked_cond = (
+                    (BlockedTime.provider_id == prov.id)
+                    | (BlockedTime.provider_id.is_(None) & BlockedTime.location_id.is_(None))
+                )
+
             provider_blocked = (
                 db.query(BlockedTime)
                 .filter(
@@ -193,10 +297,25 @@ def compute_availability(
                     BlockedTime.active.is_(True),
                     BlockedTime.end_time > working_start,
                     BlockedTime.start_time < working_end,
-                    (BlockedTime.provider_id == prov.id) | (BlockedTime.provider_id.is_(None)),
+                    blocked_cond,
                 )
                 .all()
             )
+
+            if location is not None:
+                res_cond = (
+                    (ReservedTime.provider_id.is_(None) & ReservedTime.location_id.is_(None))
+                    | (ReservedTime.location_id == location.id)
+                    | (
+                        (ReservedTime.provider_id == prov.id)
+                        & ((ReservedTime.location_id.is_(None)) | (ReservedTime.location_id == location.id))
+                    )
+                )
+            else:
+                res_cond = (
+                    (ReservedTime.provider_id == prov.id)
+                    | (ReservedTime.provider_id.is_(None) & ReservedTime.location_id.is_(None))
+                )
 
             active_reservations = (
                 db.query(ReservedTime)
@@ -204,7 +323,7 @@ def compute_availability(
                     ReservedTime.tenant_id == prov.tenant_id,
                     ReservedTime.end_time > working_start,
                     ReservedTime.start_time < working_end,
-                    (ReservedTime.provider_id == prov.id) | (ReservedTime.provider_id.is_(None)),
+                    res_cond,
                     (ReservedTime.expires_at.is_(None)) | (ReservedTime.expires_at > now_utc),
                 )
                 .all()
@@ -287,6 +406,7 @@ def compute_availability(
                             "start_time": slot_start.isoformat(),
                             "end_time": slot_end.isoformat(),
                             "provider": {"id": prov.id, "name": prov.name},
+                            "location_id": location.id if location else None,
                             "resources": flat_resources,
                         }
                     )

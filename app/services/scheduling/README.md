@@ -120,9 +120,26 @@ sequenceDiagram
 
 ---
 
+### 4.3 Multi-Location Topology & Availability Filtering (Phase 3)
+When `location_id` is supplied to availability queries (`GET /availability` or `POST /availability`):
+1. **Location Status & Isolation**: The target location must exist within the active `tenant_id` and have `active = True`. If inactive or not found, availability fails closed (returns an empty slot list).
+2. **Provider Association Filtering**: Only practitioners associated with the specified location via the `location_providers` junction table are evaluated as candidate providers. Practitioners not linked to that location are excluded.
+3. **Location-Scoped Operating Hours & Closures**:
+   - `ProviderWorkDay`: Evaluates location-specific hours (`location_id == target_location_id`) before falling back to company-wide default operating hours (`location_id IS NULL`).
+   - `ProviderSpecialDay`: Checks for location-specific closures/overrides (`location_id == target_location_id`) before company-wide overrides (`location_id IS NULL`).
+4. **Location Blocked & Reserved Intervals**:
+   - `BlockedTime` and `ReservedTime` checks clamp out unavailable slots if a block matches either:
+     - Company-wide block (`provider_id IS NULL` and `location_id IS NULL`).
+     - Location-wide block (`location_id == target_location_id`).
+     - Provider-specific block matching the provider and either location-neutral or location-specific to `target_location_id`.
+5. **TimeSlot Schema Output**: Every generated `TimeSlot` includes `location_id` reflecting the operating location.
+
+---
+
 ## 5. Data Safety, Multi-Tenancy & PII Isolation
 
 - **Tenant and Provider Scoping**: Work schedules and slot allocations are strictly scoped to the active `tenant_id` and `provider_id`. Slot conflicts cannot leak across providers or tenants.
+- **Cross-Tenant Location & Provider Boundaries**: Providers cannot be associated with locations from other tenants (`LocationProvider` validation strictly enforces `provider.tenant_id == location.tenant_id`).
 - **UTC Time Normalization**: All timestamps are normalized to UTC via `normalize_to_utc()` before insertion into `booking_slot_allocations`, eliminating timezone drift and daylight savings boundary bugs.
 - **Privacy in Concurrency Collisions**: When a conflict occurs, error details do not reveal the identity, phone number, or notes of the client who won the slot; only generic collision feedback is returned.
 
@@ -145,12 +162,15 @@ pytest tests/test_concurrency.py -v
 # 2. Test scheduling intervals and service buffers
 pytest tests/test_scheduling_intervals.py -v
 
-# 3. Test scheduling edge cases and boundary conditions
+# 3. Test multi-location availability filtering, operating hours & isolation
+pytest tests/test_multi_location_availability.py -v
+
+# 4. Test scheduling edge cases and boundary conditions
 pytest tests/test_scheduling_edge_cases.py -v
 
-# 4. Test Cal.com headless adapter and mock routes
+# 5. Test Cal.com headless adapter and mock routes
 pytest tests/test_calcom_adapter.py tests/test_calcom_router.py -v
 
-# 5. Test slot allocation repair and backfill audit
+# 6. Test slot allocation repair and backfill audit
 pytest tests/test_slot_allocation_repair.py -v
 ```

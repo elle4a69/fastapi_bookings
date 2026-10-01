@@ -249,30 +249,47 @@ def evaluate_outcall_day_slots(
 def get_available_slots(
     db: Session,
     service_duration: int,
-    provider_id: int,
+    provider_id: Optional[int],
     date: datetime,
     service_id: int | None = None,
     service_mode: str = "in_call",
     client_suburb: Optional[str] = None,
     service_address: Optional[str] = None,
     client_postcode: Optional[str] = None,
+    location_id: Optional[int] = None,
 ) -> List[dict]:
-    """Return available time slots for a provider on a given date.
+    """Return available time slots for a provider and/or location on a given date.
 
     Supports both in-call (100% backward compatible) and out-call (5-segment operational window)
     scheduling modes.
     """
     from ..scheduling_service import compute_availability
 
-    provider = db.query(Provider).filter(Provider.id == provider_id, Provider.deleted_at.is_(None)).first()
-    if not provider:
-        return []
+    provider = None
+    if provider_id:
+        provider = db.query(Provider).filter(Provider.id == provider_id, Provider.deleted_at.is_(None)).first()
+        if not provider:
+            return []
+
+    location = None
+    if location_id:
+        location = db.query(Location).filter(Location.id == location_id).first()
+        if not location:
+            return []
+
+    tenant_id = provider.tenant_id if provider else (location.tenant_id if location else None)
+    if not tenant_id and service_id is not None:
+        svc_tenant = db.query(Service.tenant_id).filter(Service.id == service_id).first()
+        if svc_tenant:
+            tenant_id = svc_tenant[0]
 
     service_query = db.query(Service).filter(
-        Service.tenant_id == provider.tenant_id,
         Service.active.is_(True),
         Service.deleted_at.is_(None),
     )
+    if tenant_id:
+        service_query = service_query.filter(Service.tenant_id == tenant_id)
+
     if service_id is not None:
         service_query = service_query.filter(Service.id == service_id)
         service = service_query.first()
@@ -290,6 +307,7 @@ def get_available_slots(
         db,
         service=service,
         provider=provider,
+        location=location,
         start_time=start_time,
         end_time=end_time,
         desired_duration=service_duration,
@@ -304,6 +322,9 @@ def get_available_slots(
         slot_dict = {
             "start": datetime.fromisoformat(slot["start_time"]),
             "end": datetime.fromisoformat(slot["end_time"]),
+            "provider_id": slot["provider"]["id"] if "provider" in slot else getattr(provider, "id", None),
+            "provider_name": slot["provider"]["name"] if "provider" in slot else getattr(provider, "name", None),
+            "location_id": slot.get("location_id") or location_id,
         }
         if "operational_window" in slot:
             slot_dict["operational_window"] = slot["operational_window"]

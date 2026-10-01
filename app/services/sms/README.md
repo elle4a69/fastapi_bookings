@@ -1187,19 +1187,26 @@ flowchart TD
 
 ### Key Workflows & Contracts
 
-1. **Unique Tenant Binding**:
+1. **Unique Tenant Binding & 3-Tier Granularities**:
    - `Tenant.chatwoot_account_id` enforces a strict 1-to-1 relationship between a FastAPI tenant and a Chatwoot account.
-   - Any attempt to bind a Chatwoot account already mapped to another tenant fails with `HTTP 400 Bad Request`.
-   - Provider scoping requires the provider to belong to the active tenant.
+   - `SmsChatwootBinding` supports 3 distinct inbox binding granularities:
+     - **Tenant Default Inbox**: `provider_id IS NULL`, `location_id IS NULL`. Used for general clinic inquiries.
+     - **Provider-Dedicated Inbox**: `provider_id IS NOT NULL`, `location_id IS NULL`. Scoped to individual practitioner communications.
+     - **Location-Dedicated Inbox**: `location_id IS NOT NULL`, `provider_id IS NULL`. Scoped to specific clinic locations/branches.
+   - `resolve_chatwoot_binding(db, tenant_id, provider_id=None, location_id=None)` resolves the most specific matching inbox: Provider-dedicated -> Location-dedicated -> Tenant default.
+   - Multi-tenant boundary checks strictly enforce that any linked provider or location belongs to the target tenant.
 2. **Channel-Neutral Dialogue Execution**:
-   - For Chatwoot conversations where `conversation.sms_account_id is None`, `ai_orchestrator.py` queries `SmsChatwootBinding` for `(tenant_id, provider_id)` to evaluate `ai_enabled` and `ai_mode` (defaulting to autopilot).
+   - For Chatwoot conversations where `conversation.sms_account_id is None`, `ai_orchestrator.py` queries `SmsChatwootBinding` for `(tenant_id, provider_id)` or `(tenant_id, location_id)` to evaluate `ai_enabled` and `ai_mode` (defaulting to autopilot).
    - Message history queries scope with `(SmsMessage.sms_account_id.is_(None) | (SmsMessage.sms_account_id == conv.sms_account_id))`, eliminating the legacy dead end where Chatwoot turns were silently dropped.
    - Evaluates `AssistantRuntimeService.execute_turn` or `_safe_local_reply` with provider profile context.
-3. **AgentBot De-confliction**:
+3. **Automated Location & Provider Provisioning (`chatwoot_provisioning_service.py`)**:
+   - `provision_chatwoot_for_tenant` supports optional `location_ids: Optional[List[int]]` alongside `provider_ids`.
+   - `provision_location_chatwoot(db, tenant_id, location_id)` provisions dedicated API channel inboxes named `"{tenant.name} - {location.name}"`, creating the corresponding `SmsChatwootBinding` with encrypted credentials and webhook registration.
+4. **AgentBot De-confliction**:
    - `chatwoot_agentbot.py` checks whether incoming webhook events belong to an inbox managed by `SmsChatwootBinding`.
    - If bound, AgentBot yields: `{"status": "ignored", "reason": "inbox_managed_by_canonical_mirror_webhook"}`.
    - Prevents duplicate replies or conflicting state machines when both webhooks are active.
-4. **Outbox Echo Deduplication & Staff Takeover**:
+5. **Outbox Echo Deduplication & Staff Takeover**:
    - Internal outbound AI messages carry `client_request_id = fastapi-chatwoot-message-{id}`.
    - When Chatwoot emits an outgoing message webhook, the canonical receiver inspects `source_id` / `client_request_id`. Internal echoes are acknowledged as duplicates (`duplicate=True, reason="internal_outbound_echo"`) without triggering takeover.
    - Genuine human staff replies trigger instant conversation takeover (`state="taken-over"`) and mark all pending `SmsAiJob`s as `CANCELLED`.
@@ -1207,10 +1214,13 @@ flowchart TD
 ### Verification & Testing Commands
 
 ```powershell
-# 1. Run the Docker-backed Chatwoot End-to-End Integration Suite:
+# 1. Run the Multi-Location and Chatwoot inbox binding suite:
+.\.venv\Scripts\python.exe -m pytest tests/test_multi_location_availability.py tests/test_sms_chatwoot.py -v
+
+# 2. Run the Docker-backed Chatwoot End-to-End Integration Suite:
 .\.venv\Scripts\python.exe -m pytest tests/test_chatwoot_docker_e2e.py -v
 
-# 2. Run all Chatwoot and AgentBot unit and integration tests:
+# 3. Run all Chatwoot and AgentBot unit and integration tests:
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
 ```
 

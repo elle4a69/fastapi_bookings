@@ -12,6 +12,7 @@ from ...models.sms_message import SmsMessage
 from ...models.sms_outbox import SmsAiJob, SmsConversationEvent
 from ...models.client import Client
 from ...models.provider import Provider
+from ...models.location import Location, LocationProvider
 from ...models.tenant import Tenant
 from .transports.base import normalize_sms_destination
 
@@ -23,6 +24,47 @@ except ImportError:
     def record_webhook_event(status: str) -> None:
         pass
 
+
+def resolve_chatwoot_binding(
+    db: Session,
+    tenant_id: int,
+    provider_id: Optional[int] = None,
+    location_id: Optional[int] = None,
+) -> Optional[SmsChatwootBinding]:
+    """Resolve the most specific active Chatwoot binding for a tenant.
+
+    Precedence order:
+    1. Provider-dedicated binding (if provider_id provided)
+    2. Location-dedicated binding (if location_id provided)
+    3. Tenant-default binding (provider_id IS NULL, location_id IS NULL)
+    """
+    if provider_id is not None:
+        binding = db.query(SmsChatwootBinding).filter(
+            SmsChatwootBinding.tenant_id == tenant_id,
+            SmsChatwootBinding.provider_id == provider_id,
+            SmsChatwootBinding.is_enabled.is_(True),
+        ).first()
+        if binding:
+            return binding
+
+    if location_id is not None:
+        binding = db.query(SmsChatwootBinding).filter(
+            SmsChatwootBinding.tenant_id == tenant_id,
+            SmsChatwootBinding.location_id == location_id,
+            SmsChatwootBinding.is_enabled.is_(True),
+        ).first()
+        if binding:
+            return binding
+
+    # Tenant default inbox fallback
+    return db.query(SmsChatwootBinding).filter(
+        SmsChatwootBinding.tenant_id == tenant_id,
+        SmsChatwootBinding.provider_id.is_(None),
+        SmsChatwootBinding.location_id.is_(None),
+        SmsChatwootBinding.is_enabled.is_(True),
+    ).first()
+
+
 async def send_chatwoot_message(
     db: Session,
     conversation: SmsConversation,
@@ -30,22 +72,20 @@ async def send_chatwoot_message(
     source_id: Optional[str] = None,
 ) -> int:
     """Send message to Chatwoot using live HTTP API client, returning Chatwoot message ID."""
-    query = db.query(SmsChatwootBinding).filter(
-        SmsChatwootBinding.tenant_id == conversation.tenant_id,
-        SmsChatwootBinding.provider_id == conversation.provider_id,
-        SmsChatwootBinding.is_enabled == True
-    )
+    binding = None
     if conversation.chatwoot_inbox_id is not None:
-        query = query.filter(SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id)
-    binding = query.first()
-
-    if not binding:
-        # Fallback without inbox filter if needed
         binding = db.query(SmsChatwootBinding).filter(
             SmsChatwootBinding.tenant_id == conversation.tenant_id,
-            SmsChatwootBinding.provider_id == conversation.provider_id,
-            SmsChatwootBinding.is_enabled == True
+            SmsChatwootBinding.chatwoot_inbox_id == conversation.chatwoot_inbox_id,
+            SmsChatwootBinding.is_enabled.is_(True),
         ).first()
+
+    if not binding:
+        binding = resolve_chatwoot_binding(
+            db,
+            tenant_id=conversation.tenant_id,
+            provider_id=conversation.provider_id,
+        )
 
     if not binding:
         raise ValueError("No enabled Chatwoot binding found for conversation.")
@@ -113,24 +153,67 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         raise HTTPException(status_code=404, detail="Chatwoot binding not found or disabled.")
 
     # Scoping Validation:
-    # 1) Provider scoping: validate provider belongs to the mapped FastAPI tenant
-    provider = db.query(Provider).filter(
-        Provider.id == binding.provider_id,
-        Provider.tenant_id == binding.tenant_id
-    ).first()
-    if not provider or not provider.active:
-        logger.warning(f"Chatwoot webhook scoping rejected: provider {binding.provider_id} does not belong to tenant {binding.tenant_id}")
-        record_webhook_event("rejected")
-        raise HTTPException(status_code=403, detail="Provider scoping validation failed: provider does not belong to mapped tenant.")
+    # 1) Location scoping (if location-dedicated): validate location belongs to mapped tenant
+    if binding.location_id is not None:
+        location = db.query(Location).filter(
+            Location.id == binding.location_id,
+            Location.tenant_id == binding.tenant_id,
+        ).first()
+        if not location or not location.active:
+            logger.warning(
+                f"Chatwoot webhook scoping rejected: location {binding.location_id} does not belong to tenant {binding.tenant_id} or is inactive"
+            )
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=403, detail="Location scoping validation failed: location does not belong to mapped tenant.")
 
-    # 2) Tenant scoping: validate tenant chatwoot_account_id mapping if established
+    # 2) Provider scoping (if provider-dedicated): validate provider belongs to mapped tenant
+    if binding.provider_id is not None:
+        provider = db.query(Provider).filter(
+            Provider.id == binding.provider_id,
+            Provider.tenant_id == binding.tenant_id,
+        ).first()
+        if not provider or not provider.active:
+            logger.warning(f"Chatwoot webhook scoping rejected: provider {binding.provider_id} does not belong to tenant {binding.tenant_id}")
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=403, detail="Provider scoping validation failed: provider does not belong to mapped tenant.")
+
+    # 3) Tenant scoping: validate tenant chatwoot_account_id mapping if established
     tenant = db.query(Tenant).filter(Tenant.id == binding.tenant_id).first()
+    if not tenant:
+        record_webhook_event("rejected")
+        raise HTTPException(status_code=404, detail="Tenant not found.")
     if tenant and tenant.chatwoot_account_id is not None and tenant.chatwoot_account_id != binding.chatwoot_account_id:
         logger.warning(
             f"Chatwoot webhook scoping rejected: tenant {tenant.id} mapped chatwoot_account_id {tenant.chatwoot_account_id} does not match binding {binding.chatwoot_account_id}"
         )
         record_webhook_event("rejected")
         raise HTTPException(status_code=403, detail="Tenant Chatwoot account scoping validation failed.")
+
+    # Resolve effective provider ID for DB models that require provider_id
+    effective_provider_id = binding.provider_id
+    if effective_provider_id is None:
+        if binding.location_id is not None:
+            loc_prov = (
+                db.query(Provider)
+                .join(LocationProvider, LocationProvider.provider_id == Provider.id)
+                .filter(
+                    LocationProvider.location_id == binding.location_id,
+                    LocationProvider.tenant_id == binding.tenant_id,
+                    Provider.deleted_at.is_(None),
+                    Provider.active.is_(True),
+                )
+                .first()
+            )
+            if loc_prov:
+                effective_provider_id = loc_prov.id
+        if effective_provider_id is None:
+            tenant_prov = db.query(Provider).filter(
+                Provider.tenant_id == binding.tenant_id,
+                Provider.deleted_at.is_(None),
+                Provider.active.is_(True),
+            ).first()
+            if tenant_prov:
+                effective_provider_id = tenant_prov.id
 
     # 3. Validate authenticity
     import secrets
@@ -218,7 +301,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
     if not conversation and normalized_phone:
         conversation = db.query(SmsConversation).filter(
             SmsConversation.tenant_id == binding.tenant_id,
-            SmsConversation.provider_id == binding.provider_id,
+            SmsConversation.provider_id == effective_provider_id,
             SmsConversation.customer_address == normalized_phone
         ).first()
         if conversation:
@@ -240,7 +323,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
 
         conversation = SmsConversation(
             tenant_id=binding.tenant_id,
-            provider_id=binding.provider_id,
+            provider_id=effective_provider_id,
             sms_account_id=None,
             customer_address=normalized_phone or f"chatwoot_contact_{chatwoot_contact_id}",
             client_id=matching_client.id if matching_client else None,
@@ -260,7 +343,7 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
     if message_type == "incoming":
         inbound_message = SmsMessage(
             tenant_id=binding.tenant_id,
-            provider_id=binding.provider_id,
+            provider_id=effective_provider_id,
             sms_account_id=None,
             conversation_id=conversation.id,
             body=content,

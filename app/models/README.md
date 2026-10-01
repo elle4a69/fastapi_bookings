@@ -43,6 +43,21 @@ app/models/
 - **Location**: `is_client_hidden` (bool, default False) for client-facing address privacy.
 - **Booking**: `service_mode` (`in_call` | `out_call`), and travel snapshot fields `client_suburb`, `client_postcode`, `service_address`, `chargeable_travel_distance_km`, `chargeable_travel_fee`. (Derived operational scheduling windows are not persisted).
 
+### Phase 3 Multi-Location & Provider Relational Topology Refinement
+- **`LocationProvider` (`location_providers`)**:
+  - Composite primary key on `(location_id, provider_id)`.
+  - Composite indexes `ix_location_providers_location_provider` and `ix_location_providers_provider_location`.
+  - Bidirectional relationships: `Location.providers` and `Provider.locations` (with `provider_locations` alias and `location_ids` helper property).
+  - Strict tenant boundary enforcement: `provider.tenant_id` must match `location.tenant_id`.
+- **`SmsChatwootBinding` (`sms_chatwoot_bindings`)**:
+  - Added nullable `location_id` column (`ForeignKey("locations.id", ondelete="CASCADE")`) alongside nullable `provider_id`.
+  - Composite indexes `ix_sms_chatwoot_bindings_tenant_location` and `ix_sms_chatwoot_bindings_tenant_provider`.
+  - Bidirectional relationships: `Location.chatwoot_bindings` and `Provider.chatwoot_bindings`.
+  - Supports 3 distinct binding granularities:
+    1. **Tenant Default Inbox**: `provider_id IS NULL`, `location_id IS NULL`
+    2. **Provider-Dedicated Inbox**: `provider_id IS NOT NULL`, `location_id IS NULL`
+    3. **Location-Dedicated Inbox**: `location_id IS NOT NULL`, `provider_id IS NULL`
+
 ---
 
 ## Multi-Tenant Partitioning Rules
@@ -53,6 +68,7 @@ app/models/
 5. **Capability Hierarchy**: Tenant -> Provider -> Service: children may be more restrictive than parents, never broader.
 6. **Tenant-Scoped Booking Idempotency**: `bookings` enforces a composite unique constraint `UniqueConstraint('tenant_id', 'idempotency_key', name='uq_tenant_booking_idempotency')`, guaranteeing that idempotency keys are strictly scoped per tenant without cross-tenant collisions.
 7. **GDPR Consent Partitioning**: `gdpr_consents` is explicitly partitioned with `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`), guaranteeing tenant-scoped compliance and consent auditing.
+8. **Multi-Location & Chatwoot Topology Isolation**: `location_providers` and `sms_chatwoot_bindings` are strictly scoped to `tenant_id`. Cross-tenant links between providers, locations, and Chatwoot inboxes are rejected.
 
 ---
 

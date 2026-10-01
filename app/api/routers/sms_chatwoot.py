@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.tenant import Tenant
 from ...models.provider import Provider
+from ...models.location import Location
 from ...models.user import User
 from ...models.sms_chatwoot import SmsChatwootBinding
 from ...schemas.sms_chatwoot import (
@@ -30,6 +31,7 @@ def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) 
         id=binding.id,
         tenant_id=binding.tenant_id,
         provider_id=binding.provider_id,
+        location_id=binding.location_id,
         chatwoot_account_id=binding.chatwoot_account_id,
         chatwoot_inbox_id=binding.chatwoot_inbox_id,
         chatwoot_base_url=binding.chatwoot_base_url,
@@ -74,16 +76,28 @@ async def create_chatwoot_binding(
     db: Session = Depends(get_db)
 ):
     """Create a new Chatwoot binding."""
-    # 1. Validate provider belongs to tenant
-    provider = db.query(Provider).filter(
-        Provider.id == payload.provider_id,
-        Provider.tenant_id == tenant.id,
-    ).first()
-    if not provider:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provider does not belong to the current tenant.",
-        )
+    # 1. Validate provider and location belong to tenant if supplied
+    if payload.provider_id is not None:
+        provider = db.query(Provider).filter(
+            Provider.id == payload.provider_id,
+            Provider.tenant_id == tenant.id,
+        ).first()
+        if not provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provider does not belong to the current tenant.",
+            )
+
+    if payload.location_id is not None:
+        location = db.query(Location).filter(
+            Location.id == payload.location_id,
+            Location.tenant_id == tenant.id,
+        ).first()
+        if not location:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Location does not belong to the current tenant.",
+            )
 
     # 2. Enforce Tenant <-> Chatwoot Account 1-to-1 mapping
     if tenant.chatwoot_account_id is not None:
@@ -120,6 +134,7 @@ async def create_chatwoot_binding(
     binding = SmsChatwootBinding(
         tenant_id=tenant.id,
         provider_id=payload.provider_id,
+        location_id=payload.location_id,
         chatwoot_account_id=payload.chatwoot_account_id,
         chatwoot_inbox_id=payload.chatwoot_inbox_id,
         chatwoot_base_url=payload.chatwoot_base_url,
@@ -210,6 +225,28 @@ async def update_chatwoot_binding(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Chatwoot inbox {update_data['chatwoot_inbox_id']} is already bound to another tenant.",
+            )
+
+    if "provider_id" in update_data and update_data["provider_id"] is not None:
+        prov = db.query(Provider).filter(
+            Provider.id == update_data["provider_id"],
+            Provider.tenant_id == tenant.id,
+        ).first()
+        if not prov:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Provider does not belong to the current tenant.",
+            )
+
+    if "location_id" in update_data and update_data["location_id"] is not None:
+        loc = db.query(Location).filter(
+            Location.id == update_data["location_id"],
+            Location.tenant_id == tenant.id,
+        ).first()
+        if not loc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Location does not belong to the current tenant.",
             )
 
     for field, value in update_data.items():

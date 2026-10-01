@@ -50,6 +50,7 @@ class TimeSlot(BaseModel):
     end: str = Field(..., description="ISO 8601 end timestamp for client appointment")
     provider_id: Optional[int] = Field(None, description="Provider ID offering this slot")
     provider_name: Optional[str] = Field(None, description="Provider display name")
+    location_id: Optional[int] = Field(None, description="Optional Location ID offering this slot")
     operational_window: Optional[OperationalWindowInfo] = Field(
         None,
         description="Optional 5-segment operational window details for this slot",
@@ -60,6 +61,7 @@ class AvailabilityQuery(BaseModel):
     """Availability search parameters."""
     service_id: int = Field(..., description="Service ID")
     provider_id: Optional[int] = Field(None, description="Optional specific Provider ID")
+    location_id: Optional[int] = Field(None, description="Optional specific Location ID")
     date: datetime = Field(..., description="Requested date")
     service_mode: ServiceMode = Field(ServiceMode.IN_CALL, description="Delivery mode (in_call or out_call)")
     client_suburb: Optional[str] = Field(None, description="Client suburb for out-call transit resolution")

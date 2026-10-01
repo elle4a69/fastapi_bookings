@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import base64
 import hashlib
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, JSON
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 from ..core.config import settings
@@ -23,10 +23,15 @@ def _chatwoot_token_cipher():
 
 class SmsChatwootBinding(Base):
     __tablename__ = "sms_chatwoot_bindings"
+    __table_args__ = (
+        Index("ix_sms_chatwoot_bindings_tenant_location", "tenant_id", "location_id"),
+        Index("ix_sms_chatwoot_bindings_tenant_provider", "tenant_id", "provider_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"), nullable=True, index=True)
+    location_id = Column(Integer, ForeignKey("locations.id", ondelete="CASCADE"), nullable=True, index=True)
     chatwoot_account_id = Column(Integer, nullable=False)
     chatwoot_inbox_id = Column(Integer, nullable=False, index=True)
     chatwoot_base_url = Column(String, nullable=False)
@@ -86,7 +91,8 @@ class SmsChatwootBinding(Base):
 
     # Relationships
     tenant = relationship("Tenant")
-    provider = relationship("Provider")
+    provider = relationship("Provider", back_populates="chatwoot_bindings")
+    location = relationship("Location", back_populates="chatwoot_bindings")
 
     def __repr__(self) -> str:
         return f"<SmsChatwootBinding id={self.id} chatwoot_inbox_id={self.chatwoot_inbox_id} is_enabled={self.is_enabled}>"

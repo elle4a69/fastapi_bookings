@@ -10,10 +10,13 @@ class SmsChatwootBindingBase(BaseModel):
     channel_metadata: Optional[Dict[str, Any]] = None
 
 class SmsChatwootBindingCreate(SmsChatwootBindingBase):
-    provider_id: int
+    provider_id: Optional[int] = None
+    location_id: Optional[int] = None
     chatwoot_api_token: str
 
 class SmsChatwootBindingUpdate(BaseModel):
+    provider_id: Optional[int] = None
+    location_id: Optional[int] = None
     chatwoot_account_id: Optional[int] = None
     chatwoot_inbox_id: Optional[int] = None
     chatwoot_base_url: Optional[str] = None
@@ -24,7 +27,8 @@ class SmsChatwootBindingUpdate(BaseModel):
 class SmsChatwootBindingResponse(SmsChatwootBindingBase):
     id: int
     tenant_id: int
-    provider_id: int
+    provider_id: Optional[int] = None
+    location_id: Optional[int] = None
     chatwoot_api_token: str = "********"
     webhook_secret: str = "********"
     webhook_url: Optional[str] = None

@@ -53,6 +53,29 @@ class Provider(Base):
         lazy="selectin"
     )
 
+    # Locations where this provider operates
+    location_providers = relationship(
+        "LocationProvider",
+        back_populates="provider",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    chatwoot_bindings = relationship(
+        "SmsChatwootBinding",
+        back_populates="provider",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    @property
+    def provider_locations(self):
+        return self.location_providers
+
+    @property
+    def location_ids(self) -> list[int]:
+        return [lp.location_id for lp in self.location_providers]
+
     @property
     def service_ids(self) -> list[int]:
         return [s.service_id for s in self.services]
