@@ -113,6 +113,7 @@ from .conversation import (
     DeliveryStatus,
 )
 from .message_style_example import MessageStyleExample
+from .tenant_translation import TenantTranslation
 
 __all__ = [
     "User",
@@ -211,5 +212,6 @@ __all__ = [
     "MessageSource",
     "DeliveryStatus",
     "MessageStyleExample",
+    "TenantTranslation",
 ]
 

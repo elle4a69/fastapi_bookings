@@ -10,6 +10,7 @@ import enum
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Float, JSON, Text
+from sqlalchemy.orm import relationship
 from ..db.database import Base
 
 
@@ -91,6 +92,8 @@ class Tenant(Base):
     travel_charge_origin = Column(String, default=TravelChargeOrigin.ALWAYS_FROM_BASE.value, nullable=False)
     assistant_policy = Column(Text, nullable=True)
     chatwoot_account_id = Column(Integer, unique=True, nullable=True, index=True)
+
+    translation = relationship("TenantTranslation", back_populates="tenant", uselist=False, cascade="all, delete-orphan")
 
     def get_enabled_modules(self) -> list[str]:
         """Return list of enabled modules for this tenant.

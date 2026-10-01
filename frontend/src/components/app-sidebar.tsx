@@ -9,6 +9,7 @@ import { NavLink, useLocation } from "react-router-dom"
 import { navigation, providerNavigation, filterNavigationByModules, type NavItem } from "@/components/navigation"
 import { useTenantModules } from "@/context/tenant-modules-context"
 import { useAuth } from "@/context/auth-context"
+import { useTranslation } from "@/context/TranslationContext"
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,7 +41,9 @@ function isCurrentPath(currentPath: string, url: string) {
 
 function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () => void }) {
   const { pathname } = useLocation()
+  const { t } = useTranslation()
   const Icon = item.icon
+  const itemTitle = t(item.title.toLowerCase(), item.title)
 
   if (!item.children) {
     const isActive = Boolean(item.url && isCurrentPath(pathname, item.url))
@@ -49,7 +52,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
         <SidebarMenuButton
           asChild
           isActive={isActive}
-          tooltip={item.title}
+          tooltip={itemTitle}
           className={`relative transition-all duration-200 rounded-lg px-3 py-2 text-sm font-medium ${
             isActive
               ? "bg-gradient-to-r from-primary/15 via-primary/10 to-transparent text-primary font-semibold border-l-2 border-primary shadow-xs"
@@ -58,7 +61,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
         >
           <NavLink to={item.url ?? "/admin"} onClick={onNavigate} className="flex items-center gap-3">
             <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover/menu-button:scale-110 ${isActive ? "text-primary" : "text-sidebar-foreground/75"}`} />
-            <span className="truncate">{item.title}</span>
+            <span className="truncate">{itemTitle}</span>
           </NavLink>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -73,7 +76,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton
             isActive={hasActiveChild}
-            tooltip={item.title}
+            tooltip={itemTitle}
             className={`relative transition-all duration-200 rounded-lg px-3 py-2 text-sm font-medium ${
               hasActiveChild
                 ? "bg-sidebar-accent/50 text-sidebar-foreground font-semibold"
@@ -81,7 +84,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
             }`}
           >
             <Icon className={`h-4 w-4 shrink-0 ${hasActiveChild ? "text-primary" : "text-sidebar-foreground/75"}`} />
-            <span className="truncate">{item.title}</span>
+            <span className="truncate">{itemTitle}</span>
             <ChevronRightIcon className="ml-auto h-4 w-4 shrink-0 text-sidebar-foreground/70 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
@@ -89,6 +92,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
           <SidebarMenuSub className="ml-4 border-l border-sidebar-border/60 pl-2 space-y-1 my-1">
             {item.children.map((child) => {
               const isChildActive = isCurrentPath(pathname, child.url)
+              const childTitle = t(child.title.toLowerCase(), child.title)
               return (
                 <SidebarMenuSubItem key={child.url}>
                   <SidebarMenuSubButton
@@ -101,7 +105,7 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
                     }`}
                   >
                     <NavLink to={child.url} onClick={onNavigate} className="truncate">
-                      {child.title}
+                      {childTitle}
                     </NavLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>

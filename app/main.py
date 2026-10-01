@@ -140,6 +140,7 @@ from .api.routers import (
     conversations,
     assistant_studio,
     tenants,
+    translations,
 )
 
 
@@ -440,6 +441,7 @@ app.include_router(booking_forms.public_router)
 app.include_router(relationship_management.router)
 app.include_router(discovery.router)
 app.include_router(umbrella_directory.router)
+app.include_router(translations.router)
 
 # SMS Module routers
 app.include_router(sms_accounts.router, prefix="/api/admin")

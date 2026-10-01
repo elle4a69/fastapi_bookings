@@ -3,6 +3,7 @@ import { Plus, Search, Edit, Trash2, MoreVertical, Eye, ShieldAlert, RefreshCw, 
 import { toast } from 'sonner';
 
 import { apiClient } from '@/lib/api';
+import { useTranslation } from '@/context/TranslationContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +42,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
+  const { t } = useTranslation();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -248,8 +250,8 @@ export default function ClientsPage() {
 
   return (
     <MobilePageShell
-      title="Clients"
-      description="Manage client accounts, compliance status, and history"
+      title={t("clients", "Clients")}
+      description={`Manage ${t("client", "client").toLowerCase()} accounts, compliance status, and history`}
       density="compact"
       actions={
         <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
@@ -279,7 +281,7 @@ export default function ClientsPage() {
             className="h-8 sm:h-9 min-h-0 px-2.5 sm:px-3 flex-1 sm:flex-initial touch-manipulation gap-1.5 text-xs sm:text-sm"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Client</span>
+            <span>Add {t("client", "Client")}</span>
           </Button>
         </div>
       }
@@ -364,10 +366,10 @@ export default function ClientsPage() {
               <CardHeader className="flex flex-row items-center justify-between space-y-0 shrink-0 border-b p-4">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="md:hidden">
-                    <MobileBackButton label="Clients" onClick={handleClosePanel} />
+                    <MobileBackButton label={t("clients", "Clients")} onClick={handleClosePanel} />
                   </div>
                   <CardTitle className="text-lg sm:text-xl font-bold truncate">
-                    {selectedClient.id ? selectedClient.name : 'New Client'}
+                    {selectedClient.id ? selectedClient.name : `New ${t("client", "Client")}`}
                   </CardTitle>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -383,11 +385,11 @@ export default function ClientsPage() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent tabIndex={0} aria-label="Client details panel" className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto focus:outline-none">
+              <CardContent tabIndex={0} aria-label={`${t("client", "Client")} details panel`} className="p-0 max-h-[calc(100vh-280px)] overflow-y-auto focus:outline-none">
                 <Accordion type="multiple" defaultValue={["profile", "compliance", "history"]} className="w-full">
                   {/* Section 1: Client Profile */}
                   <AccordionItem value="profile" className="px-4">
-                    <AccordionTrigger className="text-base font-semibold">Client Profile</AccordionTrigger>
+                    <AccordionTrigger className="text-base font-semibold">{t("client", "Client")} Profile</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">

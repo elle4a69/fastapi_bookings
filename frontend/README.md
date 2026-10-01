@@ -21,7 +21,7 @@ frontend/
 ├── src/
 │   ├── components/              # App header, sidebar, navigation, iOS install prompt
 │   │   └── ui/                  # Shadcn primitives, MobilePageShell, ResponsiveDataTable
-│   ├── context/                 # AuthContext, ClientPortalContext, TenantModulesContext
+│   ├── context/                 # AuthContext, ClientPortalContext, TenantModulesContext, TranslationContext
 │   ├── layouts/                 # AdminLayout with responsive padding & safe-area insets
 │   ├── lib/                     # Axios API client, utils, auth tokens
 │   ├── pages/                   # Admin, Portal, and Public route components
@@ -53,6 +53,24 @@ frontend/
 The SMS operations workspace is native to this frontend and uses the same authenticated tenant boundary as the rest of FastAPI Bookings. Conversation controls and draft lifecycle actions are persisted by backend APIs; browser-local state is never treated as the source of truth. The workspace links operators to the existing client, booking, and arrival surfaces and does not implement a second booking form or calendar authority.
 
 Features whose backend audit contract is not yet available—such as escalation reasons, resolution notes, internal notes, AI correction evidence, and CSV/audit export—must remain visibly unavailable rather than making speculative API calls.
+
+---
+
+## Dynamic Industry Terminology (`TranslationContext` & `useTranslation`)
+
+The application implements dynamic terminology customization to adapt across health/medical, automotive, spa/wellness, and professional services without hardcoding terms.
+
+- **Provider**: `TranslationProvider` is mounted at the root in `App.tsx`, providing `useTranslation()` (and alias `useTerminology()`).
+- **Hook API**: `const { t, locale, terminology, updateTranslations, refreshTranslations } = useTranslation();`
+- **Usage**:
+  ```tsx
+  // Dynamic lookup with graceful default fallback
+  <h1>{t("clients", "Clients")}</h1>
+  <Button>New {t("client", "Client")}</Button>
+  ```
+- **Adoption**:
+  - `AppSidebar`: Dynamically translates main and child navigation items (`Clients`, `Providers`, `Bookings`, `Services`, `Locations`) based on the active tenant's terminology preset.
+  - `ClientsPage`: Dynamic page titles, action buttons, mobile card triggers, and profile drawers.
 
 ---
 

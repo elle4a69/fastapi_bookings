@@ -70,6 +70,7 @@ const PortalDashboardPage = lazy(() => import("@/pages/portal/portal-dashboard")
 
 import { AuthProvider, useAuth } from "@/context/auth-context"
 import { ClientPortalProvider } from "@/context/client-portal-context"
+import { TranslationProvider } from "@/context/TranslationContext"
 
 
 const adminRoutes = navigation.flatMap((section) =>
@@ -151,7 +152,8 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Suspense fallback={<PageLoader />}>
+        <TranslationProvider>
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<RequireAdminSession />}>
@@ -266,6 +268,7 @@ function App() {
             <Route path="*" element={<Navigate to="/404" replace />} />
           </Routes>
         </Suspense>
+        </TranslationProvider>
       </AuthProvider>
     </BrowserRouter>
   )
