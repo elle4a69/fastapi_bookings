@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
+from ...core.config import settings
 from ...models.general_systems import GdprConsent, PluginState
 from ...models.client import Client
 from ...models.tenant import Tenant
 from ...schemas.general_systems import (
+    ChatwootGovernanceLinksResponse,
     GdprConsentCreate,
     GdprConsentListResponse,
     GdprConsentOut,
@@ -143,3 +145,31 @@ def list_gdpr_consents_for_client(
         .all()
     )
     return {"ok": True, "data": consents}
+ 
+ 
+ # ─── Platform Governance ──────────────────────────────────────────────────────
+ 
+@router.get(
+    "/api/admin/governance/chatwoot-links",
+    response_model=ChatwootGovernanceLinksResponse,
+    tags=["governance", "system"],
+)
+def get_governance_chatwoot_links(
+    tenant: Tenant = Depends(get_current_tenant),
+    current_user=Depends(get_current_admin),
+) -> dict:
+    """Return platform governance deep links for Chatwoot SuperAdmin and tenant account console."""
+    base_url = (settings.CHATWOOT_BASE_URL or "http://localhost:4000").rstrip("/")
+    super_admin_url = f"{base_url}/super_admin"
+    account_url = (
+        f"{base_url}/app/accounts/{tenant.chatwoot_account_id}"
+        if tenant.chatwoot_account_id
+        else None
+    )
+    return {
+        "ok": True,
+        "super_admin_url": super_admin_url,
+        "account_url": account_url,
+        "chatwoot_account_id": tenant.chatwoot_account_id,
+        "base_url": base_url,
+    }

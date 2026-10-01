@@ -62,3 +62,14 @@ class GdprConsentListResponse(BaseModel):
 class GdprConsentResponse(BaseModel):
     ok: bool
     data: GdprConsentOut
+
+
+# --- Platform Governance ---
+
+class ChatwootGovernanceLinksResponse(BaseModel):
+    ok: bool = True
+    super_admin_url: str
+    account_url: Optional[str] = None
+    chatwoot_account_id: Optional[int] = None
+    base_url: str
+
