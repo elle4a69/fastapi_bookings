@@ -14,11 +14,11 @@ The `app/core/` package encapsulates cross-cutting concerns for the application:
 
 ```
 app/core/
-├── config.py                 # Global Settings (DATABASE_URL, REDIS_URL, SECRET_KEY, OPENAI_API_KEY, CALCOM_BASE_URL)
-├── capability_validator.py   # Tenant -> Provider -> Service hierarchy & booking service-mode validators
+├── config.py                 # Global Settings (DATABASE_URL, REDIS_URL, SECRET_KEY, CHATWOOT_BASE_URL, MAPBOX_ACCESS_TOKEN, …)
+├── capability_validator.py   # Tenant → Provider → Service hierarchy & booking service-mode validators
 ├── redis.py                  # Sync & Async Redis connection pools, 'fb:' key formatting, ping healthcheck & fallback
 ├── security.py               # Passlib Argon2/Bcrypt hashing, JWT encode/decode routines
-├── state_machine.py          # BookingStatus state machine (pending -> confirmed -> completed / cancelled)
+├── state_machine.py          # BookingStatus state machine (pending → confirmed → completed / cancelled)
 └── telemetry.py              # OpenTelemetry TracerProvider, MeterProvider, and privacy span processor
 ```
 
@@ -37,6 +37,94 @@ Key environment variables in `.env`:
 - `CHATWOOT_AUTO_PROVISION`: Boolean flag to trigger automatic Chatwoot provisioning during tenant onboarding.
 - `LOCAL_AUTH_BYPASS`: Boolean flag strictly for local development on localhost/127.0.0.1 (forbidden in production).
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: SigNoz or OpenTelemetry collector endpoint (e.g. `http://localhost:4318`).
+- `MAPBOX_ACCESS_TOKEN`: Mapbox geocoding token — used server-side ONLY, never exposed in API responses or frontend config.
+
+---
+
+## Phase 5: Platform Owner Governance Layer
+
+### 5.1 Chatwoot SuperAdmin Deep-Link Endpoint
+
+**Route:** `GET /api/admin/governance/chatwoot-links`  
+**Auth:** Requires authenticated admin user (via `get_current_admin` + `get_current_tenant`)  
+**Location:** [`app/api/routers/general_systems.py`](file:///f:/Projects/fastapi_bookings/app/api/routers/general_systems.py#L152-L175)
+
+Returns deep links for the platform owner:
+```json
+{
+  "ok": true,
+  "super_admin_url": "http://localhost:4000/super_admin",
+  "account_url": "http://localhost:4000/app/accounts/42",
+  "chatwoot_account_id": 42,
+  "base_url": "http://localhost:4000"
+}
+```
+
+The `account_url` is `null` when the tenant has not been provisioned with a Chatwoot account yet. `CHATWOOT_BASE_URL` is resolved from settings — never hardcoded.
+
+**Frontend:** [`frontend/src/pages/admin/system.tsx`](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/system.tsx) fetches this endpoint on mount and renders "Open SuperAdmin Console" and "Open Tenant Workspace" buttons using `window.open(..., '_blank')`. Both buttons link to the server-resolved URLs — no hardcoded frontend URLs.
+
+---
+
+### 5.2 RFC 6761 `*.localhost` Subdomain Gateway Routing
+
+**Location:** [`app/api/deps.py`](file:///f:/Projects/fastapi_bookings/app/api/deps.py) — `_tenant_subdomain_from_host()` + `get_current_tenant()`
+
+Subdomain resolution rules (in order of priority):
+
+| Host Header | Extracted Subdomain |
+|---|---|
+| `simplydemo.localhost:8000` | `simplydemo` |
+| `clinic.localhost:7070` | `clinic` |
+| `clinic.localhost` | `clinic` |
+| `simplydemo.bookopenapi.com` | `simplydemo` |
+| `simplydemo.dev.localhost` | `simplydemo` |
+| `localhost:8000` | *(none — falls back to X-Tenant)* |
+| `www.example.com` | *(reserved — excluded)* |
+| `myservice.run.app` | *(Cloud Run — excluded)* |
+
+**RFC 6761 Compliance:** Port numbers are stripped before label parsing. Both `clinic.localhost` and `clinic.localhost:8000` are handled seamlessly without modifying `/etc/hosts`.
+
+**Fallback chain:**
+1. Host-header subdomain (from `Host` or `X-Forwarded-Host`).
+2. `X-Tenant` request header (for API clients, curl, background workers, test fixtures).
+3. `tenant` query parameter (legacy support).
+
+**Error behaviour:**
+- No tenant context → `HTTP 400 BAD_REQUEST`.
+- Unknown subdomain → `HTTP 404 NOT_FOUND`.
+- Host subdomain ≠ X-Tenant header → `HTTP 400 BAD_REQUEST` (prevents confusion).
+
+---
+
+### 5.3 SigNoz Telemetry PII Isolation
+
+**Location:** [`app/core/telemetry.py`](file:///f:/Projects/fastapi_bookings/app/core/telemetry.py)
+
+All OpenTelemetry spans are wrapped by `PrivacySafeSpanExporter` before being sent to SigNoz. The `SanitizedSpanProxy` enforces `SAFE_ATTRIBUTE_KEYS` — an immutable `frozenset` of permitted structural low-cardinality attribute names:
+
+**Permitted attributes (structural only):**
+`tenant_id`, `route`, `http.method`, `http.route`, `http.status_code`, `http.scheme`, `http.target`, `db.system`, `db.operation`, `error.type`, `exception.type`, `service.name`, `service.namespace`, `deployment.environment`, `frontend.*` (structural only), `event_code`, `status`, `job_type`, `operation`, `reason`, `account_id`
+
+**All other attributes are silently dropped** — including any PII fields (phone, email, customer_name, prompt, body, address, etc.) that instrumentation libraries may inadvertently capture.
+
+**Additional value-level redaction** (`_sanitize_attribute_value`):
+- Email-like values (`@` + `.`) → `[REDACTED]`
+- Phone-like values (8–16 digits with typical phone formatting) → `[REDACTED]`
+- Bearer tokens, secrets, prompt text → `[REDACTED]`
+- URL path dynamic segments (numeric IDs, UUIDs, hex tokens) → `{id}`
+
+**Log export (`PrivacySafeLogFilter`):** Applied to all OTLP log handlers. Redacts authorization headers, tokens, passwords, secrets, query parameters, email addresses, and prompt/SMS body content from all log records before SigNoz export.
+
+---
+
+### 5.4 Mapbox Token Server-Side Isolation
+
+`MAPBOX_ACCESS_TOKEN` is:
+- Stored exclusively in server-side environment (`.env` / Docker secrets).
+- Used only in `app/services/geocoding.py` for background geocoding of tenant addresses.
+- **Never serialized** into API response bodies, frontend configs, or public endpoints.
+- The geocoding service constructs the Mapbox URL server-side; coordinates are stored in the database and returned via `tenant.latitude`/`tenant.longitude` — not the raw token.
 
 ---
 
@@ -52,11 +140,21 @@ Key environment variables in `.env`:
 - **Redaction by Design**: `telemetry.py` strips all customer identities, phone numbers, emails, addresses, and query-string tokens from traces and logs before exporting.
 - **Low-Cardinality Attributes Only**: Spans record structural data like HTTP method, route template, status code, and tenant hash.
 - **Hashed Identifiers in Caches**: OTP cache keys hash phone numbers (`fb:otp:{tenant_id}:{sha256(phone)}`) so cleartext customer numbers are never stored in cache keys.
+- **Mapbox Token Isolation**: The geocoding API token is server-side only; coordinates are what the API returns, not the token.
+
+---
+
+## Known Issues, Edge Cases & Outstanding Work
+- Telemetry span attribute allowlist (`SAFE_ATTRIBUTE_KEYS`) should be reviewed when adding new instrumentation libraries to ensure no new PII leakage paths are introduced.
+- `OTEL_SDK_DISABLED=true` is enforced in all test fixtures via `conftest.py` to prevent any telemetry network calls during tests.
 
 ---
 
 ## Verification Commands
 ```bash
-# Run security, telemetry, and client portal tests
-.venv\Scripts\python.exe -m pytest tests/test_telemetry_pipeline.py tests/test_telemetry_redaction.py tests/test_client_portal.py -v
+# Run Phase 5 governance, tenant resolution, and telemetry privacy tests
+.venv\Scripts\python.exe -m pytest tests/test_tenant_resolution.py tests/test_telemetry_privacy.py -v
+
+# Run security isolation, telemetry pipeline, and redaction tests
+.venv\Scripts\python.exe -m pytest tests/test_security_isolation_remediation.py tests/test_telemetry_pipeline.py tests/test_telemetry_redaction.py tests/test_client_portal.py -v
 ```

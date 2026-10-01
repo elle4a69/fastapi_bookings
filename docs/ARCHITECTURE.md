@@ -299,3 +299,58 @@ flowchart TD
 5. **Operational Truth Wins (Spec 53, 54)**: UnifiedPromptBuilder places live application/tool state (services, business hours, calendar availability) ahead of long-term curated knowledge in instruction precedence.
 6. **Bounded Scale (Spec 48)**: Multi-channel retrieval guarantees bounded prompt size regardless of catalog volume: $\le 5$ durable facts, $\le 3$ behavioural rules, $\le 2$ style examples.
 7. **Loss Tolerance (Spec 51)**: Offline Redis or Neo4j outages degrade gracefully to direct PostgreSQL queries with zero customer disruption.
+
+---
+
+## 11. Phase 5: Platform Owner Governance, Telemetry & Subdomain Gateway
+
+### 11.1 Chatwoot SuperAdmin Deep-Link Endpoint
+
+**Route:** `GET /api/admin/governance/chatwoot-links` ([`app/api/routers/general_systems.py`](file:///F:/Projects/fastapi_bookings/app/api/routers/general_systems.py))
+
+Platform owners navigate directly to the Chatwoot SuperAdmin console and the tenant's dedicated Chatwoot workspace from the admin panel. URLs are derived server-side from `CHATWOOT_BASE_URL` and `tenant.chatwoot_account_id`. No URL hardcoding in the frontend.
+
+**Response contract:**
+```json
+{
+  "ok": true,
+  "super_admin_url": "{CHATWOOT_BASE_URL}/super_admin",
+  "account_url": "{CHATWOOT_BASE_URL}/app/accounts/{chatwoot_account_id}",
+  "chatwoot_account_id": 42,
+  "base_url": "http://localhost:4000"
+}
+```
+`account_url` is `null` when the tenant has no provisioned Chatwoot account.
+
+**Frontend integration:** [`frontend/src/pages/admin/system.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/system.tsx) fetches the endpoint on mount and renders two real deep-link buttons.
+
+---
+
+### 11.2 RFC 6761 `*.localhost` Subdomain Gateway Routing
+
+**Location:** [`app/api/deps.py`](file:///F:/Projects/fastapi_bookings/app/api/deps.py)
+
+Developers use `tenant.localhost:8000` and `tenant.localhost:7070` without DNS or hosts-file changes. Port stripping ensures `clinic.localhost:8000` and `clinic.localhost` both resolve to `clinic`. Fallback to `X-Tenant` header supports API clients and test fixtures. Unknown subdomains → HTTP 404; mismatch between host and header → HTTP 400.
+
+---
+
+### 11.3 SigNoz Telemetry PII Isolation
+
+**Location:** [`app/core/telemetry.py`](file:///F:/Projects/fastapi_bookings/app/core/telemetry.py)
+
+`PrivacySafeSpanExporter` + `SanitizedSpanProxy` enforce `SAFE_ATTRIBUTE_KEYS` (frozenset). Any attribute not in the allowlist is silently dropped before SigNoz export. Value-level redaction catches email-like, phone-like, and bearer-token values even within allowed keys. `PrivacySafeLogFilter` covers all OTLP log pipelines.
+
+---
+
+### 11.4 Mapbox Token Server-Side Isolation
+
+`MAPBOX_ACCESS_TOKEN` is used only in [`app/services/geocoding.py`](file:///F:/Projects/fastapi_bookings/app/services/geocoding.py) background tasks. It is never returned in API responses, never in frontend env config, and never logged or traced.
+
+---
+
+### 11.5 Phase 5 Test Coverage
+
+| Test File | Coverage |
+|---|---|
+| [`tests/test_tenant_resolution.py`](file:///F:/Projects/fastapi_bookings/tests/test_tenant_resolution.py) | RFC 6761 port stripping, reserved label exclusion, X-Tenant fallback, unknown → 404, missing → 400, mismatch → 400 |
+| [`tests/test_telemetry_privacy.py`](file:///F:/Projects/fastapi_bookings/tests/test_telemetry_privacy.py) | SAFE_ATTRIBUTE_KEYS completeness, PII key exclusion, SanitizedSpanProxy filtering, value-level redaction, log filter |
