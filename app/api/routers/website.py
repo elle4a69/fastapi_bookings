@@ -423,7 +423,8 @@ async def public_website_chat(
     if not target_tenant:
         supplied_subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
         from ..deps import _tenant_subdomain_from_host
-        host_subdomain = _tenant_subdomain_from_host(request.url.hostname)
+        raw_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.hostname
+        host_subdomain = _tenant_subdomain_from_host(raw_host)
         subdomain = supplied_subdomain or host_subdomain
         if subdomain:
             target_tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain.lower()).first()
@@ -700,7 +701,8 @@ def get_public_website_chat_messages(
     # 1. Check tenant scoping if host or X-Tenant header supplied
     supplied_subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
     from ..deps import _tenant_subdomain_from_host
-    host_subdomain = _tenant_subdomain_from_host(request.url.hostname)
+    raw_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.hostname
+    host_subdomain = _tenant_subdomain_from_host(raw_host)
     subdomain = supplied_subdomain or host_subdomain
     if subdomain:
         req_tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain.lower()).first()

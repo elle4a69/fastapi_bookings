@@ -45,6 +45,7 @@ _telemetry_owned_handlers: List[Tuple[logging.Logger, logging.Handler]] = []
 # Span attribute allowlist
 # ---------------------------------------------------------------------------
 SAFE_ATTRIBUTE_KEYS: FrozenSet[str] = frozenset({
+    "tenant_id", "route",
     "http.method", "http.route", "http.status_code", "http.scheme",
     "http.target",
     "db.system", "db.operation",
@@ -149,15 +150,18 @@ def _sanitize_attribute_value(key: str, val: Any) -> Any:
     if isinstance(val, (int, float, bool)):
         return val
     s = str(val)
-    if key in ("http.route", "http.target", "frontend.route"):
+    if key in ("http.route", "http.target", "frontend.route", "route"):
         return sanitize_url_path(s)
-    # Redact values that look like they contain secrets
+    # Redact values that look like they contain secrets or PII
     low = s.lower()
     if any(tok in low for tok in (
         "token=", "key=", "auth=", "secret=", "password=", "bearer ", "prompt", "completion", "sms_body", "sms-body"
     )):
         return "[REDACTED]"
     if "@" in s and "." in s:          # email-like
+        return "[REDACTED]"
+    digits = sum(c.isdigit() for c in s)
+    if 8 <= digits <= 16 and (s.strip().startswith(("+", "0", "(")) or re.search(r"(\+?\d[\d\s\-\(\)]{6,}\d)", s)):
         return "[REDACTED]"
     if len(s) > 100:
         return "[REDACTED]"

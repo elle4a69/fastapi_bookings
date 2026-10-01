@@ -24,19 +24,29 @@ from ..models.client import Client
 def _tenant_subdomain_from_host(hostname: str | None) -> str | None:
     """Return a tenant slug only from an unambiguous tenant host.
 
-    ``tenant.localhost`` is supported for local development.  Deployed hosts
+    RFC 6761 ``*.localhost`` is supported for local development (e.g.,
+    ``simplydemo.localhost``, ``clinic.localhost:8000``). Deployed hosts
     must have a tenant label plus a base domain (at least three labels), so a
     root host such as ``example.com`` cannot be mistaken for a tenant named
-    ``example``.  Cloud Run hosts are platform routing names, never tenants.
+    ``example``. Cloud Run hosts are platform routing names, never tenants.
     """
-    hostname = (hostname or "").rstrip(".").lower()
+    hostname = (hostname or "").rstrip(".").lower().strip()
+    if not hostname:
+        return None
+
+    # Strip port if present (e.g. simplydemo.localhost:8000 -> simplydemo.localhost)
+    if ":" in hostname:
+        hostname = hostname.split(":", 1)[0].strip()
+
     if not hostname or hostname.endswith(".run.app"):
         return None
 
     labels = hostname.split(".")
+    # RFC 6761: *.localhost (e.g., simplydemo.localhost, clinic.localhost)
     if len(labels) == 2 and labels[1] == "localhost":
         candidate = labels[0]
     elif len(labels) >= 3:
+        # e.g., simplydemo.dev.localhost or tenant.example.com
         candidate = labels[0]
     else:
         return None
@@ -52,12 +62,13 @@ async def get_current_tenant(
 ) -> Tenant:
     """Resolve the active tenant from the request host subdomain.
 
-    Prefer an unambiguous tenant hostname.  When no tenant hostname is
-    present, fall back to X-Tenant or the ``tenant`` query parameter for
-    isolated test and development proxies.
+    Prefer an unambiguous tenant hostname (including RFC 6761 *.localhost with ports).
+    When no tenant hostname is present, fall back to X-Tenant or the ``tenant`` query parameter
+    for isolated test and development proxies.
     """
     supplied_subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
-    host_subdomain = _tenant_subdomain_from_host(request.url.hostname)
+    raw_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.hostname
+    host_subdomain = _tenant_subdomain_from_host(raw_host)
 
     if host_subdomain and supplied_subdomain:
         if host_subdomain != supplied_subdomain.lower():
