@@ -36,6 +36,7 @@ class ProvisioningResult(BaseModel):
     bindings_created: List[int] = Field(default_factory=list, description="IDs of created/updated SmsChatwootBindings")
     webhooks_registered: List[Dict[str, Any]] = Field(default_factory=list, description="List of registered webhook endpoints")
     staff_members_provisioned: List[Dict[str, Any]] = Field(default_factory=list, description="List of provisioned staff members")
+    industry_provisioning: Optional[Dict[str, Any]] = Field(None, description="Provisioned industry custom attributes and canned responses")
     error_message: Optional[str] = Field(None, description="Error detail if provisioning failed or is pending")
 
 
@@ -80,6 +81,7 @@ def provision_tenant_chatwoot(
     tenant_id: int,
     provider_ids: Optional[List[int]] = None,
     location_ids: Optional[List[int]] = None,
+    industry: Optional[str] = None,
     chatwoot_base_url: Optional[str] = None,
     api_token: Optional[str] = None,
     platform_token: Optional[str] = None,
@@ -87,13 +89,14 @@ def provision_tenant_chatwoot(
 ) -> ProvisioningResult:
     """Automated idempotent provisioning pipeline for Chatwoot.
 
-    Executes 6 core phases:
+    Executes 7 core phases:
     1. Account Provisioning: Resolves or creates Chatwoot Account, commits tenant.chatwoot_account_id.
     2. Inbox Provisioning: Resolves or creates API Channel inboxes for providers and locations.
     3. Binding Provisioning: Creates or updates SmsChatwootBinding with timing-safe webhook_secret.
     4. Webhook Subscription: Subscribes FastAPI webhook to message_created and message_updated.
     5. Staff Provisioning: Syncs tenant staff/admin users to Chatwoot agents and inbox members.
-    6. Idempotency: Running multiple times is safe and skips existing entities.
+    6. Industry Provisioning: Provisions custom attribute definitions and canned responses per industry preset.
+    7. Idempotency: Running multiple times is safe and skips existing entities.
     """
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if not tenant:
@@ -538,6 +541,24 @@ def provision_tenant_chatwoot(
                         "role": user.role,
                     })
 
+            # -------------------------------------------------------------
+            # Phase 7: Industry Custom Attributes & Macros Provisioning
+            # -------------------------------------------------------------
+            if account_id:
+                try:
+                    from .chatwoot_industry_service import detect_tenant_industry, sync_industry_presets
+                    effective_industry = industry or detect_tenant_industry(tenant, db)
+                    industry_res = sync_industry_presets(
+                        account_id=account_id,
+                        industry=effective_industry,
+                        client=client,
+                        base_url=base_url,
+                        api_token=u_token,
+                    )
+                    result.industry_provisioning = industry_res
+                except Exception as ind_err:
+                    logger.warning(f"Could not provision industry presets for account {account_id}: {ind_err}")
+
             result.success = True
             result.status = "provisioned"
 
@@ -559,6 +580,7 @@ def provision_location_chatwoot(
     db: Session,
     tenant_id: int,
     location_id: int,
+    industry: Optional[str] = None,
     chatwoot_base_url: Optional[str] = None,
     api_token: Optional[str] = None,
     platform_token: Optional[str] = None,
@@ -569,6 +591,7 @@ def provision_location_chatwoot(
         db=db,
         tenant_id=tenant_id,
         location_ids=[location_id],
+        industry=industry,
         chatwoot_base_url=chatwoot_base_url,
         api_token=api_token,
         platform_token=platform_token,

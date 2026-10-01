@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sms/webhooks", tags=["sms-webhooks"])
 
+LEGACY_CARRIER_TRANSPORTS = {"mobilemessage", "telstra", "twilio", "sinch", "direct", "carrier"}
+
 @router.post("/incoming")
 async def inbound_webhook_generic(
     request: Request,
@@ -35,6 +37,12 @@ async def inbound_webhook_generic(
         account_public_id = account.public_id
         transport_type = account.transport_type
 
+    if (transport_type or "").lower() in LEGACY_CARRIER_TRANSPORTS:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy direct carrier webhook routes are permanently deactivated. All carrier traffic must route through Chatwoot omnichannel inboxes.",
+        )
+
     return await process_inbound_webhook(
         db=db,
         transport_type=transport_type,
@@ -50,6 +58,12 @@ async def inbound_webhook(
     db: Session = Depends(get_db)
 ):
     """Public webhook intake endpoint for incoming SMS events."""
+    if (transport_type or "").lower() in LEGACY_CARRIER_TRANSPORTS:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy direct carrier webhook routes are permanently deactivated. All carrier traffic must route through Chatwoot omnichannel inboxes.",
+        )
+
     try:
         result = await process_inbound_webhook(
             db=db,
@@ -75,6 +89,12 @@ async def delivery_receipt_webhook(
     db: Session = Depends(get_db)
 ):
     """Public webhook endpoint for delivery status receipt updates."""
+    if (transport_type or "").lower() in LEGACY_CARRIER_TRANSPORTS:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy direct carrier delivery receipt routes are permanently deactivated. All carrier traffic must route through Chatwoot omnichannel inboxes.",
+        )
+
     # 1. Resolve SMS Account
     account = db.query(SmsAccount).filter(
         SmsAccount.public_id == account_public_id,

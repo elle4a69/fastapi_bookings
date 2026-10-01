@@ -52,18 +52,34 @@ async def chatwoot_webhook(
     db: Session = Depends(get_db)
 ):
     """Chatwoot incoming webhook receiver endpoint."""
+    raw_body = await request.body()
+    try:
+        import json
+        payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
     if not token:
         token = request.query_params.get("token") or request.headers.get("X-Chatwoot-Token") or request.headers.get("Authorization")
         if token and token.startswith("Bearer "):
             token = token[7:]
 
-    try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    signature_header = request.headers.get("X-Chatwoot-Signature")
+    timestamp_header = (
+        request.headers.get("X-Chatwoot-Signature-Timestamp")
+        or request.headers.get("X-Chatwoot-Timestamp")
+        or request.query_params.get("timestamp")
+    )
 
     from ...services.sms.chatwoot_service import process_chatwoot_webhook
-    result = process_chatwoot_webhook(db, payload, token)
+    result = process_chatwoot_webhook(
+        db=db,
+        payload=payload,
+        token=token,
+        raw_body=raw_body,
+        signature_header=signature_header,
+        timestamp_header=timestamp_header,
+    )
     return result
 
 # CRUD Settings Endpoints

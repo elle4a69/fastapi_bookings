@@ -1,9 +1,14 @@
+import hashlib
+import hmac
+import json
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
+from fastapi import HTTPException
 
 from app.models.tenant import Tenant
 from app.models.provider import Provider
+from app.models.sms_account import SmsAccount
 from app.models.sms_chatwoot import SmsChatwootBinding
 from app.models.sms_conversation import SmsConversation
 from app.models.sms_message import SmsMessage
@@ -11,6 +16,8 @@ from app.models.sms_outbox import SmsAiJob, SmsOutboundJob, SmsConversationEvent
 from app.services.sms.outbound_service import enqueue_outbound_message_transactional
 from app.services.sms.outbox_worker import process_pending_sms_outbound_jobs
 from app.services.sms.chatwoot_service import process_chatwoot_webhook
+from app.services.sms.transports.mobilemessage import MobileMessageAdapter
+from app.services.sms.transports.base import OutboundSmsCommand
 
 @pytest.fixture
 def setup_chatwoot_data(db_session):
@@ -703,3 +710,277 @@ def test_webhook_authentication_regression_cases(db_session, setup_chatwoot_data
     assert conversation.state == "taken-over"
     db_session.refresh(ai_job)
     assert ai_job.status == "CANCELLED"
+
+
+def test_webhook_label_based_human_takeover(db_session, setup_chatwoot_data):
+    """Verify incoming customer message with human intervention labels halts autonomous AI."""
+    # 1. Existing conversation in auto-reply mode
+    conv = SmsConversation(
+        tenant_id=setup_chatwoot_data["tenant"].id,
+        provider_id=setup_chatwoot_data["provider"].id,
+        customer_address="+61411112222",
+        state="auto-reply",
+        chatwoot_conversation_id=601,
+        chatwoot_inbox_id=45,
+    )
+    db_session.add(conv)
+    db_session.commit()
+
+    # Pre-existing pending AI job
+    ai_job = SmsAiJob(
+        conversation_id=conv.id,
+        customer_turn_ref="turn-prev",
+        status="PENDING",
+    )
+    db_session.add(ai_job)
+    db_session.commit()
+
+    # Inbound message carrying human-intervention-required label
+    payload = {
+        "id": 901,
+        "content": "I want to speak with a human receptionist immediately.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {
+            "id": 601,
+            "labels": ["urgent", "human-intervention-required"],
+            "contact": {"id": 101, "phone_number": "+61411112222"},
+        },
+    }
+
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
+    assert result["status"] == "success"
+    assert result["state"] == "taken-over"
+    assert result["ai_job_enqueued"] is False
+    assert result["human_takeover"] is True
+
+    db_session.refresh(conv)
+    assert conv.state == "taken-over"
+
+    # Pending AI job cancelled immediately
+    db_session.refresh(ai_job)
+    assert ai_job.status == "CANCELLED"
+
+    # Verify takeover audit event recorded
+    event = db_session.query(SmsConversationEvent).filter(
+        SmsConversationEvent.conversation_id == conv.id,
+        SmsConversationEvent.type == "takeover",
+    ).first()
+    assert event is not None
+    assert event.meta.get("by") == "chatwoot_webhook_triage"
+    assert event.meta.get("reason") == "human_intervention_label"
+
+    # 2. Test needs-human label variant
+    conv.state = "auto-reply"
+    db_session.commit()
+
+    payload_needs_human = {
+        "id": 902,
+        "content": "Can someone help me?",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {
+            "id": 601,
+            "labels": ["#needs-human"],
+            "contact": {"id": 101, "phone_number": "+61411112222"},
+        },
+    }
+    result2 = process_chatwoot_webhook(db_session, payload_needs_human, token="my-webhook-secret")
+    assert result2["state"] == "taken-over"
+    assert result2["ai_job_enqueued"] is False
+    db_session.refresh(conv)
+    assert conv.state == "taken-over"
+
+
+def test_webhook_assignee_based_human_takeover(db_session, setup_chatwoot_data):
+    """Verify incoming customer message on an assigned conversation halts autonomous AI."""
+    conv = SmsConversation(
+        tenant_id=setup_chatwoot_data["tenant"].id,
+        provider_id=setup_chatwoot_data["provider"].id,
+        customer_address="+61433334444",
+        state="auto-reply",
+        chatwoot_conversation_id=602,
+        chatwoot_inbox_id=45,
+    )
+    db_session.add(conv)
+    db_session.commit()
+
+    ai_job = SmsAiJob(
+        conversation_id=conv.id,
+        customer_turn_ref="turn-assignee-test",
+        status="PENDING",
+    )
+    db_session.add(ai_job)
+    db_session.commit()
+
+    # Inbound message with assignee_id set
+    payload = {
+        "id": 903,
+        "content": "Hi there, is the doctor available?",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {
+            "id": 602,
+            "assignee_id": 88,
+            "contact": {"id": 102, "phone_number": "+61433334444"},
+        },
+    }
+
+    result = process_chatwoot_webhook(db_session, payload, token="my-webhook-secret")
+    assert result["status"] == "success"
+    assert result["state"] == "taken-over"
+    assert result["ai_job_enqueued"] is False
+    assert result["human_takeover"] is True
+
+    db_session.refresh(conv)
+    assert conv.state == "taken-over"
+    db_session.refresh(ai_job)
+    assert ai_job.status == "CANCELLED"
+
+
+def test_webhook_hmac_sha256_signature_verification_success(db_session, setup_chatwoot_data):
+    """Verify HMAC-SHA256 signature verification over {timestamp}.{raw_body}."""
+    payload = {
+        "id": 904,
+        "content": "Inbound verified by HMAC.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {
+            "id": 603,
+            "contact": {"id": 103, "phone_number": "+61455556666"},
+        },
+    }
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+
+    # Compute expected HMAC-SHA256 signature
+    binding_secret = setup_chatwoot_data["binding"].webhook_secret  # "my-webhook-secret"
+    msg_to_sign = f"{now_ts}.".encode("utf-8") + raw_body
+    computed_sig = hmac.new(
+        key=binding_secret.encode("utf-8"),
+        msg=msg_to_sign,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    # 1. Standard format: signature header + timestamp header
+    result = process_chatwoot_webhook(
+        db=db_session,
+        payload=payload,
+        raw_body=raw_body,
+        signature_header=f"sha256={computed_sig}",
+        timestamp_header=str(now_ts),
+    )
+    assert result["status"] == "success"
+    assert result["duplicate"] is False
+
+    # 2. Combined format: t=<ts>,sha256=<hex>
+    payload["id"] = 905
+    raw_body2 = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    msg_to_sign2 = f"{now_ts}.".encode("utf-8") + raw_body2
+    computed_sig2 = hmac.new(
+        key=binding_secret.encode("utf-8"),
+        msg=msg_to_sign2,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    result2 = process_chatwoot_webhook(
+        db=db_session,
+        payload=payload,
+        raw_body=raw_body2,
+        signature_header=f"t={now_ts},sha256={computed_sig2}",
+    )
+    assert result2["status"] == "success"
+
+
+def test_webhook_hmac_replay_defense_window(db_session, setup_chatwoot_data):
+    """Verify HMAC replay defense window rejects timestamps older than 300 seconds."""
+    payload = {
+        "id": 906,
+        "content": "Replay attempt.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {"id": 604, "contact": {"id": 104}},
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    expired_ts = int(datetime.now(timezone.utc).timestamp()) - 305  # 305 seconds ago (> 300s window)
+
+    binding_secret = setup_chatwoot_data["binding"].webhook_secret
+    msg_to_sign = f"{expired_ts}.".encode("utf-8") + raw_body
+    sig = hmac.new(
+        key=binding_secret.encode("utf-8"),
+        msg=msg_to_sign,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(
+            db=db_session,
+            payload=payload,
+            raw_body=raw_body,
+            signature_header=f"t={expired_ts},sha256={sig}",
+        )
+    assert exc_info.value.status_code == 401
+    assert "replay window" in exc_info.value.detail or "expired" in exc_info.value.detail
+
+
+def test_webhook_hmac_tampered_payload_rejected(db_session, setup_chatwoot_data):
+    """Verify invalid or tampered HMAC signature is rejected."""
+    payload = {
+        "id": 907,
+        "content": "Tampered payload.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {"id": 605, "contact": {"id": 105}},
+    }
+    raw_body = json.dumps(payload).encode("utf-8")
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+
+    # Invalid signature
+    with pytest.raises(HTTPException) as exc_info:
+        process_chatwoot_webhook(
+            db=db_session,
+            payload=payload,
+            raw_body=raw_body,
+            signature_header="sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            timestamp_header=str(now_ts),
+        )
+    assert exc_info.value.status_code == 401
+    assert "HMAC signature" in exc_info.value.detail or "Invalid" in exc_info.value.detail
+
+    # Missing both signature and token
+    with pytest.raises(HTTPException) as exc_info2:
+        process_chatwoot_webhook(db=db_session, payload=payload)
+    assert exc_info2.value.status_code == 401
+
+
+def test_direct_carrier_routes_fail_closed_containment(client, db_session):
+    """Verify direct carrier webhook endpoints return HTTP 410 Gone and MobileMessageAdapter locks out."""
+    # 1. POST /api/sms/webhooks/{transport}/{public_id} returns 410 Gone
+    resp1 = client.post("/api/sms/webhooks/mobilemessage/acc-test-public-id")
+    assert resp1.status_code == 410
+    body1 = resp1.json()
+    msg1 = body1.get("error", {}).get("message") or body1.get("detail", "")
+    assert "permanently deactivated" in msg1 or "Chatwoot" in msg1
+
+    # 2. POST /api/sms/webhooks/incoming with direct carrier transport returns 410 Gone
+    resp2 = client.post(
+        "/api/sms/webhooks/incoming",
+        json={"transport_type": "mobilemessage", "account_public_id": "acc-123"},
+    )
+    assert resp2.status_code == 410
+
+    # 3. POST /api/sms/webhooks/{transport}/{public_id}/delivery returns 410 Gone
+    resp3 = client.post("/api/sms/webhooks/mobilemessage/acc-test-public-id/delivery")
+    assert resp3.status_code == 410
+
+    # 4. MobileMessageAdapter fail-closed lockout on send
+    adapter = MobileMessageAdapter()
+    dummy_acc = SmsAccount(public_id="acc-dummy", transport_type="mobilemessage")
+    cmd = OutboundSmsCommand(to="+61400000000", body="Test fail closed")
+
+    import asyncio
+    send_result = asyncio.run(adapter.send(dummy_acc, cmd))
+    assert send_result.status == "error"
+    assert send_result.error_code == "DIRECT_CARRIER_LOCKED_OUT"
+    assert "locked out" in send_result.error_message
+

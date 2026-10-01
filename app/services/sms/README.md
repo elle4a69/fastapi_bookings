@@ -65,6 +65,7 @@ flowchart TD
 - [outbox_worker.py](file:///F:/Projects/fastapi_bookings/app/services/sms/outbox_worker.py): Async background polling loop leasing pending outbound jobs and dispatching via transports.
 - [chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py): Bi-directional synchronization bridge linking conversations to Chatwoot contacts and messages.
 - [chatwoot_provisioning_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_provisioning_service.py): Automated idempotent multi-tenant pipeline provisioning Chatwoot accounts, provider inboxes, bindings, webhooks, and staff memberships.
+- [chatwoot_industry_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_industry_service.py): Automated provisioning of industry-tailored custom attribute definitions and canned response macros for Chatwoot accounts.
 - [arrival_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/arrival_service.py): Self-service lobby arrival token creation, arrival check-in, and repeating staff chime alerts.
 - [prompt_builder.py](file:///F:/Projects/fastapi_bookings/app/services/sms/prompt_builder.py): Master Spec Unified Layered Prompt Builder compiling system safety, tenant policies, Style Lab traits, structured operational catalogs, curated knowledge, and situational modulation.
 - [curator_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/curator_service.py): Master Spec Autonomous Knowledge Curator Service processing learning events, managing supersession lifecycles, deriving canonical behavioural rules, and enforcing fail-closed safety boundaries.
@@ -255,6 +256,37 @@ FastAPI Bookings owns the multi-tenant source of truth. The automated provisioni
 6. **Idempotency & Fail-Safe Resiliency**:
    - Repeated runs detect existing accounts, inboxes, bindings, webhooks, and agents, skipping already-created resources without side-effects.
    - If Chatwoot is offline or unreachable, the service gracefully logs a warning and returns `status="pending"`, ensuring tenant creation and onboarding never fail due to upstream Chatwoot unavailability.
+
+### 4.6 Chatwoot Industry Automation, Custom Attributes & Macro Provisioning (`chatwoot_industry_service.py`)
+
+FastAPI Bookings configures Chatwoot's native engine per tenant industry without modifying upstream Chatwoot source code.
+
+1. **Automated Custom Attribute Definitions**:
+   - Scoped strictly to `account_id` via Chatwoot API (`/api/v1/accounts/{account_id}/custom_attribute_definitions`).
+   - Supports 4 pre-packaged industry presets:
+     * **Allied Health & Medical (`allied_health`)**: `gp_referral_number`, `health_fund`, `injury_type`.
+     * **Automotive & Mechanical (`automotive`)**: `vehicle_vin`, `vehicle_rego`, `service_mileage`.
+     * **Wellness & Salon (`wellness_salon`)**: `preferred_practitioner`, `hair_length`, `patch_test_date`.
+     * **Professional Services & Advisory (`professional_services`)**: `client_company`, `case_reference`, `billing_reference`.
+   - Provisioning is fully idempotent: pre-existing attribute definitions are detected and preserved.
+
+2. **Canned Response Macros**:
+   - Pushes industry-tailored canned responses (`/api/v1/accounts/{account_id}/canned_responses`) for staff rapid response:
+     * E.g. `directions` (parking/arrival guidance), `late_policy` (grace period and adjustment policy), `cancellation` (24h rescheduling terms), `post_treatment` / `aftercare` / `service_ready` / `meeting_prep`.
+   - Idempotently resolves existing `short_code`s before creating new macros.
+
+3. **Webhook Triage & Human Takeover Handshake**:
+   - Inbound webhook processing in `chatwoot_service.py` inspects conversation labels and assignees:
+     * **Label-Based Takeover**: If conversation labels contain `human-intervention-required` or `needs-human`, autonomous AI replies are immediately paused (`conversation.state = "taken-over"`), pending `SmsAiJob`s are cancelled, and a takeover audit event is recorded.
+     * **Assignee-Based Takeover**: If `assignee_id` is set to a human staff agent, the conversation is marked `taken-over` and autonomous AI replies are suppressed.
+   - **Ingress HMAC-SHA256 Signature Verification**:
+     * Verifies `X-Chatwoot-Signature` (`sha256=<hex>` or `t=<timestamp>,sha256=<hex>`) computed over `{timestamp}.{raw_body}` using the binding's `webhook_secret`.
+     * Enforces a strict 300-second timestamp replay defense guard, rejecting stale or future-drifted payloads.
+     * Preserves backward compatibility with legacy token authentication for testing environments.
+
+4. **Fail-Closed Direct Carrier Containment**:
+   - Legacy direct carrier webhook endpoints (`/api/sms/webhooks/{transport}/{public_id}`, `/api/sms/webhooks/incoming`, and `/delivery`) return `HTTP 410 Gone` on legacy direct carrier transports (e.g. `mobilemessage`, `telstra`).
+   - `MobileMessageAdapter` implements strict fail-closed lockout across `send()`, `verify_webhook()`, `parse_inbound()`, and `parse_delivery_receipt()`, preventing split-brain bypass of Chatwoot.
 
 ---
 

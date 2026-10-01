@@ -153,6 +153,18 @@ def update_admin_translations(
             )
         # Apply preset terms
         current_terms = dict(preset_terms)
+        current_terms["_preset"] = payload.preset
+
+        # Trigger Chatwoot industry automation if tenant has a Chatwoot account bound
+        if tenant.chatwoot_account_id:
+            try:
+                from ...services.sms.chatwoot_industry_service import sync_industry_presets
+                sync_industry_presets(
+                    account_id=tenant.chatwoot_account_id,
+                    industry=payload.preset,
+                )
+            except Exception:
+                pass
 
     # 2. If custom terminology overrides provided, merge them
     if payload.terminology is not None:

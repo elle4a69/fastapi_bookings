@@ -1,8 +1,12 @@
-import httpx
+import hashlib
+import hmac
+import json
 import logging
 import random
+import secrets
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Dict, List, Optional, Union
+import httpx
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -118,7 +122,14 @@ async def send_chatwoot_message(
         logger.error(f"Failed to send Chatwoot message: {e}")
         raise
 
-def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -> dict:
+def process_chatwoot_webhook(
+    db: Session,
+    payload: dict,
+    token: Optional[str] = None,
+    raw_body: Optional[Union[bytes, str]] = None,
+    signature_header: Optional[str] = None,
+    timestamp_header: Optional[Union[int, str]] = None,
+) -> dict:
     """Intake pipeline for incoming Chatwoot webhook events."""
     # 1. Extract Chatwoot identifiers
     chatwoot_inbox_id = payload.get("inbox", {}).get("id") or payload.get("conversation", {}).get("inbox_id")
@@ -215,13 +226,83 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
             if tenant_prov:
                 effective_provider_id = tenant_prov.id
 
-    # 3. Validate authenticity
-    import secrets
+    # 3. Validate authenticity (HMAC-SHA256 signature or shared token)
     binding_secret = binding.webhook_secret
-    if not token or not binding_secret or not secrets.compare_digest(token, binding_secret):
-        logger.warning(f"Chatwoot webhook authentication failed for binding {binding.id}")
+    if not binding_secret:
+        logger.warning(f"Chatwoot webhook authentication failed: no webhook_secret on binding {binding.id}")
         record_webhook_event("rejected")
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
+
+    if signature_header:
+        extracted_sig: Optional[str] = None
+        extracted_ts: Optional[int] = None
+
+        # Parse signature and timestamp from header (handles t=ts,sha256=hex or sha256=hex)
+        parts = [p.strip() for p in signature_header.replace(";", ",").split(",") if p.strip()]
+        for part in parts:
+            if "=" in part:
+                k, v = part.split("=", 1)
+                k = k.strip().lower()
+                v = v.strip()
+                if k in ("t", "timestamp"):
+                    try:
+                        extracted_ts = int(v)
+                    except ValueError:
+                        pass
+                elif k in ("sha256", "v1", "sig", "signature"):
+                    extracted_sig = v
+            elif len(part) == 64 and all(c in "0123456789abcdefABCDEF" for c in part):
+                extracted_sig = part
+
+        if extracted_ts is None and timestamp_header:
+            try:
+                extracted_ts = int(str(timestamp_header).strip())
+            except ValueError:
+                pass
+
+        if not extracted_sig or extracted_ts is None:
+            logger.warning("Chatwoot webhook signature header malformed or missing timestamp.")
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=401, detail="Malformed webhook signature or missing timestamp.")
+
+        # 300-second timestamp replay defense guard
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        if abs(now_ts - extracted_ts) > 300:
+            logger.warning(
+                f"Chatwoot webhook replay guard: timestamp {extracted_ts} outside 300s window (now={now_ts})"
+            )
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=401, detail="Webhook signature timestamp expired or outside replay window.")
+
+        # Compute HMAC-SHA256 over {timestamp}.{raw_body}
+        if isinstance(raw_body, bytes):
+            body_bytes = raw_body
+        elif isinstance(raw_body, str):
+            body_bytes = raw_body.encode("utf-8")
+        else:
+            body_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+        msg_to_sign = f"{extracted_ts}.".encode("utf-8") + body_bytes
+        computed_sig = hmac.new(
+            key=binding_secret.encode("utf-8"),
+            msg=msg_to_sign,
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(computed_sig.lower(), extracted_sig.lower()):
+            logger.warning("Chatwoot webhook HMAC signature verification failed.")
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=401, detail="Invalid webhook HMAC signature.")
+
+    elif token:
+        if not secrets.compare_digest(token, binding_secret):
+            logger.warning(f"Chatwoot webhook authentication failed for binding {binding.id}")
+            record_webhook_event("rejected")
+            raise HTTPException(status_code=401, detail="Invalid webhook secret.")
+    else:
+        logger.warning(f"Chatwoot webhook missing authentication for binding {binding.id}")
+        record_webhook_event("rejected")
+        raise HTTPException(status_code=401, detail="Missing webhook authentication token or signature.")
 
     # 4. Enforce Idempotency using external Chatwoot message ID
     existing_message = db.query(SmsMessage).filter(
@@ -361,6 +442,64 @@ def process_chatwoot_webhook(db: Session, payload: dict, token: Optional[str]) -
         conversation.unread_count += 1
         conversation.last_activity_at = datetime.now(timezone.utc)
         db.flush()
+
+        # Webhook Triage & Human Takeover Handshake
+        conv_payload = payload.get("conversation", {}) or {}
+        raw_labels = (
+            conv_payload.get("labels")
+            or conv_payload.get("label_list")
+            or payload.get("labels")
+            or []
+        )
+        if isinstance(raw_labels, str):
+            label_list = [lb.strip() for lb in raw_labels.split(",") if lb.strip()]
+        elif isinstance(raw_labels, list):
+            label_list = [str(lb).strip() for lb in raw_labels if lb]
+        else:
+            label_list = []
+
+        normalized_labels = {lb.lower().lstrip("#") for lb in label_list}
+
+        assignee_id = conv_payload.get("assignee_id")
+        if assignee_id is None:
+            assignee_data = conv_payload.get("assignee")
+            if isinstance(assignee_data, dict):
+                assignee_id = assignee_data.get("id")
+
+        is_human_labeled = bool(normalized_labels.intersection({"human-intervention-required", "needs-human"}))
+        is_human_assigned = bool(assignee_id)
+        is_human_takeover = is_human_labeled or is_human_assigned
+
+        if is_human_takeover:
+            conversation.state = "taken-over"
+            # Cancel any existing pending AI jobs immediately
+            db.query(SmsAiJob).filter(
+                SmsAiJob.conversation_id == conversation.id,
+                SmsAiJob.status == "PENDING"
+            ).update({"status": "CANCELLED"})
+
+            takeover_event = SmsConversationEvent(
+                conversation_id=conversation.id,
+                type="takeover",
+                meta={
+                    "by": "chatwoot_webhook_triage",
+                    "reason": "human_intervention_label" if is_human_labeled else "assignee_set",
+                    "labels": label_list,
+                    "assignee_id": assignee_id,
+                    "chatwoot_message_id": chatwoot_msg_id,
+                }
+            )
+            db.add(takeover_event)
+            db.commit()
+            record_webhook_event("accepted")
+            return {
+                "status": "success",
+                "duplicate": False,
+                "conversation_id": conversation.id,
+                "state": "taken-over",
+                "ai_job_enqueued": False,
+                "human_takeover": True,
+            }
 
         # Trigger AI Job (burst debounce)
         if conversation.state == "auto-reply":
