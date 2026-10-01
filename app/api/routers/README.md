@@ -173,7 +173,31 @@ pytest tests/test_chatwoot_provisioning.py tests/test_sms_chatwoot.py tests/test
 
 ---
 
-## 8. Granular System Health & Readiness Verification (Section 24)
+## 8. System Health & Readiness
+
+### 8.1 Admin System Health Endpoint (`GET /api/admin/system/health`)
+
+**Route:** `GET /api/admin/system/health`  
+**Auth:** Requires authenticated admin (`get_current_admin` + `get_current_tenant`)  
+**Location:** [`app/api/routers/system.py`](file:///F:/Projects/fastapi_bookings/app/api/routers/system.py)  
+**Schema:** `SystemHealthResponse` in [`app/schemas/general_systems.py`](file:///F:/Projects/fastapi_bookings/app/schemas/general_systems.py)
+
+Performs **live connectivity probes** against every service dependency and returns measured round-trip latency. Always returns **HTTP 200** — callers must inspect `api_status` and per-service `status` fields.
+
+| Service | Probe | Latency |
+|---|---|---|
+| **PostgreSQL / SQLite** | `SELECT 1` via injected DB session | Yes |
+| **Redis** | `PING` via `get_redis_client()` sync pool | Yes |
+| **Neo4j** | `RETURN 1` via driver session (only when `GRAPH_KNOWLEDGE_ENABLED=True`) | Yes |
+| **Background Workers** | `null` / `source=none` — no Celery/ARQ configured | N/A |
+
+If any probe fails: service is marked `"down"`, `api_status` becomes `"degraded"`. Each check is individually `try/except`-wrapped — the endpoint never crashes.
+
+**Frontend:** [`frontend/src/pages/admin/system.tsx`](file:///F:/Projects/fastapi_bookings/frontend/src/pages/admin/system.tsx) renders per-service latency badges. On fetch error an alert banner is shown — no fake fallback data (Rule 3 compliant).
+
+**Test coverage:** [`tests/test_system_health.py`](file:///F:/Projects/fastapi_bookings/tests/test_system_health.py)
+
+### 8.2 Granular System Health & Readiness Verification (Section 24)
 
 The router layer provides unauthenticated public readiness checks (`/health/granular`, `/readiness`) and admin-scoped diagnostics (`/diagnostics/readiness`, `/api/admin/diagnostics/readiness`):
 - **PostgreSQL Database Connectivity**: Verified via lightweight `SELECT 1` ping.
@@ -184,6 +208,7 @@ The router layer provides unauthenticated public readiness checks (`/health/gran
 - **Response Format**: Status 200 with `status: "ready"` if all critical subsystems are online; Status 503 with degraded component details if any core dependency fails.
 
 ---
+
 
 ## 9. Chatwoot Tenant Binding, Provisioning & AgentBot De-confliction (`sms_chatwoot.py`, `chatwoot_agentbot.py`, `tenants.py`)
 

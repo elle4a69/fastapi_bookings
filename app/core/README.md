@@ -128,7 +128,23 @@ All OpenTelemetry spans are wrapped by `PrivacySafeSpanExporter` before being se
 
 ---
 
+### 5.5 Admin System Health Endpoint
+
+The `GET /api/admin/system/health` endpoint (implemented in [`app/api/routers/system.py`](file:///f:/Projects/fastapi_bookings/app/api/routers/system.py)) uses two functions from `app/core/` to measure live service latency:
+
+| Core Function | Used By | Purpose |
+|---|---|---|
+| `get_redis_client()` in `redis.py` | `_check_redis()` | Issue a real `PING` and measure round-trip ms |
+| `get_neo4j_driver()` in `graphiti_client.py` | `_check_neo4j()` | Run `RETURN 1` and measure round-trip ms |
+
+The health endpoint never crashes — each probe is wrapped in `try/except`. If Redis or Neo4j is unavailable the service is reported as `"down"` and `api_status` is set to `"degraded"`.
+
+**Background workers:** No Celery/ARQ queue system is configured. The endpoint reports `background_workers` as `{ status: "ok", latency_ms: null, detail: "source=none; no distributed task queue is configured" }` rather than inventing a fake count.
+
+---
+
 ## Redis Integration & Key Namespacing
+
 - **Key Prefixing**: All Redis keys are strictly formatted via `format_key()` with the prefix `fb:` or `fb:{tenant_id}:...` ensuring strict multi-tenant isolation.
 - **Connection Pools**: Thread-safe sync (`get_redis_client()`) and async (`get_async_redis_client()`) connection pools lazily initialized with reconnect handling and bounded connection counts.
 - **Health Checks**: Synchronous `ping()` and asynchronous `async_ping()` methods for liveness/readiness probes.

@@ -2,14 +2,25 @@ import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Activity, Database, ExternalLink, Server, ShieldCheck, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, Clock, Database, ExternalLink, Server, ShieldCheck, Trash2, Wifi } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../../lib/api';
 
-interface SystemHealth {
-  api_status: string;
-  sqlite_latency_ms: number;
-  background_queues_active: number;
+// ── Types aligned with SystemHealthResponse schema ──────────────────────────
+
+interface ServiceHealthCheck {
+  status: 'ok' | 'degraded' | 'down';
+  latency_ms: number | null;
+  detail: string | null;
+}
+
+interface SystemHealthResponse {
+  api_status: 'operational' | 'degraded' | 'down';
+  postgres: ServiceHealthCheck;
+  redis: ServiceHealthCheck;
+  neo4j: ServiceHealthCheck | null;
+  background_workers: ServiceHealthCheck | null;
+  checked_at: string; // ISO-8601 datetime
 }
 
 interface GovernanceLinks {
@@ -20,8 +31,38 @@ interface GovernanceLinks {
   base_url: string;
 }
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (status === 'ok' || status === 'operational') return 'default';
+  if (status === 'degraded') return 'secondary';
+  return 'destructive';
+}
+
+function LatencyBadge({ latency_ms }: { latency_ms: number | null }) {
+  if (latency_ms === null) return <span className="text-xs text-muted-foreground">—</span>;
+  return <span className="text-xs font-mono">{latency_ms} ms</span>;
+}
+
+function ServiceRow({ label, check }: { label: string; check: ServiceHealthCheck }) {
+  return (
+    <div className="flex items-center justify-between py-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-3">
+        <LatencyBadge latency_ms={check.latency_ms} />
+        <Badge variant={statusVariant(check.status)} className="uppercase text-xs">
+          {check.status}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+
 export default function SystemPage() {
-  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [health, setHealth] = useState<SystemHealthResponse | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const [govLinks, setGovLinks] = useState<GovernanceLinks | null>(null);
   const [, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
@@ -42,16 +83,18 @@ export default function SystemPage() {
 
   const fetchHealth = async () => {
     setLoading(true);
+    setHealthError(null);
     try {
       const res: any = await apiClient.get('/api/admin/system/health');
       setHealth(res?.data ?? res);
-    } catch {
-      // Endpoint not yet implemented — show static healthy state
-      setHealth({
-        api_status: 'operational',
-        sqlite_latency_ms: 12.5,
-        background_queues_active: 3
-      });
+    } catch (err: any) {
+      // Display a real error state — never fall back to fake data.
+      setHealth(null);
+      const message =
+        err?.response?.data?.error?.message ??
+        err?.message ??
+        'Could not reach the server';
+      setHealthError(`Health check unavailable — ${message}`);
     } finally {
       setLoading(false);
     }
@@ -77,6 +120,15 @@ export default function SystemPage() {
         <p className="text-muted-foreground mt-2">Monitor platform health and perform maintenance tasks.</p>
       </div>
 
+      {/* ── Error banner ── */}
+      {healthError && (
+        <div className="flex items-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {healthError}
+        </div>
+      )}
+
+      {/* ── Top-level status cards ── */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -86,47 +138,96 @@ export default function SystemPage() {
           <CardContent>
             <div className="text-2xl font-bold">
               {health ? (
-                <Badge variant={health.api_status === 'operational' ? 'default' : 'destructive'} className="uppercase">
+                <Badge variant={statusVariant(health.api_status)} className="uppercase">
                   {health.api_status}
                 </Badge>
+              ) : healthError ? (
+                <Badge variant="destructive" className="uppercase">unavailable</Badge>
               ) : '...'}
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Database Latency</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {health ? `${health.sqlite_latency_ms} ms` : '...'}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">SQLite connection</p>
+            {health?.checked_at && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {new Date(health.checked_at).toLocaleTimeString()}
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Background Queues</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Database</CardTitle>
+            <Database className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {health ? health.background_queues_active : '...'}
+              {health ? (
+                <Badge variant={statusVariant(health.postgres.status)} className="uppercase">
+                  {health.postgres.status}
+                </Badge>
+              ) : healthError ? (
+                <Badge variant="outline" className="uppercase">—</Badge>
+              ) : '...'}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Active workers</p>
+            {health && (
+              <p className="text-xs text-muted-foreground mt-1">
+                PostgreSQL{health.postgres.latency_ms !== null ? ` · ${health.postgres.latency_ms} ms` : ''}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Cache</CardTitle>
+            <Wifi className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {health ? (
+                <Badge variant={statusVariant(health.redis.status)} className="uppercase">
+                  {health.redis.status}
+                </Badge>
+              ) : healthError ? (
+                <Badge variant="outline" className="uppercase">—</Badge>
+              ) : '...'}
+            </div>
+            {health && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Redis{health.redis.latency_ms !== null ? ` · ${health.redis.latency_ms} ms` : ''}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Detailed service breakdown ── */}
+      {health && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Service Details
+            </CardTitle>
+            <CardDescription>Live latency measurements from the last health check.</CardDescription>
+          </CardHeader>
+          <CardContent className="divide-y">
+            <ServiceRow label="PostgreSQL" check={health.postgres} />
+            <ServiceRow label="Redis" check={health.redis} />
+            {health.neo4j && <ServiceRow label="Neo4j" check={health.neo4j} />}
+            {health.background_workers && (
+              <ServiceRow label="Background Workers" check={health.background_workers} />
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-primary" />
-              Platform Owner Governance & Chatwoot
+              Platform Owner Governance &amp; Chatwoot
             </CardTitle>
             <CardDescription>
               Direct deep links for platform SuperAdmin operations and Chatwoot inbox management.

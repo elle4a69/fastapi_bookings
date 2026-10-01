@@ -1,7 +1,7 @@
-"""Schemas for plugin states and GDPR consent logs."""
+"""Schemas for plugin states, GDPR consent logs, and system health checks."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -73,3 +73,23 @@ class ChatwootGovernanceLinksResponse(BaseModel):
     chatwoot_account_id: Optional[int] = None
     base_url: str
 
+
+# --- System Health ---
+
+class ServiceHealthCheck(BaseModel):
+    """Per-service health check result with measured latency."""
+
+    status: Literal["ok", "degraded", "down"]
+    latency_ms: Optional[float] = None
+    detail: Optional[str] = None
+
+
+class SystemHealthResponse(BaseModel):
+    """Aggregate real-time health snapshot returned by GET /api/admin/system/health."""
+
+    api_status: Literal["operational", "degraded", "down"]
+    postgres: ServiceHealthCheck
+    redis: ServiceHealthCheck
+    neo4j: Optional[ServiceHealthCheck] = None
+    background_workers: Optional[ServiceHealthCheck] = None
+    checked_at: datetime
