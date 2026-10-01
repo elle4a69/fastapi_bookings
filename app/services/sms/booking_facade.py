@@ -257,7 +257,10 @@ def create_booking(
 ) -> Dict[str, Any]:
     """Idempotently create a booking in the FastAPI Bookings domain."""
     if idempotency_key:
-        existing = db.query(Booking).filter(Booking.idempotency_key == idempotency_key).first()
+        existing = db.query(Booking).filter(
+            Booking.tenant_id == tenant_id,
+            Booking.idempotency_key == idempotency_key,
+        ).first()
         if existing:
             logger.info(f"Booking creation deduplicated via idempotency_key={idempotency_key}")
             return {"booking_id": existing.id, "status": existing.status.value, "duplicate": True}

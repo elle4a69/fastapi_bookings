@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, DatabaseId
+from ..deps import get_db, DatabaseId, get_public_tenant
+from ...models.tenant import Tenant
 from ...models import (
     Provider as ProviderModel,
     ProviderSpecialDay,
@@ -26,20 +27,37 @@ router = APIRouter(prefix="/api/public/timeline", tags=["public-timeline"])
 
 
 @router.get("/schedule/{provider_id}")
-def get_provider_schedule(provider_id: DatabaseId, db: Session = Depends(get_db)) -> dict:
+def get_provider_schedule(
+    provider_id: DatabaseId,
+    db: Session = Depends(get_db),
+    current_tenant: Tenant = Depends(get_public_tenant),
+) -> dict:
     """Return a provider's weekly workdays and special-day overrides."""
-    provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+    provider = (
+        db.query(ProviderModel)
+        .filter(
+            ProviderModel.id == provider_id,
+            ProviderModel.tenant_id == current_tenant.id,
+        )
+        .first()
+    )
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
     workdays = (
         db.query(ProviderWorkDay)
-        .filter(or_(ProviderWorkDay.provider_id == provider_id, ProviderWorkDay.provider_id.is_(None)))
+        .filter(
+            ProviderWorkDay.tenant_id == current_tenant.id,
+            or_(ProviderWorkDay.provider_id == provider_id, ProviderWorkDay.provider_id.is_(None)),
+        )
         .order_by(ProviderWorkDay.weekday.asc(), ProviderWorkDay.provider_id.desc())
         .all()
     )
     special_days = (
         db.query(ProviderSpecialDay)
-        .filter(or_(ProviderSpecialDay.provider_id == provider_id, ProviderSpecialDay.provider_id.is_(None)))
+        .filter(
+            ProviderSpecialDay.tenant_id == current_tenant.id,
+            or_(ProviderSpecialDay.provider_id == provider_id, ProviderSpecialDay.provider_id.is_(None)),
+        )
         .order_by(ProviderSpecialDay.date.asc(), ProviderSpecialDay.provider_id.desc())
         .all()
     )

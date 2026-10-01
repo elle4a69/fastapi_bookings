@@ -130,6 +130,7 @@ class WebsiteChatMessageItem(BaseModel):
 class WebsiteChatResponse(BaseModel):
     ok: bool = True
     conversation_id: int
+    session_token: Optional[str] = Field(None, description="Tenant-scoped HMAC session token")
     reply: str
     messages: list[WebsiteChatMessageItem] = []
 

@@ -43,12 +43,14 @@ class GdprConsent(Base):
     __tablename__ = "gdpr_consents"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     client_id = Column(Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     consent_type = Column(String, default="gdpr", nullable=False)   # gdpr | marketing | terms
     is_approved = Column(Boolean, default=True, nullable=False)
     ip_address = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+    tenant = relationship("Tenant")
     client = relationship("Client")
 
     def __repr__(self) -> str:

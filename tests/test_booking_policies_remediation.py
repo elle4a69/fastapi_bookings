@@ -23,6 +23,8 @@ def mock_stripe():
 
 @pytest.fixture
 def setup_data(db_session):
+    from app.models.booking_slot_allocation import BookingSlotAllocation
+    db_session.query(BookingSlotAllocation).delete()
     db_session.query(ManagementReviewRequest).delete()
     db_session.query(Booking).delete()
     db_session.query(OutboxEvent).delete()

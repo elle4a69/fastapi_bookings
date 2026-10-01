@@ -259,6 +259,7 @@ def create_public_booking(
         slot_allocation_service.create_allocations_for_booking(
             db, booking=booking, buffer_before=buf_before, buffer_after=buf_after
         )
+        db.flush()
 
         # Allocate required resources
         scheduling_service.allocate_resources(db, booking=booking, commit=False)
@@ -273,6 +274,8 @@ def create_public_booking(
             "end_time": booking.end_time.isoformat() if booking.end_time else None,
             "status": booking.status,
         }
+        create_outbox_event(db, "booking.created", payload, tenant_id=tenant.id)
+
         # Trigger dynamic itinerary recalculation
         if booking.start_time:
             recalculate_provider_itinerary(

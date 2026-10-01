@@ -289,7 +289,11 @@ def test_public_website_chat_endpoint(client, website_test_env, db_session):
     assert len(data2["messages"]) >= 4
 
     # 3. Retrieve chat history via GET /api/public/website/chat/{conversation_id}
-    get_resp = client.get(f"/api/public/website/chat/{conv_id}", headers=public_headers)
+    session_token = data2.get("session_token")
+    get_resp = client.get(
+        f"/api/public/website/chat/{conv_id}?token={session_token}",
+        headers=public_headers,
+    )
     assert get_resp.status_code == status.HTTP_200_OK
     assert len(get_resp.json()["messages"]) >= 4
 

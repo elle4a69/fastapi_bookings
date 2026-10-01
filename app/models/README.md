@@ -51,6 +51,8 @@ app/models/
 3. **Discrete Slot Allocations**: `booking_slot_allocations` enforces an explicit unique constraint on `(tenant_id, provider_id, slot_time)` to guarantee 100% double-booking prevention.
 4. **Bootcamp Settings Isolation**: `sms_bootcamp_settings` enforces a composite unique constraint on `(tenant_id, provider_id)` allowing both tenant-default and provider-specific assistant personas.
 5. **Capability Hierarchy**: Tenant -> Provider -> Service: children may be more restrictive than parents, never broader.
+6. **Tenant-Scoped Booking Idempotency**: `bookings` enforces a composite unique constraint `UniqueConstraint('tenant_id', 'idempotency_key', name='uq_tenant_booking_idempotency')`, guaranteeing that idempotency keys are strictly scoped per tenant without cross-tenant collisions.
+7. **GDPR Consent Partitioning**: `gdpr_consents` is explicitly partitioned with `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`), guaranteeing tenant-scoped compliance and consent auditing.
 
 ---
 

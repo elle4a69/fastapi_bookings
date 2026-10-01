@@ -8,9 +8,10 @@ with an IP address for compliance auditing.
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_db, DatabaseId
+from ..deps import get_current_admin, get_current_tenant, get_db, DatabaseId
 from ...models.general_systems import GdprConsent, PluginState
 from ...models.client import Client
+from ...models.tenant import Tenant
 from ...schemas.general_systems import (
     GdprConsentCreate,
     GdprConsentListResponse,
@@ -96,6 +97,7 @@ def record_gdpr_consent(
         raise HTTPException(status_code=404, detail="Client not found")
     ip = consent_in.ip_address or (request.client.host if request.client else "unknown")
     consent = GdprConsent(
+        tenant_id=client.tenant_id,
         client_id=consent_in.client_id,
         consent_type=consent_in.consent_type,
         is_approved=consent_in.is_approved,
@@ -108,9 +110,18 @@ def record_gdpr_consent(
 
 
 @router.get("/api/admin/gdpr-consents", response_model=GdprConsentListResponse)
-def list_gdpr_consents(db: Session = Depends(get_db), current_user=Depends(get_current_admin)) -> dict:
+def list_gdpr_consents(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_admin),
+    current_tenant: Tenant = Depends(get_current_tenant),
+) -> dict:
     """Return all GDPR consent log entries (admin only)."""
-    consents = db.query(GdprConsent).order_by(GdprConsent.created_at.desc()).all()
+    consents = (
+        db.query(GdprConsent)
+        .filter(GdprConsent.tenant_id == current_tenant.id)
+        .order_by(GdprConsent.created_at.desc())
+        .all()
+    )
     return {"ok": True, "data": consents}
 
 
@@ -119,11 +130,15 @@ def list_gdpr_consents_for_client(
     client_id: DatabaseId,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_admin),
+    current_tenant: Tenant = Depends(get_current_tenant),
 ) -> dict:
     """Return all GDPR consent entries for a specific client."""
     consents = (
         db.query(GdprConsent)
-        .filter(GdprConsent.client_id == client_id)
+        .filter(
+            GdprConsent.tenant_id == current_tenant.id,
+            GdprConsent.client_id == client_id,
+        )
         .order_by(GdprConsent.created_at.desc())
         .all()
     )

@@ -8,12 +8,14 @@ Provides endpoints for managing tenant single-page public websites:
 """
 
 import copy
+import hashlib
+import hmac
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_current_tenant, get_db, get_public_tenant
@@ -56,6 +58,21 @@ def _generate_starter_sections(tenant: Tenant) -> Dict[str, Any]:
     if tenant.email:
         sections["contact"]["email"] = tenant.email
     return sections
+
+
+def generate_chat_session_token(tenant_id: int, conversation_id: int) -> str:
+    """Generate a tenant-scoped HMAC-SHA256 session token for a website chat conversation."""
+    secret = (getattr(settings, "SECRET_KEY", None) or "default-chat-secret").encode("utf-8")
+    msg = f"tenant:{tenant_id}:conversation:{conversation_id}".encode("utf-8")
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()
+
+
+def verify_chat_session_token(token: Optional[str], tenant_id: int, conversation_id: int) -> bool:
+    """Validate that the provided session token matches the expected HMAC for tenant and conversation."""
+    if not token:
+        return False
+    expected = generate_chat_session_token(tenant_id, conversation_id)
+    return hmac.compare_digest(token.strip(), expected)
 
 
 @router.get("/api/admin/website", response_model=WebsiteResponse)
@@ -649,9 +666,11 @@ async def public_website_chat(
         for m in all_msgs
     ]
 
+    session_token = generate_chat_session_token(target_tenant.id, conversation.id)
     return WebsiteChatResponse(
         ok=True,
         conversation_id=conversation.id,
+        session_token=session_token,
         reply=reply_text,
         messages=msg_items,
     )
@@ -661,19 +680,61 @@ async def public_website_chat(
 def get_public_website_chat_messages(
     conversation_id: int,
     request: Request,
+    token: Optional[str] = Query(None, description="HMAC session token"),
+    x_chat_session_token: Optional[str] = Header(None, alias="X-Chat-Session-Token"),
+    x_token: Optional[str] = Header(None, alias="X-Token"),
     db: Session = Depends(get_db),
 ) -> WebsiteChatResponse:
-    """Retrieve message history for an active web chat conversation."""
+    """Retrieve message history for an active web chat conversation.
+
+    Enforces tenant-scoped HMAC session token verification or caller authentication.
+    """
     from ...models.sms_conversation import SmsConversation
     from ...models.sms_message import SmsMessage
+    from ...core.security import decode_access_token
 
     conversation = db.query(SmsConversation).filter(SmsConversation.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
 
+    # 1. Check tenant scoping if host or X-Tenant header supplied
+    supplied_subdomain = request.headers.get("X-Tenant") or request.query_params.get("tenant")
+    from ..deps import _tenant_subdomain_from_host
+    host_subdomain = _tenant_subdomain_from_host(request.url.hostname)
+    subdomain = supplied_subdomain or host_subdomain
+    if subdomain:
+        req_tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain.lower()).first()
+        if req_tenant and req_tenant.id != conversation.tenant_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found in active tenant.")
+
+    # 2. Authenticate caller: verify HMAC session token or staff/admin JWT
+    session_token = x_chat_session_token or token or request.query_params.get("session_token")
+    is_authorized = False
+
+    if session_token and verify_chat_session_token(session_token, conversation.tenant_id, conversation.id):
+        is_authorized = True
+    elif x_token:
+        try:
+            payload = decode_access_token(x_token)
+            if payload and "sub" in payload:
+                user = db.query(User).filter(
+                    User.id == int(payload["sub"]),
+                    User.tenant_id == conversation.tenant_id,
+                ).first()
+                if user and user.role in ("owner", "admin", "manager", "provider"):
+                    is_authorized = True
+        except Exception:
+            is_authorized = False
+
+    if not is_authorized:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Invalid or missing tenant chat session token.",
+        )
+
     all_msgs = (
         db.query(SmsMessage)
-        .filter(SmsMessage.conversation_id == conversation.id)
+        .filter(SmsMessage.conversation_id == conversation.id, SmsMessage.tenant_id == conversation.tenant_id)
         .order_by(SmsMessage.occurred_at.asc())
         .all()
     )
@@ -688,10 +749,12 @@ def get_public_website_chat_messages(
         for m in all_msgs
     ]
     latest_reply = msg_items[-1].body if msg_items else ""
+    valid_token = generate_chat_session_token(conversation.tenant_id, conversation.id)
 
     return WebsiteChatResponse(
         ok=True,
         conversation_id=conversation.id,
+        session_token=valid_token,
         reply=latest_reply,
         messages=msg_items,
     )

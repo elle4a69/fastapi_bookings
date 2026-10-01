@@ -118,6 +118,16 @@ Clients pass their JWT access token via the `X-Token` header:
 3. **Correlation Tracking Without PII**:
    - `add_correlation_id_header` injects `X-Request-ID` and `X-Trace-ID` matching the active OpenTelemetry span context.
    - PII (passwords, payment details, phone numbers) is never echoed in correlation headers or error responses.
+4. **Chatwoot AgentBot Tenant Resolution**:
+   - AgentBot webhook inbound routing resolves the authentic internal `tenant.id` via `SmsChatwootBinding` or `Tenant.chatwoot_account_id == payload.account.id`, protecting memory curation and AI execution from cross-tenant contamination.
+   - In production environments, unmapped accounts are rejected with `unmapped_chatwoot_account`.
+5. **Website Chat Transcript HMAC Token Protection**:
+   - Web chat history endpoints (`GET /api/public/website/chat/{conversation_id}`) enforce tenant-scoped HMAC-SHA256 session token verification (`X-Chat-Session-Token` or `token`) or authorized tenant staff authentication (`X-Token`).
+   - Prevents unauthenticated conversation ID enumeration and transcript data leakage.
+6. **Public Timeline Workday Scoping**:
+   - Provider timeline endpoints (`GET /api/public/timeline/schedule/{provider_id}`) strictly bind company-wide workdays (`provider_id IS NULL`) and special-day overrides to `current_tenant.id`.
+7. **Admin GDPR Consent Isolation**:
+   - GDPR consent queries (`GET /api/admin/gdpr-consents` and `GET /api/admin/gdpr-consents/{client_id}`) strictly enforce `GdprConsent.tenant_id == current_tenant.id`.
 
 ---
 
@@ -132,6 +142,9 @@ Clients pass their JWT access token via the `X-Token` header:
 
 Execute targeted router tests:
 ```powershell
+# 0. Test Phase 1 security hardening & tenant isolation remediations
+pytest tests/test_security_isolation_remediation.py -v
+
 # 1. Test authentication contracts and token verification
 pytest tests/test_auth_contract.py -v
 

@@ -9,7 +9,7 @@ import enum
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Index, text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Index, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -34,6 +34,7 @@ class Booking(Base):
             sqlite_where=text("status NOT IN ('CANCELLED', 'cancelled')"),
             postgresql_where=text("status != 'CANCELLED'::bookingstatus"),
         ),
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_tenant_booking_idempotency"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -47,7 +48,7 @@ class Booking(Base):
     end_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(Enum(BookingStatus), default=BookingStatus.PENDING, nullable=False)
     notes = Column(Text, nullable=True)
-    idempotency_key = Column(String, unique=True, nullable=True, index=True)
+    idempotency_key = Column(String, nullable=True, index=True)
 
     # In-Call / Out-Call Delivery & Travel Snapshot
     service_mode = Column(String, default=ServiceMode.IN_CALL.value, nullable=False)

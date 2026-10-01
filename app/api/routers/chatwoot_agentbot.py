@@ -157,6 +157,58 @@ async def curate_conversation_background(
         return []
 
 
+async def resolve_chatwoot_tenant(
+    db: AsyncSession,
+    account_id: int,
+    inbox_id: Optional[int] = None,
+) -> tuple[Optional[int], Optional[int], Optional[SmsChatwootBinding]]:
+    """Resolve internal tenant_id, provider_id, and binding from Chatwoot account/inbox."""
+    binding = None
+    try:
+        if inbox_id:
+            binding_stmt = select(SmsChatwootBinding).where(
+                SmsChatwootBinding.chatwoot_inbox_id == inbox_id,
+                SmsChatwootBinding.chatwoot_account_id == account_id,
+            )
+            binding_res = await db.execute(binding_stmt)
+            binding = binding_res.scalars().first()
+        if not binding:
+            binding_stmt = select(SmsChatwootBinding).where(
+                SmsChatwootBinding.chatwoot_account_id == account_id,
+            )
+            binding_res = await db.execute(binding_stmt)
+            binding = binding_res.scalars().first()
+    except Exception as exc:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        logger.warning(
+            "Could not query SmsChatwootBinding (%s); checking tenant mapping for account_id=%s",
+            exc,
+            account_id,
+        )
+
+    tenant_obj = None
+    try:
+        from ...models.tenant import Tenant
+        t_stmt = select(Tenant).where(Tenant.chatwoot_account_id == account_id)
+        t_res = await db.execute(t_stmt)
+        tenant_obj = t_res.scalars().first()
+    except Exception:
+        pass
+
+    if binding:
+        return binding.tenant_id, binding.provider_id, binding
+    elif tenant_obj:
+        return tenant_obj.id, None, None
+    else:
+        import os
+        if getattr(settings, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
+            return account_id, None, None
+        return None, None, None
+
+
 @router.post("/webhook", status_code=status.HTTP_200_OK)
 async def chatwoot_agentbot_webhook(
     payload: ChatwootAgentBotPayload,
@@ -210,21 +262,37 @@ async def chatwoot_agentbot_webhook(
     # 2. Support conversation resolution background curation trigger
     if payload.event in ("conversation_resolved", "conversation_status_changed"):
         if payload.conversation.status == "resolved" and payload.transcript:
+            resolved_tenant_id, resolved_provider_id, _ = await resolve_chatwoot_tenant(
+                db, payload.account.id, inbox_id
+            )
+            if not resolved_tenant_id:
+                logger.warning(
+                    "Rejecting AgentBot curation: Chatwoot account %s is not mapped to any FastAPI tenant",
+                    payload.account.id,
+                )
+                return {
+                    "status": "ignored",
+                    "reason": "unmapped_chatwoot_account",
+                }
+
             logger.info(
-                "Enqueuing memory curation for resolved conversation=%s account=%s",
+                "Enqueuing memory curation for resolved conversation=%s account=%s tenant=%s",
                 payload.conversation.id,
                 payload.account.id,
+                resolved_tenant_id,
             )
             background_tasks.add_task(
                 curate_conversation_background,
-                tenant_id=payload.account.id,
+                tenant_id=resolved_tenant_id,
                 transcript=payload.transcript,
+                provider_id=resolved_provider_id,
             )
             return {
                 "status": "handled",
                 "action": "conversation_curation_enqueued",
                 "conversation_id": payload.conversation.id,
                 "account_id": payload.account.id,
+                "tenant_id": resolved_tenant_id,
             }
 
     # Filter event type and message origin
@@ -313,60 +381,18 @@ async def chatwoot_agentbot_webhook(
     )
 
     # Resolve tenant and provider bindings for Chatwoot account
-    binding = None
-    try:
-        if inbox_id:
-            binding_stmt = select(SmsChatwootBinding).where(
-                SmsChatwootBinding.chatwoot_inbox_id == inbox_id,
-                SmsChatwootBinding.chatwoot_account_id == account_id
-            )
-        else:
-            binding_stmt = select(SmsChatwootBinding).where(
-                SmsChatwootBinding.chatwoot_account_id == account_id
-            )
-        binding_res = await db.execute(binding_stmt)
-        binding = binding_res.scalars().first()
-    except Exception as exc:
-        try:
-            await db.rollback()
-        except Exception:
-            pass
+    resolved_tenant_id, resolved_provider_id, binding = await resolve_chatwoot_tenant(
+        db, account_id, inbox_id
+    )
+    if not resolved_tenant_id:
         logger.warning(
-            "Could not query SmsChatwootBinding (%s); checking tenant mapping for account_id=%s",
-            exc,
+            "Rejecting AgentBot webhook: Chatwoot account %s is not mapped to any FastAPI tenant",
             account_id,
         )
-
-    from ...models.tenant import Tenant
-    tenant_obj = None
-    try:
-        t_stmt = select(Tenant).where(Tenant.chatwoot_account_id == account_id)
-        t_res = await db.execute(t_stmt)
-        tenant_obj = t_res.scalars().first()
-    except Exception:
-        pass
-
-    if binding:
-        resolved_tenant_id = binding.tenant_id
-        resolved_provider_id = binding.provider_id
-    elif tenant_obj:
-        resolved_tenant_id = tenant_obj.id
-        resolved_provider_id = None
-    else:
-        # Guard against tenant hijacking in production
-        import os
-        if getattr(settings, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
-            resolved_tenant_id = account_id
-            resolved_provider_id = None
-        else:
-            logger.warning(
-                "Rejecting AgentBot webhook: Chatwoot account %s is not mapped to any FastAPI tenant",
-                account_id,
-            )
-            return {
-                "status": "ignored",
-                "reason": "unmapped_chatwoot_account",
-            }
+        return {
+            "status": "ignored",
+            "reason": "unmapped_chatwoot_account",
+        }
 
     # Fallback to binding tokens if not passed via headers/settings
     if not api_token and binding and binding.chatwoot_api_token:
