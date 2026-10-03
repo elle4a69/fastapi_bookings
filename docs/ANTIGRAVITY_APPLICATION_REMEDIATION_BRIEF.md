@@ -35,11 +35,38 @@ The remediation programme is complete only when:
 ### 1.2 Explicit non-goals
 
 - Do not split the application into microservices merely to address these findings. The modular-monolith architecture remains suitable.
-- Do not revive, copy, import, inspect for implementation, or depend on the obsolete Assistant UI or `integrations/assistant-ui-v2/`.
+- Do not revive, wholesale-copy, import at runtime, or depend on the legacy reference application. The narrow native Business Assistant source-reference exception in section 1.3 is the only exception.
 - Do not invent replacement APIs to conceal frontend/backend mismatches.
 - Do not add payment, refund, cancellation, confirmation, SMS, or external-provider behavior beyond the minimum approved remediation.
 - Do not combine unrelated onboarding, website-builder, Codex-control, hold-retirement, telemetry, or UI redesign work with critical security fixes.
 - Do not purge Git history, delete tracked artifacts, rotate real credentials, or alter production infrastructure without explicit authorization and a recovery plan.
+
+### 1.3 Narrow native Business Assistant source-reference exception
+
+The native Business Assistant programme is authorised to inspect and selectively
+reimplement only the explicitly allowlisted behavioural assets in
+`docs/BUSINESS_ASSISTANT_REFERENCE_INVENTORY.md`. Its work packages, boundaries,
+and acceptance requirements are defined in
+`docs/BUSINESS_ASSISTANT_NATIVE_PORT_PLAN.md`.
+
+This exception is narrow and does not permit a revived application, wholesale
+copy, runtime bridge, shared database, shared authentication state, shared
+credential, runtime-module import, deployment-resource reuse, or Git submodule.
+No legacy-source environment file, database, secret, credential, production
+data, log, message body, customer record, SMS number, deployment material, or
+unallowlisted folder may be read, copied, or depended upon. Untracked local
+integration material remains out of scope and must not be staged, deleted,
+modified, inspected for implementation, or committed.
+
+The completed feature must be a wholly native FastAPI Bookings module with
+server-enforced tenant/user scope, authenticated APIs, native persistence and
+migrations, privacy-safe telemetry, real end-to-end verification, and no runtime
+dependency on the legacy reference application. The Business Assistant must not
+receive source-code, shell, Git, deployment, infrastructure, secret-reading,
+unrestricted-database, or coding-worker execution tools. This exception does not
+authorise production data access, live messaging, customer contact, booking or
+payment actions, deployment, or any external action without the separate
+approval and safeguards required elsewhere in this brief and `AGENTS.md`.
 
 ---
 

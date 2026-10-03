@@ -248,7 +248,7 @@ In `app/api/routers/providers.py`, where string prefixes like `"prov-1"` are sup
   ?? docs/numeric_id_bounds_rectification_2026-08-29.md
   ?? docs/remediation_and_verification_2026-08-28.md
   ?? docs/runtime_smoke_audit_2026-08-28.md
-  ?? integrations/assistant-ui-v2/
+  ?? integrations/[retired-external-integration-directory]/
   ```
 
 ---

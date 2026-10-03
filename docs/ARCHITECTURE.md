@@ -88,10 +88,11 @@ Every inbound HTTP request undergoes tenant scoping before routing:
 
 ## 3. Database Layer & Concurrency Model
 
-### 3.1 ORM & Migration Strategy
+### 3.1 ORM, Migration Strategy & Dialect Handling
 - **Engine**: SQLAlchemy 2.0 ORM with asynchronous capabilities (`async_database_url` via `asyncpg` / `aiosqlite`).
-- **Migrations**: Alembic manages 100% of database schema changes (`alembic/versions/`). Runtime table creation (`create_all`) is strictly disabled in production.
-- **Dialect Handling**: Works seamlessly with SQLite 3.38+ for developer testing and PostgreSQL 15+ for production Cloud Run deployments.
+- **Migrations & Schema Evolution**: Alembic manages incremental migrations ([alembic/versions/](file:///f:/Projects/fastapi_bookings/alembic/versions/)). When bootstrapping an empty database, [alembic/env.py](file:///f:/Projects/fastapi_bookings/alembic/env.py) provisions tables via `target_metadata.create_all()` and stamps the database at current `head`. Note that legacy pre-Alembic tables (53 tables) and certain newer models (`curated_memories`, `tenant_websites`, `client_disputes`) lack discrete `create_table` revision files, relying on bootstrap stamping or runtime initialization helpers (`init_website_tables()`, `init_dispute_tables()`).
+- **Dialect Handling**: Supports PostgreSQL 15+ for production environments (enforcing row-level pessimistic locking `FOR UPDATE SKIP LOCKED` and native pgvector types) and SQLite 3.38+ for developer testing (where `FOR UPDATE` is ignored and pgvector distance is simulated in Python). Production environments explicitly forbid SQLite (`ValueError` raised in [app/core/config.py](file:///f:/Projects/fastapi_bookings/app/core/config.py)).
+- **Vector Storage & pgvector**: The `curated_memories` table features a 1536-dimensional vector column (`embedding vector(1536)` via `pgvector.sqlalchemy.Vector`). Native pgvector cosine distance queries (`<=>`) are implemented in [app/engine/prompt_assembler.py](file:///f:/Projects/fastapi_bookings/app/engine/prompt_assembler.py), while the active runtime SMS pipeline retrieves knowledge via Graphiti/Neo4j with safe fallback to token-based keyword ranking or in-memory Python cosine similarity. No IVFFlat or HNSW vector indexes are defined in models or migrations; queries perform sequential table scans.
 
 ### 3.2 Integer Bounds & Identifier Safety
 To prevent integer overflow vulnerabilities across 32-bit and 64-bit boundaries, database IDs are constrained in [app/api/deps.py](file:///F:/Projects/fastapi_bookings/app/api/deps.py):
@@ -172,12 +173,23 @@ sequenceDiagram
 
 ---
 
-## 5. Chatwoot Omnichannel Synchronization
+## 5. Chatwoot Omnichannel Synchronization & Messaging
 
-FastAPI Bookings maintains a bi-directional synchronization bridge with Chatwoot ([app/services/sms/chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py)):
-- **SmsChatwootBinding**: Links an internal `SmsConversation` to a Chatwoot `conversation_id`, `contact_id`, and `inbox_id`.
-- **Inbound Mirroring**: When an SMS is received, it is immediately posted to Chatwoot as an incoming message via Chatwoot's API.
-- **Outbound Agent Sync**: When a human agent types a reply in Chatwoot, Chatwoot triggers a webhook (`app/api/routers/chatwoot_agentbot.py`), which converts the staff message into a transactional `SmsOutboundJob`.
+FastAPI Bookings maintains a dual-webhook integration architecture with Chatwoot:
+
+### 5.1 Canonical Mirror Webhook (`/api/sms/chatwoot/webhook`)
+Handled by [app/services/sms/chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py):
+- **SmsChatwootBinding**: Links an internal `SmsConversation` to a Chatwoot `conversation_id`, `contact_id`, and `inbox_id`. Supports 3-tier binding granularity (Tenant default, Provider-dedicated, Location-dedicated).
+- **Inbound Mirroring**: When an SMS is received via ClickSend, `send_chatwoot_message` posts it to Chatwoot as an incoming message via Chatwoot's REST API.
+- **Outbound Staff Takeover**: When a human agent types a reply in Chatwoot, Chatwoot posts an outgoing message event to `/api/sms/chatwoot/webhook`. The service inserts an outbound `SmsMessage(author_type="staff")`, flips `conversation.state = "taken-over"`, cancels pending `SmsAiJob`s, and logs an `SmsConversationEvent(type="takeover")`.
+- **Self-Echo Deduplication**: AI replies dispatched from FastAPI carry a `client_request_id` (matched via Chatwoot `source_id`). When Chatwoot echoes the outgoing webhook, the system acknowledges it without false-positive takeover.
+
+### 5.2 AgentBot Webhook & Human Handoff (`/api/v1/chatwoot/webhook`)
+Handled by [app/api/routers/chatwoot_agentbot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_agentbot.py) and [app/services/messaging/chatwoot_handoff.py](file:///F:/Projects/fastapi_bookings/app/services/messaging/chatwoot_handoff.py):
+- **De-confliction**: Automatically ignores events belonging to inboxes managed by active `SmsChatwootBinding`s to prevent duplicate replies.
+- **Human Handoff**: Regex triggers (`requires_human_handoff`) transfer conversations to human agents (`PATCH /api/v1/accounts/{id}/conversations/{id}` with `status="open"` and private note).
+- **Automated Dialogue Engine**: Routes customer turns to LangGraph dialogue engine (`app/engine/dialogue_graph.py`).
+- **Memory Curation Hook**: On `conversation_resolved`, enqueues background memory curation tasks (`curate_conversation_background`).
 
 ---
 
@@ -203,11 +215,11 @@ flowchart LR
     subgraph PrivacyFilter["Privacy & Allowlist Enforcement"]
         AllowlistKeys["Allowlist Attribute Keys (SAFE_ATTRIBUTE_KEYS)"]
         BoundedEnums["Bounded Low-Cardinality Enums (HTTP, SMS, AI)"]
-        RedactRegex["Regex Redaction (Credit Cards, Phones, Emails, Auth)"]
+        RedactRegex["PrivacySafeLogFilter (Tokens, Passwords, Queries, Emails)"]
     end
     
     ExporterWrapper --> PrivacyFilter
-    PrivacyFilter --> OTLPExporter["OTLP HTTP Exporter (/v1/traces, /v1/logs)"]
+    PrivacyFilter --> OTLPExporter["OTLP HTTP Exporter (/v1/traces, /v1/logs, /v1/metrics)"]
     OTLPExporter --> SigNozCollector["SigNoz Collector (:4318)"]
 ```
 
@@ -216,14 +228,17 @@ Raw spans are scrubbed by `_FilteringSpanExporter`:
 - Only keys in `SAFE_ATTRIBUTE_KEYS` (e.g. `http.method`, `http.route`, `http.status_code`, `service.name`, `db.system`) are forwarded.
 - Query parameters, phone numbers, customer names, SMS message text, and tokens are completely stripped.
 
-### 7.2 Log Privacy Redaction
-General logs exported to SigNoz pass through `PrivacyRedactingFilter`:
-- Credit card numbers (Visa, Mastercard, Amex via Luhn regex).
-- Phone numbers (Australian E.164, mobile, landline formats).
-- Email addresses.
-- Bearer tokens, passwords, and API keys.
+### 7.2 Log Privacy Redaction (`PrivacySafeLogFilter`)
+General operational logs exported to SigNoz pass through `PrivacySafeLogFilter`:
+- Bearer tokens, JWTs, and authorization headers (`Bearer [REDACTED]`).
+- Passwords, API keys, cookies, secrets, and webhook signatures (`key=[REDACTED]`).
+- URL query strings in HTTP access lines (`GET /path?[REDACTED]`) and generic URLs.
+- Email addresses (`[REDACTED_EMAIL]`) and customer PII.
 
----
+### 7.3 Logger Topology & Handler Lifecycle
+- Operational `LoggingHandler` attached to root logger and non-propagating framework loggers (`uvicorn`, `uvicorn.access`, `uvicorn.error`, `fastapi`).
+- Dedicated structured telemetry handler attached to `fastapi_bookings.telemetry` (`propagate=False`).
+- Idempotent lifecycle tracking via `_telemetry_owned_handlers` on startup and shutdown.
 
 ## 8. Role-Based Access Control (RBAC) & Security Boundaries
 
@@ -342,9 +357,13 @@ Developers use `tenant.localhost:8000` and `tenant.localhost:7070` without DNS o
 
 ---
 
-### 11.4 Mapbox Token Server-Side Isolation
+### 11.4 Mapbox Token Server-Side Isolation & Geospatial Services
 
-`MAPBOX_ACCESS_TOKEN` is used only in [`app/services/geocoding.py`](file:///F:/Projects/fastapi_bookings/app/services/geocoding.py) background tasks. It is never returned in API responses, never in frontend env config, and never logged or traced.
+The server-side secret `MAPBOX_ACCESS_TOKEN` is used strictly within backend services:
+- [`app/services/geocoding.py`](file:///F:/Projects/fastapi_bookings/app/services/geocoding.py): Background task geocoding tenant business addresses to `Tenant.latitude`/`Tenant.longitude`.
+- [`app/services/routing/geocoding.py`](file:///F:/Projects/fastapi_bookings/app/services/routing/geocoding.py): Multi-tier forward geocoding and address search (`search_addresses_mapbox`) fallback when query cannot be resolved via the local Australian postcodes database (`au_postcodes.db`).
+
+The server secret `MAPBOX_ACCESS_TOKEN` is never returned in API responses, never logged, and never exposed to the production frontend (`frontend/`). The separate prototype client (`mapbox/`) uses its own public Mapbox token (`pk.*`) for client-side raster/vector tile rendering on interactive maps.
 
 ---
 

@@ -143,7 +143,7 @@ Per repository change control rules, the worktree was inspected for unrelated or
 2. **`mapbox/package-lock.json` (Untracked File):**
    - *Provenance:* Auto-generated npm lockfile in the mapbox visualization directory.
    - *Action:* Preserved and left untracked.
-3. **`integrations/assistant-ui-v2/` (Untracked Directory):**
+3. **Retired external integration directory (Untracked Directory):**
    - *Provenance:* Legacy material explicitly protected by repository rules.
    - *Action:* Completely untouched, unindexed, and unstaged.
 

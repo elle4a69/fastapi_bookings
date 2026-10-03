@@ -5,7 +5,7 @@
 **Branch:** `telemetry/observability-baseline`
 **Base Head:** `0af43f02aef0bd4a39019905ecde0a5e44a5f895`
 **New Head:** `0c3ab03e9ea7da947ef3671ec44e0541786ba1c3`
-**Operating Rules:** Strictly followed AGENTS.md (`integrations/assistant-ui-v2/` untouched, 0 secrets printed, 0 mock records leaked).
+**Operating Rules:** Strictly followed AGENTS.md (the retired external integration directory untouched, 0 secrets printed, 0 mock records leaked).
 
 ---
 
@@ -93,7 +93,7 @@ Three independent, logical commits were staged and committed:
   ?? docs/full_application_verification_2026-08-28.md
   ?? docs/remediation_and_verification_2026-08-28.md
   ?? docs/runtime_smoke_audit_2026-08-28.md
-  ?? integrations/assistant-ui-v2/
+  ?? integrations/[retired-external-integration-directory]/
   ```
 
 ---

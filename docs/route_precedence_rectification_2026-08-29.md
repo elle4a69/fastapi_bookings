@@ -131,7 +131,7 @@ A full AST and path-segment scan across all 275 router endpoints and application
   ?? docs/remediation_and_verification_2026-08-28.md
   ?? docs/route_precedence_rectification_2026-08-29.md
   ?? docs/runtime_smoke_audit_2026-08-28.md
-  ?? integrations/assistant-ui-v2/
+  ?? integrations/[retired-external-integration-directory]/
   ```
 
 ---

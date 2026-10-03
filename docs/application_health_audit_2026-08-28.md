@@ -4,7 +4,7 @@
 **Audit Scope**: Repository & Startup Integrity, Backend Routes & Tests, Frontend Type-Safety & API Contracts, Integrations, Performance & Reliability.
 **Branch**: `telemetry/observability-baseline`
 **HEAD Commit**: `b7e512214b3d13cf5f6a99a21ac1afcf6f43ebad`
-**Safety Directives Followed**: Zero code/config/DB changes made; no live customer/SMS/booking actions triggered; `.env` unread/unprinted; `integrations/assistant-ui-v2/` preserved untouched.
+**Safety Directives Followed**: Zero code/config/DB changes made; no live customer/SMS/booking actions triggered; `.env` unread/unprinted; the retired external integration directory preserved untouched.
 
 ---
 

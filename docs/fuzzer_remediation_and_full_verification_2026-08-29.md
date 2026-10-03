@@ -96,7 +96,7 @@ We implemented a two-layer architectural fix:
   ?? docs/fuzzer_remediation_and_full_verification_2026-08-29.md
   ?? docs/remediation_and_verification_2026-08-28.md
   ?? docs/runtime_smoke_audit_2026-08-28.md
-  ?? integrations/assistant-ui-v2/
+  ?? integrations/[retired-external-integration-directory]/
   ```
 
 ---

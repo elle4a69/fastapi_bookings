@@ -124,16 +124,19 @@ Database Engine: PostgreSQL 16 (`pgvector 0.8.4`) / SQLite Dialect Compatible
 
 ## 8. Graphiti Learned-Context Knowledge Graph & Search (Specs 26, 46, 54, 65, 85)
 
-- **Engine:** Neo4j Community / Graphiti Knowledge Graph
+- **Engine:** Neo4j Community (`neo4j:5-community` container, official driver `neo4j>=5.26.0`) / Graphiti Knowledge Graph (`graphiti-core==0.30.2`)
 - **Scope & Group Partitioning:**
   * Graph groups partitioned strictly by multi-tenant and provider boundaries:
     - Provider-specific facts: `tenant:{id}:provider:{id}`
     - Tenant-shared facts: `tenant:{id}:shared`
   * Providers in the same tenant query both `tenant:{id}:provider:{id}` and `tenant:{id}:shared`.
   * Provider B cannot retrieve private facts from Provider A's graph group.
-- **Ontology & Edge Schema:**
-  * **Entity Concepts:** `BusinessPolicy`, `ServiceOffering`, `Preference`, `BoundaryConstraint`, `ProviderGuidance`, `CommunicationStyle`
-  * **Edge Relationships:** `GOVERNS`, `OFFERS`, `PREFERS`, `RESTRICTS`, `APPLIES_TO`, `EXEMPLIFIES`, `SUPERSEDES`
+- **Ontology & Edge Schema (`app/services/knowledge/projection_service.py`):**
+  * **Entity Concepts (`EntityConcept`):** `Provider`, `Tenant`, `Preference`, `Behaviour`, `Policy`, `Boundary`, `Example`
+  * **Edge Relationships (`EdgeType`):** `PREFERS`, `AVOIDS`, `APPLIES_WHEN`, `HAS_BOUNDARY`, `SUPERSEDES`, `SUPPORTED_BY`
+  * **Operational Caveat:** `ProjectionService.project_to_graphiti()` currently does not pass `entity_types=ONTOLOGY_ENTITY_TYPES` to `Graphiti.add_episode()`, so Graphiti's default entity extraction schema is used until custom schema binding is wired.
+- **Neo4j Constraints & Schema Indexes:**
+  * Graphiti specifies `build_indices_and_constraints()` for full-text and vector indexing; this must be explicitly executed on graph database initialization.
 - **Retrieval Architecture:**
   * Multi-channel bounded retrieval:
     - Channel 1 (Facts): Durable facts, business policy, preferences (bounded to $\le 5$ items).
