@@ -122,12 +122,12 @@ before starting unrelated remediation.
   known limitations. Do not report success based only on imports or static
   checks when runtime behavior is in scope.
 
-### Mandatory Automated Local Commit on Verified Task Completion
+### Mandatory Automated Local Commit & Push on Verified Task Completion
 To ensure verified work is never stranded, forgotten, or lost in an uncommitted state:
 - Once all verification tests pass, living documentation is verified via `python scripts/verify_living_docs.py`, and the QA audit sign-off is complete, the agent MUST automatically stage only the explicitly assigned task allowlist paths.
 - The agent MUST automatically execute a clean, descriptive local git commit.
-- The agent MUST report the resulting commit hash in its final delivery summary.
-- Pushing to remote GitHub remains strictly user-triggered (never push autonomously).
+- The agent MUST automatically push the commit to the current approved tracking branch on GitHub (`git push`).
+- The agent MUST report the resulting commit hash and push confirmation in its final delivery summary.
 
 ## 7. Verification requirements
 
