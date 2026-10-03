@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -505,3 +506,39 @@ def process_repeated_arrival_alerts(
         db.commit()
         logger.info("arrival_alerts_enqueued count=%s", created)
     return created
+
+
+async def start_arrival_alert_worker_loop(
+    interval_seconds: float = 60.0,
+    stop_event: Optional[asyncio.Event] = None,
+) -> None:
+    """Continuous async runner for arrival alert repeated chime worker with graceful shutdown."""
+    if stop_event is None:
+        stop_event = asyncio.Event()
+
+    logger.info("Arrival alert chime worker started (interval=%.1fs)", interval_seconds)
+
+    while not stop_event.is_set():
+        try:
+            from ...db.database import SessionLocal
+
+            def _run_once() -> int:
+                db = SessionLocal()
+                try:
+                    return process_repeated_arrival_alerts(db)
+                finally:
+                    db.close()
+
+            count = await asyncio.to_thread(_run_once)
+            if count > 0:
+                logger.info("Processed %d repeated arrival alerts", count)
+        except Exception as exc:
+            logger.error("Error during arrival alert worker execution: %s", exc, exc_info=True)
+
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+        except asyncio.TimeoutError:
+            pass
+
+    logger.info("Arrival alert chime worker stopped gracefully")
+

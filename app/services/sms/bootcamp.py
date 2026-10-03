@@ -430,14 +430,20 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def normalize_style_profile(profile: Optional[Dict[str, Any]]) -> Dict[str, int]:
-    source = profile or {}
+def normalize_style_profile(profile: Optional[Union[Dict[str, Any], Any]]) -> Dict[str, int]:
+    source = profile.model_dump() if hasattr(profile, "model_dump") else (profile or {})
     normalized: Dict[str, int] = {}
     for key in TRAIT_KEYS:
+        default_val = DEFAULT_STYLE_PROFILE[key]
+        if key == "chattiness" and "chattiness" not in source and "brevity" in source:
+            try:
+                default_val = max(0, min(5, 5 - int(source["brevity"])))
+            except (TypeError, ValueError):
+                default_val = DEFAULT_STYLE_PROFILE[key]
         try:
-            value = int(source.get(key, DEFAULT_STYLE_PROFILE[key]))
+            value = int(source.get(key, default_val))
         except (TypeError, ValueError):
-            value = DEFAULT_STYLE_PROFILE[key]
+            value = default_val
         normalized[key] = max(0, min(5, value))
     return normalized
 

@@ -120,6 +120,30 @@ STYLE_TRAIT_DESCRIPTIONS: Dict[str, Dict[int, str]] = {
         4: "Exceptional patience; reassuring with questions.",
         5: "Infinite patience; never rushes or displays frustration.",
     },
+    "flirtiness": {
+        0: "Keep the tone entirely non-flirtatious.",
+        1: "Use only the faintest playfulness when invited.",
+        2: "Use occasional light flirtation when the customer leads there.",
+        3: "Be comfortably flirtatious when context invites it.",
+        4: "Be playfully and clearly flirtatious while respecting boundaries.",
+        5: "Be confidently flirtatious when invited, without becoming pushy or explicit by default.",
+    },
+    "cheerfulness": {
+        0: "Keep cheerfulness restrained and calm.",
+        1: "Sound mildly positive.",
+        2: "Sound pleasantly upbeat.",
+        3: "Sound cheerful and engaged.",
+        4: "Use bright, energetic warmth.",
+        5: "Be highly cheerful without sounding artificial.",
+    },
+    "chattiness": {
+        0: "Use the shortest complete reply possible.",
+        1: "Usually use one short sentence.",
+        2: "Use one or two concise sentences.",
+        3: "Allow a little conversational expansion.",
+        4: "Be chatty when the customer wants conversation.",
+        5: "Be highly conversational without rambling.",
+    },
     "brevity": {
         0: "Comprehensive and descriptive.",
         1: "Balanced detail with complete sentences.",
@@ -136,6 +160,22 @@ FRUSTRATION_KEYWORDS: Tuple[str, ...] = (
     "ridiculous", "complaint", "speak to a human", "real person",
     "manager", "supervisor", "lawyer", "refund now",
 )
+
+
+class StyleProfile(BaseModel):
+    """Calibrated behavioral traits (0-5 scale) for Style Lab."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    warmth: int = Field(4, ge=0, le=5)
+    directness: int = Field(3, ge=0, le=5)
+    wit: int = Field(2, ge=0, le=5)
+    sarcasm: int = Field(0, ge=0, le=5)
+    patience: int = Field(4, ge=0, le=5)
+    flirtiness: int = Field(2, ge=0, le=5)
+    cheerfulness: int = Field(3, ge=0, le=5)
+    chattiness: int = Field(1, ge=0, le=5)
+    brevity: Optional[int] = Field(None, ge=0, le=5)
 
 
 class MessageStyleExample(BaseModel):
@@ -181,7 +221,7 @@ class PromptPolicyAssembler:
         context: RuntimeContext,
         tenant_policy: Optional[str] = None,
         provider_overlay: Optional[str] = None,
-        style_profile: Optional[Dict[str, Any]] = None,
+        style_profile: Optional[Union[Dict[str, Any], StyleProfile]] = None,
         curated_memories: Optional[List[Any]] = None,
         style_examples: Optional[List[Union[MessageStyleExample, Any]]] = None,
         conversation_state: Optional[Dict[str, Any]] = None,
@@ -189,7 +229,7 @@ class PromptPolicyAssembler:
         db: Optional[Session] = None,
         training_notes: Optional[str] = None,
         learned_facts: Optional[Union[str, List[Any]]] = None,
-        style_prior: Optional[Dict[str, Any]] = None,
+        style_prior: Optional[Union[Dict[str, Any], StyleProfile]] = None,
     ) -> AssembledPrompt:
         """Assemble the complete prompt following the 10-tier precedence hierarchy."""
         unresolved_vars: List[str] = []
@@ -285,13 +325,24 @@ class PromptPolicyAssembler:
         # -------------------------------------------------------------------
         # Tier 6: Style Lab Profile
         # -------------------------------------------------------------------
-        effective_style = dict(style_profile or style_prior or {})
+        style_src = (
+            style_profile.model_dump()
+            if hasattr(style_profile, "model_dump")
+            else (style_profile or {})
+        )
+        prior_src = (
+            style_prior.model_dump()
+            if hasattr(style_prior, "model_dump")
+            else (style_prior or {})
+        )
+        effective_style = dict(style_src or prior_src or {})
         frustration_detected = self.detect_frustration(context)
         if frustration_detected:
             context.set_flag("frustration_detected", True)
             context.set_flag("situational_modulation_active", True)
-            # Situational modulation: suppress sarcasm, enforce high patience
+            # Situational modulation: suppress sarcasm and flirtiness, enforce high patience
             effective_style["sarcasm"] = 0
+            effective_style["flirtiness"] = 0
             effective_style["patience"] = max(effective_style.get("patience", 3), 4)
             effective_style["warmth"] = max(effective_style.get("warmth", 3), 3)
 
@@ -463,7 +514,7 @@ def assemble_assistant_prompt(
     context: RuntimeContext,
     tenant_policy: Optional[str] = None,
     provider_overlay: Optional[str] = None,
-    style_profile: Optional[Dict[str, Any]] = None,
+    style_profile: Optional[Union[Dict[str, Any], StyleProfile]] = None,
     curated_memories: Optional[List[Any]] = None,
     style_examples: Optional[List[Union[MessageStyleExample, Any]]] = None,
     conversation_state: Optional[Dict[str, Any]] = None,
@@ -472,7 +523,7 @@ def assemble_assistant_prompt(
     variable_registry: Optional[VariableRegistry] = None,
     training_notes: Optional[str] = None,
     learned_facts: Optional[Union[str, List[Any]]] = None,
-    style_prior: Optional[Dict[str, Any]] = None,
+    style_prior: Optional[Union[Dict[str, Any], StyleProfile]] = None,
 ) -> AssembledPrompt:
     """Convenience functional interface for assembling the 10-tier prompt."""
     assembler = PromptPolicyAssembler(variable_registry=variable_registry)

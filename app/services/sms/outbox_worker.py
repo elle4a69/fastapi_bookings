@@ -126,7 +126,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
                 except Exception as ex:
                     db.rollback()
                     job.retry_count += 1
-                    job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                    job.error_log = f"{type(ex).__name__}: {str(ex)[:200]}"
                     job.lease_token = None
                     if job.retry_count >= 5:
                         job.status = "FAILED"
@@ -207,7 +207,7 @@ async def process_pending_sms_outbound_jobs(db: Session = None) -> None:
             except Exception as ex:
                 db.rollback()
                 job.retry_count += 1
-                job.error_log = f"{str(ex)}\n{traceback.format_exc()}"
+                job.error_log = f"{type(ex).__name__}: {str(ex)[:200]}"
                 job.lease_token = None
                 
                 if job.retry_count >= 5:

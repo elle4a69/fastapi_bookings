@@ -95,6 +95,14 @@ STYLE_TRAIT_SCALES: Dict[str, List[str]] = {
         "Be patient and reassuring.",
         "Be exceptionally patient without rewarding pressure or manipulation.",
     ],
+    "brevity": [
+        "Comprehensive and descriptive.",
+        "Balanced detail with complete sentences.",
+        "Moderately concise (2-3 sentences).",
+        "Concise and to the point (1-2 sentences).",
+        "Ultra-brief (1 sentence or phrase).",
+        "Telegraphic and minimal.",
+    ],
 }
 
 FRUSTRATION_KEYWORDS: Tuple[str, ...] = (
@@ -129,20 +137,28 @@ FORMAL_PHRASES: Tuple[str, ...] = (
 )
 
 
-def format_style_profile(profile_dict: Optional[Dict[str, Any]]) -> str:
+def format_style_profile(profile_dict: Optional[Union[Dict[str, Any], Any]]) -> str:
     """Format the 8 Style Lab traits (0-5 scale) as behavioral priors."""
-    values = normalize_style_profile(profile_dict)
+    src = profile_dict.model_dump() if hasattr(profile_dict, "model_dump") else (profile_dict or {})
+    values = normalize_style_profile(src)
     lines = ["Provider Behaviour Profile & Style Lab:"]
     for key in TRAIT_KEYS:
         desc = STYLE_TRAIT_SCALES[key][values[key]]
         lines.append(f"- {key.title()} {values[key]}/5: {desc}")
+    if isinstance(src, dict) and "brevity" in src and src["brevity"] is not None:
+        try:
+            b_val = max(0, min(5, int(src["brevity"])))
+            desc = STYLE_TRAIT_SCALES["brevity"][b_val]
+            lines.append(f"- Brevity {b_val}/5: {desc}")
+        except (TypeError, ValueError):
+            pass
     return "\n".join(lines)
 
 
 def detect_situational_modulation(
     customer_text: str,
     prior_turns: Optional[List[Any]] = None,
-    base_profile: Optional[Dict[str, int]] = None,
+    base_profile: Optional[Union[Dict[str, int], Any]] = None,
 ) -> Dict[str, Any]:
     """Detects frustration, billing confusion, or urgent complaints to dynamically modulate traits.
 
@@ -228,7 +244,7 @@ def detect_situational_modulation(
 def detect_earned_escalation(
     customer_text: str,
     is_new_customer: bool = True,
-    base_profile: Optional[Dict[str, int]] = None,
+    base_profile: Optional[Union[Dict[str, int], Any]] = None,
 ) -> Dict[str, Any]:
     """Detects whether stylistic banter and sarcasm have been earned through rapport.
 

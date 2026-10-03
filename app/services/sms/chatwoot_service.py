@@ -122,6 +122,23 @@ async def send_chatwoot_message(
         logger.error(f"Failed to send Chatwoot message: {e}")
         raise
 
+def generate_webhook_url(
+    base_url: str = "http://localhost:8000",
+    token: Optional[str] = None,
+) -> str:
+    """Generate public Chatwoot webhook receiver callback URL.
+
+    Secrets should not be embedded into query parameters; headers
+    (X-Chatwoot-Token, X-Chatwoot-Signature, or Authorization) are preferred.
+    If token is explicitly provided for legacy backwards-compatibility, query param is appended.
+    """
+    clean_base = (base_url or "http://localhost:8000").rstrip("/")
+    path = "/api/sms/chatwoot/webhook"
+    if token:
+        return f"{clean_base}{path}?token={token}"
+    return f"{clean_base}{path}"
+
+
 def process_chatwoot_webhook(
     db: Session,
     payload: dict,
@@ -129,6 +146,7 @@ def process_chatwoot_webhook(
     raw_body: Optional[Union[bytes, str]] = None,
     signature_header: Optional[str] = None,
     timestamp_header: Optional[Union[int, str]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> dict:
     """Intake pipeline for incoming Chatwoot webhook events."""
     # 1. Extract Chatwoot identifiers
@@ -232,6 +250,31 @@ def process_chatwoot_webhook(
         logger.warning(f"Chatwoot webhook authentication failed: no webhook_secret on binding {binding.id}")
         record_webhook_event("rejected")
         raise HTTPException(status_code=401, detail="Invalid webhook secret.")
+
+    if headers:
+        if not signature_header:
+            signature_header = (
+                headers.get("X-Chatwoot-Signature")
+                or headers.get("x-chatwoot-signature")
+            )
+        if not timestamp_header:
+            timestamp_header = (
+                headers.get("X-Chatwoot-Signature-Timestamp")
+                or headers.get("x-chatwoot-signature-timestamp")
+                or headers.get("X-Chatwoot-Timestamp")
+                or headers.get("x-chatwoot-timestamp")
+            )
+        if not token:
+            header_auth = (
+                headers.get("X-Chatwoot-Token")
+                or headers.get("x-chatwoot-token")
+                or headers.get("Authorization")
+                or headers.get("authorization")
+            )
+            if header_auth:
+                if header_auth.startswith("Bearer "):
+                    header_auth = header_auth[7:].strip()
+                token = header_auth
 
     if signature_header:
         extracted_sig: Optional[str] = None

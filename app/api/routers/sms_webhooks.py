@@ -14,7 +14,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sms/webhooks", tags=["sms-webhooks"])
 
-LEGACY_CARRIER_TRANSPORTS = {"mobilemessage", "telstra", "twilio", "sinch", "direct", "carrier"}
+LEGACY_CARRIER_TRANSPORTS = {
+    "mobilemessage",
+    "telstra",
+    "twilio",
+    "sinch",
+    "direct",
+    "carrier",
+    "clicksend",
+    "click_send",
+}
 
 @router.post("/incoming")
 async def inbound_webhook_generic(

@@ -82,6 +82,7 @@ class SmsBootcampMessage(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(16), nullable=False)  # 'persona' or 'tori'
     text = Column(Text, nullable=False)
+    status = Column(String(32), nullable=False, default="pending", server_default="pending")
     meta = Column(JSON, nullable=True, default=dict)
 
     created_at = Column(DateTime(timezone=True), default=_utc_now, nullable=False)
@@ -89,19 +90,6 @@ class SmsBootcampMessage(Base):
     # Relationships
     tenant = relationship("Tenant")
     conversation = relationship("SmsBootcampConversation", back_populates="messages")
-
-    @property
-    def status(self) -> str:
-        if hasattr(self, "_status_override"):
-            return self._status_override
-        return (self.meta or {}).get("status", "sent" if self.role == "tori" else "received")
-
-    @status.setter
-    def status(self, val: str) -> None:
-        self._status_override = val
-        new_meta = dict(self.meta or {})
-        new_meta["status"] = val
-        self.meta = new_meta
 
     def __repr__(self) -> str:
         return f"<SmsBootcampMessage id={self.id} role={self.role} conv={self.conversation_id}>"
