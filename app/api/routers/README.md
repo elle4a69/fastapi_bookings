@@ -34,11 +34,10 @@ graph TD
     RouterGroup -->|"/api/client-portal/*"| PortalRouter["client_portal.py"]
     RouterGroup -->|"/api/sms/*"| SMSRouters["sms_accounts.py, sms_conversations.py, sms_webhooks.py, sms_chatwoot.py"]
     RouterGroup -->|"/api/resident-agent/*"| AgentRouter["resident_agent.py"]
-    RouterGroup -->|"/webhooks/chatwoot"| ChatwootWebhookRouter["chatwoot_webhook.py"]
     RouterGroup -->|"/api/webhooks/*"| WebhookRouters["stripe_webhooks.py"]
     RouterGroup -->|"/api/v1/chatwoot/*"| ChatwootAgentBotRouter["chatwoot_agentbot.py"]
 
-    AuthRouter & PublicRouters & AdminRouters & PortalRouter & SMSRouters & AgentRouter & ChatwootAgentBotRouter & ChatwootWebhookRouter --> Deps["app/api/deps.py (Auth, Tenant, RBAC, DB)"]
+    AuthRouter & PublicRouters & AdminRouters & PortalRouter & SMSRouters & AgentRouter & ChatwootAgentBotRouter --> Deps["app/api/deps.py (Auth, Tenant, RBAC, DB)"]
     Deps --> DB[(Database Session)]
 ```
 
@@ -53,7 +52,6 @@ graph TD
 - [sms_chatwoot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_chatwoot.py): Canonical Chatwoot mirror webhook intake, provider-scoped `SmsChatwootBinding` CRUD, token/secret masking, 1-to-1 Tenant mapping enforcement, and admin automated provisioning trigger (`POST /provision`). Now supports full Same-Tenancy Binding Security Lockdown & Manual Override UI.
 - [tenants.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenants.py): Tenant creation and retrieval router with automated Chatwoot multi-tenant provisioning lifecycle hook (`CHATWOOT_AUTO_PROVISION`).
 - [chatwoot_agentbot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_agentbot.py): Chatwoot AgentBot webhook integration with automated de-confliction ignoring mirror-bound inboxes to prevent duplicate replies.
-- [chatwoot_webhook.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_webhook.py): Handles standard Chatwoot webhooks (`/webhooks/chatwoot`) checking HMAC signatures, filtering valid `message_created` events, preventing agent duplication on assigned/resolved conversations, and dispatching tasks to `run_agent_turn`.
 - [resident_agent.py](file:///F:/Projects/fastapi_bookings/app/api/routers/resident_agent.py): Operational health checks, deep audit trigger, and fuzzer controls.
 - [assistant_studio.py](file:///F:/Projects/fastapi_bookings/app/api/routers/assistant_studio.py): Assistant Studio administration endpoints: 10-tier policy management (`Tenant.assistant_policy`), procedural style example CRUD, curator proposal management, simulation sandbox, cryptographic dataset importer, and evaluation suite with uniform `validate_tenant_provider` cross-tenant scoping and platform seed read-only lockdown.
 - [translations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/translations.py): Tenant dynamic wording and localization router: public portal endpoint (`GET /api/public/translations`), admin translation management (`GET /api/admin/translations`), and industry preset application (`PUT /api/admin/translations`).

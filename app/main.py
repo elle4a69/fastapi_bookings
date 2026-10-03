@@ -99,7 +99,6 @@ from .api.routers import (
     packages,
     # New routers from merge
     admin_schedule,
-    chatwoot_webhook,
     additional_fields,
     checkout,
     public_clients,
@@ -460,7 +459,6 @@ app.include_router(service_relations.router, prefix="/api/admin")
 
 # FastBook merge
 app.include_router(webhooks.router)
-app.include_router(chatwoot_webhook.router)
 app.include_router(calendar_notes.router)
 app.include_router(general_systems.router)
 app.include_router(general_systems.public_router)

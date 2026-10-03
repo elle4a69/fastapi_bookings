@@ -50,5 +50,4 @@ These require the `httpx` module for making API calls.
 python -m pytest tests/test_chatwoot_provisioner.py -v
 python -m pytest tests/test_contact_sync.py -v
 python -m pytest tests/test_agent_runner.py -v
-python -m pytest tests/test_chatwoot_webhook.py -v
 ```
