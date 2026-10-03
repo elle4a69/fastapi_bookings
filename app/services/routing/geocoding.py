@@ -9,12 +9,14 @@ with:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
 from pathlib import Path
 import re
 import sqlite3
+import time
 from typing import Any, Optional, Tuple
 from urllib.parse import quote
 
@@ -58,6 +60,120 @@ def register_test_location(name_or_address: str, coords: tuple[float, float]) ->
 def clear_test_locations() -> None:
     """Clear test location registry."""
     _RUNTIME_REGISTRY.clear()
+
+
+# ---------------------------------------------------------------------------
+# In-memory TTL Caching & Rate Limiting for Mapbox Geocoding
+# ---------------------------------------------------------------------------
+
+
+class GeocodingTTLCache:
+    """Thread-safe in-memory TTL cache for geocoding queries.
+
+    Keyed by normalized query string with configurable time-to-live
+    (default: 3600 seconds / 1 hour) and maximum entry capacity to
+    prevent duplicate outbound network calls and memory growth.
+    """
+
+    def __init__(self, ttl_seconds: float = 3600.0, max_entries: int = 1000) -> None:
+        self.ttl_seconds = ttl_seconds
+        self.max_entries = max_entries
+        self._entries: dict[str, tuple[float, Any]] = {}
+
+    def get(self, key: str) -> Optional[Any]:
+        """Retrieve a cached entry if not expired."""
+        norm = key.strip().lower()
+        entry = self._entries.get(norm)
+        if entry is None:
+            return None
+        timestamp, value = entry
+        if (time.time() - timestamp) > self.ttl_seconds:
+            self._entries.pop(norm, None)
+            return None
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        """Store an entry in the cache with the current timestamp."""
+        norm = key.strip().lower()
+        if len(self._entries) >= self.max_entries:
+            self._evict_expired_or_oldest()
+        self._entries[norm] = (time.time(), value)
+
+    def _evict_expired_or_oldest(self) -> None:
+        now = time.time()
+        expired = [k for k, (ts, _) in self._entries.items() if (now - ts) > self.ttl_seconds]
+        for k in expired:
+            self._entries.pop(k, None)
+        if len(self._entries) >= self.max_entries:
+            oldest_k = next(iter(self._entries))
+            self._entries.pop(oldest_k, None)
+
+    def clear(self) -> None:
+        """Clear all entries from the cache."""
+        self._entries.clear()
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __contains__(self, key: str) -> bool:
+        return self.get(key) is not None
+
+
+class AsyncRateLimiter:
+    """Token-bucket rate limiter to throttle outbound network calls and avoid 429 errors.
+
+    Replenishes tokens at a fixed rate per second up to `max_tokens`. If tokens are
+    exhausted, callers await the needed fractional delay.
+    """
+
+    def __init__(self, rate: float = 10.0, max_tokens: float = 10.0) -> None:
+        """
+        Args:
+            rate: Replenishment rate in tokens per second (default: 10 req/s).
+            max_tokens: Maximum burst capacity of the token bucket.
+        """
+        self.rate = rate
+        self.max_tokens = max_tokens
+        self.tokens = max_tokens
+        self.last_update = time.monotonic()
+        self._lock: Optional[asyncio.Lock] = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def acquire(self) -> None:
+        """Acquire a token, asynchronously awaiting delay if bucket is empty."""
+        async with self.lock:
+            now = time.monotonic()
+            elapsed = now - self.last_update
+            self.last_update = now
+            self.tokens = min(self.max_tokens, self.tokens + (elapsed * self.rate))
+
+            if self.tokens < 1.0:
+                needed = 1.0 - self.tokens
+                delay = needed / self.rate
+                await asyncio.sleep(delay)
+                self.last_update = time.monotonic()
+                self.tokens = 0.0
+            else:
+                self.tokens -= 1.0
+
+
+_GEOCODING_CACHE = GeocodingTTLCache(ttl_seconds=3600.0)
+_RATE_LIMITER = AsyncRateLimiter(rate=10.0, max_tokens=10.0)
+
+
+def get_geocoding_cache() -> GeocodingTTLCache:
+    """Return the global geocoding TTL cache."""
+    return _GEOCODING_CACHE
+
+
+def clear_geocoding_cache() -> None:
+    """Clear all entries in the global geocoding TTL cache."""
+    _GEOCODING_CACHE.clear()
 
 
 def lookup_au_postcode(
@@ -396,7 +512,14 @@ class GeocodingService:
         return _deterministic_fallback_coords(combined or "suburb")
 
     async def _query_mapbox(self, query: str, token: str) -> Optional[tuple[float, float]]:
-        """Call Mapbox places API with timeout safety."""
+        """Call Mapbox places API with timeout safety, in-memory TTL caching, and rate limiting."""
+        norm_key = f"coord:{query.strip().lower()}"
+        cached = _GEOCODING_CACHE.get(norm_key)
+        if cached is not None:
+            return cached
+
+        await _RATE_LIMITER.acquire()
+
         encoded = quote(query, safe="")
         url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json?access_token={token}&limit=1"
         try:
@@ -407,7 +530,11 @@ class GeocodingService:
                 features = data.get("features", [])
                 if features and "center" in features[0]:
                     center = features[0]["center"]
-                    return float(center[1]), float(center[0])
+                    coords = (float(center[1]), float(center[0]))
+                    _GEOCODING_CACHE.set(norm_key, coords)
+                    return coords
+            elif resp.status_code == 429:
+                logger.warning("Mapbox rate limit (429) encountered for geocoding query '%s'", query)
         except Exception as exc:
             logger.warning("Mapbox geocoding query failed for '%s': %s", query, exc)
         return None
@@ -424,7 +551,14 @@ async def search_addresses_mapbox(
     client: httpx.AsyncClient,
     limit: int = 10,
 ) -> list[dict[str, Any]]:
-    """Query Mapbox Geocoding Places API for Australian addresses."""
+    """Query Mapbox Geocoding Places API for Australian addresses with TTL caching and rate limiting."""
+    norm_key = f"address:{query.strip().lower()}:{limit}"
+    cached = _GEOCODING_CACHE.get(norm_key)
+    if cached is not None:
+        return list(cached)
+
+    await _RATE_LIMITER.acquire()
+
     encoded = quote(query, safe="")
     url = (
         f"https://api.mapbox.com/geocoding/v5/mapbox.places/{encoded}.json"
@@ -477,6 +611,9 @@ async def search_addresses_mapbox(
                     "source": "mapbox",
                     "is_verified": True,
                 })
+            _GEOCODING_CACHE.set(norm_key, results)
+        elif resp.status_code == 429:
+            logger.warning("Mapbox rate limit (429) encountered for address search '%s'", query)
     except Exception as exc:
         logger.warning("Mapbox address search failed for '%s': %s", query, exc)
     return results

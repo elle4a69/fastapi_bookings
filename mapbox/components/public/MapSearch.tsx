@@ -3,7 +3,8 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
 // Mapbox public token
-mapboxgl.accessToken = 'pk.eyJ1IjoiY2ljY2lvNjQiLCJhIjoiY21yazBxZ21qMDltZDM0b2F1d2xsdDZrbCJ9.WZv80bAtOFDNzXxUZ3RXfw';
+const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
+mapboxgl.accessToken = token;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,74 +114,7 @@ const MAPBOX_STYLES = [
   { name: 'Outdoors', url: 'mapbox://styles/mapbox/outdoors-v12', icon: '🌲' },
 ];
 
-const MOCK_COMPANION_PINS: TenantPin[] = [
-  {
-    tenant_id: 1,
-    business_name: 'Bella - Independent Companion',
-    slug: 'bella-companion',
-    latitude: -37.8136,
-    longitude: 144.9665,
-    address: '150 Collins St, Melbourne VIC 3000',
-    image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    status: 'available_today',
-    next_available_text: 'Available today at 2:00 PM',
-  },
-  {
-    tenant_id: 2,
-    business_name: 'Sarah - Premium Hostess',
-    slug: 'sarah-hostess',
-    latitude: -37.8250,
-    longitude: 144.9700,
-    address: '300 St Kilda Rd, Southbank VIC 3006',
-    image_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80',
-    status: 'available_later',
-    next_available_text: 'Available tomorrow at 11:00 AM',
-  },
-  {
-    tenant_id: 3,
-    business_name: 'Sophie - Elite Companion',
-    slug: 'sophie-elite',
-    latitude: -37.8000,
-    longitude: 144.9680,
-    address: '100 Lygon St, Carlton VIC 3053',
-    image_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400&auto=format&fit=crop&q=80',
-    status: 'unavailable',
-    next_available_text: 'Fully booked this week',
-  },
-  {
-    tenant_id: 4,
-    business_name: 'Gigi - Independent Companion',
-    slug: 'gigi-companion',
-    latitude: -37.8390,
-    longitude: 144.9950,
-    address: '600 Chapel St, South Yarra VIC 3141',
-    image_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80',
-    status: 'available_today',
-    next_available_text: 'Available today at 4:30 PM',
-  },
-  {
-    tenant_id: 5,
-    business_name: 'Chloe - Private Escort',
-    slug: 'chloe-private',
-    latitude: -37.8610,
-    longitude: 144.9780,
-    address: '120 Fitzroy St, St Kilda VIC 3182',
-    image_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=400&auto=format&fit=crop&q=80',
-    status: 'available_later',
-    next_available_text: 'Available Friday at 1:00 PM',
-  },
-  {
-    tenant_id: 6,
-    business_name: 'Mia - Independent Companion',
-    slug: 'mia-companion',
-    latitude: -37.8030,
-    longitude: 144.9790,
-    address: '200 Brunswick St, Fitzroy VIC 3065',
-    image_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80',
-    status: 'available_today',
-    next_available_text: 'Available today at 6:00 PM',
-  },
-];
+
 
 // ---------------------------------------------------------------------------
 // Component
@@ -200,7 +134,7 @@ const MapSearch: React.FC = () => {
   ]);
   const [serviceFilter, setServiceFilter] = useState('');
   const [inputValue, setInputValue] = useState('');
-  const [pins, setPins] = useState<TenantPin[]>(MOCK_COMPANION_PINS);
+  const [pins, setPins] = useState<TenantPin[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState('mapbox://styles/mapbox/dark-v11');
@@ -258,27 +192,21 @@ const MapSearch: React.FC = () => {
       const res = await fetch(url);
       if (res.ok) {
         const data: TenantPin[] = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setPins(data);
-          setLoading(false);
-          return;
+        } else {
+          setPins([]);
         }
+      } else {
+        setError('Failed to fetch providers matching your criteria.');
+        setPins([]);
       }
     } catch {
-      /* fallback to mock dataset */
+      setError('Unable to load providers. Please check your network connection.');
+      setPins([]);
+    } finally {
+      setLoading(false);
     }
-
-    // Apply client-side filter to mock dataset
-    let filtered = MOCK_COMPANION_PINS;
-    if (filter) {
-      const lower = filter.toLowerCase();
-      filtered = MOCK_COMPANION_PINS.filter(p =>
-        p.business_name.toLowerCase().includes(lower) ||
-        p.address?.toLowerCase().includes(lower)
-      );
-    }
-    setPins(filtered);
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchPins(serviceFilter); }, [serviceFilter, fetchPins]);
@@ -600,9 +528,19 @@ const MapSearch: React.FC = () => {
             gap: '16px',
             padding: '24px',
           }}>
-            {pins.length === 0 && !loading && (
+            {loading && (
+              <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>
+                <p style={{ fontSize: '16px', margin: 0 }}>Loading providers...</p>
+              </div>
+            )}
+            {error && !loading && (
+              <div style={{ textAlign: 'center', color: '#f87171', padding: '40px' }}>
+                <p style={{ fontSize: '16px', margin: 0 }}>{error}</p>
+              </div>
+            )}
+            {pins.length === 0 && !loading && !error && (
               <div style={{ textAlign: 'center', color: '#64748b', padding: '40px' }}>
-                <p style={{ fontSize: '16px', margin: 0 }}>No companions found matching search filter.</p>
+                <p style={{ fontSize: '16px', margin: 0 }}>No providers found matching your search criteria.</p>
               </div>
             )}
             
