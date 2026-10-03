@@ -97,24 +97,67 @@ Subdomain resolution rules (in order of priority):
 
 ---
 
-### 5.3 SigNoz Telemetry PII Isolation
+### 5.3 SigNoz OpenTelemetry Observability Pipeline & Privacy Boundaries
 
 **Location:** [`app/core/telemetry.py`](file:///f:/Projects/fastapi_bookings/app/core/telemetry.py)
 
-All OpenTelemetry spans are wrapped by `PrivacySafeSpanExporter` before being sent to SigNoz. The `SanitizedSpanProxy` enforces `SAFE_ATTRIBUTE_KEYS` — an immutable `frozenset` of permitted structural low-cardinality attribute names:
+FastAPI Bookings implements a centralized, privacy-safe OpenTelemetry pipeline delivering traces, metrics, and structured logs via OTLP HTTP to a SigNoz collector (configured via `OTEL_EXPORTER_OTLP_ENDPOINT`, default `http://localhost:4318` or `http://signoz-otel-collector:4318` in Docker).
 
-**Permitted attributes (structural only):**
-`tenant_id`, `route`, `http.method`, `http.route`, `http.status_code`, `http.scheme`, `http.target`, `db.system`, `db.operation`, `error.type`, `exception.type`, `service.name`, `service.namespace`, `deployment.environment`, `frontend.*` (structural only), `event_code`, `status`, `job_type`, `operation`, `reason`, `account_id`
+```mermaid
+flowchart TD
+    subgraph Sources["Instrumentation Sources"]
+        AppLogs["Application Code (Root Logger)"]
+        ServerLogs["Server Loggers (uvicorn, fastapi)"]
+        StructuredLogs["fastapi_bookings.telemetry"]
+        Spans["FastAPI / SQLAlchemy / HTTPX Spans"]
+        Metrics["Runtime / App Metrics"]
+    end
 
-**All other attributes are silently dropped** — including any PII fields (phone, email, customer_name, prompt, body, address, etc.) that instrumentation libraries may inadvertently capture.
+    subgraph PrivacyFilters["Privacy & Lifecycle Gateways"]
+        Redactor["PrivacySafeLogFilter (Bearer tokens, credentials, queries, PII)"]
+        SpanAllowlist["SanitizedSpanProxy (SAFE_ATTRIBUTE_KEYS allowlist)"]
+        LifecycleManager["_telemetry_owned_handlers Tracker"]
+    end
 
-**Additional value-level redaction** (`_sanitize_attribute_value`):
-- Email-like values (`@` + `.`) → `[REDACTED]`
-- Phone-like values (8–16 digits with typical phone formatting) → `[REDACTED]`
-- Bearer tokens, secrets, prompt text → `[REDACTED]`
-- URL path dynamic segments (numeric IDs, UUIDs, hex tokens) → `{id}`
+    subgraph OTLPExporters["OTLP Exporters (Protobuf / HTTP)"]
+        LogExp["OTLPLogExporter (/v1/logs)"]
+        TraceExp["OTLPSpanExporter (/v1/traces)"]
+        MetricExp["OTLPMetricExporter (/v1/metrics)"]
+    end
 
-**Log export (`PrivacySafeLogFilter`):** Applied to all OTLP log handlers. Redacts authorization headers, tokens, passwords, secrets, query parameters, email addresses, and prompt/SMS body content from all log records before SigNoz export.
+    subgraph Collector["SigNoz Observability Engine"]
+        SigNoz["SigNoz OTLP Collector (:4318)"]
+    end
+
+    AppLogs --> Redactor --> LogExp
+    ServerLogs --> Redactor --> LogExp
+    StructuredLogs --> LogExp
+    Spans --> SpanAllowlist --> TraceExp
+    Metrics --> MetricExp
+    LogExp & TraceExp & MetricExp --> SigNoz
+```
+
+#### 1. Logger Topology & Zero-Duplication Guarantee
+To eliminate duplicate log lines in SigNoz without losing framework output:
+- **Root Logger (`logging.getLogger()`):** Receives application events via normal Python logging propagation. An operational `LoggingHandler` equipped with `PrivacySafeLogFilter` is attached here.
+- **Non-Propagating Framework Loggers (`uvicorn`, `uvicorn.error`, `uvicorn.access`, `fastapi`):** Because `setup_logging()` sets `propagate = False` on these loggers, the operational OTLP handler is attached directly to each. Because propagation is disabled, events are processed once and never double-exported to root.
+- **Dedicated Structured Telemetry Logger (`fastapi_bookings.telemetry`):** Has `propagate = False` and handles structured domain events (`record_webhook_event`, `record_sms_event`, `record_ai_event`, `record_arrival_event`, `record_telemetry_log`) with strict allowlisting.
+- **Handler Lifecycle Management:** All attached handlers are tracked in `_telemetry_owned_handlers`. Repeated `init_telemetry()` and `shutdown_telemetry()` cycles safely flush, close, and detach handlers without leaking memory or leaving zombie handlers.
+
+#### 2. Strict Span Attribute Allowlisting (`SAFE_ATTRIBUTE_KEYS`)
+Raw spans are scrubbed by `_FilteringSpanExporter` / `SanitizedSpanProxy`:
+- **Allowlisted keys only:** `tenant_id`, `route`, `http.method`, `http.route`, `http.status_code`, `http.scheme`, `http.target`, `db.system`, `db.operation`, `error.type`, `exception.type`, `service.name`, `service.namespace`, `deployment.environment`, `frontend.*` (structural only), `event_code`, `status`, `job_type`, `operation`, `reason`, `account_id`.
+- **All other attributes are dropped** to strictly enforce Rule 5 of `AGENTS.md`.
+
+#### 3. Value-Level Sanitization & Privacy Redaction (`PrivacySafeLogFilter`)
+- **Bearer Tokens & Credentials:** `Bearer [REDACTED]`, `password=[REDACTED]`, `api_key=[REDACTED]`, `secret=[REDACTED]`, `cookie=[REDACTED]`, `token=[REDACTED]`.
+- **HTTP Access Queries & Generic URLs:** Strips query parameters from access lines (`GET /path?query=val` → `GET /path?[REDACTED]`) and arbitrary URLs (`https://api.domain.com/v1?token=xyz` → `https://api.domain.com/v1?[REDACTED]`).
+- **Emails & PII:** Redacts email addresses (`[REDACTED_EMAIL]`) and phone numbers (8–16 digits matching Australian or international formats).
+- **Dynamic URL Paths:** URL path dynamic segments (numeric IDs, UUIDs, hex tokens, long slugs) are normalized to `/{id}`.
+
+#### 4. Diagnostics & Sentinel Probes
+- `GET /api/admin/system/diagnostics/telemetry/status` calls `get_telemetry_status_data()` to safely report pipeline health (`telemetry_enabled`, `trace_exporter_active`, `metric_exporter_active`, `log_exporter_active`, `last_export_status`, `last_export_timestamp`) without leaking internal endpoints or tokens.
+- `TelemetrySentinel` (`app/services/resident_agent/telemetry_sentinel.py`) inspects pipeline health, SMS outbox queues, retry backlogs, and Chatwoot binding health to compute an overall health score.
 
 ---
 
@@ -122,9 +165,10 @@ All OpenTelemetry spans are wrapped by `PrivacySafeSpanExporter` before being se
 
 `MAPBOX_ACCESS_TOKEN` is:
 - Stored exclusively in server-side environment (`.env` / Docker secrets).
-- Used only in `app/services/geocoding.py` for background geocoding of tenant addresses.
-- **Never serialized** into API response bodies, frontend configs, or public endpoints.
-- The geocoding service constructs the Mapbox URL server-side; coordinates are stored in the database and returned via `tenant.latitude`/`tenant.longitude` — not the raw token.
+- Used server-side in `app/services/geocoding.py` (background geocoding of tenant addresses) and `app/services/routing/geocoding.py` (forward geocoding and address search fallback).
+- **Never serialized** into API response bodies, production frontend configs (`frontend/`), or public endpoints.
+- The geocoding services construct the Mapbox URL server-side; coordinates are returned via `tenant.latitude`/`tenant.longitude` or `AddressAutocompleteItem` — not the raw secret token.
+- (Note: The separate legacy prototype client in `mapbox/` uses its own public `pk.*` token strictly for browser-side tile rendering).
 
 ---
 
@@ -161,16 +205,27 @@ The health endpoint never crashes — each probe is wrapped in `try/except`. If 
 ---
 
 ## Known Issues, Edge Cases & Outstanding Work
-- Telemetry span attribute allowlist (`SAFE_ATTRIBUTE_KEYS`) should be reviewed when adding new instrumentation libraries to ensure no new PII leakage paths are introduced.
-- `OTEL_SDK_DISABLED=true` is enforced in all test fixtures via `conftest.py` to prevent any telemetry network calls during tests.
+
+1. **External SigNoz Collector Prerequisite**: `docker-compose.prod.yml` and `docker-compose.yml` do NOT spin up a SigNoz collector container. The collector must be running independently on port 4318 or `OTEL_SDK_DISABLED=true` must be set to avoid connection warning logs.
+2. **Local `signoz/` Folder**: A local directory `signoz/` exists at repository root containing upstream source files from prior research; it is ignored by Git and not used as a runtime dependency.
+3. **`OTEL_SDK_DISABLED=true` in Pytest**: Enforced globally in `tests/conftest.py` to guarantee zero outbound network traffic during test execution.
+4. **Third-Party Loggers**: Any newly introduced logger that sets `propagate = False` must be registered in `init_telemetry()` or its output will not reach OTLP log export.
 
 ---
 
-## Verification Commands
-```bash
-# Run Phase 5 governance, tenant resolution, and telemetry privacy tests
-.venv\Scripts\python.exe -m pytest tests/test_tenant_resolution.py tests/test_telemetry_privacy.py -v
+## Verification & Testing Commands
 
-# Run security isolation, telemetry pipeline, and redaction tests
-.venv\Scripts\python.exe -m pytest tests/test_security_isolation_remediation.py tests/test_telemetry_pipeline.py tests/test_telemetry_redaction.py tests/test_client_portal.py -v
+Execute verified test commands against telemetry, security, and governance modules:
+```powershell
+# 1. Run telemetry pipeline and lifecycle tests
+python -m pytest tests/test_telemetry_pipeline.py -v
+
+# 2. Run telemetry privacy and attribute allowlist tests
+python -m pytest tests/test_telemetry_privacy.py -v
+
+# 3. Run telemetry redaction and PII filter tests
+python -m pytest tests/test_telemetry_redaction.py -v
+
+# 4. Run Phase 5 governance, tenant resolution, and security isolation suite
+python -m pytest tests/test_tenant_resolution.py tests/test_security_isolation_remediation.py -v
 ```

@@ -8,12 +8,15 @@ This module houses the SMS/MMS conversational dialogue engine, transactional out
 
 The SMS Assistant module owns:
 - Inbound carrier webhook intake with cryptographic signature verification and idempotent receipt logging.
+- Decommissioned legacy direct carrier routes (including ClickSend / `clicksend` / `click_send`) returning `HTTP 410 GONE`.
+- Secured Chatwoot webhook ingress accepting header-first authentication (`X-Chatwoot-Token`, `Authorization`, `X-Chatwoot-Signature`) and secret-free callback URLs.
 - Customer burst turn consolidation and debounce scheduling.
 - Review-first and safety-gated AI reply generation with tenant, provider, and SMS-account prompt/context isolation.
 - A fail-closed local fallback that can use approved static knowledge but cannot create, cancel, or reschedule bookings.
 - Bi-directional synchronization with Chatwoot omnichannel inboxes.
 - Human takeover state management (`auto-reply` vs `human-takeover`).
-- Contactless self-arrival check-in chime and repeated lobby notification alerts.
+- Contactless self-arrival check-in chime and continuous background arrival alert chime worker (`start_arrival_alert_worker_loop`, polling every 60s).
+- Sanitized transactional outbox worker error logging preventing persistence of stack traces, paths, or secrets.
 
 This module deliberately avoids direct network dispatch inside request threads (delegating to transactional outbox workers), cross-tenant/account dialogue context sharing, and direct booking or durable-knowledge mutation from conversation routes. FastAPI Bookings remains the booking authority; the explicitly confirmed conversational-booking workflow is a separate delivery stage.
 
@@ -62,14 +65,14 @@ flowchart TD
 - [booking_facade.py](file:///F:/Projects/fastapi_bookings/app/services/sms/booking_facade.py): Existing booking-domain adapter; it is not called by the local fallback in this integration slice.
 - [outbound_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/outbound_service.py): Transactional outbound message creation and outbox queuing.
 - [operations_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/operations_service.py): Tenant/account-scoped staff lifecycle transitions, structural audit events, draft selection, and sanitized timeline assembly.
-- [outbox_worker.py](file:///F:/Projects/fastapi_bookings/app/services/sms/outbox_worker.py): Async background polling loop leasing pending outbound jobs and dispatching via transports.
-- [chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py): Bi-directional synchronization bridge linking conversations to Chatwoot contacts and messages.
+- [outbox_worker.py](file:///F:/Projects/fastapi_bookings/app/services/sms/outbox_worker.py): Async background polling loop leasing pending outbound jobs and dispatching via transports; captures sanitized error summaries (`f"{type(ex).__name__}: {str(ex)[:200]}"`) to prevent database traceback persistence.
+- [chatwoot_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_service.py): Bi-directional synchronization bridge linking conversations to Chatwoot contacts and messages; provides header-first webhook authentication (`X-Chatwoot-Token`, `Authorization`, `X-Chatwoot-Signature`) and secret-free `generate_webhook_url()`.
 - [chatwoot_provisioning_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_provisioning_service.py): Automated idempotent multi-tenant pipeline provisioning Chatwoot accounts, provider inboxes, bindings, webhooks, and staff memberships.
 - [chatwoot_industry_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/chatwoot_industry_service.py): Automated provisioning of industry-tailored custom attribute definitions and canned response macros for Chatwoot accounts.
-- [arrival_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/arrival_service.py): Self-service lobby arrival token creation, arrival check-in, and repeating staff chime alerts.
+- [arrival_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/arrival_service.py): Self-service lobby arrival token creation, arrival check-in, repeating staff chime alerts (`process_repeated_arrival_alerts`), and continuous 60-second background runner (`start_arrival_alert_worker_loop`) wired into lifespan.
 - [prompt_builder.py](file:///F:/Projects/fastapi_bookings/app/services/sms/prompt_builder.py): Master Spec Unified Layered Prompt Builder compiling system safety, tenant policies, Style Lab traits, structured operational catalogs, curated knowledge, and situational modulation.
 - [curator_service.py](file:///F:/Projects/fastapi_bookings/app/services/sms/curator_service.py): Master Spec Autonomous Knowledge Curator Service processing learning events, managing supersession lifecycles, deriving canonical behavioural rules, and enforcing fail-closed safety boundaries.
-- [transports/mobilemessage.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/mobilemessage.py): ClickSend / MobileMessage HTTP carrier implementation.
+- [transports/mobilemessage.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/mobilemessage.py): ClickSend / MobileMessage HTTP carrier implementation; permanently locked out and deactivated (returns `DIRECT_CARRIER_LOCKED_OUT` and `HTTP 410 GONE` on webhook routes).
 - [transports/fake.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/fake.py): In-memory carrier mock for test isolation.
 
 ---
@@ -133,7 +136,18 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
 1. When a client receives an appointment reminder SMS, it includes a short link containing an arrival token (`arrival_service.create_arrival_session`).
 2. Upon arrival at the clinic, clicking the link triggers `/api/sms/arrivals/checkin/{token}`.
 3. The session records `arrived_at = now()`. An `arrival_alert_triggered` event is published to the outbox.
-4. `process_repeated_arrival_alerts` runs periodically. If an arrived client remains unacknowledged after 60 seconds, it sounds repeated chime events to staff dashboards.
+4. `start_arrival_alert_worker_loop` runs as an asynchronous background worker wired into `app_lifespan` in `app/main.py`, polling `process_repeated_arrival_alerts(db)` every 60 seconds with graceful shutdown via `asyncio.Event`.
+5. If an arrived client remains unacknowledged after 60 seconds, repeated structural chime alerts (`arrival.alert`) are enqueued into `outbox_events` and recorded in `sms_conversation_events`.
+6. Deduplication is strictly enforced by the unique outbox idempotency key `arrival-alert:{session_id}:{sequence}`, preventing duplicate staff alerts under concurrent or clustered polling.
+
+### 4.3b Ingress Security & Legacy Carrier Containment
+1. **Legacy Direct Carrier Deactivation**:
+   - Webhook endpoints `/api/sms/webhooks/{transport}/{public_id}`, `/api/sms/webhooks/incoming`, and delivery receipt endpoints permanently reject legacy direct carrier traffic (including `clicksend`, `click_send`, `mobilemessage`, `telstra`, `twilio`, `sinch`, `direct`, `carrier`) returning `HTTP 410 GONE`.
+   - All external carrier traffic must ingest through Chatwoot omnichannel inboxes.
+2. **Chatwoot Webhook Authentication Hardening**:
+   - Webhook intake at `/api/sms/chatwoot/webhook` enforces header-based authentication: `X-Chatwoot-Token`, `Authorization` (`Bearer <token>`), or `X-Chatwoot-Signature` (HMAC-SHA256 with 300-second replay window).
+   - Passing secret tokens in query parameters (`?token=...`) is deprecated; requests trigger explicit deprecation warnings and are contained.
+   - `generate_webhook_url(base_url)` generates canonical webhook callback URLs (`{base_url}/api/sms/chatwoot/webhook`) without embedding raw secrets into query parameters.
 
 ### 4.4 Native Staff Operations & Draft Moderation Contracts
 
@@ -295,6 +309,9 @@ FastAPI Bookings configures Chatwoot's native engine per tenant industry without
 - **Tenant Boundary Enforcement**: `SmsAccount`, `SmsConversation`, `SmsMessage`, and `SmsOutboundJob` all strictly enforce `tenant_id` foreign keys. An SMS account can never access conversation context from another tenant.
 - **Transactional Consistency**: AI-generated responses and customer status updates are committed in the same database transaction as the outbox queue entry, preventing ghost replies or lost messages.
 - **Account-scoped idempotency**: inbound provider identifiers are hashed with their SMS account before receipt storage; outbound UI request identifiers are resolved within tenant, provider, account and conversation scope.
+- **Sanitized Outbox Error Logging**: `outbox_worker.py` writes sanitized error summaries (`f"{type(ex).__name__}: {str(ex)[:200]}"`) to `job.error_log`, preventing database persistence of file paths, stack traces, or credentials.
+- **Webhook Secret Isolation**: `generate_webhook_url()` no longer embeds raw secrets into query parameters, avoiding credential leakage across access logs, proxy logs, or browser histories.
+- **Arrival Chime Idempotency**: Repeated lobby arrival alerts enforce unique idempotency keys `arrival-alert:{session_id}:{sequence}` with nested transaction exception rollback on concurrent race conditions.
 - **Offline Carrier Guard**: In automated tests, raw socket calls are blocked; all SMS operations use [fake.py](file:///F:/Projects/fastapi_bookings/app/services/sms/transports/fake.py) with synthetic phone numbers (`0411000001` - `0411000005`). Real external SMS messages are never sent during testing.
 
 ---
@@ -303,6 +320,8 @@ FastAPI Bookings configures Chatwoot's native engine per tenant industry without
 
 - **Carrier Inbound Retries**: Some carriers retry webhooks if processing exceeds 3000ms. Because signature check and DB insert are sub-50ms and AI generation is asynchronous, timeouts are prevented.
 - **Chatwoot Outage Resiliency**: If Chatwoot API experiences downtime, inbound SMS processing continues unhindered; Chatwoot sync jobs back off exponentially.
+- **Chatwoot Token Query Param Deprecation**: Query param token fallback `?token=...` on `/api/sms/chatwoot/webhook` is deprecated and emits runtime warnings; integrations should migrate to `X-Chatwoot-Token`, `Authorization`, or `X-Chatwoot-Signature` headers.
+- **Legacy Carrier Lockout**: Legacy carrier webhooks (`clicksend`, `click_send`, `mobilemessage`, `telstra`, `twilio`, `sinch`, `direct`, `carrier`) permanently return `HTTP 410 GONE`.
 - **Migration blocker**: the `is_pinned`, `is_blocked`, and `ai_enabled` conversation columns currently lack a committed migration. A migration must be added only after the concurrent migration branch is reconciled to one clean Alembic head. This slice is not deployable before that migration lands.
 - **Concurrency hardening pending migration**: application-level manual-send and draft-approval checks are idempotent for repeated requests, but database uniqueness for scoped `client_request_id` and one outbound job per message must be added by the migration owner to close concurrent races.
 - **Deferred inbox enrichment**: persisted priority, SLA/due-at, escalation owner, booking/arrival summary fields and CSV reporting are not part of this slice and require an approved data/API contract.
@@ -313,19 +332,22 @@ FastAPI Bookings configures Chatwoot's native engine per tenant industry without
 
 Run the SMS test suite:
 ```powershell
-# 1. Test SMS foundation and outbox queuing
+# 1. Test SMS chatwoot, arrivals, bootcamp, and webhook 410 containment (WP3 Suite)
+python -m pytest tests/test_sms_chatwoot.py tests/test_sms_arrivals.py tests/test_sms_bootcamp.py tests/test_sms_webhooks.py -v
+
+# 2. Test SMS foundation and outbox queuing
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_foundation.py -v
 
-# 2. Test OpenAI function calling and tool execution
+# 3. Test OpenAI function calling and tool execution
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_openai.py -v
 
-# 3. Test prompt hierarchy and persona overrides
+# 4. Test prompt hierarchy and persona overrides
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_prompt_hierarchy.py -v
 
-# 4. Test Chatwoot synchronization and agentbot binding
+# 5. Test Chatwoot synchronization and agentbot binding
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py -v
 
-# 5. Test Lobby Arrival chime and repeated alerts
+# 6. Test Lobby Arrival chime and repeated alerts
 .\.venv\Scripts\python.exe -m pytest tests/test_sms_arrivals.py -v
 
 # 6. Test SMS rate limiting
@@ -1234,26 +1256,35 @@ flowchart TD
 3. **Automated Location & Provider Provisioning (`chatwoot_provisioning_service.py`)**:
    - `provision_chatwoot_for_tenant` supports optional `location_ids: Optional[List[int]]` alongside `provider_ids`.
    - `provision_location_chatwoot(db, tenant_id, location_id)` provisions dedicated API channel inboxes named `"{tenant.name} - {location.name}"`, creating the corresponding `SmsChatwootBinding` with encrypted credentials and webhook registration.
-4. **AgentBot De-confliction**:
+4. **Industry Custom Attributes & Canned Responses (`chatwoot_industry_service.py`)**:
+   - Provisions tailored custom attribute definitions (e.g. medical intake flags, client preferences) and pre-packaged canned response macros into the Chatwoot account.
+5. **AgentBot De-confliction & Human Handoff**:
    - `chatwoot_agentbot.py` checks whether incoming webhook events belong to an inbox managed by `SmsChatwootBinding`.
    - If bound, AgentBot yields: `{"status": "ignored", "reason": "inbox_managed_by_canonical_mirror_webhook"}`.
+   - Human agent handoff operations and bot message dispatches use the dedicated external client in [`app/services/messaging/chatwoot_handoff.py`](file:///f:/Projects/fastapi_bookings/app/services/messaging/chatwoot_handoff.py).
    - Prevents duplicate replies or conflicting state machines when both webhooks are active.
-5. **Outbox Echo Deduplication & Staff Takeover**:
+6. **Outbox Echo Deduplication & Staff Takeover**:
    - Internal outbound AI messages carry `client_request_id = fastapi-chatwoot-message-{id}`.
    - When Chatwoot emits an outgoing message webhook, the canonical receiver inspects `source_id` / `client_request_id`. Internal echoes are acknowledged as duplicates (`duplicate=True, reason="internal_outbound_echo"`) without triggering takeover.
    - Genuine human staff replies trigger instant conversation takeover (`state="taken-over"`) and mark all pending `SmsAiJob`s as `CANCELLED`.
+7. **Legacy File Status & Test Data Sync**:
+   - **Orphaned Legacy Module**: Note that [`app/services/chatwoot.py`](file:///f:/Projects/fastapi_bookings/app/services/chatwoot.py) is unreferenced dead code; active operations use `app/services/sms/chatwoot_service.py` and `app/services/messaging/chatwoot_handoff.py`.
+   - **Synthetic Fixture Synchronization**: [`scripts/sync_mock_to_chatwoot.py`](file:///f:/Projects/fastapi_bookings/scripts/sync_mock_to_chatwoot.py) synchronizes synthetic numbered scenario fixtures (`Client 1..5`) from `scripts/seed_clean_numbered_data.py` into a live Chatwoot instance. It does not contain stub code.
 
 ### Verification & Testing Commands
 
 ```powershell
 # 1. Run the Multi-Location and Chatwoot inbox binding suite:
-.\.venv\Scripts\python.exe -m pytest tests/test_multi_location_availability.py tests/test_sms_chatwoot.py -v
+python -m pytest tests/test_multi_location_availability.py tests/test_sms_chatwoot.py -v
 
 # 2. Run the Docker-backed Chatwoot End-to-End Integration Suite:
-.\.venv\Scripts\python.exe -m pytest tests/test_chatwoot_docker_e2e.py -v
+python -m pytest tests/test_chatwoot_docker_e2e.py -v
 
-# 3. Run all Chatwoot and AgentBot unit and integration tests:
-.\.venv\Scripts\python.exe -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
+# 3. Run Chatwoot provisioning and industry customization tests:
+python -m pytest tests/test_chatwoot_provisioning.py tests/test_chatwoot_industry_service.py -v
+
+# 4. Run all Chatwoot and AgentBot unit and integration tests:
+python -m pytest tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_sync_mock_to_chatwoot.py -v
 ```
 
 ---
