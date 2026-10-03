@@ -20,7 +20,7 @@ FastAPI Bookings owns:
 
 ---
 
-## 2. System Map & Core Architecture
+## 2. Architecture & Key Files
 
 ```mermaid
 flowchart TD
@@ -79,28 +79,18 @@ flowchart TD
     CoreEngine -.-> SigNoz
 ```
 
----
-
-## 3. Documentation Suite Index
-
-| Document | Description | Key Topics |
-| :--- | :--- | :--- |
-| [ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md) | Comprehensive System Architecture | Multi-tenancy, DB bounds, Concurrency, SMS, Chatwoot, Cal.com, OTel |
-| [MODULE_INDEX.md](file:///F:/Projects/fastapi_bookings/docs/MODULE_INDEX.md) | Application Module Catalog | Complete table of all directories, paths, domains, and health status |
-| [app/api/routers/README.md](file:///F:/Projects/fastapi_bookings/app/api/routers/README.md) | HTTP REST API Router Layer | Authentication, dependencies, rate limits, routers registry, error handling |
-| [app/services/sms/README.md](file:///F:/Projects/fastapi_bookings/app/services/sms/README.md) | Autonomous SMS Dialogue Engine | Inbound intake, Outbox worker, OpenAI tool calls, Chatwoot sync, Arrivals chime |
-| [app/services/scheduling/README.md](file:///F:/Projects/fastapi_bookings/app/services/scheduling/README.md) | Scheduling Engine & Cal.com | 15-minute slot allocations, collision prevention, availability calculation |
-| [app/services/resident_agent/README.md](file:///F:/Projects/fastapi_bookings/app/services/resident_agent/README.md) | Codex Resident Autonomous Agent | Static audits, telemetry sentinels, race condition fuzzer, self-healing runtime |
-| [app/services/curation/README.md](file:///F:/Projects/fastapi_bookings/app/services/curation/README.md) | Semantic Memory Curator | Mem0 pattern, PII scrubbing (phone/email/address/card), pgvector storage |
-| [app/models/README.md](file:///F:/Projects/fastapi_bookings/app/models/README.md) | SQLAlchemy ORM Catalog | Schema definitions, entity relationships, cascade behavior, tenant isolation |
-| [app/core/README.md](file:///F:/Projects/fastapi_bookings/app/core/README.md) | Configuration & Core Primitives | `Settings`, JWT tokens, `BookingStatus` state machine, OTel telemetry |
-| [scripts/README.md](file:///F:/Projects/fastapi_bookings/scripts/README.md) | Operational Automation Scripts | Numbered seeder, Chatwoot sync, PWA icon builder, release gate verification, secrets audit |
-| [docs/operations/knowledge-production-runbook.md](file:///F:/Projects/fastapi_bookings/docs/operations/knowledge-production-runbook.md) | Production Operations Runbook | Backup/restore drills, worker recovery, dead-letter replay, zero-DDL rollback, canary rollout |
-| [tests/README.md](file:///F:/Projects/fastapi_bookings/tests/README.md) | Testing Architecture & Protocols | Pytest test suites, socket connection guards, in-memory isolation |
+### Documentation Suite Catalog & Key Files:
+- [ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md): Comprehensive system architecture covering multi-tenancy, concurrency, SMS, Chatwoot, and telemetry.
+- [MODULE_INDEX.md](file:///F:/Projects/fastapi_bookings/docs/MODULE_INDEX.md): Master inventory of all modules, domain boundaries, entrypoints, and test commands.
+- [AGENT_BOOT_SNAPSHOT.md](file:///F:/Projects/fastapi_bookings/docs/AGENT_BOOT_SNAPSHOT.md): Autonomous agent boot snapshot containing compact system status and orientation instructions.
+- [module_manifest.json](file:///F:/Projects/fastapi_bookings/docs/module_manifest.json): Machine-readable documentation metadata and Rule 10 compliance ledger.
+- [module_docs.db](file:///F:/Projects/fastapi_bookings/docs/module_docs.db): SQLite FTS5 full-text search database indexing all module documentation.
+- [app/main.py](file:///F:/Projects/fastapi_bookings/app/main.py): FastAPI application lifecycle, middleware chain, and route mounts.
+- [app/core/config.py](file:///F:/Projects/fastapi_bookings/app/core/config.py): Typed environment settings and platform defaults.
 
 ---
 
-## 4. Setup, Configuration & Quickstart
+## 3. Setup, Configuration & Dependencies
 
 ### Prerequisites
 - Python 3.11+
@@ -157,11 +147,14 @@ npm run dev -- --port 7070
 
 ---
 
-## 5. Developer Workflows & Quality Gates
+## 4. Core Workflows & Contracts
 
-All contributions and automated agent tasks must adhere to [AGENTS.md](file:///F:/Projects/fastapi_bookings/AGENTS.md). 
+### 4.1 Master Architecture Contracts
+- **Multi-Tenant Scoping**: All queries use `tenant_id` resolved via host headers or JWT claims.
+- **Transactional Outbox**: Asynchronous events (`outbox_events`) and outbound messages (`sms_outbound_jobs`) commit atomically with business mutations before worker polling.
+- **First-Submit-Wins Discrete Allocation**: `booking_slot_allocations` table enforces strict atomic exclusion on provider time blocks.
 
-### 8 Release Verification Gates
+### 4.2 8 Release Verification Gates
 Before any deployment or major release, run the consolidated gate checker:
 ```powershell
 python scripts/verify_all_release_gates.py
@@ -179,7 +172,7 @@ The 8 release gates run in sequence:
 
 ---
 
-## 6. Data Safety, Multi-Tenancy & PII Isolation
+## 5. Data Safety & Isolation
 
 FastAPI Bookings enforces strict data boundary and customer protection rules:
 1. **Tenant Isolation**: Every database query in staff and public endpoints is scoped by `tenant_id`. Subdomains are parsed securely via `app.api.deps.get_current_tenant`.
@@ -189,7 +182,25 @@ FastAPI Bookings enforces strict data boundary and customer protection rules:
 
 ---
 
-## 7. Known Issues & Operational Reference
+## 6. Known Issues, Edge Cases & Outstanding Work
 
 - **SQLite vs PostgreSQL Concurrency**: Under SQLite in local dev, high-concurrency writes may trigger `database is locked` if connection pooling is misconfigured. In staging and production, PostgreSQL with `READ COMMITTED` and unique slot constraints (`uq_provider_slot_allocation`) is mandatory.
-- **Background Worker Process**: In production, the outbox worker (`app.services.outbox_worker`) runs as a dedicated async loop process to guarantee sub-second delivery for transactional SMS jobs.
+- **Background Worker Process**: In production, the outbox worker (`app.services.sms.outbox_worker`) runs as a dedicated async loop process to guarantee sub-second delivery for transactional SMS jobs.
+- **Documentation Drift**: As new features land, module documentation must be kept in sync by running `python scripts/index_living_docs.py` to rebuild `docs/MODULE_INDEX.md`, `docs/module_manifest.json`, and `docs/module_docs.db`.
+
+---
+
+## 7. Verification & Testing Commands
+
+To verify documentation indexing, compliance gates, and all test suites:
+
+```powershell
+# 1. Verify living documentation compliance against Rule 10
+python scripts/verify_living_docs.py
+
+# 2. Re-index living documentation catalog and build SQLite FTS5 database
+python scripts/index_living_docs.py
+
+# 3. Test the living documentation parser and search query CLI
+python -m pytest tests/test_living_documentation.py -v
+```

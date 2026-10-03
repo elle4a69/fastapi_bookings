@@ -114,6 +114,8 @@ result = engine.execute_tool(
     context=context,
     db=db_session,
 )
+```
+
 ### 3. Unified Assistant Runtime (`AssistantRuntimeService`)
 ```python
 from app.services.assistant import AssistantRuntimeService, RuntimeContext

@@ -1,23 +1,25 @@
 # Assistant Studio UI & API Architecture
 
-## 1. Purpose & Scope
-
 The **Assistant Studio** (`frontend/src/pages/admin/assistant-studio/` and `app/api/routers/assistant_studio.py`) serves as the authoritative, multi-tenant administrative command center for the FastAPI Bookings conversational assistant platform. It consolidates prompt policy management, multi-provider tone control, live runtime simulation, few-shot style curation, autonomous knowledge ingestion, and safety guardrail auditing into a single channel-neutral interface and real backend API.
 
-### STRICT PLATFORM COMPLIANCE (AGENTS.md Rule 3):
-- **Mock Implementations Eliminated**: 100% of synthetic `setTimeout` handlers and hardcoded simulated state have been eliminated across all frontend tabs.
-- **Real Backend APIs**: Every tab communicates directly with real, authenticated, tenant-scoped endpoints mounted under `/api/admin/assistant-studio`.
-- **Database Persistence**: State mutations persist to `Tenant`, `SmsBootcampSettings`, `SmsPromptProfile`, `MessageStyleExample`, `CuratedMemory`, and `KnowledgeProposal` models.
+---
 
-### Unified 8-Section Control Center:
-1. **Overview**: Real-time tenant operational statistics (total channel accounts, active conversations, approved curated facts in `CuratedMemory`, approved style examples in `MessageStyleExample`, message volume, and readiness score).
-2. **Prompt Composer**: Visual multi-layer editor backed by `GET` and `PUT` `/api/admin/assistant-studio/policy` persisting `tenant_policy` directly to `Tenant.assistant_policy`, provider overlay to `SmsPromptProfile`, and training notes / Style Lab priors to `SmsBootcampSettings`.
-3. **Simulator Sandbox**: Real conversational simulation turn backed by `POST /api/admin/assistant-studio/simulate`, executing `RuntimeContext`, `PromptPolicyAssembler`, and `AssistantToolEngine` against live database tables.
-4. **Example Library**: Live CRUD operations on `MessageStyleExample` via `GET`, `POST`, `PUT`, `DELETE` `/api/admin/assistant-studio/examples`. Platform seeds (`tenant_id === null`) are locked system-wide with read-only badges and disabled mutation controls. Tenant-owned examples support full edit, active toggle, and deletion.
-5. **Knowledge Review & Curator**: Human-in-the-loop review queue backed by `GET /api/admin/assistant-studio/curator/proposals` and `POST /api/admin/assistant-studio/curator/proposals/{id}/curate`. Canonical decision codes (`accepted`, `evidence_only`, `pending_review`, `quarantined`, `rejected`, `superseded`) are visually badged, with clear distinction between durable factual knowledge (promoted to `CuratedMemory`) and procedural style guidance (promoted to `MessageStyleExample`), plus extracted variables inspection.
-6. **Import Centre**: Real dataset import via `POST /api/admin/assistant-studio/import` calling `import_approved_style_examples` with cryptographic SHA-256 validation.
-7. **Variables & Tools**: Live variable registry resolution (`GET /api/admin/assistant-studio/variables`) and server-enforced tool schemas (`GET /api/admin/assistant-studio/tools`).
-8. **Evaluation & Safety**: Live benchmark suite execution via `POST /api/admin/assistant-studio/evaluate` verifying 6 safety, availability, travel radius, and multi-tenant invariants against live models.
+## 1. Purpose & Scope
+
+The Assistant Studio owns:
+- **Zero-Mock Platform Compliance (AGENTS.md Rule 3)**: Eliminates synthetic `setTimeout` handlers and hardcoded simulated state; every control communicates with real backend APIs mounted under `/api/admin/assistant-studio`.
+- **Database Persistence**: State mutations persist directly to `Tenant`, `SmsBootcampSettings`, `SmsPromptProfile`, `MessageStyleExample`, `CuratedMemory`, and `KnowledgeProposal` database tables.
+- **Unified 8-Section Control Center**:
+  1. *Overview*: Real-time tenant operational statistics (total channel accounts, active conversations, approved curated facts in `CuratedMemory`, approved style examples in `MessageStyleExample`, message volume, and readiness score).
+  2. *Prompt Composer*: Visual multi-layer editor backed by `GET` and `PUT` `/api/admin/assistant-studio/policy` persisting `tenant_policy` directly to `Tenant.assistant_policy`, provider overlay to `SmsPromptProfile`, and training notes / Style Lab priors to `SmsBootcampSettings`.
+  3. *Simulator Sandbox*: Conversational simulation turns backed by `POST /api/admin/assistant-studio/simulate`, executing `RuntimeContext`, `PromptPolicyAssembler`, and `AssistantToolEngine` against live database tables.
+  4. *Example Library*: Live CRUD operations on `MessageStyleExample` via `GET`, `POST`, `PUT`, `DELETE` `/api/admin/assistant-studio/examples`. Platform seeds (`tenant_id === null`) are locked system-wide with read-only badges and disabled mutation controls. Tenant-owned examples support full edit, active toggle, and deletion.
+  5. *Knowledge Review & Curator*: Human-in-the-loop review queue backed by `GET /api/admin/assistant-studio/curator/proposals` and `POST /api/admin/assistant-studio/curator/proposals/{id}/curate`.
+  6. *Import Centre*: Dataset import via `POST /api/admin/assistant-studio/import` calling `import_approved_style_examples` with cryptographic SHA-256 validation.
+  7. *Variables & Tools*: Live variable registry resolution (`GET /api/admin/assistant-studio/variables`) and server-enforced tool schemas (`GET /api/admin/assistant-studio/tools`).
+  8. *Evaluation & Safety*: Live benchmark suite execution via `POST /api/admin/assistant-studio/evaluate` verifying 6 safety, availability, travel radius, and multi-tenant invariants.
+
+This module deliberately avoids direct SQL execution by LLM models, exposure of raw tenant credentials in client responses, or treating client-side browser state as authoritative ground truth.
 
 ---
 
@@ -42,9 +44,28 @@ The **Assistant Studio** (`frontend/src/pages/admin/assistant-studio/` and `app/
         └── evaluation-safety-tab.tsx    # Tab 8: Live guardrail evaluation benchmarks against DB
 ```
 
+### Key Files:
+- [index.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/assistant-studio/index.tsx): Main layout coordinating active provider and channel selection with sub-tab routing.
+- [types.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/assistant-studio/types.ts): TypeScript type definitions matching Pydantic response models.
+- [app/api/routers/assistant_studio.py](file:///f:/Projects/fastapi_bookings/app/api/routers/assistant_studio.py): Backend FastAPI router providing all administrative and simulation endpoints.
+- [tabs/prompt-composer-tab.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/assistant-studio/tabs/prompt-composer-tab.tsx): 10-tier prompt hierarchy visualizer and Style Lab controls.
+- [tabs/knowledge-curator-tab.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/assistant-studio/tabs/knowledge-curator-tab.tsx): 4-screen epistemic knowledge curation interface.
+
 ---
 
-## 3. Backend API Contract & Endpoints
+## 3. Setup, Configuration & Dependencies
+
+### Dependencies & Requirements
+- **Frontend**: React 18, TypeScript, Tailwind CSS, Lucide React icons, Radix UI primitives.
+- **Backend**: FastAPI, SQLAlchemy 2.0 ORM, Pydantic v2, and `app/services/assistant` runtime engine.
+- **Environment**: Requires active database connectivity (`DATABASE_URL`) and configured OpenAI API key (`OPENAI_API_KEY`) for live simulation turns.
+- **Authentication**: All endpoints require a valid administrative JWT via `X-Token` (or `Authorization: Bearer`) and tenant scoping header (`X-Tenant`).
+
+---
+
+## 4. Core Workflows & Contracts
+
+### Backend API Contract & Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -65,9 +86,9 @@ The **Assistant Studio** (`frontend/src/pages/admin/assistant-studio/` and `app/
 
 ---
 
-## 4. Multi-Tenant Scoping, Epistemic Integrity & Security
+## 5. Data Safety & Isolation
 
-1. **Authentication**: All endpoints require a valid administrative JWT via `X-Token` and tenant resolution via `X-Tenant` or hostname.
+1. **Authentication & Multi-Tenant Scoping**: All endpoints require a valid administrative JWT via `X-Token` and tenant resolution via `X-Tenant` or hostname. Cross-tenant reads or writes return `404 Not Found` or `403 Forbidden`.
 2. **Server-Side Boundary Enforcement**: All tool calls (`service_lookup`, `quote_travel`, `check_availability`, `provider_lookup`, `address_validation`) enforce `context.tenant_id` and `context.provider_id` server-side; clients and LLMs cannot override or spoof tenant boundaries.
 3. **Epistemic Invariant**:
    - `CuratedMemory`: Stores static owner-verified facts only (Tier 7).
@@ -84,21 +105,27 @@ The **Assistant Studio** (`frontend/src/pages/admin/assistant-studio/` and `app/
 
 ---
 
-## 5. Verification & Testing Commands
+## 6. Known Issues, Edge Cases & Outstanding Work
+
+- **Long-Running Simulation Turns**: When simulating multi-step turns with external OpenAI API calls, slow networks may cause the request to take 3–5 seconds; the UI maintains an active loading spinner to prevent double-submissions.
+- **Platform Seed Customization**: Tenants currently cannot directly clone a platform seed into a tenant-specific override with a single button; cloning currently requires manual creation in the Example Library.
+- **Future Work**: Integration of live audio/voice streaming simulation directly within the sandbox tab.
+
+---
+
+## 7. Verification & Testing Commands
 
 To run backend integration tests:
-```bash
-.venv\Scripts\python.exe -m pytest -q tests/test_assistant_studio_api.py
+```powershell
+.venv\Scripts\python.exe -m pytest tests/test_assistant_studio_api.py -v
 ```
 
 To run the frontend TypeScript type check:
-```bash
-cd frontend
-.\node_modules\.bin\tsc.cmd -b --noEmit
+```powershell
+npx tsc --noEmit
 ```
 
 To compile production Vite bundle:
-```bash
-cd frontend
+```powershell
 npm run build
 ```

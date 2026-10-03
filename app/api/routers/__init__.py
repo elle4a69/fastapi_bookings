@@ -43,4 +43,5 @@ from . import resident_agent  # noqa: F401
 from . import travel  # noqa: F401
 from . import itinerary  # noqa: F401
 from . import tenants  # noqa: F401
+from . import business_assistant  # noqa: F401
 
