@@ -29,6 +29,7 @@ from app.models.booking import Booking, BookingStatus
 from app.models.sms_conversation import SmsConversation
 from app.models.sms_message import SmsMessage
 from app.models.sms_chatwoot import SmsChatwootBinding
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.api.routers.website import generate_chat_session_token
 from app.api.routers.chatwoot_agentbot import resolve_chatwoot_tenant
@@ -102,6 +103,7 @@ async def test_chatwoot_agentbot_resolved_curation_uses_mapped_tenant(async_test
 
     app.dependency_overrides[get_async_db] = override_get_async_db
     try:
+        headers = {"X-Chatwoot-Token": settings.CHATWOOT_WEBHOOK_SECRET} if getattr(settings, "CHATWOOT_WEBHOOK_SECRET", "") else {}
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             payload = {
@@ -118,7 +120,7 @@ async def test_chatwoot_agentbot_resolved_curation_uses_mapped_tenant(async_test
                     {"sender": "agent", "text": "Sure, here are available slots"},
                 ],
             }
-            resp = await ac.post("/api/v1/chatwoot/webhook", json=payload)
+            resp = await ac.post("/api/v1/chatwoot/webhook", json=payload, headers=headers)
             assert resp.status_code == 200
             data = resp.json()
             assert data["status"] == "handled"
@@ -142,6 +144,7 @@ async def test_chatwoot_agentbot_unmapped_account_in_production(async_test_db, m
 
     app.dependency_overrides[get_async_db] = override_get_async_db
     try:
+        headers = {"X-Chatwoot-Token": settings.CHATWOOT_WEBHOOK_SECRET} if getattr(settings, "CHATWOOT_WEBHOOK_SECRET", "") else {}
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             payload = {
@@ -155,7 +158,7 @@ async def test_chatwoot_agentbot_unmapped_account_in_production(async_test_db, m
                 },
                 "transcript": [{"sender": "customer", "text": "hello"}],
             }
-            resp = await ac.post("/api/v1/chatwoot/webhook", json=payload)
+            resp = await ac.post("/api/v1/chatwoot/webhook", json=payload, headers=headers)
             assert resp.status_code == 200
             data = resp.json()
             assert data["status"] == "ignored"

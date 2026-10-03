@@ -136,8 +136,8 @@ def test_admin_apply_industry_preset_allied_health(client, db_session):
     assert updated["terminology"]["clients"] == "Patients"
     assert updated["terminology"]["provider"] == "Practitioner"
     assert updated["terminology"]["providers"] == "Practitioners"
-    assert updated["terminology"]["booking"] == "Appointment"
-    assert updated["terminology"]["service"] == "Consultation"
+    assert updated["terminology"]["booking"] == "Consultation"
+    assert updated["terminology"]["service"] == "Treatment"
     assert updated["terminology"]["location"] == "Clinic"
 
     # Public endpoint reflects allied health preset
@@ -146,6 +146,8 @@ def test_admin_apply_industry_preset_allied_health(client, db_session):
     pub_terms = pub_resp.json()["terminology"]
     assert pub_terms["client"] == "Patient"
     assert pub_terms["provider"] == "Practitioner"
+    assert pub_terms["service"] == "Treatment"
+    assert pub_terms["booking"] == "Consultation"
 
 
 def test_admin_apply_preset_with_custom_overrides(client, db_session):
@@ -172,7 +174,8 @@ def test_admin_apply_preset_with_custom_overrides(client, db_session):
     # Preset values
     assert updated["terminology"]["client"] == "Customer"
     assert updated["terminology"]["provider"] == "Technician"
-    assert updated["terminology"]["location"] == "Workshop"
+    assert updated["terminology"]["service"] == "Service/Repair"
+    assert updated["terminology"]["location"] == "Workshop/Bay"
     # Custom override
     assert updated["terminology"]["booking"] == "Work Order"
     assert updated["terminology"]["bookings"] == "Work Orders"
@@ -261,3 +264,118 @@ def test_tenant_translation_cascade_delete(client, db_session):
     # Verify translation record was deleted as well
     orphaned = db_session.query(TenantTranslation).filter_by(tenant_id=tenant.id).first()
     assert orphaned is None
+
+
+def test_all_industry_presets_definitions():
+    """Verify all 4 industry presets contain the mandatory exact terminology mappings."""
+    from app.services.localization.presets import get_preset, INDUSTRY_PRESETS
+
+    # allied_health
+    ah = get_preset("allied_health")
+    assert ah is not None
+    assert ah["client"] == "Patient"
+    assert ah["provider"] == "Practitioner"
+    assert ah["service"] == "Treatment"
+    assert ah["booking"] == "Consultation"
+    assert ah["location"] == "Clinic"
+
+    # automotive
+    auto = get_preset("automotive")
+    assert auto is not None
+    assert auto["client"] == "Customer"
+    assert auto["provider"] == "Technician"
+    assert auto["service"] == "Service/Repair"
+    assert auto["booking"] == "Service"
+    assert auto["location"] == "Workshop/Bay"
+
+    # wellness_salon
+    salon = get_preset("wellness_salon")
+    assert salon is not None
+    assert salon["client"] == "Client"
+    assert salon["provider"] == "Stylist"
+    assert salon["service"] == "Treatment"
+    assert salon["booking"] == "Appointment"
+    assert salon["location"] == "Salon/Studio"
+
+    # professional_services
+    prof = get_preset("professional_services")
+    assert prof is not None
+    assert prof["client"] == "Client"
+    assert prof["provider"] == "Consultant"
+    assert prof["service"] == "Session"
+    assert prof["booking"] == "Appointment"
+    assert prof["location"] == "Office"
+
+
+def test_admin_apply_wellness_salon_and_professional_services(client, db_session):
+    """Admin can apply wellness_salon and professional_services presets."""
+    tenant, admin, token = _create_tenant_with_admin(db_session, "salon-prof", "Salon & Advisory")
+
+    # Apply wellness_salon
+    put_resp = client.put(
+        "/api/admin/translations",
+        json={"preset": "wellness_salon"},
+        headers={"X-Tenant": "salon-prof", "X-Token": token},
+    )
+    assert put_resp.status_code == 200
+    salon_data = put_resp.json()
+    assert salon_data["terminology"]["provider"] == "Stylist"
+    assert salon_data["terminology"]["location"] == "Salon/Studio"
+
+    # Switch to professional_services
+    put_resp2 = client.put(
+        "/api/admin/translations",
+        json={"preset": "professional_services"},
+        headers={"X-Tenant": "salon-prof", "X-Token": token},
+    )
+    assert put_resp2.status_code == 200
+    prof_data = put_resp2.json()
+    assert prof_data["terminology"]["provider"] == "Consultant"
+    assert prof_data["terminology"]["service"] == "Session"
+    assert prof_data["terminology"]["location"] == "Office"
+
+
+def test_tenant_model_translation_relationship(db_session):
+    """Test the direct ORM relationship between Tenant and TenantTranslation."""
+    tenant = Tenant(
+        name="ORM Translation Test",
+        subdomain="orm-trans-test",
+        subscription_tier="growth",
+    )
+    db_session.add(tenant)
+    db_session.flush()
+
+    translation = TenantTranslation(
+        tenant_id=tenant.id,
+        locale="en",
+        terminology={"client": "Clientele", "provider": "Specialist"},
+    )
+    db_session.add(translation)
+    db_session.commit()
+    db_session.refresh(tenant)
+
+    assert tenant.translation is not None
+    assert tenant.translation.id == translation.id
+    assert tenant.translation.terminology["client"] == "Clientele"
+    assert tenant.translation.tenant.id == tenant.id
+
+
+def test_schemas_translation_module():
+    """Verify app.schemas.translation exports all required schemas."""
+    from app.schemas.translation import (
+        TerminologyMap,
+        IndustryPresetInfo,
+        IndustryPresetList,
+        TenantTranslationOut,
+        TenantTranslationUpdate,
+        AdminTranslationsResponse,
+        PublicTranslationsResponse,
+    )
+    assert TerminologyMap is not None
+    assert IndustryPresetInfo is not None
+    assert IndustryPresetList is not None
+    assert TenantTranslationOut is not None
+    assert TenantTranslationUpdate is not None
+    assert AdminTranslationsResponse is not None
+    assert PublicTranslationsResponse is not None
+
