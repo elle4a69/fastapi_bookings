@@ -1064,15 +1064,43 @@ export default function PublicBookingPage() {
               )}
 
               {travelEstimate && (
-                <div className="mt-2 space-y-1.5 text-xs p-2.5 rounded-lg border bg-background">
+                <div className="mt-2 text-xs p-3 rounded-xl border bg-card shadow-sm space-y-2">
                   <div className="flex justify-between items-center font-bold text-foreground">
-                    <span>Estimated Travel Fee ({travelEstimate.distance_km} km)</span>
+                    <div className="flex items-center gap-2">
+                      <span>Travel Estimate</span>
+                      {travelEstimate.fee_mode === 'uber_pass_through' && (
+                        <div className="bg-black text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1">
+                          Uber
+                        </div>
+                      )}
+                    </div>
                     <span className="text-primary font-mono text-sm">${Number(travelEstimate.travel_fee).toFixed(2)}</span>
                   </div>
-                  <div className="text-[11px] text-muted-foreground flex justify-between">
-                    <span>Base Surcharge: ${Number(travelEstimate.base_surcharge).toFixed(2)}</span>
-                    <span>Distance Fee: ${Number(travelEstimate.distance_fee).toFixed(2)}</span>
+                  
+                  <div className="flex items-center gap-4 text-muted-foreground text-[11px]">
+                    <div className="flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      {travelEstimate.distance_km} km
+                    </div>
+                    {travelEstimate.duration_minutes && (
+                      <div className="flex items-center gap-1">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {Math.round(travelEstimate.duration_minutes)} min transit
+                      </div>
+                    )}
                   </div>
+
+                  {travelEstimate.fee_mode !== 'uber_pass_through' && travelEstimate.fee_mode !== 'fixed' && (
+                    <div className="text-[11px] text-muted-foreground flex justify-between pt-1 border-t border-border/50">
+                      <span>Base: ${Number(travelEstimate.base_surcharge).toFixed(2)}</span>
+                      <span>Distance: ${Number(travelEstimate.distance_fee).toFixed(2)}</span>
+                    </div>
+                  )}
+                  
                   {!travelEstimate.within_radius && (
                     <div className="p-2 rounded bg-destructive/10 text-destructive text-[11px] font-semibold flex items-center gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -1080,7 +1108,7 @@ export default function PublicBookingPage() {
                     </div>
                   )}
                   {travelEstimate.disclaimer && (
-                    <div className="text-[10px] text-muted-foreground/80 italic pt-1 border-t">
+                    <div className="text-[10px] text-muted-foreground/80 italic pt-1 border-t border-border/50">
                       {travelEstimate.disclaimer}
                     </div>
                   )}

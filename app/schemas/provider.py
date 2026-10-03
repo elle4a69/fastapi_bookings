@@ -26,6 +26,9 @@ class ProviderBase(BaseModel):
     out_call_radius_km: float = Field(25.0, description="Out-call service radius in km")
     base_outcall_surcharge: Decimal = Field(Decimal("0.00"), description="Base surcharge for out-call services")
     per_km_fee: Decimal = Field(Decimal("0.00"), description="Per-km travel fee for out-call services")
+    travel_fee_mode: str = Field("per_km", description="Fee calculation mode: per_km, fixed, tiered, uber_pass_through")
+    fixed_travel_fee: Decimal = Field(Decimal("0.00"), description="Fixed travel fee amount")
+    travel_distance_tiers: Optional[list[dict]] = Field(None, description="Distance tiers for tiered fee mode")
     turnaround_buffer_mins: int = Field(15, description="Turnaround buffer in minutes")
 
 
@@ -53,6 +56,9 @@ class ProviderUpdate(BaseModel):
     out_call_radius_km: Optional[float] = None
     base_outcall_surcharge: Optional[Decimal] = None
     per_km_fee: Optional[Decimal] = None
+    travel_fee_mode: Optional[str] = None
+    fixed_travel_fee: Optional[Decimal] = None
+    travel_distance_tiers: Optional[list[dict]] = None
     turnaround_buffer_mins: Optional[int] = None
 
 

@@ -473,6 +473,20 @@ export default function BookingsAdminPage() {
                         <span className="font-medium text-foreground">Destination: </span>
                         {selectedBooking.service_address || `${selectedBooking.client_suburb || ""} ${selectedBooking.client_postcode || ""}`.trim() || "Address not provided"}
                       </div>
+                      
+                      {(selectedBooking.service_address || selectedBooking.client_suburb) && (
+                        <div className="pt-1">
+                          <a
+                            href={`https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[formatted_address]=${encodeURIComponent(selectedBooking.service_address || `${selectedBooking.client_suburb || ""} ${selectedBooking.client_postcode || ""}`.trim())}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 bg-black text-white hover:bg-black/80 text-xs font-semibold px-3 py-1.5 rounded transition-colors"
+                          >
+                            <span>🚗</span> Ride with Uber
+                          </a>
+                        </div>
+                      )}
+
                       {selectedBooking.chargeable_travel_distance_km !== undefined && (
                         <div className="text-[11px] text-muted-foreground">
                           Estimated transit distance: {selectedBooking.chargeable_travel_distance_km} km

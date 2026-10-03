@@ -32,11 +32,13 @@ graph TD
     RouterGroup -->|"/api/public/*"| PublicRouters["availability.py, public_bookings.py, public_clients.py"]
     RouterGroup -->|"/api/admin/*"| AdminRouters["bookings.py, providers.py, services.py, clients.py, admin_schedule.py"]
     RouterGroup -->|"/api/client-portal/*"| PortalRouter["client_portal.py"]
-    RouterGroup -->|"/api/sms/*"| SMSRouters["sms_accounts.py, sms_conversations.py, sms_webhooks.py"]
+    RouterGroup -->|"/api/sms/*"| SMSRouters["sms_accounts.py, sms_conversations.py, sms_webhooks.py, sms_chatwoot.py"]
     RouterGroup -->|"/api/resident-agent/*"| AgentRouter["resident_agent.py"]
-    RouterGroup -->|"/api/webhooks/*"| WebhookRouters["stripe_webhooks.py, chatwoot_agentbot.py"]
+    RouterGroup -->|"/webhooks/chatwoot"| ChatwootWebhookRouter["chatwoot_webhook.py"]
+    RouterGroup -->|"/api/webhooks/*"| WebhookRouters["stripe_webhooks.py"]
+    RouterGroup -->|"/api/v1/chatwoot/*"| ChatwootAgentBotRouter["chatwoot_agentbot.py"]
 
-    AuthRouter & PublicRouters & AdminRouters & PortalRouter & SMSRouters & AgentRouter --> Deps["app/api/deps.py (Auth, Tenant, RBAC, DB)"]
+    AuthRouter & PublicRouters & AdminRouters & PortalRouter & SMSRouters & AgentRouter & ChatwootAgentBotRouter & ChatwootWebhookRouter --> Deps["app/api/deps.py (Auth, Tenant, RBAC, DB)"]
     Deps --> DB[(Database Session)]
 ```
 
@@ -46,14 +48,18 @@ graph TD
 - [availability.py](file:///F:/Projects/fastapi_bookings/app/api/routers/availability.py): Real-time availability calculation across provider schedules and buffer rules.
 - [public_bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/public_bookings.py): Intake endpoints consumed by the public booking widget.
 - [client_portal.py](file:///F:/Projects/fastapi_bookings/app/api/routers/client_portal.py): Self-service client appointment views, reschedules, and cancellations.
-- [sms_conversations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_conversations.py): SMS conversation thread view, message history, human takeover toggle.
+- [sms_conversations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_conversations.py): SMS conversation thread view, message history, manual triage, human takeover toggle, and quick tools management. Unreachable legacy `/seed-scenarios` route purged from production router.
 - [sms_webhooks.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_webhooks.py): Inbound webhook receiver for ClickSend and external SMS carriers.
 - [sms_chatwoot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_chatwoot.py): Canonical Chatwoot mirror webhook intake, provider-scoped `SmsChatwootBinding` CRUD, token/secret masking, 1-to-1 Tenant mapping enforcement, and admin automated provisioning trigger (`POST /provision`).
 - [tenants.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenants.py): Tenant creation and retrieval router with automated Chatwoot multi-tenant provisioning lifecycle hook (`CHATWOOT_AUTO_PROVISION`).
 - [chatwoot_agentbot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_agentbot.py): Chatwoot AgentBot webhook integration with automated de-confliction ignoring mirror-bound inboxes to prevent duplicate replies.
+- [chatwoot_webhook.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_webhook.py): Handles standard Chatwoot webhooks (`/webhooks/chatwoot`) checking HMAC signatures, filtering valid `message_created` events, preventing agent duplication on assigned/resolved conversations, and dispatching tasks to `run_agent_turn`.
 - [resident_agent.py](file:///F:/Projects/fastapi_bookings/app/api/routers/resident_agent.py): Operational health checks, deep audit trigger, and fuzzer controls.
 - [assistant_studio.py](file:///F:/Projects/fastapi_bookings/app/api/routers/assistant_studio.py): Assistant Studio administration endpoints: 10-tier policy management (`Tenant.assistant_policy`), procedural style example CRUD, curator proposal management, simulation sandbox, cryptographic dataset importer, and evaluation suite with uniform `validate_tenant_provider` cross-tenant scoping and platform seed read-only lockdown.
 - [translations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/translations.py): Tenant dynamic wording and localization router: public portal endpoint (`GET /api/public/translations`), admin translation management (`GET /api/admin/translations`), and industry preset application (`PUT /api/admin/translations`).
+- [travel.py](file:///F:/Projects/fastapi_bookings/app/api/routers/travel.py): Public and outcall travel calculations: address standardization (`GET /api/public/travel/addresses`), suburb typeahead (`GET /api/public/travel/suburbs`), centroid fee estimates (`POST /estimate`), exact address quotes (`POST /quote`), and operational transit segments (`POST /transit`).
+- [discovery.py](file:///F:/Projects/fastapi_bookings/app/api/routers/discovery.py): Multi-tenant Discovery Map API: geocoded business pins with real-time slot availability indicators (`GET /api/discovery/map`), service catalog options (`GET /api/discovery/services`), and manual admin geocode trigger (`POST /api/admin/business-profile/geocode`).
+- [locations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/locations.py): Administrative CRUD and relationship syncing for physical business locations (`/locations`, `/locations/{id}`).
 - [deps.py](file:///F:/Projects/fastapi_bookings/app/api/deps.py): Core dependency injection functions: `get_current_tenant`, `get_current_user`, `require_role`, `get_current_client`.
 
 ---
@@ -134,6 +140,15 @@ Clients pass their JWT access token via the `X-Token` header:
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
+- **Dual Chatwoot Webhook Ingress Architecture**:
+  - The API exposes two separate webhook routes: `/api/sms/chatwoot/webhook` (canonical mirror managed by `sms_chatwoot.py` / `chatwoot_service.py`) and `/api/v1/chatwoot/webhook` (AgentBot automated dialogue managed by `chatwoot_agentbot.py`).
+  - To prevent duplicate replies or conflicting turn processing, `chatwoot_agentbot.py` checks `SmsChatwootBinding` and explicitly ignores inboxes managed by the canonical mirror webhook (`status: ignored`, `reason: inbox_managed_by_canonical_mirror_webhook`).
+- **AgentBot Tenant Resolution Test Bypass**:
+  - In `app/api/routers/chatwoot_agentbot.py` (`resolve_chatwoot_tenant`), when running under Pytest (`PYTEST_CURRENT_TEST` or `settings.TESTING`), unmapped Chatwoot accounts default to `(account_id, None, None)` to allow offline testing. In production environments, unmapped accounts return `(None, None, None)` and are rejected with `unmapped_chatwoot_account`.
+- **Chatwoot Token Masking**:
+  - All responses from `/api/sms/chatwoot/bindings` mask `chatwoot_api_token` and `webhook_secret` as `"********"` to prevent credential leakage.
+- **Purged Dead Scenario Seeding Route (Work Package 5 Completed)**:
+  - The legacy unreachable scenario seeding route (`POST /seed-scenarios`), which was permanently disabled behind an unconditional 409 Conflict exception followed by ~400 lines of dead code, has been completely purged from production `sms_conversations.py`. Production API traffic remains strictly real, tenant-isolated, and free of mock seeding routes.
 - **Rate Limiting on Reverse Proxies**: SlowAPI uses `get_remote_address`, which resolves proxy IPs if `Forwarded` / `X-Forwarded-For` is not configured in upstream load balancers.
 - **Public Bootstrap Deprecation**: Legacy endpoints allowing token-less public queries are being migrated to strictly enforce tenant subdomains.
 

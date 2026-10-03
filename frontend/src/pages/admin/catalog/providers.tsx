@@ -19,6 +19,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -43,6 +50,9 @@ interface Provider {
   out_call_radius_km?: number;
   base_outcall_surcharge?: number;
   per_km_fee?: number;
+  travel_fee_mode?: string;
+  fixed_travel_fee?: number;
+  travel_distance_tiers?: any[];
   turnaround_buffer_mins?: number;
   capacity?: number;
   color?: string;
@@ -193,6 +203,9 @@ export default function ProvidersPage() {
         out_call_radius_km: updatedData.out_call_radius_km !== undefined ? Number(updatedData.out_call_radius_km) : 25,
         base_outcall_surcharge: updatedData.base_outcall_surcharge !== undefined ? Number(updatedData.base_outcall_surcharge) : 0,
         per_km_fee: updatedData.per_km_fee !== undefined ? Number(updatedData.per_km_fee) : 0,
+        travel_fee_mode: updatedData.travel_fee_mode || 'per_km',
+        fixed_travel_fee: updatedData.fixed_travel_fee !== undefined ? Number(updatedData.fixed_travel_fee) : 0,
+        travel_distance_tiers: updatedData.travel_distance_tiers || null,
         turnaround_buffer_mins: updatedData.turnaround_buffer_mins !== undefined ? Number(updatedData.turnaround_buffer_mins) : 15,
       };
 
@@ -1621,35 +1634,145 @@ console.warn("Shortener API offline:", err);
                           </div>
 
                           {selectedProvider.allow_out_call && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-4">
                               <div className="space-y-1.5">
-                                <Label htmlFor="prov-base-surcharge" className="text-xs font-semibold text-muted-foreground">
-                                  Base Out-Call Surcharge ($)
+                                <Label className="text-xs font-semibold text-muted-foreground">
+                                  Travel Pricing Mode
                                 </Label>
-                                <Input
-                                  id="prov-base-surcharge"
-                                  type="number"
-                                  min={0}
-                                  step={5}
-                                  value={selectedProvider.base_outcall_surcharge ?? 0}
-                                  onChange={(e) => handleProviderChange('base_outcall_surcharge', parseFloat(e.target.value) || 0, true)}
-                                  className="h-10"
-                                />
+                                <Select
+                                  value={selectedProvider.travel_fee_mode || 'per_km'}
+                                  onValueChange={(val) => handleProviderChange('travel_fee_mode', val, true)}
+                                >
+                                  <SelectTrigger className="w-full sm:w-[300px]">
+                                    <SelectValue placeholder="Select travel pricing mode" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="per_km">Standard Base + Per-KM</SelectItem>
+                                    <SelectItem value="fixed">Flat Fixed Fee</SelectItem>
+                                    <SelectItem value="tiered">Distance Tiers</SelectItem>
+                                    <SelectItem value="uber_pass_through">Uber Pass-Through</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
-                              <div className="space-y-1.5">
-                                <Label htmlFor="prov-per-km" className="text-xs font-semibold text-muted-foreground">
-                                  Per-KM Travel Surcharge ($/km)
-                                </Label>
-                                <Input
-                                  id="prov-per-km"
-                                  type="number"
-                                  min={0}
-                                  step={0.5}
-                                  value={selectedProvider.per_km_fee ?? 0}
-                                  onChange={(e) => handleProviderChange('per_km_fee', parseFloat(e.target.value) || 0, true)}
-                                  className="h-10"
-                                />
-                              </div>
+
+                              {(selectedProvider.travel_fee_mode === 'per_km' || !selectedProvider.travel_fee_mode) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                  <div className="space-y-1.5">
+                                    <Label htmlFor="prov-base-surcharge" className="text-xs font-semibold text-muted-foreground">
+                                      Base Out-Call Surcharge ($)
+                                    </Label>
+                                    <Input
+                                      id="prov-base-surcharge"
+                                      type="number"
+                                      min={0}
+                                      step={5}
+                                      value={selectedProvider.base_outcall_surcharge ?? 0}
+                                      onChange={(e) => handleProviderChange('base_outcall_surcharge', parseFloat(e.target.value) || 0, true)}
+                                      className="h-10"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label htmlFor="prov-per-km" className="text-xs font-semibold text-muted-foreground">
+                                      Per-KM Travel Surcharge ($/km)
+                                    </Label>
+                                    <Input
+                                      id="prov-per-km"
+                                      type="number"
+                                      min={0}
+                                      step={0.5}
+                                      value={selectedProvider.per_km_fee ?? 0}
+                                      onChange={(e) => handleProviderChange('per_km_fee', parseFloat(e.target.value) || 0, true)}
+                                      className="h-10"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {selectedProvider.travel_fee_mode === 'fixed' && (
+                                <div className="space-y-1.5 w-full sm:w-[300px]">
+                                  <Label htmlFor="prov-fixed-fee" className="text-xs font-semibold text-muted-foreground">
+                                    Fixed Travel Fee ($)
+                                  </Label>
+                                  <Input
+                                    id="prov-fixed-fee"
+                                    type="number"
+                                    min={0}
+                                    step={5}
+                                    value={selectedProvider.fixed_travel_fee ?? 0}
+                                    onChange={(e) => handleProviderChange('fixed_travel_fee', parseFloat(e.target.value) || 0, true)}
+                                    className="h-10"
+                                  />
+                                </div>
+                              )}
+
+                              {selectedProvider.travel_fee_mode === 'tiered' && (
+                                <div className="space-y-2 border rounded-md p-3 bg-card">
+                                  <Label className="text-xs font-semibold text-muted-foreground">Distance Tiers</Label>
+                                  {(selectedProvider.travel_distance_tiers || []).map((tier: any, idx: number) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      <div className="flex-1 flex items-center gap-2">
+                                        <span className="text-xs">Up to</span>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          value={tier.up_to_km}
+                                          onChange={(e) => {
+                                            const newTiers = [...(selectedProvider.travel_distance_tiers || [])];
+                                            newTiers[idx] = { ...tier, up_to_km: parseFloat(e.target.value) || 0 };
+                                            handleProviderChange('travel_distance_tiers', newTiers, true);
+                                          }}
+                                          className="h-8 w-20"
+                                        />
+                                        <span className="text-xs">km: $</span>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          value={tier.fee}
+                                          onChange={(e) => {
+                                            const newTiers = [...(selectedProvider.travel_distance_tiers || [])];
+                                            newTiers[idx] = { ...tier, fee: parseFloat(e.target.value) || 0 };
+                                            handleProviderChange('travel_distance_tiers', newTiers, true);
+                                          }}
+                                          className="h-8 w-24"
+                                        />
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 w-8 p-0 text-destructive"
+                                        onClick={() => {
+                                          const newTiers = [...(selectedProvider.travel_distance_tiers || [])];
+                                          newTiers.splice(idx, 1);
+                                          handleProviderChange('travel_distance_tiers', newTiers, true);
+                                        }}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 text-xs"
+                                    onClick={() => {
+                                      const newTiers = [...(selectedProvider.travel_distance_tiers || [])];
+                                      newTiers.push({ up_to_km: 10, fee: 10 });
+                                      handleProviderChange('travel_distance_tiers', newTiers, true);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" /> Add Tier
+                                  </Button>
+                                </div>
+                              )}
+
+                              {selectedProvider.travel_fee_mode === 'uber_pass_through' && (
+                                <div className="p-3 bg-black/5 dark:bg-white/5 rounded-md flex items-center gap-2">
+                                  <div className="bg-black text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Uber</div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Client pays the estimated live Uber transit fare based on their address.
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
 

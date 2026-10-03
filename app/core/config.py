@@ -114,6 +114,48 @@ class Settings(BaseSettings):
 
     # OpenAI Settings
     OPENAI_API_KEY: str = Field("", description="OpenAI API Key")
+    OPENAI_EMBEDDING_MODEL: str = Field(
+        "text-embedding-3-small",
+        description="Configured model name for 1536-dimensional semantic embeddings.",
+    )
+    BUSINESS_ASSISTANT_TEXT_MODEL: str = Field(
+        "",
+        description="Configured model name for the bounded internal text conversation.",
+    )
+    BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES: int = Field(
+        20,
+        ge=2,
+        le=100,
+        description="Maximum persisted conversation messages supplied to one text turn.",
+    )
+    BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS: int = Field(
+        600,
+        ge=64,
+        le=2_000,
+        description="Maximum output tokens for one internal text turn.",
+    )
+    BUSINESS_ASSISTANT_TURN_TIMEOUT_SECONDS: float = Field(
+        30.0,
+        ge=1.0,
+        le=120.0,
+        description="Maximum provider request duration for one internal text turn.",
+    )
+    BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS: int = Field(
+        3,
+        ge=0,
+        le=6,
+        description="Maximum server-authorised read-tool rounds in one internal text turn.",
+    )
+    BUSINESS_ASSISTANT_REALTIME_MODEL: str = Field(
+        "",
+        description="Configured model name for the server-negotiated realtime voice session.",
+    )
+    BUSINESS_ASSISTANT_REALTIME_SDP_MAX_BYTES: int = Field(
+        100_000,
+        ge=1_024,
+        le=500_000,
+        description="Maximum accepted SDP offer or answer size for the internal realtime voice session.",
+    )
 
     # Cal.com Settings
     CALCOM_API_KEY: str = Field("", description="Cal.com API key")
@@ -126,6 +168,8 @@ class Settings(BaseSettings):
     CHATWOOT_BASE_URL: str = Field("http://localhost:4000", description="Chatwoot base URL")
     CHATWOOT_API_ACCESS_TOKEN: str = Field("", description="Chatwoot API access token")
     CHATWOOT_PLATFORM_API_TOKEN: str = Field("", description="Chatwoot Platform API access token for account provisioning")
+    CHATWOOT_PLATFORM_ACCESS_TOKEN: str = Field("", description="Chatwoot Platform API access token for account provisioning")
+    AGENT_WEBHOOK_URL: str = Field("http://localhost:8000/api/v1/chatwoot/webhook", description="Agent webhook URL to receive Chatwoot events")
     CHATWOOT_WEBHOOK_SECRET: str = Field("", description="Chatwoot webhook secret")
     CHATWOOT_AUTO_PROVISION: bool = Field(False, description="Automatically provision Chatwoot account/inboxes on tenant creation")
 

@@ -1114,22 +1114,20 @@ export default function ServicesPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">In-Call Prep Buffer Before (mins)</Label>
+                        <Label className="text-sm font-semibold">Buffer Before (mins)</Label>
                         <Input 
                           type="number"
                           value={formData.buffer_before}
                           onChange={e => setFormData({ ...formData, buffer_before: parseInt(e.target.value) || 0 })}
                         />
-                        <p className="text-[11px] text-muted-foreground">Studio intake & prep before appointment.</p>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">In-Call Reset Buffer After (mins)</Label>
+                        <Label className="text-sm font-semibold">Buffer After (mins)</Label>
                         <Input 
                           type="number"
                           value={formData.buffer_after}
                           onChange={e => setFormData({ ...formData, buffer_after: parseInt(e.target.value) || 0 })}
                         />
-                        <p className="text-[11px] text-muted-foreground">Sanitizing & room reset after appointment.</p>
                       </div>
                     </div>
                   </div>
@@ -1157,22 +1155,20 @@ export default function ServicesPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Pre-Service Prep Buffer (mins)</Label>
+                        <Label className="text-sm font-semibold">Buffer Before (mins)</Label>
                         <Input
                           type="number"
                           value={formData.outcall_buffer_before ?? 0}
                           onChange={(e) => setFormData({ ...formData, outcall_buffer_before: parseInt(e.target.value) || 0 })}
                         />
-                        <p className="text-[11px] text-muted-foreground">Parking, entry, unpacking & setup (in addition to travel time).</p>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Post-Service Pack-up Buffer (mins)</Label>
+                        <Label className="text-sm font-semibold">Buffer After (mins)</Label>
                         <Input
                           type="number"
                           value={formData.outcall_buffer_after ?? 0}
                           onChange={(e) => setFormData({ ...formData, outcall_buffer_after: parseInt(e.target.value) || 0 })}
                         />
-                        <p className="text-[11px] text-muted-foreground">Packing equipment & departure (in addition to travel time).</p>
                       </div>
                     </div>
 
@@ -1368,7 +1364,7 @@ export default function ServicesPage() {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="buffer_before">In-Call Prep Buffer Before (mins)</Label>
+                              <Label htmlFor="buffer_before">Buffer Before (mins)</Label>
                               <Input 
                                 id="buffer_before" 
                                 type="number"
@@ -1381,10 +1377,9 @@ export default function ServicesPage() {
                                 }}
                                 disabled={!isEditing}
                               />
-                              <p className="text-[11px] text-muted-foreground">Studio intake & prep before appointment.</p>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="buffer_after">In-Call Reset Buffer After (mins)</Label>
+                              <Label htmlFor="buffer_after">Buffer After (mins)</Label>
                               <Input 
                                 id="buffer_after" 
                                 type="number"
@@ -1397,7 +1392,6 @@ export default function ServicesPage() {
                                 }}
                                 disabled={!isEditing}
                               />
-                              <p className="text-[11px] text-muted-foreground">Sanitizing & room reset after appointment.</p>
                             </div>
                           </div>
                         </div>
@@ -1429,7 +1423,7 @@ export default function ServicesPage() {
                               </div>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="outcall_buffer_before">Pre-Service Prep Buffer (mins)</Label>
+                              <Label htmlFor="outcall_buffer_before">Buffer Before (mins)</Label>
                               <Input
                                 id="outcall_buffer_before"
                                 type="number"
@@ -1442,10 +1436,9 @@ export default function ServicesPage() {
                                 }}
                                 disabled={!isEditing}
                               />
-                              <p className="text-[11px] text-muted-foreground">Parking, entry, unpacking & setup (in addition to travel time).</p>
                             </div>
                             <div className="space-y-2">
-                              <Label htmlFor="outcall_buffer_after">Post-Service Pack-up Buffer (mins)</Label>
+                              <Label htmlFor="outcall_buffer_after">Buffer After (mins)</Label>
                               <Input
                                 id="outcall_buffer_after"
                                 type="number"
@@ -1458,7 +1451,6 @@ export default function ServicesPage() {
                                 }}
                                 disabled={!isEditing}
                               />
-                              <p className="text-[11px] text-muted-foreground">Packing equipment & departure (in addition to travel time).</p>
                             </div>
                           </div>
 

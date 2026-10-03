@@ -155,14 +155,56 @@ class TravelCalculationService:
             distance_fee = 0.0
             reason = "Provider does not offer out-call services"
             disclaimer = None
+            fee_mode = "per_km"
         elif not within_radius:
             travel_fee = 0.0
             distance_fee = 0.0
             reason = fee_res.get("reason", "Location exceeds maximum out-call radius")
             disclaimer = None
+            fee_mode = "per_km"
         else:
-            distance_fee = float(round(distance_km * per_km_fee, 2))
-            travel_fee = float(fee_res.get("fee", round(base_surcharge + distance_fee, 2)))
+            travel_fee_mode = getattr(provider, "travel_fee_mode", "per_km")
+            fee_mode = travel_fee_mode
+
+            if travel_fee_mode == "fixed":
+                fixed_fee = float(getattr(provider, "fixed_travel_fee", 0.0) or 0.0)
+                distance_fee = 0.0
+                travel_fee = fixed_fee
+            elif travel_fee_mode == "tiered":
+                tiers = getattr(provider, "travel_distance_tiers", None)
+                distance_fee = 0.0
+                travel_fee = float(round(base_surcharge + distance_km * per_km_fee, 2))  # fallback
+                
+                if tiers and isinstance(tiers, list):
+                    try:
+                        sorted_tiers = sorted(
+                            [t for t in tiers if "up_to_km" in t and "fee" in t],
+                            key=lambda x: float(x["up_to_km"])
+                        )
+                        if sorted_tiers:
+                            applied_fee = None
+                            for tier in sorted_tiers:
+                                if distance_km <= float(tier["up_to_km"]):
+                                    applied_fee = float(tier["fee"])
+                                    break
+                            if applied_fee is None:
+                                applied_fee = float(sorted_tiers[-1]["fee"])
+                            travel_fee = applied_fee
+                    except (ValueError, TypeError):
+                        pass
+            elif travel_fee_mode == "uber_pass_through":
+                # estimated trip fare (base flagfall + per-km + per-minute rate)
+                # Assume $3.00 base + $1.85/km + $0.45/min
+                # Assume roughly 1.5 minutes per km on average for duration
+                duration_mins = distance_km * 1.5
+                travel_fee = float(round(3.00 + (distance_km * 1.85) + (duration_mins * 0.45), 2))
+                distance_fee = float(round((distance_km * 1.85) + (duration_mins * 0.45), 2))
+            else:
+                # "per_km" default
+                fee_mode = "per_km"
+                distance_fee = float(round(distance_km * per_km_fee, 2))
+                travel_fee = float(fee_res.get("fee", round(base_surcharge + distance_fee, 2)))
+
             reason = None
             if is_estimate:
                 disclaimer = (
@@ -175,6 +217,7 @@ class TravelCalculationService:
         return ChargeableTravelQuote(
             distance_km=distance_km,
             travel_fee=travel_fee,
+            fee_mode=fee_mode,
             base_surcharge=base_surcharge,
             distance_fee=distance_fee,
             origin_type=origin_type,

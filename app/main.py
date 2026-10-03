@@ -99,6 +99,7 @@ from .api.routers import (
     packages,
     # New routers from merge
     admin_schedule,
+    chatwoot_webhook,
     additional_fields,
     checkout,
     public_clients,
@@ -141,6 +142,7 @@ from .api.routers import (
     assistant_studio,
     tenants,
     translations,
+    business_assistant,
 )
 
 
@@ -158,6 +160,8 @@ async def app_lifespan(app: FastAPI):
     curator_worker_task = None
     projection_stop_event = None
     projection_worker_task = None
+    arrival_alert_stop_event = None
+    arrival_alert_worker_task = None
 
     if not os.getenv("PYTEST_CURRENT_TEST"):
         try:
@@ -165,6 +169,19 @@ async def app_lifespan(app: FastAPI):
             sentinel_scheduler.start()
         except Exception as exc:
             logging.getLogger(__name__).warning("Failed starting sentinel scheduler: %s", exc)
+
+        try:
+            from .services.sms.arrival_service import start_arrival_alert_worker_loop
+            arrival_alert_stop_event = asyncio.Event()
+            arrival_alert_worker_task = asyncio.create_task(
+                start_arrival_alert_worker_loop(
+                    interval_seconds=60.0,
+                    stop_event=arrival_alert_stop_event,
+                )
+            )
+            logging.getLogger(__name__).info("Arrival alert chime worker task started")
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Failed starting arrival alert worker: %s", exc)
 
         if settings.CURATOR_WORKER_ENABLED:
             try:
@@ -195,6 +212,13 @@ async def app_lifespan(app: FastAPI):
                 logging.getLogger(__name__).warning("Failed starting projection worker: %s", exc)
 
     yield
+
+    if arrival_alert_stop_event and arrival_alert_worker_task:
+        try:
+            arrival_alert_stop_event.set()
+            await asyncio.wait_for(arrival_alert_worker_task, timeout=5.0)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Arrival alert worker shutdown error: %s", exc)
 
     if projection_stop_event and projection_worker_task:
         try:
@@ -305,6 +329,17 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
         code = "CONFLICT"
     elif exc.status_code == 429:
         code = "TOO_MANY_REQUESTS"
+
+    message = exc.detail
+    details = {}
+    if isinstance(exc.detail, dict):
+        candidate_code = exc.detail.get("error_code")
+        candidate_message = exc.detail.get("message")
+        candidate_details = exc.detail.get("details")
+        if isinstance(candidate_code, str) and candidate_code:
+            code = candidate_code
+        message = candidate_message if isinstance(candidate_message, str) else "Request failed."
+        details = candidate_details if isinstance(candidate_details, dict) else {}
     
     current_span = trace.get_current_span()
     trace_id = ""
@@ -317,8 +352,8 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
             "ok": False,
             "error": {
                 "code": code,
-                "message": exc.detail,
-                "details": {},
+                "message": message,
+                "details": details,
                 "request_id": trace_id
             }
         }
@@ -425,6 +460,7 @@ app.include_router(service_relations.router, prefix="/api/admin")
 
 # FastBook merge
 app.include_router(webhooks.router)
+app.include_router(chatwoot_webhook.router)
 app.include_router(calendar_notes.router)
 app.include_router(general_systems.router)
 app.include_router(general_systems.public_router)
@@ -465,6 +501,7 @@ app.include_router(itinerary.router, prefix="/api/admin")
 app.include_router(itinerary.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api/admin")
 app.include_router(assistant_studio.router, prefix="/api/admin/assistant-studio", tags=["Assistant Studio"])
+app.include_router(business_assistant.router, prefix="/api/admin")
 
 
 

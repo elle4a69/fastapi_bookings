@@ -583,3 +583,64 @@ async def test_quote_outcall_travel_resolves_origin_from_provider_location(base_
     )
     assert quote_single.origin_address == "Chatswood"
 
+# ---------------------------------------------------------------------------
+# 9. Flexible Travel Fee Modes Tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_flexible_travel_fee_fixed(base_tenant, sample_provider):
+    """Test fixed travel fee mode."""
+    sample_provider.travel_fee_mode = "fixed"
+    sample_provider.fixed_travel_fee = Decimal("50.00")
+    service = TravelCalculationService()
+
+    quote = await service.calculate_chargeable_travel(
+        tenant=base_tenant,
+        provider=sample_provider,
+        client_destination="Bondi",
+    )
+
+    assert quote.fee_mode == "fixed"
+    assert quote.travel_fee == 50.00
+    assert quote.distance_fee == 0.0
+
+
+@pytest.mark.asyncio
+async def test_flexible_travel_fee_tiered(base_tenant, sample_provider):
+    """Test tiered travel fee mode."""
+    sample_provider.travel_fee_mode = "tiered"
+    sample_provider.travel_distance_tiers = [
+        {"up_to_km": 5.0, "fee": 15.00},
+        {"up_to_km": 15.0, "fee": 30.00},
+        {"up_to_km": 30.0, "fee": 60.00},
+    ]
+    service = TravelCalculationService()
+
+    quote = await service.calculate_chargeable_travel(
+        tenant=base_tenant,
+        provider=sample_provider,
+        client_destination="Bondi",
+    )
+
+    assert quote.fee_mode == "tiered"
+    assert quote.travel_fee == 30.00
+
+
+@pytest.mark.asyncio
+async def test_flexible_travel_fee_uber_pass_through(base_tenant, sample_provider):
+    """Test uber_pass_through travel fee mode."""
+    sample_provider.travel_fee_mode = "uber_pass_through"
+    service = TravelCalculationService()
+
+    quote = await service.calculate_chargeable_travel(
+        tenant=base_tenant,
+        provider=sample_provider,
+        client_destination="Bondi",
+    )
+
+    assert quote.fee_mode == "uber_pass_through"
+    distance_km = quote.distance_km
+    duration_mins = distance_km * 1.5
+    expected_fee = round(3.00 + (distance_km * 1.85) + (duration_mins * 0.45), 2)
+    assert quote.travel_fee == float(expected_fee)
+

@@ -30,6 +30,7 @@ class ChargeableTravelQuote(BaseModel):
 
     distance_km: float = Field(..., description="Calculated chargeable distance in kilometers")
     travel_fee: float = Field(..., description="Total travel surcharge fee charged to the client")
+    fee_mode: str = Field("per_km", description="Pricing mode used for calculation")
     base_surcharge: float = Field(..., description="Base out-call surcharge amount")
     distance_fee: float = Field(..., description="Variable distance-based fee component")
     origin_type: str = Field(..., description="Origin policy used: ALWAYS_FROM_BASE or ACTUAL_ORIGIN")

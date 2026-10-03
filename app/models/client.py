@@ -7,7 +7,7 @@ and consent records required for the public client portal.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey, Float
 from sqlalchemy.orm import relationship
 
 from ..db.database import Base
@@ -29,6 +29,14 @@ class Client(Base):
     postcode = Column(String, nullable=True)
     country = Column(String, nullable=True)
     timezone = Column(String, nullable=True)
+    
+    # Chatwoot & Geo fields
+    chatwoot_contact_id = Column(Integer, unique=True, nullable=True)
+    street_address = Column(String, nullable=True)
+    suburb = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    
     accepts_marketing = Column(Boolean, default=False, nullable=False)
     terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
     privacy_accepted_at = Column(DateTime(timezone=True), nullable=True)

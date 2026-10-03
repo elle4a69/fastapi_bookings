@@ -31,6 +31,11 @@ class Provider(Base):
     ignore_company_hours = Column(Boolean, default=False, nullable=False)
     image = Column(Text, nullable=True)
     weekly_schedule = Column(JSON, nullable=True)
+    
+    # Chatwoot & Agent fields
+    chatwoot_inbox_id = Column(Integer, unique=True, nullable=True)
+    system_persona = Column(Text, nullable=True)
+    max_char_limit = Column(Integer, default=160, nullable=False)
 
     # In-call and Out-call routing & scheduling attributes
     allow_in_call = Column(Boolean, default=True, nullable=False)
@@ -39,6 +44,9 @@ class Provider(Base):
     out_call_radius_km = Column(Float, default=25.0, nullable=False)
     base_outcall_surcharge = Column(Numeric(10, 2), default=0.00, nullable=False)
     per_km_fee = Column(Numeric(10, 2), default=0.00, nullable=False)
+    travel_fee_mode = Column(String, default="per_km", nullable=False)
+    fixed_travel_fee = Column(Numeric(10, 2), default=0.00, nullable=False)
+    travel_distance_tiers = Column(JSON, nullable=True)
     turnaround_buffer_mins = Column(Integer, default=15, nullable=False)
 
     # Relationships

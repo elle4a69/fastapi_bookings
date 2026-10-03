@@ -7,6 +7,7 @@ SQLAlchemy's metadata can discover them when creating tables.
 from .user import User
 from .service import Service
 from .provider import Provider
+from .provider_knowledge import ProviderKnowledge
 from .client import Client
 from .location import Location, LocationProvider, LocationService, LocationCategory, LocationProduct, LocationProvider, LocationService, LocationCategory, LocationProduct
 from .booking import Booking, ServiceMode
@@ -114,6 +115,16 @@ from .conversation import (
 )
 from .message_style_example import MessageStyleExample
 from .tenant_translation import TenantTranslation
+from .business_assistant import (
+    BusinessAssistantConversation,
+    BusinessAssistantMessage,
+    BusinessAssistantToolRun,
+    BusinessAssistantMemory,
+    BusinessAssistantOnboardingProgress,
+    SupportTicket,
+    SupportTicketDeduplicationClaim,
+    SupportTicketEvent,
+)
 
 __all__ = [
     "User",
@@ -213,5 +224,14 @@ __all__ = [
     "DeliveryStatus",
     "MessageStyleExample",
     "TenantTranslation",
+    "BusinessAssistantConversation",
+    "BusinessAssistantMessage",
+    "BusinessAssistantToolRun",
+    "BusinessAssistantMemory",
+    "BusinessAssistantOnboardingProgress",
+    "SupportTicket",
+    "SupportTicketDeduplicationClaim",
+    "SupportTicketEvent",
+    "ProviderKnowledge",
 ]
 
