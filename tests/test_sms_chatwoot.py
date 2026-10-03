@@ -984,3 +984,149 @@ def test_direct_carrier_routes_fail_closed_containment(client, db_session):
     assert send_result.error_code == "DIRECT_CARRIER_LOCKED_OUT"
     assert "locked out" in send_result.error_message
 
+
+def test_generate_webhook_url_no_mandatory_secret():
+    """Verify generate_webhook_url does not mandate embedding raw secrets in query parameters."""
+    from app.services.sms.chatwoot_service import generate_webhook_url
+
+    clean_url = generate_webhook_url("https://example.com")
+    assert clean_url == "https://example.com/api/sms/chatwoot/webhook"
+    assert "token=" not in clean_url
+
+    legacy_url = generate_webhook_url("https://example.com", token="legacy_secret_123")
+    assert legacy_url == "https://example.com/api/sms/chatwoot/webhook?token=legacy_secret_123"
+
+
+def test_chatwoot_webhook_header_authentication(client, db_session, setup_chatwoot_data):
+    """Verify authentication via X-Chatwoot-Token, Authorization headers, and query param fallback."""
+    secret = setup_chatwoot_data["binding"].webhook_secret
+    payload = {
+        "id": 991,
+        "content": "Testing header auth.",
+        "message_type": "incoming",
+        "inbox": {"id": 45},
+        "conversation": {"id": 500, "contact": {"id": 89, "phone_number": "+61400000000"}},
+    }
+
+    # 1. Authenticate with X-Chatwoot-Token header
+    resp1 = client.post(
+        "/api/sms/chatwoot/webhook",
+        json=payload,
+        headers={"X-Chatwoot-Token": secret},
+    )
+    assert resp1.status_code == 200
+    assert resp1.json()["status"] == "success"
+
+    # 2. Authenticate with Authorization Bearer header
+    payload["id"] = 992
+    resp2 = client.post(
+        "/api/sms/chatwoot/webhook",
+        json=payload,
+        headers={"Authorization": f"Bearer {secret}"},
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "success"
+
+    # 3. Authenticate with query param fallback (?token=...)
+    payload["id"] = 993
+    resp3 = client.post(
+        f"/api/sms/chatwoot/webhook?token={secret}",
+        json=payload,
+    )
+    assert resp3.status_code == 200
+    assert resp3.json()["status"] == "success"
+
+    # 4. Reject when no token/header provided
+    payload["id"] = 994
+    resp4 = client.post(
+        "/api/sms/chatwoot/webhook",
+        json=payload,
+    )
+    assert resp4.status_code == 401
+
+
+def test_cross_tenant_account_lockdown_and_override(client, db_session, setup_chatwoot_data):
+    """Verify that bindings enforce same-tenancy lockdown (403 on mismatch, lock to tenant account)."""
+    from app.main import app as fastapi_app
+    from app.models.user import User
+    from app.api.deps import get_current_tenant, get_current_admin
+
+    data = setup_chatwoot_data
+    tenant = data["tenant"]
+    provider = data["provider"]
+
+    # Ensure tenant has chatwoot_account_id mapped
+    tenant.chatwoot_account_id = 1
+    db_session.commit()
+
+    admin_user = User(
+        id=8888,
+        tenant_id=tenant.id,
+        login="testadmin@example.com",
+        password_hash="pw",
+        role="admin",
+    )
+    db_session.add(admin_user)
+    db_session.commit()
+
+    fastapi_app.dependency_overrides[get_current_tenant] = lambda: tenant
+    fastapi_app.dependency_overrides[get_current_admin] = lambda: admin_user
+
+    try:
+        # 1. Attempting to create binding with mismatched chatwoot_account_id returns 403 Forbidden
+        mismatched_create = client.post(
+            "/api/sms/chatwoot/bindings",
+            json={
+                "provider_id": provider.id,
+                "chatwoot_account_id": 9999,  # Mismatched!
+                "chatwoot_inbox_id": 777,
+            },
+        )
+        assert mismatched_create.status_code == 403
+        msg1 = mismatched_create.json().get("error", {}).get("message") or mismatched_create.json().get("detail", "")
+        assert "Cannot bind to a Chatwoot account outside your tenancy" in msg1
+
+        # 2. Creating binding with chatwoot_account_id omitted automatically locks to tenant.chatwoot_account_id
+        valid_create = client.post(
+            "/api/sms/chatwoot/bindings",
+            json={
+                "provider_id": provider.id,
+                "chatwoot_inbox_id": 778,
+                "is_enabled": True,
+            },
+        )
+        assert valid_create.status_code == 201
+        created_data = valid_create.json()
+        assert created_data["chatwoot_account_id"] == 1
+        assert created_data["chatwoot_inbox_id"] == 778
+        created_id = created_data["id"]
+
+        # 3. Attempting to update binding to a different chatwoot_account_id returns 403 Forbidden
+        mismatched_update = client.put(
+            f"/api/sms/chatwoot/bindings/{created_id}",
+            json={
+                "chatwoot_account_id": 8888,  # Mismatched!
+            },
+        )
+        assert mismatched_update.status_code == 403
+        msg3 = mismatched_update.json().get("error", {}).get("message") or mismatched_update.json().get("detail", "")
+        assert "Cannot bind to a Chatwoot account outside your tenancy" in msg3
+
+        # 4. Same-tenancy update (e.g. changing inbox or enabled state) succeeds
+        valid_update = client.put(
+            f"/api/sms/chatwoot/bindings/{created_id}",
+            json={
+                "chatwoot_inbox_id": 779,
+                "is_enabled": False,
+            },
+        )
+        assert valid_update.status_code == 200
+        assert valid_update.json()["chatwoot_inbox_id"] == 779
+        assert valid_update.json()["is_enabled"] is False
+
+    finally:
+        fastapi_app.dependency_overrides.pop(get_current_tenant, None)
+        fastapi_app.dependency_overrides.pop(get_current_admin, None)
+
+
+

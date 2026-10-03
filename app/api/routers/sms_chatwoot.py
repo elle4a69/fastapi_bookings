@@ -16,6 +16,11 @@ from ...schemas.sms_chatwoot import (
     SmsChatwootBindingResponse,
 )
 
+import logging
+from ...services.sms.chatwoot_service import generate_webhook_url
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/sms/chatwoot", tags=["sms-chatwoot"])
 
 def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) -> SmsChatwootBindingResponse:
@@ -25,7 +30,7 @@ def to_response(binding: SmsChatwootBinding, request: Optional[Request] = None) 
         base = str(request.base_url).rstrip("/")
         
     secret = binding.webhook_secret
-    webhook_url = f"{base}/api/sms/chatwoot/webhook?token={secret}" if secret else None
+    webhook_url = generate_webhook_url(base) if secret else None
 
     return SmsChatwootBindingResponse(
         id=binding.id,
@@ -59,10 +64,20 @@ async def chatwoot_webhook(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    if not token:
-        token = request.query_params.get("token") or request.headers.get("X-Chatwoot-Token") or request.headers.get("Authorization")
-        if token and token.startswith("Bearer "):
-            token = token[7:]
+    header_token = request.headers.get("X-Chatwoot-Token") or request.headers.get("Authorization")
+    if header_token and header_token.startswith("Bearer "):
+        header_token = header_token[7:].strip()
+
+    query_token = request.query_params.get("token") or token
+    if query_token and not header_token:
+        logger.warning(
+            "Passing Chatwoot webhook token via query parameter ?token= is deprecated and insecure. "
+            "Use X-Chatwoot-Token, Authorization, or X-Chatwoot-Signature headers instead."
+        )
+        effective_token = query_token
+    else:
+        effective_token = header_token or query_token
+    token = effective_token
 
     signature_header = request.headers.get("X-Chatwoot-Signature")
     timestamp_header = (
@@ -79,6 +94,7 @@ async def chatwoot_webhook(
         raw_body=raw_body,
         signature_header=signature_header,
         timestamp_header=timestamp_header,
+        headers=dict(request.headers),
     )
     return result
 
@@ -117,12 +133,18 @@ async def create_chatwoot_binding(
 
     # 2. Enforce Tenant <-> Chatwoot Account 1-to-1 mapping
     if tenant.chatwoot_account_id is not None:
-        if tenant.chatwoot_account_id != payload.chatwoot_account_id:
+        if payload.chatwoot_account_id is not None and tenant.chatwoot_account_id != payload.chatwoot_account_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot bind to a Chatwoot account outside your tenancy.",
+            )
+        account_id_to_use = tenant.chatwoot_account_id
+    else:
+        if payload.chatwoot_account_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tenant is already mapped to Chatwoot account {tenant.chatwoot_account_id}.",
+                detail="chatwoot_account_id is required when tenant does not have a linked account.",
             )
-    else:
         existing_tenant = db.query(Tenant).filter(
             Tenant.chatwoot_account_id == payload.chatwoot_account_id,
             Tenant.id != tenant.id,
@@ -133,6 +155,7 @@ async def create_chatwoot_binding(
                 detail=f"Chatwoot account {payload.chatwoot_account_id} is already mapped to another tenant.",
             )
         tenant.chatwoot_account_id = payload.chatwoot_account_id
+        account_id_to_use = payload.chatwoot_account_id
 
     # 3. Check inbox uniqueness across tenants
     existing_inbox = db.query(SmsChatwootBinding).filter(
@@ -145,16 +168,20 @@ async def create_chatwoot_binding(
             detail=f"Chatwoot inbox {payload.chatwoot_inbox_id} is already bound to another tenant.",
         )
 
+    from ...core.config import settings
+    chatwoot_base_url_to_use = payload.chatwoot_base_url or settings.CHATWOOT_BASE_URL
+    chatwoot_api_token_to_use = payload.chatwoot_api_token or settings.CHATWOOT_API_ACCESS_TOKEN or settings.CHATWOOT_PLATFORM_ACCESS_TOKEN
+
     import secrets
     webhook_secret = secrets.token_hex(32)
     binding = SmsChatwootBinding(
         tenant_id=tenant.id,
         provider_id=payload.provider_id,
         location_id=payload.location_id,
-        chatwoot_account_id=payload.chatwoot_account_id,
+        chatwoot_account_id=account_id_to_use,
         chatwoot_inbox_id=payload.chatwoot_inbox_id,
-        chatwoot_base_url=payload.chatwoot_base_url,
-        chatwoot_api_token=payload.chatwoot_api_token,
+        chatwoot_base_url=chatwoot_base_url_to_use,
+        chatwoot_api_token=chatwoot_api_token_to_use,
         webhook_secret=webhook_secret,
         is_enabled=payload.is_enabled,
         channel_metadata=payload.channel_metadata,
@@ -213,12 +240,12 @@ async def update_chatwoot_binding(
 
     update_data = payload.model_dump(exclude_unset=True)
 
-    if "chatwoot_account_id" in update_data and update_data["chatwoot_account_id"] != binding.chatwoot_account_id:
+    if "chatwoot_account_id" in update_data and update_data["chatwoot_account_id"] is not None and update_data["chatwoot_account_id"] != binding.chatwoot_account_id:
         new_account_id = update_data["chatwoot_account_id"]
         if tenant.chatwoot_account_id is not None and tenant.chatwoot_account_id != new_account_id:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tenant is already mapped to Chatwoot account {tenant.chatwoot_account_id}.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot bind to a Chatwoot account outside your tenancy.",
             )
         existing_tenant = db.query(Tenant).filter(
             Tenant.chatwoot_account_id == new_account_id,

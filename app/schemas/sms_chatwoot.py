@@ -3,16 +3,16 @@ from typing import Optional, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 
 class SmsChatwootBindingBase(BaseModel):
-    chatwoot_account_id: int
+    chatwoot_account_id: Optional[int] = None
     chatwoot_inbox_id: int
-    chatwoot_base_url: str
+    chatwoot_base_url: Optional[str] = None
     is_enabled: bool = True
     channel_metadata: Optional[Dict[str, Any]] = None
 
 class SmsChatwootBindingCreate(SmsChatwootBindingBase):
     provider_id: Optional[int] = None
     location_id: Optional[int] = None
-    chatwoot_api_token: str
+    chatwoot_api_token: Optional[str] = None
 
 class SmsChatwootBindingUpdate(BaseModel):
     provider_id: Optional[int] = None

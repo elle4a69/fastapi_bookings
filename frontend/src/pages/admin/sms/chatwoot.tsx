@@ -42,11 +42,9 @@ export default function SmsChatwootTab() {
 
   // Form states
   const [providerId, setProviderId] = useState("");
-  const [chatwootAccountId, setChatwootAccountId] = useState("");
   const [chatwootInboxId, setChatwootInboxId] = useState("");
-  const [chatwootBaseUrl, setChatwootBaseUrl] = useState("https://app.chatwoot.com");
-  const [chatwootApiToken, setChatwootApiToken] = useState("");
   const [isEnabled, setIsEnabled] = useState(true);
+  const [provisioning, setProvisioning] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -78,10 +76,7 @@ export default function SmsChatwootTab() {
   const handleOpenCreate = () => {
     setEditingBinding(null);
     setProviderId(providers[0]?.id ? String(providers[0].id) : "");
-    setChatwootAccountId("");
     setChatwootInboxId("");
-    setChatwootBaseUrl("https://app.chatwoot.com");
-    setChatwootApiToken("");
     setIsEnabled(true);
     setDialogOpen(true);
   };
@@ -89,27 +84,21 @@ export default function SmsChatwootTab() {
   const handleOpenEdit = (bind: SmsChatwootBinding) => {
     setEditingBinding(bind);
     setProviderId(String(bind.provider_id || providers[0]?.id || ""));
-    setChatwootAccountId(String(bind.chatwoot_account_id));
     setChatwootInboxId(String(bind.chatwoot_inbox_id));
-    setChatwootBaseUrl(bind.chatwoot_base_url);
-    setChatwootApiToken(bind.chatwoot_api_token); // Will be masked as ********
     setIsEnabled(bind.is_enabled);
     setDialogOpen(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!providerId || !chatwootAccountId || !chatwootInboxId || !chatwootBaseUrl || !chatwootApiToken) {
+    if (!providerId || !chatwootInboxId) {
       toast.error("Please fill in all required fields.");
       return;
     }
 
     const payload = {
       provider_id: Number(providerId),
-      chatwoot_account_id: Number(chatwootAccountId),
       chatwoot_inbox_id: Number(chatwootInboxId),
-      chatwoot_base_url: chatwootBaseUrl,
-      chatwoot_api_token: chatwootApiToken,
       is_enabled: isEnabled
     };
 
@@ -125,6 +114,19 @@ export default function SmsChatwootTab() {
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Failed to save Chatwoot binding.");
+    }
+  };
+
+  const handleAutoProvision = async () => {
+    setProvisioning(true);
+    try {
+      await apiClient.post("/api/admin/sms/chatwoot/provision", {});
+      toast.success("Auto-provisioning completed successfully.");
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Auto-provisioning failed.");
+    } finally {
+      setProvisioning(false);
     }
   };
 
@@ -152,6 +154,11 @@ export default function SmsChatwootTab() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {govLinks?.chatwoot_account_id && (
+              <Badge variant="outline" className="gap-1 px-2.5 py-1 text-xs border-primary/20 bg-primary/5 text-primary">
+                🔒 Account: #{govLinks.chatwoot_account_id}
+              </Badge>
+            )}
             {govLinks?.super_admin_url && (
               <Button
                 variant="outline"
@@ -184,6 +191,9 @@ export default function SmsChatwootTab() {
                 Tenant Workspace
               </Button>
             )}
+            <Button onClick={handleAutoProvision} size="sm" variant="secondary" className="gap-2" disabled={provisioning}>
+              ⚡ {provisioning ? "Provisioning..." : "Auto-Provision Inboxes"}
+            </Button>
             <Button onClick={handleOpenCreate} size="sm" className="gap-2">
               <Plus className="w-4 h-4" /> Add Binding
             </Button>
@@ -313,6 +323,11 @@ export default function SmsChatwootTab() {
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSave} className="space-y-4 py-2">
+              {govLinks?.chatwoot_account_id && (
+                <div className="text-sm text-muted-foreground bg-primary/5 p-3 rounded-md border border-primary/10">
+                  Locked to your clinic's Chatwoot account (#{govLinks.chatwoot_account_id}). Connect a provider to any of your account's inboxes.
+                </div>
+              )}
               <div className="grid gap-2">
                 <Label htmlFor="provider">Booking Provider</Label>
                 <Select value={providerId} onValueChange={setProviderId}>
@@ -329,53 +344,14 @@ export default function SmsChatwootTab() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="accountId">Chatwoot Account ID</Label>
-                  <Input
-                    id="accountId"
-                    type="number"
-                    value={chatwootAccountId}
-                    onChange={(e) => setChatwootAccountId(e.target.value)}
-                    placeholder="e.g. 1"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="inboxId">Chatwoot Inbox ID</Label>
-                  <Input
-                    id="inboxId"
-                    type="number"
-                    value={chatwootInboxId}
-                    onChange={(e) => setChatwootInboxId(e.target.value)}
-                    placeholder="e.g. 45"
-                    required
-                  />
-                </div>
-              </div>
-
               <div className="grid gap-2">
-                <Label htmlFor="baseUrl">Chatwoot Base URL</Label>
+                <Label htmlFor="inboxId">Chatwoot Inbox ID</Label>
                 <Input
-                  id="baseUrl"
-                  type="url"
-                  value={chatwootBaseUrl}
-                  onChange={(e) => setChatwootBaseUrl(e.target.value)}
-                  placeholder="https://app.chatwoot.com"
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="token" className="flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-muted-foreground" /> Chatwoot API Token
-                </Label>
-                <Input
-                  id="token"
-                  type="password"
-                  value={chatwootApiToken}
-                  onChange={(e) => setChatwootApiToken(e.target.value)}
-                  placeholder="Enter API token or bot access token"
+                  id="inboxId"
+                  type="number"
+                  value={chatwootInboxId}
+                  onChange={(e) => setChatwootInboxId(e.target.value)}
+                  placeholder="e.g. 45"
                   required
                 />
               </div>
