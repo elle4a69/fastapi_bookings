@@ -12,42 +12,30 @@ They are mandatory unless the user explicitly overrides a rule in writing.
   booking audit history.
 - Chatwoot is not the booking source of truth.
 
-### Bridge Phase Exception — Explicitly Approved
+### Native Business Assistant Source-Reference Exception — Explicitly Approved
 
-- The existing Assistant UI remains an independently deployable, protected
-  messaging and AI application during the Bridge Phase.
-- For Bridge-enabled providers only, Assistant UI may own SMS transport,
-  conversations, message history, AI modes, drafts, knowledge, agent
-  configuration, and staff messaging workflow.
-- Assistant UI may call a narrow, authenticated FastAPI Booking Bridge API for
-  live booking-domain operations only. FastAPI must resolve tenant, provider,
-  location, and account scope server-side from the authenticated Assistant UI
-  line/account mapping. The AI, frontend, and bridge caller must not select
-  arbitrary tenant or provider IDs.
-- Assistant UI must not directly read or write FastAPI databases, import
-  FastAPI runtime modules, share authentication sessions, share production
-  credentials, or become a Git submodule/runtime dependency.
-- For a Bridge-enabled provider, Assistant UI's legacy booking, SQLite, Google
-  Calendar, and availability paths must not create, confirm, modify, or cancel
-  bookings. If FastAPI is unavailable, Assistant UI must fail closed into staff
-  review rather than fall back to its legacy booking path.
-- Chatwoot is out of scope for the Bridge Phase. Do not introduce it as an
-  additional messaging dependency until a separate decision approves it.
-- The deployed Assistant UI must not be modified during development. Bridge work
-  must first occur in an isolated development or staging deployment, using test
-  numbers and synthetic data. Any production Assistant UI release requires
-  separate explicit owner approval.
-- A long-term native FastAPI messaging/AI replacement remains optional future
-  work. It is not an active requirement for the Bridge Phase.
-
-### Assistant UI Source Boundaries
-
-- `integrations/assistant-ui-v2/` is intentionally untracked local material.
-  Do not stage, delete, modify, inspect for implementation, or commit it.
-- Any permitted Assistant UI source audit or bridge adapter work must be
-  explicitly scoped to the approved bridge source location and task allowlist.
-  It must never use production databases, secrets, SMS numbers, or deployment
-  resources.
+- FastAPI Bookings may selectively inspect and reimplement only the allowlisted
+  behavioural assets from the legacy reference application for the native
+  Business Assistant programme. The binding source allowlist, asset hashes,
+  exclusions, and source-checkpoint requirement are in
+  `docs/BUSINESS_ASSISTANT_REFERENCE_INVENTORY.md`; the delivery controls are in
+  `docs/BUSINESS_ASSISTANT_NATIVE_PORT_PLAN.md`.
+- This exception permits a native implementation inside FastAPI Bookings. It
+  does not permit revival, wholesale copying, runtime coupling, shared
+  databases, shared authentication sessions, shared credentials, runtime-module
+  imports, deployment-resource reuse, or a Git submodule.
+- No legacy-source database, environment file, secret, credential, production
+  data, logs, message bodies, customer records, SMS number, deployment material,
+  or unallowlisted folder may be read, copied, or depended upon.
+- Untracked local integration material is out of scope. Do not stage, delete,
+  modify, inspect for implementation, or commit it.
+- The resulting Business Assistant must be owned, authenticated, tenant/user
+  scoped, persisted, tested, and deployed wholly by FastAPI Bookings. It must
+  not receive source-code, shell, Git, deployment, infrastructure,
+  secret-reading, unrestricted-database, or coding-worker execution tools.
+- The legacy reference application is never a production dependency. Any
+  production release remains separately owner-approved and must use synthetic
+  data and test numbers during development and staging verification.
 
 ## 2. Scope discipline
 
@@ -62,10 +50,11 @@ Before editing:
    First establish the intended contract from the existing code and task.
 5. If a request would expand the task materially, stop and report the decision
    point rather than silently broadening scope.
-6. Bridge work must remain limited to the approved line-to-provider mapping,
-   authenticated Booking Bridge API contract, and specific Assistant UI adapter
-   call sites. Do not port or rebuild messaging, AI, knowledge, Chatwoot,
-   arrival, reporting, or a new operations UI unless separately approved.
+6. Legacy-reference work must remain limited to the native Business Assistant
+   programme, its approved source allowlist, and individually authorised work
+   packages. Do not broaden it into a runtime bridge, wholesale application
+   copy, messaging replacement, Chatwoot, arrival, reporting, or unrelated UI
+   work unless separately approved.
 
 One task must address one coherent outcome. Finish, verify, and commit it
 before starting unrelated remediation.
@@ -133,6 +122,13 @@ before starting unrelated remediation.
   known limitations. Do not report success based only on imports or static
   checks when runtime behavior is in scope.
 
+### Mandatory Automated Local Commit on Verified Task Completion
+To ensure verified work is never stranded, forgotten, or lost in an uncommitted state:
+- Once all verification tests pass, living documentation is verified via `python scripts/verify_living_docs.py`, and the QA audit sign-off is complete, the agent MUST automatically stage only the explicitly assigned task allowlist paths.
+- The agent MUST automatically execute a clean, descriptive local git commit.
+- The agent MUST report the resulting commit hash in its final delivery summary.
+- Pushing to remote GitHub remains strictly user-triggered (never push autonomously).
+
 ## 7. Verification requirements
 
 For any code change:
@@ -198,3 +194,17 @@ To preserve application integrity and eliminate reliance on ad-hoc handoff notes
   7. **Verification & Testing Commands**: Exact commands to run tests, smoke tests, and lint checks.
 - **Self-Documenting Codebase**: An agent opening any module should understand its full
   state from its `README.md` without relying on previous chat transcripts or ephemeral notes.
+
+## 11. Agent Cold-Start Protocol & Architectural Orientation
+
+To eliminate token waste, blind directory scanning, and hallucinated paths on agent startup:
+
+- **Mandatory First-Turn Inspection**: Before scanning arbitrary directories, reading unassigned files, or running broad exploratory searches, every automated agent must inspect the repository's pre-compiled architectural map:
+  - Run `python scripts/query_docs.py --boot-snapshot` (or read `docs/AGENT_BOOT_SNAPSHOT.md`).
+- **Targeted Test Command Retrieval**: Before running verification or writing tests, agents must query the authoritative verification command for the module being changed:
+  - Run `python scripts/query_docs.py --test-command <module_name>` (e.g. `python scripts/query_docs.py --test-command sms`).
+  - Do not guess test commands or run slow, un-targeted global test suites.
+- **Semantic Documentation Search**: To discover architectural invariants, data safety boundaries, or contracts across modules:
+  - Run `python scripts/query_docs.py --search "<topic>"` (e.g. `python scripts/query_docs.py --search "arrival token"`).
+- **Compliance Verification**: All changes to modules must be verified against Rule 10 via:
+  - `python scripts/verify_living_docs.py --path <module_readme_path>`.
