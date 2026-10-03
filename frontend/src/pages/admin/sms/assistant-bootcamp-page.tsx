@@ -39,7 +39,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "cranky-carl",
     name: "Cranky Carl",
     category: "DIFFICULT",
-    badgeClass: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800",
+    badgeClass: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
     description: "Impatient, critical, expects instant answers and zero friction.",
     handoffTurn: 2,
     handoffReason: "Specific policy exception authorization for same-day no-show refund request.",
@@ -71,7 +71,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "sarcastic-sam",
     name: "Sarcastic Sam",
     category: "SARCASM",
-    badgeClass: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800",
+    badgeClass: "bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30",
     description: "Dry humor, ironic quips, constantly testing conversational resilience.",
     dialogueScript: [
       {
@@ -100,7 +100,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "deadpan-dave",
     name: "Deadpan Dave",
     category: "DIRECT",
-    badgeClass: "bg-slate-200 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+    badgeClass: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
     description: "Monotone, ultra-terse, zero pleasantries, straight to the facts.",
     dialogueScript: [
       {
@@ -129,7 +129,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "passive-paul",
     name: "Passive Paul",
     category: "INDECISIVE",
-    badgeClass: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
+    badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
     description: "Hesitant, leaves decisions up in the air, needs gentle guidance.",
     dialogueScript: [
       {
@@ -158,7 +158,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "happy-harry",
     name: "Happy Harry",
     category: "FRIENDLY",
-    badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
+    badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
     description: "Super enthusiastic, upbeat, uses lots of exclamation marks and emojis.",
     dialogueScript: [
       {
@@ -187,7 +187,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "nervous-neil",
     name: "Nervous Neil",
     category: "ANXIOUS",
-    badgeClass: "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
+    badgeClass: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
     description: "Worried about policies, hidden charges, and unexpected fees.",
     dialogueScript: [
       {
@@ -216,7 +216,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "time-waster-terry",
     name: "Time-Waster Terry",
     category: "DISENGAGED",
-    badgeClass: "bg-zinc-200 text-zinc-800 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
+    badgeClass: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30",
     description: "Asks endless speculative questions without committing to any booking.",
     dialogueScript: [
       {
@@ -245,7 +245,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "chatty-charlie",
     name: "Chatty Charlie",
     category: "CHATTY",
-    badgeClass: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+    badgeClass: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
     description: "Writes long paragraphs rambling about irrelevant personal backstory.",
     dialogueScript: [
       {
@@ -274,7 +274,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "budget-bob",
     name: "Budget Bob",
     category: "PRICE-SENSITIVE",
-    badgeClass: "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800",
+    badgeClass: "bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-500/30",
     description: "Aggressively hunts for discounts, promo codes, and special concessions.",
     dialogueScript: [
       {
@@ -303,7 +303,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "curious-colin",
     name: "Curious Colin",
     category: "TECHNICAL",
-    badgeClass: "bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-950 dark:text-cyan-300 dark:border-cyan-800",
+    badgeClass: "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30",
     description: "Asks deep questions about specific materials, sterilization, and equipment.",
     handoffTurn: 3,
     handoffReason: "Practitioner credential verification & medical-grade autoclave sterilization spec sheet.",
@@ -335,7 +335,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "discreet-dominic",
     name: "Discreet Dominic",
     category: "PRIVACY",
-    badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800",
+    badgeClass: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
     description: "Guarded, refuses to share personal details or email upfront.",
     dialogueScript: [
       {
@@ -364,7 +364,7 @@ export const PERSONAS: PersonaDefinition[] = [
     id: "pushy-pete",
     name: "Pushy Pete",
     category: "DEMANDING",
-    badgeClass: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800",
+    badgeClass: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
     description: "Demands immediate appointments outside hours and insists on exceptions.",
     dialogueScript: [
       {
@@ -1616,12 +1616,12 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
       {/* 2. Responsive 3-Column Layout */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT COLUMN: Personas & Turn Controls */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card flex flex-col min-h-0">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border border-t-2 border-t-indigo-500/80 bg-card flex flex-col min-h-0 relative">
           {/* Compact Header Controls */}
-          <div className="p-2.5 border-b border-border space-y-1.5 shrink-0">
+          <div className="p-2.5 border-b border-border space-y-1.5 shrink-0 bg-gradient-to-b from-indigo-950/20 via-card/80 to-card backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                <Users className="h-3.5 w-3.5 text-primary" />
+                <Users className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
                 <span>Threads {selectedPersonaIds.length}/{PERSONAS.length}</span>
               </div>
               <div className="flex items-center gap-1 text-[11px]">
@@ -1914,7 +1914,7 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         </aside>
 
         {/* MIDDLE COLUMN: Interactive Conversation Stream */}
-        <main className="flex-1 min-w-0 flex flex-col h-full bg-[#f8fafc] dark:bg-slate-950 min-h-0 overflow-hidden">
+        <main className="flex-1 min-w-0 flex flex-col h-full bg-background/90 min-h-0 overflow-hidden relative shadow-inner">
           {activeConversation ? (
             <AssistantThreadPanel
               mode="bootcamp"
@@ -1957,58 +1957,71 @@ export default function AssistantBootcampPage({ onNavigate }: AssistantBootcampP
         </main>
 
         {/* RIGHT COLUMN: Style Laboratory */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-card flex flex-col min-h-0">
-          <div className="p-3 border-b border-border shrink-0">
-            <div className="flex items-center justify-between mb-1">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-t lg:border-t-0 lg:border-l border-border border-t-2 border-t-cyan-500/80 bg-card flex flex-col min-h-0 relative">
+          <div className="p-3 border-b border-border shrink-0 bg-gradient-to-b from-cyan-950/20 via-card/80 to-card backdrop-blur-sm space-y-2">
+            <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold flex items-center gap-1.5 text-foreground">
-                <Sliders className="h-4 w-4 text-primary" />
+                <Sliders className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                 Tori style laboratory
               </h2>
+              <a
+                href="/admin/assistant-studio?tab=prompts"
+                className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1"
+                title="Open Assistant Studio Prompt Composer"
+              >
+                <span>Studio</span>
+                <span aria-hidden="true">&rarr;</span>
+              </a>
             </div>
             <p className="text-[11px] text-muted-foreground leading-snug">
-              These values affect Boot Camp only until you deliberately apply the complete combination.
+              Calibrate sandbox simulation traits for Boot Camp. Canonical baseline prompt policies and Style Lab priors are governed in{" "}
+              <a href="/admin/assistant-studio?tab=prompts" className="text-primary hover:underline font-medium">
+                Assistant Studio
+              </a>.
             </p>
           </div>
 
-          {/* 8 Sliders (0 - 5) */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3.5 no-scrollbar text-xs">
+          {/* 8 Calibrated Traits (0 - 5) aligned with Assistant Studio & TRAIT_KEYS */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 no-scrollbar text-xs">
             {(
               [
-                { key: "flirtiness", label: "Flirtiness", desc: "Playfulness & charismatic warmth" },
-                { key: "cheerfulness", label: "Cheerfulness", desc: "Sunny optimism & enthusiastic tone" },
-                { key: "wit", label: "Wit", desc: "Clever phrasing & quick repartee" },
-                { key: "sarcasm", label: "Sarcasm", desc: "Dry humor & ironic wit" },
                 { key: "warmth", label: "Warmth", desc: "Empathy & emotional reassurance" },
                 { key: "directness", label: "Directness", desc: "Concise brevity & fast booking" },
-                { key: "chattiness", label: "Chattiness", desc: "Descriptive background context" },
-                { key: "patience", label: "Patience", desc: "Gentle understanding for hesitations" }
+                { key: "wit", label: "Wit", desc: "Clever phrasing & quick repartee" },
+                { key: "sarcasm", label: "Sarcasm", desc: "Dry humor & banter (suppressed during distress)" },
+                { key: "patience", label: "Patience", desc: "Gentle understanding for hesitations" },
+                { key: "flirtiness", label: "Flirtiness", desc: "Playfulness & charismatic warmth" },
+                { key: "cheerfulness", label: "Cheerfulness", desc: "Sunny optimism & enthusiastic tone" },
+                { key: "chattiness", label: "Chattiness", desc: "Descriptive background context" }
               ] as const
             ).map(({ key, label, desc }) => {
               const val = styleProfile[key];
               return (
-                <div key={key} className="space-y-1">
+                <div key={key} className="space-y-1.5 p-2 rounded-lg bg-muted/30 border border-border/60 hover:border-cyan-500/40 transition-colors">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-semibold text-foreground">{label}</span>
+                      <span className="font-semibold text-foreground text-xs">{label}</span>
                       <span className="text-[10px] text-muted-foreground block">{desc}</span>
                     </div>
-                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                      {val} / 5
+                    <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 tabular-nums shadow-xs">
+                      {val}/5
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="5"
-                    step="1"
-                    value={val}
-                    onChange={(e) => handleSliderChange(key, Number(e.target.value))}
-                    aria-label={label}
-                    className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                  />
-                  <div className="flex justify-between text-[9px] text-muted-foreground">
+                  <div className="relative py-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="5"
+                      step="1"
+                      value={val}
+                      onChange={(e) => handleSliderChange(key, Number(e.target.value))}
+                      aria-label={label}
+                      className="w-full h-2 bg-slate-200 dark:bg-slate-700/80 rounded-lg appearance-none cursor-pointer accent-cyan-500 dark:accent-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+                    />
+                  </div>
+                  <div className="flex justify-between font-mono text-[9px] text-muted-foreground/80 px-0.5">
                     <span>0 (None)</span>
-                    <span>5 (Maximum)</span>
+                    <span>5 (Max)</span>
                   </div>
                 </div>
               );

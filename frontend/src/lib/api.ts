@@ -115,7 +115,7 @@ function clearUnauthorizedAdminSession(): void {
   }
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   data: any;
 
@@ -127,9 +127,7 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(endpoint: string, method: HttpMethod, options: ApiClientOptions = {}): Promise<T> {
-  const { data, headers: customHeaders, ...customOptions } = options;
-
+export function getAuthenticatedAdminHeaders(contentType = 'application/json'): Headers {
   const token = getAdminAccessToken();
   let tenant = getActiveTenantFromHost();
   if (!tenant && typeof window !== 'undefined') {
@@ -142,13 +140,10 @@ async function request<T>(endpoint: string, method: HttpMethod, options: ApiClie
     }
   }
 
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-  });
-
-  new Headers(customHeaders).forEach((value, name) => {
-    headers.set(name, value);
-  });
+  const headers = new Headers();
+  if (contentType) {
+    headers.set('Content-Type', contentType);
+  }
 
   if (token) {
     headers.set('X-Token', token);
@@ -157,6 +152,83 @@ async function request<T>(endpoint: string, method: HttpMethod, options: ApiClie
   if (tenant) {
     headers.set('X-Tenant', tenant);
   }
+
+  return headers;
+}
+
+export type UserFacingApiError = {
+  code: string;
+  message: string;
+  requestId: string | null;
+  retryable: boolean;
+};
+
+const NON_RETRYABLE_ERROR_CODES = new Set([
+  'TEXT_CONFIGURATION_REQUIRED',
+  'TEXT_CLIENT_UNAVAILABLE',
+  'REALTIME_CONFIGURATION_REQUIRED',
+  'REALTIME_INVALID_SDP',
+  'VALIDATION_ERROR',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+]);
+
+export function toUserFacingApiError(error: unknown, fallback: string): UserFacingApiError {
+  if (error instanceof ApiError) {
+    const payload = error.data?.error;
+    const code = typeof payload?.code === 'string' && payload.code
+      ? payload.code
+      : `HTTP_${error.status}`;
+    const message = typeof payload?.message === 'string' && payload.message
+      ? payload.message
+      : error.message || fallback;
+    const requestId = typeof payload?.request_id === 'string' && payload.request_id
+      ? payload.request_id
+      : null;
+    return {
+      code,
+      message,
+      requestId,
+      retryable: !NON_RETRYABLE_ERROR_CODES.has(code) && (error.status === 408 || error.status === 429 || error.status >= 500),
+    };
+  }
+
+  return {
+    code: 'NETWORK_ERROR',
+    message: error instanceof Error && error.message ? error.message : fallback,
+    requestId: null,
+    retryable: true,
+  };
+}
+
+export async function authenticatedAdminFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  const headers = getAuthenticatedAdminHeaders('');
+  new Headers(options.headers).forEach((value, name) => {
+    headers.set(name, value);
+  });
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401) {
+    clearUnauthorizedAdminSession();
+  }
+
+  return response;
+}
+
+async function request<T>(endpoint: string, method: HttpMethod, options: ApiClientOptions = {}): Promise<T> {
+  const { data, headers: customHeaders, ...customOptions } = options;
+
+  const headers = getAuthenticatedAdminHeaders();
+
+  new Headers(customHeaders).forEach((value, name) => {
+    headers.set(name, value);
+  });
 
   const config: RequestInit = {
     method,

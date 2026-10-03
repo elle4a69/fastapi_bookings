@@ -55,7 +55,20 @@ export default defineConfig({
         ],
       },
       devOptions: {
+        // Keep a development worker registered so browsers with an existing
+        // registration receive this corrected configuration. API navigation is
+        // still explicitly denied below and continues through Vite's proxy.
         enabled: true,
+      },
+      workbox: {
+        // API requests are never application navigations. Excluding them from the
+        // generated navigation route keeps every /api/* request on the network
+        // path (and, in development, the Vite proxy).
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
+        // Keep Workbox diagnostics out of browser consoles. In particular, a
+        // denied API navigation must not emit a misleading "No route found"
+        // message while the browser continues to the network.
+        disableDevLogs: true,
       },
     }),
   ],

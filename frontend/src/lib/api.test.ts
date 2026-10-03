@@ -176,3 +176,37 @@ test('public-path 401 leaves the session and location unchanged', { concurrency:
   assert.equal(storage.getItem('token'), 'test-token-only');
   assert.deepEqual(redirects, []);
 });
+
+test('preserves backend error code, message, request ID, and safe retry state', { concurrency: false }, async () => {
+  installBrowser('tenant.localhost');
+  const { ApiError, toUserFacingApiError } = await loadApi();
+  const providerFailure = toUserFacingApiError(
+    new ApiError(503, 'fallback', {
+      error: {
+        code: 'TEXT_PROVIDER_UNAVAILABLE',
+        message: 'The text provider could not generate a reply.',
+        request_id: 'request-safe-123',
+      },
+    }),
+    'fallback',
+  );
+  const configurationFailure = toUserFacingApiError(
+    new ApiError(503, 'fallback', {
+      error: {
+        code: 'TEXT_CONFIGURATION_REQUIRED',
+        message: 'Text setup is incomplete.',
+        request_id: 'request-safe-456',
+      },
+    }),
+    'fallback',
+  );
+
+  assert.deepEqual(providerFailure, {
+    code: 'TEXT_PROVIDER_UNAVAILABLE',
+    message: 'The text provider could not generate a reply.',
+    requestId: 'request-safe-123',
+    retryable: true,
+  });
+  assert.equal(configurationFailure.retryable, false);
+  assert.equal(configurationFailure.requestId, 'request-safe-456');
+});

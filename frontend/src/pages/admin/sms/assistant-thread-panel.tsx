@@ -438,7 +438,7 @@ export function AssistantThreadPanel({
         )}
 
         {/* Chat Timeline Viewport */}
-        <div className="flex min-h-0 flex-1 flex-col bg-muted/30 dark:bg-background/80 overflow-y-auto px-3 py-3 space-y-2.5">
+        <div className="flex min-h-0 flex-1 flex-col bg-background/60 backdrop-blur-xs overflow-y-auto px-3.5 py-3.5 space-y-3">
           {messages.length === 0 ? (
             <div className="m-auto text-center text-xs text-muted-foreground">
               No messages in this conversation yet.
@@ -475,7 +475,7 @@ export function AssistantThreadPanel({
                       {msg.kind === "internal_note" ? "Staff Note:" : "Event:"}
                     </span>
                     <span>{msg.body}</span>
-                    <div className="text-[9px] text-muted-foreground/70 mt-0.5">
+                    <div className="text-[9px] text-muted-foreground/70 mt-0.5 font-mono">
                       {formatOccurredAt(msg.occurredAt)}
                     </div>
                   </div>
@@ -489,15 +489,15 @@ export function AssistantThreadPanel({
                 return (
                   <div
                     key={msg.id}
-                    className="self-end max-w-[85%] rounded-2xl rounded-br-md border border-primary/30 bg-primary/5 text-foreground shadow-xs px-3 py-2 space-y-2"
+                    className="self-end max-w-[85%] rounded-2xl rounded-br-md border border-primary/40 bg-primary/10 dark:bg-primary/15 backdrop-blur-xs text-foreground shadow-xs px-3.5 py-2.5 space-y-2 ring-1 ring-primary/20"
                   >
                     <div className="flex items-center justify-between text-[11px] font-bold text-primary">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <Sparkles className="h-3.5 w-3.5" />
                         <span>AI draft—not sent</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-[10.5px] text-primary/80 font-normal shrink-0">
-                        {msg.occurredAt && <span>{formatOccurredAt(msg.occurredAt)} ·</span>}
+                        {msg.occurredAt && <span className="font-mono">{formatOccurredAt(msg.occurredAt)} ·</span>}
                         <span>Pending approval</span>
                       </div>
                     </div>
@@ -572,15 +572,19 @@ export function AssistantThreadPanel({
                 return (
                   <div
                     key={msg.id}
-                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-xs px-3 py-2 text-[13px]"
+                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-primary text-primary-foreground shadow-md shadow-primary/25 ring-1 ring-primary/30 px-3.5 py-2.5 text-[13px] relative transition-all"
                   >
                     <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-primary-foreground/90 mb-1">
-                      <div className="flex items-center gap-1">
-                        <Bot className="h-3 w-3 shrink-0" />
-                        <span>{msg.authorName || "AI"}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-foreground/60 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-foreground"></span>
+                        </span>
+                        <Bot className="h-3.5 w-3.5 shrink-0" />
+                        <span>{msg.authorName || "Tori AI"}</span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 text-[10.5px] font-normal">
-                        <span>{formatOccurredAt(msg.occurredAt)}</span>
+                        <span className="font-mono">{formatOccurredAt(msg.occurredAt)}</span>
                         <span>· Sent</span>
                         <button
                           type="button"
@@ -606,11 +610,11 @@ export function AssistantThreadPanel({
                 return (
                   <div
                     key={msg.id}
-                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-slate-700 dark:bg-slate-800 text-white shadow-xs px-3 py-2 text-[13px]"
+                    className="self-end max-w-[82%] rounded-2xl rounded-br-md bg-slate-800 dark:bg-slate-800 text-white shadow-xs px-3.5 py-2.5 text-[13px] ring-1 ring-white/10"
                   >
                     <div className="flex items-center justify-between gap-2 text-[10.5px] text-slate-300 dark:text-slate-400 mb-1">
                       <span className="font-semibold">{msg.authorName || "Staff"}</span>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0 font-mono">
                         <span>{formatOccurredAt(msg.occurredAt)}</span>
                         <span>· {msg.status === "delivered" ? "Delivered" : "Sent"}</span>
                       </div>
@@ -624,13 +628,13 @@ export function AssistantThreadPanel({
               return (
                 <div
                   key={msg.id}
-                  className="self-start max-w-[82%] rounded-2xl rounded-bl-md bg-card dark:bg-muted/80 text-foreground border border-border/80 shadow-xs px-3 py-2 text-[13px]"
+                  className="self-start max-w-[82%] rounded-2xl rounded-bl-md bg-card/90 dark:bg-card/80 backdrop-blur-xs text-foreground border border-border/80 shadow-xs px-3.5 py-2.5 text-[13px] ring-1 ring-black/5 dark:ring-white/5"
                 >
                   <div className="flex items-center justify-between gap-2 text-[10.5px] text-muted-foreground mb-1">
-                    <span className="font-semibold uppercase tracking-wider">
+                    <span className="font-semibold uppercase tracking-wider text-muted-foreground/90">
                       {msg.authorName || "Customer"}
                     </span>
-                    <span className="font-medium shrink-0">
+                    <span className="font-mono text-[10px] shrink-0">
                       {formatOccurredAt(msg.occurredAt)}
                     </span>
                   </div>
@@ -642,9 +646,9 @@ export function AssistantThreadPanel({
 
           {/* Real-time simulation thinking indicator */}
           {isGenerating && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground pl-2 py-1">
+            <div className="flex items-center gap-2 text-xs text-primary bg-primary/5 rounded-lg border border-primary/20 px-3 py-1.5 shadow-xs max-w-fit">
               <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
-              <span className="italic">AI is analyzing persona cues and formulating reply...</span>
+              <span className="italic font-medium">Tori is analyzing persona cues and formulating reply...</span>
             </div>
           )}
 

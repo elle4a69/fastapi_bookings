@@ -109,6 +109,7 @@ export const navigation: NavSection[] = [
         ],
       },
       { title: "Clients", url: "/admin/clients", icon: UsersIcon },
+      { title: "Business Assistant", url: "/admin/business-assistant", icon: Bot },
       { title: "Assistant Studio", url: "/admin/assistant-studio", icon: Bot },
     ],
   },
@@ -254,5 +255,4 @@ export function filterNavigationByModules(
     })
     .filter((section) => section.items.length > 0)
 }
-
 

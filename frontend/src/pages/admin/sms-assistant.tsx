@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   MessagesSquare,
-  UserCheck,
   DoorOpen,
   Smartphone,
   Bot,
@@ -15,9 +14,7 @@ import {
   Inbox, 
   Link2,
   BellRing,
-  Sliders,
   Sparkles,
-  Terminal,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -40,24 +37,22 @@ const TABS_CONFIG = [
   { id: "inbox", label: "Inbox", icon: Inbox, color: "text-foreground" },
   { id: "arrivals", label: "Arrivals", icon: BellRing, color: "text-amber-500" },
   { id: "triage", label: "Draft Triage", icon: Sparkles, color: "text-indigo-500" },
-  { id: "bootcamp", label: "Bootcamp", icon: Bot, color: "text-purple-500" },
-  { id: "bootcamp-settings", label: "Camp Settings", icon: Sliders, color: "text-indigo-500" },
-  { id: "console", label: "Console", icon: Terminal, color: "text-emerald-500" },
   { id: "accounts", label: "SMS Lines", icon: UserSquare2, color: "text-foreground" },
   { id: "chatwoot", label: "Chatwoot", icon: Link2, color: "text-foreground" },
-  { id: "settings", label: "RAG & Prompts", icon: Settings, color: "text-foreground" },
-  { id: "simulator", label: "Simulator", icon: PlayCircle, color: "text-foreground" },
   { id: "diagnostics", label: "Diagnostics", icon: Activity, color: "text-foreground" },
+  { id: "simulator", label: "Simulator", icon: PlayCircle, color: "text-foreground" },
+  { id: "bootcamp", label: "Bootcamp", icon: Bot, color: "text-purple-500" },
+  { id: "settings", label: "Assistant Studio", icon: Bot, color: "text-purple-500" },
 ];
 
 const BOTTOM_TABS = [
   { id: "messages", label: "Messages", icon: MessagesSquare },
-  { id: "inbox", label: "Console", icon: UserCheck },
+  { id: "inbox", label: "Inbox", icon: Inbox },
   { id: "arrivals", label: "Arrivals", icon: DoorOpen },
   { id: "triage", label: "Triage", icon: Sparkles },
-  { id: "simulator", label: "SMS Sim", icon: Smartphone },
-  { id: "bootcamp", label: "Camp", icon: Bot },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "accounts", label: "Lines", icon: Smartphone },
+  { id: "simulator", label: "SMS Sim", icon: PlayCircle },
+  { id: "settings", label: "Studio", icon: Settings },
 ];
 
 export default function SmsAssistantPage() {
