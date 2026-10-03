@@ -56,46 +56,56 @@ class ConcurrencyStressFuzzer:
             title="Concurrency Fuzzer Started",
         )
 
-        # 1. Resolve or establish test fixture context
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            tenant = Tenant(name=f"Fuzz Tenant {test_id}", subdomain=f"fuzz-{test_id}")
-            db.add(tenant)
-            db.commit()
-            db.refresh(tenant)
+        # 1. Resolve or establish test fixture context using SessionLocal to ensure
+        # the entities exist in the same database engine where worker threads execute.
+        setup_session = SessionLocal()
+        try:
+            tenant = setup_session.query(Tenant).first()
+            if not tenant:
+                tenant = Tenant(name=f"Fuzz Tenant {test_id}", subdomain=f"fuzz-{test_id}")
+                setup_session.add(tenant)
+                setup_session.commit()
+                setup_session.refresh(tenant)
 
-        provider = db.query(Provider).filter(Provider.tenant_id == tenant.id).first()
-        if not provider:
-            provider = Provider(
-                tenant_id=tenant.id,
-                name=f"Fuzz Provider {test_id}",
-                email=f"fuzz_{test_id}@example.com",
-            )
-            db.add(provider)
-            db.commit()
-            db.refresh(provider)
+            provider = setup_session.query(Provider).filter(Provider.tenant_id == tenant.id).first()
+            if not provider:
+                provider = Provider(
+                    tenant_id=tenant.id,
+                    name=f"Fuzz Provider {test_id}",
+                    email=f"fuzz_{test_id}@example.com",
+                )
+                setup_session.add(provider)
+                setup_session.commit()
+                setup_session.refresh(provider)
 
-        client = db.query(Client).filter(Client.tenant_id == tenant.id).first()
-        if not client:
-            client = Client(
-                tenant_id=tenant.id,
-                name=f"Fuzz Client {test_id}",
-                email=f"fuzz_client_{test_id}@example.com",
-            )
-            db.add(client)
-            db.commit()
-            db.refresh(client)
+            client = setup_session.query(Client).filter(Client.tenant_id == tenant.id).first()
+            if not client:
+                client = Client(
+                    tenant_id=tenant.id,
+                    name=f"Fuzz Client {test_id}",
+                    email=f"fuzz_client_{test_id}@example.com",
+                )
+                setup_session.add(client)
+                setup_session.commit()
+                setup_session.refresh(client)
 
-        service = db.query(Service).filter(Service.tenant_id == tenant.id).first()
-        if not service:
-            service = Service(
-                tenant_id=tenant.id,
-                name=f"Fuzz Service {test_id}",
-                duration=30,
-            )
-            db.add(service)
-            db.commit()
-            db.refresh(service)
+            service = setup_session.query(Service).filter(Service.tenant_id == tenant.id).first()
+            if not service:
+                service = Service(
+                    tenant_id=tenant.id,
+                    name=f"Fuzz Service {test_id}",
+                    duration=30,
+                )
+                setup_session.add(service)
+                setup_session.commit()
+                setup_session.refresh(service)
+
+            tenant_id = tenant.id
+            provider_id = provider.id
+            client_id = client.id
+            service_id = service.id
+        finally:
+            setup_session.close()
 
         # Generate a distinct slot in the future to avoid colliding with real bookings
         future_day = 100 + (hash(test_id) % 200)
@@ -108,7 +118,7 @@ class ConcurrencyStressFuzzer:
             "step",
             {
                 "concurrency": clamped_concurrency,
-                "provider_id": provider.id,
+                "provider_id": provider_id,
                 "slot_start": slot_start.isoformat(),
             },
             title=f"Dispatched {clamped_concurrency} Concurrent Workers",
@@ -122,10 +132,10 @@ class ConcurrencyStressFuzzer:
             try:
                 # Attempt to allocate the exact same discrete slot
                 b = Booking(
-                    tenant_id=tenant.id,
-                    client_id=client.id,
-                    provider_id=provider.id,
-                    service_id=service.id,
+                    tenant_id=tenant_id,
+                    client_id=client_id,
+                    provider_id=provider_id,
+                    service_id=service_id,
                     start_time=slot_start,
                     end_time=slot_end,
                     status=BookingStatus.CONFIRMED,
@@ -134,9 +144,9 @@ class ConcurrencyStressFuzzer:
                 worker_session.flush()
 
                 allocation = BookingSlotAllocation(
-                    tenant_id=tenant.id,
+                    tenant_id=tenant_id,
                     booking_id=b.id,
-                    provider_id=provider.id,
+                    provider_id=provider_id,
                     slot_start=slot_start,
                 )
                 worker_session.add(allocation)
@@ -154,14 +164,23 @@ class ConcurrencyStressFuzzer:
                 worker_session.rollback()
                 w_latency = round((time.perf_counter() - w_start) * 1000, 2)
                 is_conflict = is_slot_allocation_conflict(ie)
-                return {
-                    "worker_index": worker_idx,
-                    "booking_id": None,
-                    "status": "CONFLICT",
-                    "is_slot_conflict": is_conflict,
-                    "latency_ms": w_latency,
-                    "error": "Slot already claimed by concurrent transaction",
-                }
+                if is_conflict:
+                    return {
+                        "worker_index": worker_idx,
+                        "booking_id": None,
+                        "status": "CONFLICT",
+                        "is_slot_conflict": True,
+                        "latency_ms": w_latency,
+                        "error": "Slot already claimed by concurrent transaction",
+                    }
+                else:
+                    return {
+                        "worker_index": worker_idx,
+                        "booking_id": None,
+                        "status": "ERROR",
+                        "latency_ms": w_latency,
+                        "error": str(ie),
+                    }
             except Exception as e:
                 worker_session.rollback()
                 w_latency = round((time.perf_counter() - w_start) * 1000, 2)

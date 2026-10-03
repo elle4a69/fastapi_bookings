@@ -8,6 +8,7 @@ Spec references: Sections 6, 7, 34, 35, 36, 46, 47, 48, 49, 50, 66, 96, 97, 98.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional, Union
 
@@ -37,6 +38,7 @@ from app.services.knowledge.cache import (
     increment_tenant_epoch,
     set_cached_knowledge,
 )
+from app.services.knowledge import graphiti_client
 from app.services.knowledge.graphiti_client import (
     get_graphiti_client,
     resolve_query_group_ids,
@@ -49,6 +51,11 @@ from app.services.knowledge.retrieval import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """Return current UTC timezone-aware timestamp."""
+    return datetime.now(timezone.utc)
 
 
 class KnowledgeGateway:
@@ -190,7 +197,7 @@ class KnowledgeGateway:
             return True
 
         # 3. Graphiti ingestion
-        client = get_graphiti_client()
+        client = graphiti_client.get_graphiti_client()
         if client is not None:
             try:
                 # Add episode if available
@@ -198,10 +205,16 @@ class KnowledgeGateway:
                 if add_ep is not None:
                     import asyncio
                     import inspect
+                    source_description = f"Knowledge gateway event for tenant {item.scope.tenant_id}"
+                    reference_time = _utc_now()
                     if inspect.iscoroutinefunction(add_ep):
                         try:
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
+                            loop = asyncio.get_running_loop()
+                        except RuntimeError:
+                            loop = None
+
+                        try:
+                            if loop is not None and loop.is_running():
                                 import concurrent.futures
                                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                                     pool.submit(
@@ -209,20 +222,32 @@ class KnowledgeGateway:
                                             client.add_episode(
                                                 name=f"item_{item.kind.value}",
                                                 episode_body=item.text,
+                                                source_description=source_description,
+                                                reference_time=reference_time,
                                                 group_id=item.scope.group_id,
                                             )
                                         )
                                     ).result(timeout=5.0)
                             else:
-                                loop.run_until_complete(
+                                asyncio.run(
                                     client.add_episode(
                                         name=f"item_{item.kind.value}",
                                         episode_body=item.text,
+                                        source_description=source_description,
+                                        reference_time=reference_time,
                                         group_id=item.scope.group_id,
                                     )
                                 )
                         except Exception as exc:
                             logger.warning("Graphiti add_episode failed: %s", exc)
+                    else:
+                        client.add_episode(
+                            name=f"item_{item.kind.value}",
+                            episode_body=item.text,
+                            source_description=source_description,
+                            reference_time=reference_time,
+                            group_id=item.scope.group_id,
+                        )
             except Exception as exc:
                 logger.error("Failed to publish item to Graphiti: %s", exc)
 

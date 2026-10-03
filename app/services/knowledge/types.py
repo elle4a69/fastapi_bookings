@@ -94,6 +94,7 @@ class RetrievalQuery(BaseModel):
     tenant_id: int = Field(..., gt=0, description="Tenant identifier")
     provider_id: Optional[int] = Field(None, gt=0, description="Optional provider identifier")
     query: str = Field(..., description="Search query or customer utterance")
+    embedding: Optional[List[float]] = Field(None, description="Optional pre-computed 1536-dim vector for semantic search")
     kinds: Optional[List[KnowledgeKind]] = Field(None, description="Filter for specific kinds of knowledge")
     limit: int = Field(10, ge=1, le=50, description="Maximum number of items to retrieve")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional query metadata")

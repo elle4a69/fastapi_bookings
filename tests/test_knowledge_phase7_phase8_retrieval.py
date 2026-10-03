@@ -640,3 +640,105 @@ def test_7_multi_tenant_and_provider_isolation(retrieval_setup, db_session):
     assert "T1 Shared Wifi Password" not in res_2_text
     assert "Dr. Alice practices" not in res_2_text
     assert "Dr. Bob practices" not in res_2_text
+
+
+# =============================================================================
+# Test 8: pgvector cosine retrieval and SQLite fallback
+# =============================================================================
+def test_8_pgvector_cosine_retrieval_and_sqlite_fallback(retrieval_setup, db_session):
+    """Verify that pgvector cosine similarity queries execute cleanly on PostgreSQL
+    and fall back gracefully on SQLite."""
+    from sqlalchemy.dialects import postgresql
+
+    t1 = retrieval_setup["tenant_1"]
+    p1a = retrieval_setup["prov_1a"]
+    now = datetime.now(timezone.utc)
+
+    # 1. Seed memories with embeddings
+    v1 = [0.0] * 1536
+    v1[0] = 1.0  # Unit vector along axis 0
+    v2 = [0.0] * 1536
+    v2[1] = 1.0  # Unit vector along axis 1
+
+    mem1 = CuratedMemory(
+        tenant_id=t1.id,
+        provider_id=p1a.id,
+        category="clinical",
+        user_query="How do you handle sanitization?",
+        ideal_response="Strict hospital-grade sanitization is applied before each session.",
+        embedding=v1,
+        knowledge_kind="durable_fact",
+        authority="explicit_provider_instruction",
+        status="active",
+        conflict_state="clear",
+        created_at=now,
+    )
+    mem2 = CuratedMemory(
+        tenant_id=t1.id,
+        provider_id=p1a.id,
+        category="clinical",
+        user_query="What payment options do you support?",
+        ideal_response="We support credit cards and direct debit.",
+        embedding=v2,
+        knowledge_kind="durable_fact",
+        authority="explicit_provider_instruction",
+        status="active",
+        conflict_state="clear",
+        created_at=now,
+    )
+    db_session.add_all([mem1, mem2])
+    db_session.commit()
+
+    # Part A: SQLite Fallback
+    # On SQLite (current db_session), verify that providing an embedding falls back
+    # gracefully without throwing pgvector-specific errors, and ranks correctly.
+    query_with_embedding = RetrievalQuery(
+        tenant_id=t1.id,
+        provider_id=p1a.id,
+        query="sanitization session",
+        embedding=v1,
+        limit=5,
+    )
+    facts_sqlite = retrieve_facts(query_with_embedding, db=db_session)
+    assert len(facts_sqlite) > 0
+    assert any("hospital-grade sanitization" in f.text for f in facts_sqlite)
+
+    # Also test query without embedding on SQLite
+    query_no_embedding = RetrievalQuery(
+        tenant_id=t1.id,
+        provider_id=p1a.id,
+        query="payment options credit cards",
+        limit=5,
+    )
+    facts_no_emb = retrieve_facts(query_no_embedding, db=db_session)
+    assert len(facts_no_emb) > 0
+    assert any("credit cards" in f.text for f in facts_no_emb)
+
+    # Part B: PostgreSQL Query Compilation and pgvector Execution
+    # 1. Verify SQL compilation with native pgvector operator <=>
+    q_pg = (
+        db_session.query(CuratedMemory)
+        .filter(
+            CuratedMemory.tenant_id == t1.id,
+            CuratedMemory.status == "active",
+            CuratedMemory.embedding.is_not(None),
+        )
+        .order_by(CuratedMemory.embedding.cosine_distance(v1).asc())
+    )
+    compiled_sql = str(q_pg.statement.compile(dialect=postgresql.dialect()))
+    assert "<=>" in compiled_sql
+    assert "curated_memories.embedding" in compiled_sql
+
+    # 2. Verify BoundedKnowledgeRetriever routing when dialect is PostgreSQL
+    mock_pg_session = MagicMock()
+    mock_bind = MagicMock()
+    mock_bind.dialect.name = "postgresql"
+    mock_pg_session.get_bind.return_value = mock_bind
+    mock_pg_session.query.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [mem1]
+
+    retriever = BoundedKnowledgeRetriever(db=mock_pg_session)
+    res = retriever.retrieve_facts(query_with_embedding, db=mock_pg_session)
+    assert len(res) == 1
+    assert "hospital-grade sanitization" in res[0].text
+    assert mock_pg_session.query.called
+

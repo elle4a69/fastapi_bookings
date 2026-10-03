@@ -93,7 +93,7 @@ def test_resident_agent_audit_endpoint(client, resident_agent_admin):
     assert "code_audit" in data
     assert "telemetry_audit" in data
     assert "total_active_issues" in data
-    assert data["code_audit"]["passed"] is True or False
+    assert data["code_audit"]["passed"] in (True, False)
 
 
 def test_resident_agent_plan_fix_endpoint(client, resident_agent_admin):
@@ -124,8 +124,8 @@ def test_resident_agent_plan_fix_endpoint(client, resident_agent_admin):
     assert plan["requires_approval"] is True
 
 
-def test_resident_agent_execute_fix_enforces_approval_gate(client, resident_agent_admin):
-    """Verify POST /api/admin/resident-agent/execute-fix strictly rejects unapproved plans."""
+def test_resident_agent_execute_fix_fails_closed_without_a_real_worker(client, resident_agent_admin):
+    """Execution never reports success while the remediation path is unavailable."""
     _, _, headers = resident_agent_admin
 
     # First generate a plan
@@ -148,17 +148,16 @@ def test_resident_agent_execute_fix_enforces_approval_gate(client, resident_agen
     error_msg = reject_res.json().get("detail") or reject_res.json().get("error", {}).get("message", "")
     assert "approval" in error_msg.lower()
 
-    # Now execute with explicit approved=True -> must succeed
+    # Explicit approval cannot turn an unavailable execution path into success.
     approved_payload = {
         "plan_id": plan_id,
         "approved": True,
         "simulate_only": True,
     }
     exec_res = client.post("/api/admin/resident-agent/execute-fix", json=approved_payload, headers=headers)
-    assert exec_res.status_code == status.HTTP_200_OK
-    exec_data = exec_res.json()
-    assert exec_data["success"] is True
-    assert exec_data["status"] == "EXECUTED"
+    assert exec_res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    exec_error = exec_res.json().get("detail") or exec_res.json().get("error", {}).get("message", "")
+    assert "not an isolated coding worker" in exec_error
 
 
 def test_resident_agent_advisory_endpoint(client, resident_agent_admin):
@@ -266,8 +265,8 @@ def test_stress_fuzzer_endpoint(client, resident_agent_admin):
     assert data["transactional_integrity_verified"] is True
 
 
-def test_remote_action_approval_execution(client, resident_agent_admin):
-    """Verify POST /api/admin/resident-agent/remote-action approves and executes remediation."""
+def test_remote_action_fails_closed_without_a_real_worker(client, resident_agent_admin):
+    """Remote approval must not claim to execute a remediation plan."""
     _, _, headers = resident_agent_admin
 
     # 1. Create a plan to approve
@@ -287,17 +286,15 @@ def test_remote_action_approval_execution(client, resident_agent_admin):
     )
     assert bad_cmd_res.status_code == status.HTTP_400_BAD_REQUEST
 
-    # 3. Test structured command APPROVE <plan_id>
+    # 3. An otherwise valid approval command receives an honest unavailable response.
     remote_res = client.post(
         "/api/admin/resident-agent/remote-action",
         json={"command": f"APPROVE {plan_id}"},
         headers=headers,
     )
-    assert remote_res.status_code == status.HTTP_200_OK
-    data = remote_res.json()
-    assert data["success"] is True
-    assert data["action"] == "approve"
-    assert data["plan_id"] == plan_id
+    assert remote_res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    remote_error = remote_res.json().get("detail") or remote_res.json().get("error", {}).get("message", "")
+    assert "not an isolated coding worker" in remote_error
 
 
 def test_tech_radar_endpoint(client, resident_agent_admin):
@@ -331,4 +328,3 @@ async def test_sentinel_scheduler_sweep(db_session):
     assert "chatwoot" in sweep_res["subsystems"]
     assert "database" in sweep_res["subsystems"]
     assert sweep_res["subsystems"]["database"]["healthy"] is True
-

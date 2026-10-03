@@ -7,7 +7,7 @@ Key responsibilities:
 - Continuous scanning of repository integrity, route registrations, and schema boundaries.
 - Live Server-Sent Events (SSE) telemetry broadcast to the admin control panel.
 - Transactional race-condition stress fuzzing to verify zero-double-booking locking under concurrent load.
-- Self-healing remediation strategies for detected anomalies.
+- Remediation planning for human review; this module does not execute code changes.
 
 ---
 
@@ -57,7 +57,8 @@ app/services/resident_agent/
 
 ## Known Issues, Edge Cases & Outstanding Work
 - Fuzzer requires database row-level locking (`SELECT ... FOR UPDATE`) or discrete slot allocations; SQLite file locks behave differently from PostgreSQL row-level locks under extreme concurrency.
-- Future work: automated rollback of detected regression diffs via git worktrees.
+- The remediation executor is intentionally unavailable. It publishes an `UNAVAILABLE` status and rejects execution because no isolated coding worker, verification runner, or independent-review path is connected.
+- Future work requires a separately approved worker with an isolated Git worktree, actual verification evidence, independent review, and deployment separation. Do not replace this boundary with simulated success.
 
 ---
 

@@ -22,6 +22,7 @@ from app.models.curated_memory import CuratedMemory
 from app.models.knowledge_projection import KnowledgeGraphProjection, utc_now
 from app.models.learning_event import LearningEvent
 from app.services.curation.pii_scrubber import scrub_pii
+from app.services.knowledge import graphiti_client
 from app.services.knowledge.graphiti_client import format_group_id, get_graphiti_client
 
 logger = logging.getLogger(__name__)
@@ -53,13 +54,13 @@ class EdgeType(str, Enum):
 
 
 class ProviderNode(BaseModel):
-    name: str
+    provider_name: str
     tenant_id: int
     provider_id: Optional[int] = None
 
 
 class TenantNode(BaseModel):
-    name: str
+    tenant_name: str
     tenant_id: int
 
 
@@ -275,14 +276,9 @@ class ProjectionService:
         reference_time = projection.created_at or utc_now()
 
         # 3. Graphiti dispatch
-        active_client = client if client is not None else get_graphiti_client()
+        active_client = client if client is not None else graphiti_client.get_graphiti_client()
         if active_client is None:
-            logger.info(
-                "Graphiti client offline; mock-projecting episode %s for group %s",
-                episode_uuid,
-                group_id,
-            )
-            return episode_uuid
+            raise RuntimeError("Graphiti client unavailable; cannot project episode")
 
         res = active_client.add_episode(
             name=name,
@@ -291,6 +287,7 @@ class ProjectionService:
             reference_time=reference_time,
             group_id=group_id,
             uuid=episode_uuid,
+            entity_types=ONTOLOGY_ENTITY_TYPES,
         )
 
         if inspect.isawaitable(res):

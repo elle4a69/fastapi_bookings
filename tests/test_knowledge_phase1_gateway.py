@@ -236,6 +236,35 @@ class TestKnowledgeGateway:
         # Publishing a valid item succeeds and invalidates cache
         assert gateway.publish(valid_item) is True
 
+    def test_gateway_publish_invokes_add_episode_with_contract_args(self, monkeypatch):
+        from datetime import datetime
+        from unittest.mock import MagicMock
+        from app.services.knowledge import graphiti_client
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "GRAPH_KNOWLEDGE_ENABLED", True)
+        mock_client = MagicMock()
+        monkeypatch.setattr(graphiti_client, "_graphiti_instance", mock_client)
+        monkeypatch.setattr(graphiti_client, "_indices_initialized", True)
+        monkeypatch.setattr(graphiti_client, "ping_neo4j", lambda: True)
+
+        gateway = KnowledgeGateway()
+        valid_item = KnowledgeItem(
+            scope=KnowledgeScope(tenant_id=42, provider_id=7),
+            kind=KnowledgeKind.durable_fact,
+            text="Patients can book online 24/7.",
+            authority=Authority.explicit_provider_instruction,
+        )
+        success = gateway.publish(valid_item)
+        assert success is True
+        mock_client.add_episode.assert_called_once()
+        kwargs = mock_client.add_episode.call_args[1]
+        assert kwargs["name"] == "item_durable_fact"
+        assert kwargs["episode_body"] == "Patients can book online 24/7."
+        assert kwargs["source_description"] == "Knowledge gateway event for tenant 42"
+        assert kwargs["group_id"] == "tenant:42:provider:7"
+        assert isinstance(kwargs["reference_time"], datetime)
+
     def test_neo4j_connectivity_ping_mocked(self, monkeypatch):
         # Verify ping_neo4j returns True when driver connectivity succeeds
         from unittest.mock import MagicMock

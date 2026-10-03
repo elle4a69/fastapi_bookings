@@ -65,9 +65,12 @@ def _normalize_query(
     tenant_id: Optional[int] = None,
     provider_id: Optional[int] = None,
     limit: Optional[int] = None,
+    embedding: Optional[List[float]] = None,
 ) -> RetrievalQuery:
     """Normalize input query to RetrievalQuery model."""
     if isinstance(query, RetrievalQuery):
+        if embedding is not None and query.embedding is None:
+            return query.model_copy(update={"embedding": embedding})
         return query
     if tenant_id is None:
         raise ValueError("tenant_id is required when query is a string")
@@ -75,6 +78,7 @@ def _normalize_query(
         tenant_id=tenant_id,
         provider_id=provider_id,
         query=query,
+        embedding=embedding,
         limit=limit or 10,
     )
 
@@ -114,13 +118,14 @@ class BoundedKnowledgeRetriever:
         db: Optional[Session] = None,
         limit: Optional[int] = None,
         as_strings: bool = False,
+        embedding: Optional[List[float]] = None,
     ) -> Union[List[KnowledgeItem], List[str]]:
         """Retrieve bounded factual knowledge items (Spec 47, 48).
 
         Channel 1: Factual knowledge (durable_fact, policy_guidance, preference, boundary)
         bounded strictly by KNOWLEDGE_FACTS_LIMIT.
         """
-        norm_query = _normalize_query(query, tenant_id, provider_id, limit)
+        norm_query = _normalize_query(query, tenant_id, provider_id, limit, embedding=embedding)
         max_limit = min(
             limit or settings.KNOWLEDGE_FACTS_LIMIT,
             settings.KNOWLEDGE_FACTS_LIMIT,
@@ -143,13 +148,14 @@ class BoundedKnowledgeRetriever:
         db: Optional[Session] = None,
         limit: Optional[int] = None,
         as_strings: bool = False,
+        embedding: Optional[List[float]] = None,
     ) -> Union[List[KnowledgeItem], List[str]]:
         """Retrieve bounded behavioural guidance items (Spec 47, 48).
 
         Channel 2: Behavioural guidance (behaviour_rule)
         bounded strictly by KNOWLEDGE_BEHAVIOUR_LIMIT.
         """
-        norm_query = _normalize_query(query, tenant_id, provider_id, limit)
+        norm_query = _normalize_query(query, tenant_id, provider_id, limit, embedding=embedding)
         max_limit = min(
             limit or settings.KNOWLEDGE_BEHAVIOUR_LIMIT,
             settings.KNOWLEDGE_BEHAVIOUR_LIMIT,
@@ -172,13 +178,14 @@ class BoundedKnowledgeRetriever:
         db: Optional[Session] = None,
         limit: Optional[int] = None,
         as_strings: bool = False,
+        embedding: Optional[List[float]] = None,
     ) -> Union[List[KnowledgeItem], List[str]]:
         """Retrieve bounded style examples and guidance (Spec 47, 48).
 
         Channel 3: Style examples (style_example, response_guidance)
         bounded strictly by KNOWLEDGE_EXAMPLES_LIMIT.
         """
-        norm_query = _normalize_query(query, tenant_id, provider_id, limit)
+        norm_query = _normalize_query(query, tenant_id, provider_id, limit, embedding=embedding)
         max_limit = min(
             limit or settings.KNOWLEDGE_EXAMPLES_LIMIT,
             settings.KNOWLEDGE_EXAMPLES_LIMIT,
@@ -199,9 +206,10 @@ class BoundedKnowledgeRetriever:
         tenant_id: Optional[int] = None,
         provider_id: Optional[int] = None,
         db: Optional[Session] = None,
+        embedding: Optional[List[float]] = None,
     ) -> RetrievalResult:
         """Execute bounded retrieval across all 3 channels and return structured RetrievalResult."""
-        norm_query = _normalize_query(query, tenant_id, provider_id)
+        norm_query = _normalize_query(query, tenant_id, provider_id, embedding=embedding)
         effective_db = db or self._db
 
         # Safety & Scope checks
@@ -314,28 +322,68 @@ class BoundedKnowledgeRetriever:
         candidates: List[Tuple[int, KnowledgeItem]] = []
 
         # -----------------------------------------------------------------
-        # 1. Query PostgreSQL CuratedMemory
+        # 1. Query PostgreSQL CuratedMemory (pgvector cosine or keyword fallback)
         # -----------------------------------------------------------------
-        cm_query = session.query(CuratedMemory).filter(
-            CuratedMemory.tenant_id == query.tenant_id,
-            CuratedMemory.status == "active",
-            or_(
-                CuratedMemory.effective_until.is_(None),
-                CuratedMemory.effective_until > now,
-            ),
-        )
+        bind = session.get_bind() if hasattr(session, "get_bind") else getattr(session, "bind", None)
+        is_postgres = bind is not None and getattr(bind.dialect, "name", "") == "postgresql"
 
-        if query.provider_id is not None:
-            cm_query = cm_query.filter(
-                or_(
-                    CuratedMemory.provider_id == query.provider_id,
-                    CuratedMemory.provider_id.is_(None),
+        active_memories: List[CuratedMemory] = []
+        if is_postgres and query.embedding is not None:
+            try:
+                pg_query = session.query(CuratedMemory).filter(
+                    CuratedMemory.tenant_id == query.tenant_id,
+                    CuratedMemory.status == "active",
+                    CuratedMemory.embedding.is_not(None),
+                    or_(
+                        CuratedMemory.effective_until.is_(None),
+                        CuratedMemory.effective_until > now,
+                    ),
                 )
-            )
-        else:
-            cm_query = cm_query.filter(CuratedMemory.provider_id.is_(None))
+                if query.provider_id is not None:
+                    pg_query = pg_query.filter(
+                        or_(
+                            CuratedMemory.provider_id == query.provider_id,
+                            CuratedMemory.provider_id.is_(None),
+                        )
+                    )
+                else:
+                    pg_query = pg_query.filter(CuratedMemory.provider_id.is_(None))
 
-        active_memories = cm_query.order_by(desc(CuratedMemory.id)).all()
+                active_memories = (
+                    pg_query.order_by(
+                        CuratedMemory.embedding.cosine_distance(query.embedding).asc()
+                    )
+                    .limit(channel_limit * 3)
+                    .all()
+                )
+            except Exception as exc:
+                logger.warning(
+                    "pgvector cosine distance query failed (%s); falling back to keyword search",
+                    exc,
+                )
+                active_memories = []
+
+        if not active_memories:
+            cm_query = session.query(CuratedMemory).filter(
+                CuratedMemory.tenant_id == query.tenant_id,
+                CuratedMemory.status == "active",
+                or_(
+                    CuratedMemory.effective_until.is_(None),
+                    CuratedMemory.effective_until > now,
+                ),
+            )
+
+            if query.provider_id is not None:
+                cm_query = cm_query.filter(
+                    or_(
+                        CuratedMemory.provider_id == query.provider_id,
+                        CuratedMemory.provider_id.is_(None),
+                    )
+                )
+            else:
+                cm_query = cm_query.filter(CuratedMemory.provider_id.is_(None))
+
+            active_memories = cm_query.order_by(desc(CuratedMemory.id)).all()
 
         for mem in active_memories:
             user_q = (mem.user_query or "").strip()
@@ -354,6 +402,13 @@ class BoundedKnowledgeRetriever:
             text = ideal_ans if ideal_ans else user_q
             is_prov = (mem.provider_id is not None and mem.provider_id == query.provider_id)
             score = _compute_relevance_score(f"{user_q} {ideal_ans} {mem.category}", query_tokens, is_prov)
+            if query.embedding is not None and mem.embedding is not None:
+                try:
+                    from app.services.curation.memory_curator import compute_cosine_distance
+                    dist = compute_cosine_distance(query.embedding, list(mem.embedding))
+                    score += int(max(0.0, 1.0 - dist) * 20)
+                except Exception:
+                    pass
 
             item = KnowledgeItem(
                 id=f"cm_{mem.id}",
@@ -599,6 +654,7 @@ def retrieve_facts(
     db: Optional[Session] = None,
     limit: Optional[int] = None,
     as_strings: bool = False,
+    embedding: Optional[List[float]] = None,
 ) -> Union[List[KnowledgeItem], List[str]]:
     """Retrieve bounded factual knowledge items (Spec 47, 48)."""
     return default_retriever.retrieve_facts(
@@ -608,6 +664,7 @@ def retrieve_facts(
         db=db,
         limit=limit,
         as_strings=as_strings,
+        embedding=embedding,
     )
 
 
@@ -618,6 +675,7 @@ def retrieve_behaviour(
     db: Optional[Session] = None,
     limit: Optional[int] = None,
     as_strings: bool = False,
+    embedding: Optional[List[float]] = None,
 ) -> Union[List[KnowledgeItem], List[str]]:
     """Retrieve bounded behavioural guidance items (Spec 47, 48)."""
     return default_retriever.retrieve_behaviour(
@@ -627,6 +685,7 @@ def retrieve_behaviour(
         db=db,
         limit=limit,
         as_strings=as_strings,
+        embedding=embedding,
     )
 
 
@@ -637,6 +696,7 @@ def retrieve_examples(
     db: Optional[Session] = None,
     limit: Optional[int] = None,
     as_strings: bool = False,
+    embedding: Optional[List[float]] = None,
 ) -> Union[List[KnowledgeItem], List[str]]:
     """Retrieve bounded style examples and guidance (Spec 47, 48)."""
     return default_retriever.retrieve_examples(
@@ -646,6 +706,7 @@ def retrieve_examples(
         db=db,
         limit=limit,
         as_strings=as_strings,
+        embedding=embedding,
     )
 
 
@@ -654,6 +715,7 @@ def retrieve_bounded_knowledge(
     tenant_id: Optional[int] = None,
     provider_id: Optional[int] = None,
     db: Optional[Session] = None,
+    embedding: Optional[List[float]] = None,
 ) -> RetrievalResult:
     """Retrieve bounded knowledge across all 3 channels (Spec 47, 48, 66)."""
     return default_retriever.retrieve_all_channels(
@@ -661,4 +723,5 @@ def retrieve_bounded_knowledge(
         tenant_id=tenant_id,
         provider_id=provider_id,
         db=db,
+        embedding=embedding,
     )

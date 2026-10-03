@@ -30,14 +30,17 @@ retrievable as factual authority.
 ## Setup, Configuration & Dependencies
 
 The service uses SQLAlchemy asynchronous sessions and `pgvector`-compatible
-embeddings. Curator embeddings are deterministic and local so transcript text
-is not sent to an external embedding provider. PostgreSQL may store vectors;
-SQLite test runs rank them in process.
+embeddings. The embedding pipeline generates 1536-dimensional semantic vectors
+in the shared latent space (`OPENAI_EMBEDDING_MODEL`, defaulting to
+`text-embedding-3-small`) after local PII scrubbing. For test and offline
+environments without network connectivity or API credentials, it gracefully
+falls back to deterministic unit vectors.
 
-The production migration is intentionally pending because the current Alembic
-head (`e8f9a0b1c2d3`) is unrelated, untracked work. Do not deploy these model
-changes until a clean migration is generated from the accepted schema head and
-its upgrade/downgrade is verified.
+PostgreSQL stores 1536-dimensional vectors using the native `vector` extension
+indexed via an approximate nearest neighbor HNSW cosine distance index
+(`ix_curated_memories_embedding_hnsw`, `m = 16, ef_construction = 64`) created in
+migration `j1k2m3n4p5q6`. SQLite test runners execute hybrid ranking with in-memory
+fallback.
 
 ## Core Workflows & Contracts
 
@@ -68,8 +71,12 @@ candidate and no conflict/replacement candidate.
 
 `retrieve_durable_knowledge()` applies tenant, provider, active status,
 approved authority, confidence, effective date, knowledge kind and conflict
-filters before ranking. Retrieval emits structural decision evidence only; it
-does not log the query or answer.
+filters before ranking. When running against PostgreSQL with pre-computed query
+embeddings, candidate ordering is executed directly in PostgreSQL via native
+pgvector cosine distance (`CuratedMemory.embedding.cosine_distance(query_embedding).asc()`)
+utilizing the HNSW index. On SQLite or when no embedding is supplied, it falls
+back seamlessly to Python-level cosine distance and lexical token matching.
+Retrieval emits structural decision evidence only; it does not log the query or answer.
 
 ## Data Safety & Isolation
 
@@ -85,8 +92,8 @@ does not log the query or answer.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
-- Generate and verify an Alembic migration after the unrelated current head is
-  committed or removed from the migration graph.
+- Alembic migration `j1k2m3n4p5q6_add_pgvector_extension_and_hnsw_index.py` creates
+  the PostgreSQL `vector` extension and the HNSW cosine index `ix_curated_memories_embedding_hnsw`.
 - Mount owner/admin curator HTTP endpoints and build the admin workspace in a
   separate task; shared router/main files are intentionally not changed here.
 - Replace the existing direct `answer-info-request` persistence path in
@@ -100,5 +107,5 @@ does not log the query or answer.
 
 ```powershell
 .\.venv\Scripts\python.exe -m py_compile app/models/curated_memory.py app/schemas/curated_memory.py app/services/curation/knowledge_policy.py app/services/curation/retrieval.py app/services/curation/memory_curator.py
-.\.venv\Scripts\python.exe -m pytest tests/test_knowledge_curator_safety.py tests/test_track4_pii_scrubber.py -q
+python -m pytest tests/test_knowledge_phase7_phase8_retrieval.py tests/test_knowledge_curator_api.py -v
 ```

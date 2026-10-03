@@ -41,7 +41,10 @@ class PlanFixRequest(BaseModel):
 class ExecuteFixRequest(BaseModel):
     plan_id: str = Field(..., description="Unique plan ID to execute")
     approved: bool = Field(False, description="Explicit approval gate flag (must be true)")
-    simulate_only: bool = Field(False, description="Simulate execution without modifying files")
+    simulate_only: bool = Field(
+        False,
+        description="Deprecated compatibility field; all remediation execution is unavailable.",
+    )
 
 
 class AdvisoryRequest(BaseModel):
@@ -120,7 +123,7 @@ async def execute_remediation_fix(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Safely execute an approved remediation plan with rollback and verification."""
+    """Reject code execution until a real isolated worker is available."""
     if not payload.approved:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -128,14 +131,24 @@ async def execute_remediation_fix(
         )
 
     try:
-        result = await resident_agent_engine.execute_remediation_plan(
+        await resident_agent_engine.execute_remediation_plan(
             plan_id=payload.plan_id,
             approved=payload.approved,
             simulate_only=payload.simulate_only,
         )
-        return result
+        # The current executor must always raise rather than produce a success
+        # response. Keep this guard if its implementation changes accidentally.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Remediation execution is unavailable until an isolated coding worker is connected.",
+        )
     except FixExecutionError as fee:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(fee))
+        raise HTTPException(
+            status_code=getattr(fee, "status_code", status.HTTP_400_BAD_REQUEST),
+            detail=str(fee),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Unexpected error during fix execution: %s", exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
@@ -161,7 +174,7 @@ async def execute_remote_action(
     current_admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Execute remote action triggers dispatched via Chatwoot or SMS (e.g. 'APPROVE <plan_id>')."""
+    """Reject remote remediation execution until a real isolated worker is available."""
     plan_id = payload.plan_id
     action = (payload.action or "").lower()
 
@@ -180,20 +193,24 @@ async def execute_remote_action(
         )
 
     try:
-        result = await resident_agent_engine.execute_remediation_plan(
+        await resident_agent_engine.execute_remediation_plan(
             plan_id=plan_id,
             approved=True,
             simulate_only=False,
         )
-        return {
-            "success": True,
-            "action": "approve",
-            "plan_id": plan_id,
-            "execution_result": result,
-            "message": f"Autonomous remediation plan '{plan_id}' approved and executed successfully.",
-        }
+        # The current executor must always raise rather than produce a success
+        # response. Keep this guard if its implementation changes accidentally.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Remediation execution is unavailable until an isolated coding worker is connected.",
+        )
     except FixExecutionError as fee:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(fee))
+        raise HTTPException(
+            status_code=getattr(fee, "status_code", status.HTTP_400_BAD_REQUEST),
+            detail=str(fee),
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error executing remote action for plan %s: %s", plan_id, exc)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
@@ -258,4 +275,3 @@ def get_sentinel_status(
 ) -> Dict[str, Any]:
     """Return current status of the autonomous background sentinel scheduler."""
     return sentinel_scheduler.get_status()
-

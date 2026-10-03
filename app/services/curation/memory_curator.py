@@ -9,15 +9,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
+import os
 import random
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from ...models.audit import AuditLog
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
@@ -155,15 +160,61 @@ def generate_deterministic_embedding(text: str, dim: int = 1536) -> list[float]:
     return [value / norm for value in vector] if norm else [0.0] * dim
 
 
-async def compute_embedding(text: str) -> list[float]:
-    """Return a deterministic local embedding of scrubbed text.
+async def compute_semantic_embedding(text: str) -> Optional[list[float]]:
+    """Generate 1536-dimensional semantic embedding via configured OpenAI API.
 
-    External embedding calls are deliberately excluded from the curator path;
-    callers that use an approved privacy gateway may pass their own vectors to
-    retrieval separately.
+    Returns None if OPENAI_API_KEY is absent or if external network call fails.
     """
+    api_key = getattr(settings, "OPENAI_API_KEY", "")
+    if not api_key or not text.strip():
+        return None
 
-    return generate_deterministic_embedding(scrub_pii(text))
+    url = "https://api.openai.com/v1/embeddings"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    model = getattr(settings, "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+    payload = {
+        "model": model,
+        "input": text.strip(),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            embedding = data.get("data", [{}])[0].get("embedding")
+            if isinstance(embedding, list) and len(embedding) == 1536:
+                return [float(x) for x in embedding]
+    except Exception as exc:
+        logger.warning(
+            "External semantic embedding generation failed for text (%s): %s",
+            text[:30],
+            exc,
+        )
+
+    return None
+
+
+async def compute_embedding(text: str) -> list[float]:
+    """Generate 1536-dimensional semantic vector in shared latent space.
+
+    Scans and scrubs PII first. If OpenAI API credentials are configured,
+    calls the live semantic embedding pipeline (text-embedding-3-small).
+    For test/offline environments without credentials or network connectivity,
+    gracefully falls back to deterministic unit vectors.
+    """
+    clean_text = scrub_pii(text).strip()
+    if not clean_text:
+        return [0.0] * 1536
+
+    semantic_vector = await compute_semantic_embedding(clean_text)
+    if semantic_vector is not None:
+        return semantic_vector
+
+    return generate_deterministic_embedding(clean_text)
 
 
 def compute_cosine_distance(left: list[float], right: list[float]) -> float:
@@ -209,7 +260,7 @@ async def find_candidate_memories(
     provider_id: Optional[int] = None,
     limit: int = 5,
 ) -> list[tuple[CuratedMemory, float]]:
-    """Find tenant/scope candidates locally without unsafe transaction rollback."""
+    """Find tenant/scope candidates using native pgvector cosine distance on PostgreSQL or local fallback."""
 
     stmt = select(CuratedMemory).where(CuratedMemory.tenant_id == tenant_id)
     if provider_id is None:
@@ -218,6 +269,32 @@ async def find_candidate_memories(
         stmt = stmt.where(
             or_(CuratedMemory.provider_id == provider_id, CuratedMemory.provider_id.is_(None))
         )
+
+    bind = db.get_bind() if hasattr(db, "get_bind") else getattr(db, "bind", None)
+    is_postgres = bind is not None and getattr(bind.dialect, "name", "") == "postgresql"
+
+    if is_postgres and embedding:
+        try:
+            pg_stmt = (
+                stmt.where(CuratedMemory.embedding.is_not(None))
+                .order_by(CuratedMemory.embedding.cosine_distance(embedding).asc())
+                .limit(max(1, min(limit, 50)))
+            )
+            result = await db.execute(pg_stmt)
+            memories = result.scalars().all()
+            if memories:
+                return [
+                    (
+                        memory,
+                        compute_cosine_distance(embedding, list(memory.embedding))
+                        if memory.embedding is not None
+                        else 1.0,
+                    )
+                    for memory in memories
+                ]
+        except Exception as exc:
+            logger.info("pgvector candidate query failed (%s), using local fallback", exc)
+
     result = await db.execute(stmt)
     ranked: list[tuple[CuratedMemory, float]] = []
     for memory in result.scalars().all():

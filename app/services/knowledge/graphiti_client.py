@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _driver: Optional[Driver] = None
 _graphiti_instance = None
+_indices_initialized: bool = False
 
 
 def format_group_id(tenant_id: int, provider_id: Optional[int] = None) -> str:
@@ -74,10 +75,57 @@ def ping_neo4j() -> bool:
         return False
 
 
+def initialize_graphiti_schema(client=None) -> bool:
+    """Initialize Graphiti schema indices and constraints idempotently.
+
+    Safe to invoke during startup lifespans or upon client instantiation.
+    """
+    global _indices_initialized
+    if _indices_initialized:
+        return True
+
+    target_client = client or _graphiti_instance
+    if target_client is None:
+        return False
+
+    build_fn = getattr(target_client, "build_indices_and_constraints", None)
+    if build_fn is None:
+        _indices_initialized = True
+        return True
+
+    try:
+        import asyncio
+        import concurrent.futures
+        import inspect
+
+        if inspect.iscoroutinefunction(build_fn):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop is not None and loop.is_running():
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    executor.submit(asyncio.run, build_fn()).result()
+            else:
+                asyncio.run(build_fn())
+        else:
+            build_fn()
+
+        _indices_initialized = True
+        logger.info("Successfully established Graphiti indices and schema constraints.")
+        return True
+    except Exception as exc:
+        logger.warning("Failed to initialize Graphiti schema indices and constraints: %s", exc)
+        return False
+
+
 def get_graphiti_client():
     """Get or instantiate singleton Graphiti client with graceful fallback."""
     global _graphiti_instance
     if _graphiti_instance is not None:
+        if not _indices_initialized:
+            initialize_graphiti_schema(_graphiti_instance)
         return _graphiti_instance
 
     if not ping_neo4j():
@@ -91,6 +139,7 @@ def get_graphiti_client():
             user=settings.NEO4J_USER,
             password=settings.NEO4J_PASSWORD,
         )
+        initialize_graphiti_schema(_graphiti_instance)
         return _graphiti_instance
     except Exception as exc:
         logger.error("Failed to initialize Graphiti core client: %s", exc)
@@ -99,7 +148,7 @@ def get_graphiti_client():
 
 def close_connections() -> None:
     """Close active Neo4j driver and Graphiti connections."""
-    global _driver, _graphiti_instance
+    global _driver, _graphiti_instance, _indices_initialized
     if _graphiti_instance is not None:
         try:
             # Graphiti provides a close() coroutine or method
@@ -117,6 +166,7 @@ def close_connections() -> None:
         except Exception as exc:
             logger.debug("Error closing Graphiti instance: %s", exc)
         _graphiti_instance = None
+        _indices_initialized = False
 
     if _driver is not None:
         try:

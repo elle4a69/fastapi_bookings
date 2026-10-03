@@ -40,8 +40,11 @@ def utc_now() -> datetime:
 def mock_graphiti_offline(monkeypatch):
     """Ensure Phase 4 unit tests run without live Graphiti/OpenAI dispatch."""
     import app.services.knowledge.graphiti_client as gc
-    monkeypatch.setattr(gc, "ping_neo4j", lambda: False)
-    monkeypatch.setattr(gc, "_graphiti_instance", None)
+    fake_client = MagicMock()
+    fake_client.add_episode.side_effect = lambda **kwargs: kwargs.get("uuid")
+    monkeypatch.setattr(gc, "_graphiti_instance", fake_client)
+    monkeypatch.setattr(gc, "_indices_initialized", True)
+    monkeypatch.setattr(gc, "ping_neo4j", lambda: True)
 
 
 @pytest.fixture
@@ -446,3 +449,103 @@ def test_ontological_concepts_and_edge_types():
     for edge in expected_edges:
         assert edge in ONTOLOGY_EDGE_TYPES
         assert hasattr(EdgeType, edge)
+
+
+def test_9_graphiti_offline_raises_and_schedules_retry(p4_setup, db_session, monkeypatch):
+    """Test 9: When Graphiti client is offline/None, project_to_graphiti raises RuntimeError and worker schedules retry."""
+    import app.services.knowledge.graphiti_client as gc
+    monkeypatch.setattr(gc, "_graphiti_instance", None)
+    monkeypatch.setattr(gc, "ping_neo4j", lambda: False)
+
+    tenant_1 = p4_setup["tenant_1"]
+    prov_1 = p4_setup["prov_1"]
+
+    projection = KnowledgeGraphProjection(
+        tenant_id=tenant_1.id,
+        provider_id=prov_1.id,
+        curated_memory_id=999,
+        projection_type="fact",
+        graph_group_id=format_group_id(tenant_1.id, prov_1.id),
+        status="pending",
+    )
+    db_session.add(projection)
+    db_session.commit()
+
+    # Direct call to projection_service must raise RuntimeError
+    with pytest.raises(RuntimeError, match="Graphiti client unavailable; cannot project episode"):
+        projection_service.project_to_graphiti(projection)
+
+    # Worker processing must catch RuntimeError, schedule retry with backoff, and release lease
+    worker = ProjectionWorker(worker_id="test-retry-worker", batch_size=10, max_retries=5)
+    summary = worker.process_batch(db=db_session)
+
+    assert summary["claimed"] == 1
+    assert summary["projected"] == 0
+    assert summary["retried"] == 1
+
+    db_session.refresh(projection)
+    assert projection.status == "retry"
+    assert projection.attempt_count == 1
+    assert "Graphiti client unavailable; cannot project episode" in projection.last_error
+    assert projection.lease_owner is None
+    assert projection.lease_expires_at is None
+    assert projection.next_attempt_at is not None
+
+
+def test_10_ontological_entity_types_passed_to_add_episode(p4_setup, db_session):
+    """Test 10: project_to_graphiti passes ONTOLOGY_ENTITY_TYPES to active_client.add_episode."""
+    from app.services.knowledge.projection_service import ONTOLOGY_ENTITY_TYPES
+    tenant_1 = p4_setup["tenant_1"]
+    prov_1 = p4_setup["prov_1"]
+
+    projection = KnowledgeGraphProjection(
+        tenant_id=tenant_1.id,
+        provider_id=prov_1.id,
+        curated_memory_id=888,
+        projection_type="fact",
+        graph_group_id=format_group_id(tenant_1.id, prov_1.id),
+        status="pending",
+    )
+    db_session.add(projection)
+    db_session.commit()
+
+    mock_client = MagicMock()
+    mock_client.add_episode.return_value = "test-ep-uuid"
+
+    ep_id = projection_service.project_to_graphiti(projection, client=mock_client)
+    assert ep_id == "test-ep-uuid"
+
+    mock_client.add_episode.assert_called_once()
+    kwargs = mock_client.add_episode.call_args[1]
+    assert kwargs.get("entity_types") == ONTOLOGY_ENTITY_TYPES
+    assert "Provider" in kwargs["entity_types"]
+    assert "Tenant" in kwargs["entity_types"]
+    assert "Preference" in kwargs["entity_types"]
+    assert "Behaviour" in kwargs["entity_types"]
+    assert "Policy" in kwargs["entity_types"]
+    assert "Boundary" in kwargs["entity_types"]
+    assert "Example" in kwargs["entity_types"]
+
+
+def test_11_schema_constraints_initialization_idempotent(monkeypatch):
+    """Test 11: Schema constraints initialization is idempotent and error-resilient."""
+    from app.services.knowledge import graphiti_client as gc
+    mock_graphiti = MagicMock()
+    monkeypatch.setattr(gc, "ping_neo4j", lambda: True)
+    monkeypatch.setattr(gc, "_graphiti_instance", None)
+    monkeypatch.setattr(gc, "_indices_initialized", False)
+
+    with patch("graphiti_core.Graphiti", return_value=mock_graphiti):
+        c1 = gc.get_graphiti_client()
+        assert c1 == mock_graphiti
+        assert mock_graphiti.build_indices_and_constraints.call_count == 1
+
+        # Second call must be idempotent (not rebuild indices)
+        c2 = gc.get_graphiti_client()
+        assert c2 == mock_graphiti
+        assert mock_graphiti.build_indices_and_constraints.call_count == 1
+
+        # Reset connection closes and resets flag
+        gc.close_connections()
+        assert gc._indices_initialized is False
+

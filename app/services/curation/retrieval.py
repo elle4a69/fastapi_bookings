@@ -97,6 +97,17 @@ async def retrieve_durable_knowledge(
     if category:
         stmt = stmt.where(CuratedMemory.category == category)
 
+    bind = db.get_bind() if hasattr(db, "get_bind") else getattr(db, "bind", None)
+    is_postgres = bind is not None and getattr(bind.dialect, "name", "") == "postgresql"
+
+    if is_postgres and query_embedding is not None:
+        try:
+            stmt = stmt.order_by(
+                CuratedMemory.embedding.cosine_distance(query_embedding).asc()
+            )
+        except Exception:
+            pass
+
     result = await db.execute(stmt)
     eligible = [
         memory

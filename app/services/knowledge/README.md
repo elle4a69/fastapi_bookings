@@ -20,7 +20,7 @@ The **Knowledge Subsystem** provides a multi-tenant, provider-isolated graph and
 - **Typed procedural-variable boundary (`classifier.py`)**: New learning content may reference only `{business_name}`, `{provider_name}`, `{location_name}`, `{location_address}`, `{service_name}`, `{service_area}`, and `{booking_link}`. Dates, times, availability, prices, booking IDs, and customer/contact/address values are never normalised into memory; they must come from a tenant/provider-scoped live tool at response time. Style retrieval derives a conservative intent and applies provider -> tenant -> platform precedence; it does not inject unrelated recent examples.
 - **Security and prompt-injection guardrails (`is_system_safety_violation`)**: Quarantining safety breaches into review queues (`QUARANTINE`).
 - **Bounded Multi-Channel Retrieval (`retrieval.py`)**: 3 bounded retrieval channels separating factual knowledge (`retrieve_facts`), behavioural rules (`retrieve_behaviour`), and style examples (`retrieve_examples`) with strictly bounded context windows (Specs 47, 48, 96).
-- **Safe PostgreSQL Fallback Path (Spec 66)**: Graceful fallback querying active `CuratedMemory` and approved `SmsKnowledgeEntry` when Graphiti is disabled, offline, or returns empty, strictly preserving multi-tenant/provider boundaries and filtering dynamic/safety data.
+- **Safe PostgreSQL Fallback & pgvector Retrieval (Spec 66)**: Graceful fallback querying active `CuratedMemory` and approved `SmsKnowledgeEntry` when Graphiti is disabled, offline, or returns empty. On PostgreSQL, executes native pgvector cosine distance queries (`CuratedMemory.embedding.cosine_distance(query_vector)`) accelerated by the HNSW index `ix_curated_memories_embedding_hnsw`, and seamlessly falls back to keyword token matching on SQLite or when query embeddings are absent.
 - **Master Spec 54 Prompt Precedence Convergence**: Exact 10-layer hierarchical instruction precedence ensuring live operational truth wins (Spec 53), safety rules are immutable, and knowledge context is cleanly segmented.
 - **Redis Retrieval Caching & Epoch Invalidation (`cache.py`)**: Cache keys `fb:tenant:{tenant_id}:provider:{provider_id}:knowledge:{epoch}:{query_hash}` using composite epochs `f"{tenant_epoch}:{provider_epoch}"` for instant O(1) cache busting upon curation (Specs 49, 50, 97).
 - **Configuration Caching (Spec 52)**: Epoch-invalidated caching for provider profile configurations (`fb:tenant:{tenant_id}:provider:{provider_id}:profile:{epoch}`).
@@ -200,14 +200,112 @@ flowchart TD
 
 ---
 
-## 5. Verification & Testing Commands
+## 5. Data Safety & Isolation
 
-### Phase 5 & 6 Backfill, Rebuild & Shadow Write Tests
+The Knowledge Subsystem operates under stringent isolation, privacy, and safety boundaries to ensure zero cross-tenant leakage, zero operational hallucination, and full compliance with **AGENTS.md**:
+
+### 5.1 Multi-Tenant & Provider Group Partitioning
+- **Strict Graph Partitioning (Spec 34)**:
+  - Provider-private knowledge is stored in Graphiti group `tenant:{tenant_id}:provider:{provider_id}`.
+  - Organization-wide knowledge is stored in `tenant:{tenant_id}:shared`.
+  - Providers within the same tenant query their private partition and the tenant-shared partition, but are mathematically barred from accessing sibling provider partitions.
+  - Queries across distinct tenants (`tenant_id_A` vs `tenant_id_B`) are partitioned at both the Cypher query level (`WHERE r.group_id IN $group_ids`) and the relational database level (`WHERE CuratedMemory.tenant_id == query.tenant_id`).
+- **Scope Validation (`validate_scope`)**: Every ingestion event, curation proposal, projection, and retrieval query asserts `tenant_id > 0`. Provider queries assert provider ownership under the active tenant.
+
+### 5.2 Dynamic Operational Fact Rejection (Spec 19)
+- Real-time availability, clock times, calendar slots, appointment durations, dynamic pricing quotes, and ephemeral payment links are strictly rejected (`REJECT_DYNAMIC`).
+- Dynamic operational data is transient truth owned by the live scheduling engine and tools (Layer 2). Allowing it to persist in long-term graph memory (Layer 6) causes stale scheduling hallucination.
+- Both `is_dynamic_operational_data()` and the fail-closed pre-promotion classifier (`classify_curated_memory_candidate`) reject operational patterns before persistence in `CuratedMemory` or projection to Neo4j.
+
+### 5.3 PII Scrubbing Across All Storage Layers (Specs 20, 33, 35)
+- All human text inputs, feedback wording, and dialogue turns pass through `scrub_pii()` before entering `CuratedMemory`, `KnowledgeGraphProjection`, or Graphiti episode bodies.
+- Australian mobile numbers (`04xx`), landlines, international numbers, email addresses, credit cards, full customer names, and street addresses are replaced with typed redaction tokens.
+- Raw customer identifiers or conversation transcripts are never projected into Neo4j graph nodes or edges.
+
+### 5.4 System Safety & Prompt Injection Guardrails
+- Input queries and candidate facts are evaluated via `is_system_safety_violation()`.
+- System override markers (`[SYSTEM]`, `<|im_start|>`), role spoofing, and jailbreak attempts are immediately blocked.
+- Violating learning events are quarantined (`status="quarantined"`, `resolution_code="quarantined_safety_violation"`) for administrative review and never enter the active knowledge graph.
+
+### 5.5 Concurrency Safety & Lease-Based Worker Isolation
+- Background workers (`projection_worker` and `curator_worker`) claim records using PostgreSQL `FOR UPDATE SKIP LOCKED`.
+- Each claim atomically writes `status="processing"`, `lease_owner=<worker_uuid>`, and `lease_expires_at=now() + 2 minutes`.
+- Multiple concurrent worker instances process disjoint batches without lock contention or duplicate execution.
+- If a worker crashes or encounters an OOM event mid-batch, stale leases naturally expire after 120 seconds and are reclaimed by healthy workers on the subsequent polling cycle.
+
+---
+
+## 6. Known Issues, Edge Cases & Outstanding Work
+
+An exhaustive audit of the codebase against production requirements and **AGENTS.md Rule 3** identified technical shortcomings and implementation gaps, which are tracked and remediated as follows:
+
+### 6.1 Mock Projection Fallback on Offline Graphiti Client (`projection_service.py:278-285`) — [RESOLVED in Work Package A]
+- **Remediation Completed**: Removed the silent mock return that previously faked success when Graphiti was offline. `ProjectionService.project_to_graphiti()` now raises `RuntimeError("Graphiti client unavailable; cannot project episode")` whenever `active_client is None`.
+- **Runtime Behavior**: In `projection_worker.py`, this failure triggers standard transactional rollback, increments `attempt_count`, releases the lease, and computes exponential retry backoff (Spec 68: `10 * 2^attempt_count`) or transitions to `dead_letter` upon reaching `max_retries` (Spec 69).
+
+### 6.2 Ontological Concepts in `add_episode` Call (`projection_service.py:282-293`) — [RESOLVED in Work Package A]
+- **Remediation Completed**: Updated `project_to_graphiti()` to pass `entity_types=ONTOLOGY_ENTITY_TYPES` to `active_client.add_episode()`, enforcing domain entity schemas (`ProviderNode`, `TenantNode`, `PreferenceNode`, `BehaviourNode`, `PolicyNode`, `BoundaryNode`, `ExampleNode`).
+- **Schema Protection Compliance**: Field names on `ProviderNode` (`provider_name`) and `TenantNode` (`tenant_name`) are defined to respect Graphiti's protected attributes (`name`, `uuid`, `summary`, etc.), ensuring strict ontological concept extraction without schema validation errors.
+
+### 6.3 Mandatory Arguments in `KnowledgeGateway.publish()` (`gateway.py:206-239`) — [RESOLVED in Work Package A]
+- **Remediation Completed**: Plumbed required `source_description=f"Knowledge gateway event for tenant {tenant_id}"` and `reference_time=_utc_now()` into all `client.add_episode()` invocations in `gateway.py:publish()`.
+- **Event Loop Safety**: Added robust running-loop detection using `asyncio.get_running_loop()`, executing in a worker thread via `ThreadPoolExecutor` when an event loop is already active, or invoking `asyncio.run()` when no loop is active.
+
+### 6.4 Graph Schema Index and Constraint Initialization (`graphiti_client.py:78-125`) — [RESOLVED in Work Package A]
+- **Remediation Completed**: Implemented `initialize_graphiti_schema(client=None)` in `graphiti_client.py`, which is called automatically and idempotently during `get_graphiti_client()` instantiation and can also be called at startup.
+- **Resilience**: `build_indices_and_constraints()` is safely executed across async and sync contexts. Any initialization warnings or existing index notifications from Neo4j DBMS are handled gracefully without interrupting runtime service.
+
+### 6.5 Synthetic Graph Rendering in Assistant Studio Curator (`assistant_studio_curator.py:811-990`)
+- **Current Behavior**: The `GET /api/admin/assistant-studio/curator/graph-nodes` visualizer endpoint claims to generate real epistemic graph nodes and directed ontological edges. In reality, it queries PostgreSQL `CuratedMemory` and synthesizes nodes and edges in Python without querying Neo4j.
+- **Shortcoming**: The visualizer reflects relational PostgreSQL memory state rather than the actual state of the Neo4j Graphiti database.
+- **Remediation Required**: Plumb a real Cypher query (`MATCH (e:Episode)-[r:MENTIONS]->(ent:Entity) WHERE r.group_id IN $group_ids RETURN ...`) against the Neo4j driver when `ping_neo4j()` is true, falling back to PostgreSQL representation only when Neo4j is offline.
+
+### 6.6 Hardcoded and Approximated Telemetry in Pipeline Status (`assistant_studio_curator.py:235, 315-316`)
+- **Current Behavior**: In `GET /api/admin/assistant-studio/curator/pipeline-status`:
+  - `neo4j_node_count` is calculated as `projected_count + (1 if provider_id else 2)` based on PostgreSQL row counts rather than executing a Cypher count.
+  - `redis_cache_hit_ratio` is hardcoded as `0.88 if active_memories > 0 else 0.0`.
+- **Shortcoming**: Synthetic constants and estimates masquerade as live infrastructure telemetry.
+- **Remediation Required**: Execute live Cypher query `MATCH (n) RETURN count(n)` against Neo4j, and query Redis INFO stats (`keyspace_hits` / (`keyspace_hits` + `keyspace_misses`)) to compute genuine cache hit ratios.
+
+### 6.7 Parity Verification Scope Limitation (`rebuild.py:360-420`)
+- **Current Behavior**: `verify_parity()` in `rebuild.py` (and the CLI `--verify` flag) compares PostgreSQL `curated_memories` against PostgreSQL `knowledge_graph_projections` outbox rows. It never queries Neo4j.
+- **Shortcoming**: The documentation claims that it "verifies parity between PostgreSQL ground truth and Neo4j graph nodes". In reality, it only verifies outbox queue enqueueing parity within PostgreSQL.
+- **Remediation Required**: Augment `verify_parity()` with a Neo4j Cypher verification pass to verify that every projected episode UUID actually exists in the graph database.
+
+### 6.8 Implicit OpenAI Dependency in `graphiti-core`
+- **Current Behavior**: `graphiti_core.graphiti.Graphiti` defaults to `OpenAIClient` and `OpenAIEmbedder`. Tests in `tests/test_production_rollout_stages.py` and `tests/test_production_readiness_drills.py` work around this by injecting a custom `RealNeo4jGraphitiBridgeClient` that writes raw Cypher, bypassing `graphiti-core` entirely.
+- **Shortcoming**: Live `graphiti-core` extraction and retrieval pipelines cannot run in local, offline, or air-gapped staging environments without external OpenAI API keys and egress access.
+- **Remediation Required**: Implement configurable local embedding and LLM client support in `graphiti_client.py` (e.g. Ollama, FastEmbed, or HuggingFace local models).
+
+---
+
+## 7. Verification & Testing Commands
+
+### 7.1 Phase 1–10 Focused Subsystem Tests
 ```powershell
+# Phase 1: Knowledge Gateway & Cache Invalidation
+python -m pytest tests/test_knowledge_phase1_gateway.py -v
+
+# Phase 2: Curator Ingestion & Outbox Enqueueing
+python -m pytest tests/test_knowledge_phase2_curator.py -v
+
+# Phase 3: Curator Background Worker & Leasing
+python -m pytest tests/test_knowledge_phase3_worker.py -v
+
+# Phase 4: Graphiti Projection Worker & Episode Builder
+python -m pytest tests/test_knowledge_phase4_projection_worker.py -v
+
+# Phase 5 & 6: Historical Knowledge Backfill & Rebuild
 python -m pytest tests/test_knowledge_phase5_phase6_backfill.py -v
+
+# Phase 7 & 8: Bounded Retrieval & Redis Dual-Epoch Cache
+python -m pytest tests/test_knowledge_phase7_phase8_retrieval.py -v
+
+# Phase 9 & 10: Shadow Evaluation & Canary Scope Gating
+python -m pytest tests/test_knowledge_phase9_phase10_shadow_canary.py -v
 ```
 
-### Administrative CLI Tool Execution
+### 7.2 Administrative CLI Tool Execution
 ```powershell
 # Preview backfill counts without mutating database
 python -m app.tools.rebuild_knowledge_graph --dry-run --verify
@@ -219,54 +317,29 @@ python -m app.tools.rebuild_knowledge_graph --tenant-id 1 --verify
 python -m app.tools.rebuild_knowledge_graph --tenant-id 1 --provider-id 2
 ```
 
-### Phase 9 & Phase 10 Shadow Retrieval & Canary Gating Tests
+### 7.3 Assistant Studio Curator API Verification
 ```powershell
-python -m pytest tests/test_knowledge_phase9_phase10_shadow_canary.py -v
+python -m pytest tests/test_knowledge_curator_api.py -v
 ```
 
-### Phase 7 & Phase 8 Retrieval, Safe Fallback & Redis Caching Tests
+### 7.4 End-to-End Production Infrastructure Drills & Canary Rollout Tests
+Requires local Docker infrastructure (PostgreSQL on 5433, Redis on 6380, Neo4j on 7687):
 ```powershell
-python -m pytest tests/test_knowledge_phase7_phase8_retrieval.py -v
+# Production readiness failure & resilience drills
+python -m pytest tests/test_production_readiness_drills.py -v
+
+# Production canary rollout stages verification
+python -m pytest tests/test_production_rollout_stages.py -v
 ```
 
-### Phase 5 & Phase 6 Backfill & Parity Tests
-```powershell
-python -m pytest tests/test_knowledge_phase5_phase6_backfill.py -v
-```
-
-### Phase 4 Projection Worker & Episode Builder Tests
-```powershell
-python -m pytest tests/test_knowledge_phase4_projection_worker.py -v
-```
-
-### Phase 3 Worker Tests
-```powershell
-python -m pytest tests/test_knowledge_phase3_worker.py -v
-```
-
-### Phase 2 Curator & Ledger Tests
-```powershell
-python -m pytest tests/test_knowledge_phase2_curator.py -v
-```
-
-### Phase 1 Gateway Tests
-```powershell
-python -m pytest tests/test_knowledge_phase1_gateway.py -v
-```
-
-### Full Knowledge Subsystem Verification
-```powershell
-python -m pytest tests/test_knowledge_phase9_phase10_shadow_canary.py tests/test_knowledge_phase7_phase8_retrieval.py tests/test_knowledge_phase5_phase6_backfill.py tests/test_knowledge_phase4_projection_worker.py tests/test_knowledge_phase3_worker.py tests/test_knowledge_phase2_curator.py tests/test_knowledge_phase1_gateway.py -v
-```
-
-### Regression Tests (SMS Prompt Builder, Learning Events, Curator Service)
+### 7.5 Upstream SMS & Prompt Precedence Regression Tests
 ```powershell
 python -m pytest tests/test_sms_prompt_builder.py tests/test_sms_learning_events.py tests/test_sms_curator_service.py -v
 ```
 
 ---
 
-## 6. Complete End-to-End Architecture Flow (Spec 109)
+## 8. Complete End-to-End Architecture Flow (Spec 109)
 
 The diagram below documents the unified 10-stage epistemic lifecycle connecting provider actions to runtime agent retrieval:
 
@@ -299,7 +372,7 @@ flowchart TD
 
 ---
 
-## 7. Phase 11–14 Cutover & Legacy Retirement Summary (Specs 26, 27, 46, 54, 65, 83–87, 108)
+## 9. Phase 11–14 Cutover & Legacy Retirement Summary (Specs 26, 27, 46, 54, 65, 83–87, 108)
 
 - **Phase 11 (Live Retrieval Cutover)**: All SMS and Bootcamp reply generation routes live queries through `knowledge_gateway.retrieve(...)`.
 - **Phase 12 (Stop Duplicate Legacy Writes)**: Duplicate inserts into `SmsKnowledgeEntry` on info request answers and bootcamp responses are ceased. `LearningEvent` and `CuratedMemory` serve as the primary write path. Historical `SmsKnowledgeEntry` rows are kept intact for audit compliance.
@@ -308,11 +381,11 @@ flowchart TD
 
 ---
 
-## 8. Production Readiness & Failure Drills Verification (Sections 2–10, 15–24, 38–39)
+## 10. Production Readiness & Failure Drills Verification (Sections 2–10, 15–24, 38–39)
 
 The knowledge subsystem has undergone end-to-end failure drills and latency benchmarking against live infrastructure (PostgreSQL port 5433, Redis port 6380, Neo4j port 7687):
 
-### 8.1 Real Infrastructure Test Suite
+### 10.1 Real Infrastructure Test Suite
 Implementation located at `tests/test_production_readiness_drills.py` covering:
 1. **Real Graphiti Write & Retrieval (Section 3)**: Complete path from `LearningEvent` -> `UnifiedCurator` -> `CuratedMemory` -> `KnowledgeGraphProjection` -> worker -> real Neo4j Cypher write -> `KnowledgeGateway.retrieve` -> bounded system prompt.
 2. **Bootcamp-to-Live Pathway & Sibling Provider Isolation (Section 4)**: Facts taught in Bootcamp are retrievable by the target provider while strictly invisible to sibling providers in the same tenant.
@@ -339,18 +412,18 @@ Implementation located at `tests/test_production_readiness_drills.py` covering:
     - Projection worker execution: ~43.7 ms.
 11. **Granular Health Check Endpoint (Section 24)**: Verified `/health/granular` and `/readiness` endpoints with per-subsystem status reporting.
 
-### 8.2 Execution Command
+### 10.2 Execution Command
 ```powershell
 python -m pytest tests/test_production_readiness_drills.py -v
 ```
 
 ---
 
-## 9. Controlled Production Canary Rollout Verification (Sections 7–25, 47–51)
+## 11. Controlled Production Canary Rollout Verification (Sections 7–25, 47–51)
 
 Implementation codified in [`tests/test_production_rollout_stages.py`](file:///f:/Projects/fastapi_bookings/tests/test_production_rollout_stages.py).
 
-### 9.1 Verification Scope & Objectives
+### 11.1 Verification Scope & Objectives
 1. **Rollout Modes & Fallback Retention (Sections 7, 8)**:
    - Validates explicit rollout modes: `LEGACY/FALLBACK`, `CANARY`, `GRAPH LIVE`.
    - Verifies historical tables (`sms_knowledge_entries`, `curated_memories`, and `Vector(1536)` via pgvector) remain non-destructively active and queryable.
@@ -386,41 +459,41 @@ Implementation codified in [`tests/test_production_rollout_stages.py`](file:///f
    - **Multi-Tenant Scale & Isolation**: Verified strict Tenant 1 and Tenant 2 isolation, Layer 2 operational truth precedence over Layer 6 graph knowledge, and bounded prompt context guarantees (<= 5 facts, 3 behaviours, 2 examples).
    - **Emergency Global Rollback**: Verified instantaneous fallback to PostgreSQL upon flipping `GRAPH_KNOWLEDGE_ENABLED=False` without database restarts or data loss.
 
-### 9.2 Execution Command
+### 11.2 Execution Command
 ```powershell
 python -m pytest tests/test_production_rollout_stages.py -v
 ```
 
 ---
 
-## 10. Continuous Curation Governance & Provider Isolation Rules
+## 12. Continuous Curation Governance & Provider Isolation Rules
 
-### 10.1 Strict Provider Proposal Scoping & Isolation
+### 12.1 Strict Provider Proposal Scoping & Isolation
 `UnifiedCurator` enforces strict provider and tenant boundary isolation across proposal matching, resolution, and quarantine:
 - **Explicit Scoping (`proposal_matches_scope`)**: When an event has a specific `provider_id`, only proposals with `KnowledgeProposal.provider_id == event.provider_id` are eligible for matching, resolution, or safety quarantine. If `event.provider_id is None`, only tenant-shared proposals (`KnowledgeProposal.provider_id.is_(None)`) match.
 - **Cross-Provider Protection**: Provider A's events never resolve, supersede, quarantine, or reject Provider B's proposals.
 - **Target Memory Linking**: Resolved proposals point to `CuratedMemory.id` via `target_memory_id` strictly within the matching provider/tenant scope.
 
-### 10.2 Flag-Only Corrections (Telemetry & Evidence Only)
+### 12.2 Flag-Only Corrections (Telemetry & Evidence Only)
 - **Zero Factual Invention**: When an operator flags an assistant response with a critique or correction reason but does not provide explicit replacement wording (`human_content=None`), the curator treats the signal as feedback/telemetry evidence only.
 - **Evidence-Only Decision**: Returns `CuratorActionValue("EVIDENCE", ...)` with `status="processed"`, `retained_as_evidence=True`, and `memory_id=None`. No factual `CuratedMemory` or canonical knowledge proposal is created from operator criticism alone.
 - **Behavioral Distinctions**: Only explicit, clean human replacement text (`clean_human`) or genuine behavioral instructions create new knowledge entries.
 
-### 10.3 Dynamic Operational Fact Rejection
+### 12.3 Dynamic Operational Fact Rejection
 - Dynamic operational data (live calendar times, availability slots, real-time rates, one-off payment links) detected via `is_dynamic_operational_data` are immediately rejected (`REJECT_DYNAMIC`).
 - Pending proposals associated with dynamic facts are rejected with `reason_code="dynamic_operational_data"` strictly within the event's scoped provider partition.
 
 ---
 
-## 11. Curator Safety, Example Store & Approved Dataset Importer (Workstream 3)
+## 13. Curator Safety, Example Store & Approved Dataset Importer (Workstream 3)
 
-### 11.1 Architectural Separation: Factual vs Procedural Knowledge
+### 13.1 Architectural Separation: Factual vs Procedural Knowledge
 To prevent graph pollution and instruction cross-talk, FastAPI Bookings strictly enforces an architectural partition between business facts and conversational style:
 - **`CuratedMemory` (`curated_memories` table)**: Authoritative, reviewed static business knowledge (e.g., parking facilities, clinic access, cancellation policies, amenities). Dynamic pricing, real-time availability, and conversational dialog flows are strictly prohibited.
 - **`MessageStyleExample` (`message_style_examples` table)**: Dedicated procedural store for approved conversational turns and tone exemplars. Stores sanitized customer/assistant dialog pairs to condition LLM phrasing and tone without polluting factual epistemic graphs.
 - **Epistemic Invariant Guarantee**: Factual knowledge MUST NEVER be written to `MessageStyleExample`, and style examples MUST NEVER be written to `CuratedMemory`. Tested and verified across all curation and import paths.
 
-### 11.2 Fail-Closed Safety Classifier (`classifier.py`)
+### 13.2 Fail-Closed Safety Classifier (`classifier.py`)
 Any candidate content proposed for durable storage is evaluated against deterministic safety classifiers:
 | Category | Evaluated Criteria | Safety Action | Store Target |
 | :--- | :--- | :--- | :--- |
@@ -432,7 +505,7 @@ Any candidate content proposed for durable storage is evaluated against determin
 
 **Fail-Closed Policy**: If input text is empty, whitespace-only, corrupted, or exhibits ambiguous classifications, the classifier defaults strictly to `SafetyDecision.REJECT`.
 
-### 11.3 Typed Variables & Placeholder Allowlist Validation
+### 13.3 Typed Variables & Placeholder Allowlist Validation
 To prevent prompt injection, server-side template injection (SSTI), or variable hallucination, all procedural style examples must conform to a strict placeholder allowlist:
 - **Approved Standard Placeholders**:
   - `{business_name}`: Resolved business or clinic name.
@@ -444,12 +517,12 @@ To prevent prompt injection, server-side template injection (SSTI), or variable 
 - **Legacy Seed Placeholders**: Permitted exclusively when `is_approved_source=True` for the cryptographically verified seed dataset (`{address}`, `{building_number}`, `{date}`, `{hotel_name}`, `{level_number}`, `{name}`, `{phone}`, `{provider_name}`, `{room_number}`, `{suburb}`, `{time}`, `{website}`).
 - **Strict Prohibition of Raw Execution Syntax**: Any Jinja tags (`{{...}}`, `{%...%}`), shell variables (`${...}`), server tags (`<%...%>`), evaluation expressions (`{eval(...)}`), or unapproved custom variables are rejected immediately with `SafetyDecision.REJECT` and blocked by Pydantic schema validation.
 
-### 11.4 ORM & Schema Field Alignment with Prompt Policy
+### 13.4 ORM & Schema Field Alignment with Prompt Policy
 - **Primary Schema / Column Contract**: `client_message` and `assistant_reply`.
 - **Prompt Policy Assembly Compatibility**: `MessageStyleExample` ORM and Pydantic schemas expose bidirectional `@property` aliases for `user_query` (maps to `client_message`) and `ideal_response` (maps to `assistant_reply`).
 - **Prompt Policy Assembly**: In `PromptPolicyAssembler` (Tier 8), style examples seamlessly project into few-shot guidance prompts regardless of attribute naming.
 
-### 11.5 Packaged Safe Asset Importer (`asset_importer.py`)
+### 13.5 Packaged Safe Asset Importer (`asset_importer.py`)
 The asset importer provides deterministic, verified batch ingestion of approved intent examples packaged directly within the platform:
 - **Packaged Internal Asset**: `app/services/knowledge/data/approved_intent_examples.jsonl` (resolved dynamically via `Path(__file__).parent / "data" / "approved_intent_examples.jsonl"`, removing any external system dependencies).
 - **Line Count**: Exactly 180 checksum-pinned source records. Each record is
@@ -467,7 +540,7 @@ The asset importer provides deterministic, verified batch ingestion of approved 
   committing, or rolling back caller-owned database state.
 - **Invariant Guarantee**: Formally asserts that `CuratedMemory` row counts remain strictly unchanged before and after import.
 
-### 11.6 Bounded Procedural Example Retrieval (`example_service.py`)
+### 13.6 Bounded Procedural Example Retrieval (`example_service.py`)
 Procedural style examples are retrieved on-demand for system/few-shot prompt conditioning via `retrieve_style_examples`:
 - **Bounded Footprint**: Defaults to `limit=3` and enforces a maximum character budget (`max_char_budget=2400`, ~600 tokens) to prevent prompt bloat.
 - **Hierarchical Priority Scoping**:
@@ -478,25 +551,25 @@ Procedural style examples are retrieved on-demand for system/few-shot prompt con
 
 ---
 
-## 12. Unified Curator, Variable Normalization & Harmonized Bootcamp Learning (Stream C)
+## 14. Unified Curator, Variable Normalization & Harmonized Bootcamp Learning (Stream C)
 
-### 12.1 Classifier Screening at Write & Approval Gates
+### 14.1 Classifier Screening at Write & Approval Gates
 To prevent unreviewed or unsafe content from bypassing classification:
 - **Assistant Studio Example Gates (`POST /examples`, `PUT /examples/{id}`)**: Both `client_message` and `assistant_reply` are screened through `classify_text` and `normalize_template_variables`. Any input containing `DYNAMIC_OPERATIONAL` facts (dates, clock times, live quotes), `PII`, or `PROMPT_INJECTION` is rejected immediately with HTTP 422.
 - **Curator Proposal Approval Gate (`POST /curator/proposals/{id}/curate`)**: Screened at the moment of approval (`proposal.proposed_fact`). Forbids acceptance if it contains dynamic operational data or PII, transitioning the proposal to `rejected` (or `quarantine`) with `resolution_code="rejected_by_curator_classifier"`. Only proposals classified as static `FACTUAL_PROPOSAL` are promoted into `CuratedMemory`. Style guidance proposals promote strictly into `MessageStyleExample` and never touch `CuratedMemory`.
 
-### 12.2 Variable Normalization & Central Registry
+### 14.2 Variable Normalization & Central Registry
 - **Canonical Placeholders**: Standard templates support `{business_name}`, `{provider_name}`, `{location_name}`, `{location_address}`, `{service_name}`, `{service_area}`, `{booking_link}`, and `{cancellation_window}`.
 - **Syntax Normalization (`normalize_template_variables`)**: Normalizes double braces (`{{var}}` -> `{var}`) and interior whitespace (`{ var }` -> `{var}`).
 - **Forbidden Operational Placeholders**: Dynamic operational variables (`{date}`, `{time}`, `{slot}`, `{price}`, `{deposit}`, `{customer_name}`, etc.) are rejected with `ValueError` to guarantee live tool routing at runtime.
 - **Variable Registry Extensions**: `VariableRegistry` registers `service_area` and `cancellation_window` resolvers.
 
-### 12.3 Harmonized Bootcamp Learning Flows
+### 14.3 Harmonized Bootcamp Learning Flows
 1. **Information Requests**: Lessons submitted via `/conversations/{id}/information-request/respond` are stored as pending `KnowledgeProposal` (`proposal_type="gap"`) and processed through `UnifiedCurator` / worker. They are NEVER written directly into prompt-bearing `SmsBootcampSettings.custom_training_notes`.
 2. **Corrections**: Flag-only corrections (reason without replacement text) are recorded strictly as `evidence_only` feedback telemetry (`decision_code="evidence_only"`). They NEVER create durable facts in `CuratedMemory`. Only corrections with non-empty `corrected_wording` passing the classifier propose factual knowledge.
 3. **Draft Approvals / Edits**: When an operator edits a draft, it is retained as evidence. Minor edits produce `decision_code="evidence_only"`. Material edits propose procedural style guidance (`knowledge_kind="style_example"`, `category="style"`) which upon approval creates `MessageStyleExample` and NEVER pollutes `CuratedMemory`.
 
-### 12.4 Standardized Auditable Decision Codes
+### 14.4 Standardized Auditable Decision Codes
 Every curator decision emits one of the 6 standardized auditable codes:
 - `accepted`: Factual candidate approved into `CuratedMemory`.
 - `evidence_only`: Incidental edits, approved drafts, and flag-only critique retained for telemetry.
@@ -505,18 +578,18 @@ Every curator decision emits one of the 6 standardized auditable codes:
 - `rejected`: Policy failures, scope mismatches, and classifier rejections.
 - `superseded`: Prior durable knowledge replaced by newer approved truth.
 
-### 12.5 Verification Commands
+### 14.5 Verification Commands
 ```bash
 .venv\Scripts\python.exe -m pytest -q tests/test_curator_unified_learning.py tests/test_curator_import_safety.py tests/test_assistant_studio_api.py tests/test_sms_bootcamp.py
 ```
 
 ---
 
-## 13. Assistant Studio Knowledge Curator API (`assistant_studio_curator.py`)
+## 15. Assistant Studio Knowledge Curator API (`assistant_studio_curator.py`)
 
 The **Knowledge Curator API** powers the Assistant Studio Curator visual interfaces (Screens A, B, C, D) with real-time, zero-mock database and graph management endpoints mounted under `/api/admin/assistant-studio/curator`:
 
-### 13.1 Endpoints & Responsibilities
+### 15.1 Endpoints & Responsibilities
 - `GET /pipeline-status`: Returns 6 evolutionary pipeline stages with real-time queue counters (`pending_curation`, `active_memories`, `pending_projections`, `neo4j_node_count`, `redis_cache_hit_ratio`, `dead_letters`).
 - `GET /memories`: Scoped list of `CuratedMemory` records with query search, category/kind filtering, provider vs. tenant-shared partitioning, and joined `KnowledgeGraphProjection` state.
 - `POST /memories`: Authoring endpoint for new durable facts with dynamic leak detection (`classify_text`), PII scrubbing, content hashing, outbox projection queueing (`knowledge_graph_projections`), and dual-epoch Redis cache invalidation.
@@ -527,12 +600,12 @@ The **Knowledge Curator API** powers the Assistant Studio Curator visual interfa
 - `POST /memories/{id}/reproject`: Reschedules outbox projection in `knowledge_graph_projections` (`status="pending"`, `attempt_count=0`) for immediate Graphiti resynchronization.
 - `GET /graph-nodes`: Generates real epistemic graph nodes and directed ontological edges (`PREFERS`, `AVOIDS`, `SUPERSEDES`, `APPLIES_WHEN`, `HAS_BOUNDARY`, `SUPPORTED_BY`) reflecting provider-specific and tenant-shared partitions.
 
-### 13.2 Partition Isolation & Zero-Mock Guarantee
+### 15.2 Partition Isolation & Zero-Mock Guarantee
 - Every query enforces `tenant_id` isolation from the authenticated JWT session.
 - Dual-partition scoping separates `tenant:{id}:shared` and `tenant:{id}:provider:{id}` knowledge.
 - In accordance with **AGENTS.md Rule 3**, no mock data or synthetic timeouts are used; every action writes to PostgreSQL and signals Redis cache invalidation via `gateway.invalidate(tenant_id, provider_id)`.
 
-### 13.3 Verification Commands
+### 15.3 Verification Commands
 ```bash
 .venv\Scripts\python.exe -m pytest -v tests/test_knowledge_curator_api.py
 ```

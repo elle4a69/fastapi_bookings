@@ -35,6 +35,7 @@ from app.services.knowledge.graphiti_client import (
     format_group_id,
     get_graphiti_client,
     get_neo4j_driver,
+    initialize_graphiti_schema,
     ping_neo4j,
     resolve_query_group_ids,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "get_neo4j_driver",
     "ping_neo4j",
     "get_graphiti_client",
+    "initialize_graphiti_schema",
     "KnowledgeGateway",
     "knowledge_gateway",
     "CuratorDecision",
