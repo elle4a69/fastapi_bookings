@@ -21,8 +21,15 @@ from ...models.business_assistant import (
     SupportTicketEvent,
 )
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
+from ...models.tenant import Tenant
 from ...models.tenant_website import DEFAULT_SECTIONS_DATA, TenantWebsite
 from ...models.user import User
+from .rollout import (
+    BusinessAssistantRolloutRestrictionError,
+    RolloutAccessDecision,
+    RolloutGate,
+    RolloutStage,
+)
 from .confirmation import (
     ConfirmationError,
     ConfirmationExpiredError,
@@ -103,6 +110,25 @@ class BusinessAssistantService:
         self._user_id = user_id
         self._repository = BusinessAssistantRepository(db, tenant_id, user_id)
         self._product_context = ProductContextAdapter(db, tenant_id)
+
+    def verify_rollout_access(
+        self,
+        tenant: Optional[Tenant] = None,
+        user: Optional[User] = None,
+        stage_override: Optional[str] = None,
+    ) -> RolloutAccessDecision:
+        """Verify that the current tenant and user are permitted under the active rollout stage."""
+        resolved_tenant = tenant
+        if resolved_tenant is None:
+            resolved_tenant = self._db.query(Tenant).filter(Tenant.id == self._tenant_id).first()
+        resolved_user = user
+        if resolved_user is None:
+            resolved_user = self._db.query(User).filter(User.id == self._user_id).first()
+        return RolloutGate.enforce(
+            tenant=resolved_tenant,
+            user=resolved_user,
+            stage_override=stage_override,
+        )
 
     def create_conversation(
         self,

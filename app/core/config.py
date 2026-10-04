@@ -157,6 +157,19 @@ class Settings(BaseSettings):
         description="Maximum accepted SDP offer or answer size for the internal realtime voice session.",
     )
 
+    BUSINESS_ASSISTANT_ROLLOUT_STAGE: str = Field(
+        "enabled",
+        description="Rollout stage for native Business Assistant: disabled, internal_synthetic, owner_staging, enabled",
+    )
+    BUSINESS_ASSISTANT_SYNTHETIC_TENANT_IDS: List[int] = Field(
+        default_factory=list,
+        description="Allowlisted tenant IDs for synthetic test stage",
+    )
+    BUSINESS_ASSISTANT_ALLOWLISTED_TENANT_IDS: List[int] = Field(
+        default_factory=list,
+        description="Allowlisted tenant IDs for staging / preview access",
+    )
+
     # Cal.com Settings
     CALCOM_API_KEY: str = Field("", description="Cal.com API key")
     CALCOM_BASE_URL: str = Field("https://api.cal.com/v1", description="Cal.com API base URL")
@@ -218,6 +231,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        if self.BUSINESS_ASSISTANT_ROLLOUT_STAGE not in ("disabled", "internal_synthetic", "owner_staging", "enabled"):
+            raise ValueError(
+                f"Invalid BUSINESS_ASSISTANT_ROLLOUT_STAGE: '{self.BUSINESS_ASSISTANT_ROLLOUT_STAGE}'. "
+                "Must be one of 'disabled', 'internal_synthetic', 'owner_staging', 'enabled'."
+            )
         if self.OUTBOX_SHUTDOWN_GRACE_SECONDS >= self.OUTBOX_LEASE_SECONDS:
             raise ValueError("OUTBOX_SHUTDOWN_GRACE_SECONDS must be shorter than OUTBOX_LEASE_SECONDS")
         if self.APP_ENV in ("production", "prod"):

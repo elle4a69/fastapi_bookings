@@ -78,8 +78,22 @@ from .coding_worker import (
     TicketNotEligibleError,
     WorkerRunResult,
 )
+from .rollout import (
+    BusinessAssistantRolloutRestrictionError,
+    RolloutAccessDecision,
+    RolloutGate,
+    RolloutStage,
+    is_staging_tenant,
+    is_synthetic_tenant,
+)
 
 __all__ = [
+    "BusinessAssistantRolloutRestrictionError",
+    "RolloutAccessDecision",
+    "RolloutGate",
+    "RolloutStage",
+    "is_staging_tenant",
+    "is_synthetic_tenant",
     "SUPPORT_ENGINEERING_TOOLS",
     "BusinessAssistantRepository",
     "BusinessAssistantService",

@@ -26,6 +26,7 @@ app/services/business_assistant/
 ├── website_sanitiser.py # XSS, script injection, PII sanitiser and asset domain validator
 ├── realtime.py          # Server-held SDP exchange for authenticated voice sessions
 ├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
+├── rollout.py           # Staged rollout lifecycle, stage gate evaluation and safe degradation
 ├── adapters/
 │   ├── reads.py         # Scoped native read adapters for product help, settings, and scheduling
 │   └── __init__.py      # Adapter exports
@@ -109,6 +110,20 @@ separate from customer conversation and message tables.
 - **Optimistic Version Concurrency & Rollback**: Proposals enforce optimistic concurrency
   checks to prevent concurrent overwrite. Owners can roll back to any previously published version,
   creating a new rollback proposal and restoring live website content safely.
+- **Staged Rollout Lifecycle Gating (WP11)**: Production rollout transitions through
+  four deterministic stages (`disabled`, `internal_synthetic`, `owner_staging`, `enabled`).
+  Restricted states degrade cleanly with descriptive error codes (`BUSINESS_ASSISTANT_DISABLED` [HTTP 503],
+  `SYNTHETIC_TENANTS_ONLY` [HTTP 403], `STAGING_TENANTS_ONLY` [HTTP 403], `OWNER_ROLE_REQUIRED` [HTTP 403])
+  without application crashes.
+- **Prompt Injection & Secret Exfiltration Resistance (WP11)**: Model replies undergo
+  server-side secret scrubbing via `scrub_sensitive_secrets()`, redacting raw OpenAI API keys,
+  `.env` credential strings, and platform secrets (`settings.SECRET_KEY`, `OPENAI_API_KEY`).
+  Conversational overrides and prompt jailbreaks cannot bypass cryptographic HMAC confirmation tokens.
+- **Tool Confusion Resistance (WP11)**: Unallowlisted tools, cross-pack unauthorized tools,
+  and malformed argument types are rejected with status `"rejected"` and recorded in the append-only
+  telemetry table `business_assistant_tool_runs` with safe sanitized metadata.
+- **Zero Legacy Reference Dependencies (WP11)**: The module runs 100% self-contained within
+  FastAPI Bookings with zero dependencies, shared databases, or runtime imports from legacy reference packages.
 
 ## Configuration and dependencies
 
@@ -126,6 +141,12 @@ Realtime voice uses server-held `OPENAI_API_KEY`,
 `BUSINESS_ASSISTANT_REALTIME_MODEL`, and
 `BUSINESS_ASSISTANT_REALTIME_SDP_MAX_BYTES`; absent configuration returns an
 explicit unavailable result rather than a simulated exchange.
+Rollout gating is governed by validated application settings:
+`BUSINESS_ASSISTANT_ROLLOUT_STAGE` (values: `disabled`, `internal_synthetic`, `owner_staging`, `enabled`),
+`BUSINESS_ASSISTANT_SYNTHETIC_TENANT_IDS`, and
+`BUSINESS_ASSISTANT_ALLOWLISTED_TENANT_IDS`.
+Operational procedures, incident runbooks, and telemetry monitoring are defined in
+`docs/BUSINESS_ASSISTANT_OPERATIONAL_RUNBOOK.md`.
 
 ## Core workflows and contracts
 
@@ -339,7 +360,7 @@ must restore from a verified backup rather than dropping feature tables.
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py tests/test_business_assistant_hardening_and_rollout.py -q
 ```
 
 

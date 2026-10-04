@@ -82,6 +82,9 @@ from ...services.business_assistant import (
     DynamicFactRejectedError,
     WebsiteContentSafetyError,
     WebsiteVersionConflictError,
+    BusinessAssistantRolloutRestrictionError,
+    RolloutGate,
+    RolloutStage,
 )
 
 router = APIRouter(prefix="/business-assistant", tags=["Business Assistant"])
@@ -98,7 +101,9 @@ def get_realtime_runtime() -> BusinessAssistantRealtimeRuntime:
 
 
 def _service(db: Session, tenant: Tenant, user: User) -> BusinessAssistantService:
-    return BusinessAssistantService(db, tenant.id, user.id)
+    service = BusinessAssistantService(db, tenant.id, user.id)
+    service.verify_rollout_access(tenant=tenant, user=user)
+    return service
 
 
 def _onboarding_response(service: BusinessAssistantService) -> BusinessAssistantOnboardingRead:

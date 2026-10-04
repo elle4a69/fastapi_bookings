@@ -10,7 +10,37 @@ from ...core.config import settings
 from ...models.business_assistant import BusinessAssistantMessage
 
 
+import re
+
 logger = logging.getLogger(__name__)
+
+OPENAI_KEY_PATTERN = re.compile(r"sk-[A-Za-z0-9-_]{20,}")
+ENV_SECRET_PATTERN = re.compile(
+    r"(?i)\b(?:OPENAI_API_KEY|SECRET_KEY|DATABASE_URL|STRIPE_SECRET_KEY|NEO4J_PASSWORD|CLICKSEND_API_KEY)\s*=\s*['\"]?[^\s'\"]+['\"]?"
+)
+
+
+def scrub_sensitive_secrets(text: str) -> str:
+    """Scrub raw API keys, passwords, and environment credentials from model output."""
+    if not text:
+        return text
+
+    scrubbed = text
+    scrubbed = OPENAI_KEY_PATTERN.sub("[REDACTED_API_KEY]", scrubbed)
+    scrubbed = ENV_SECRET_PATTERN.sub("[REDACTED_ENV_SECRET]", scrubbed)
+
+    for secret in (
+        settings.OPENAI_API_KEY,
+        settings.SECRET_KEY,
+        settings.STRIPE_SECRET_KEY,
+        settings.CLICKSEND_API_KEY,
+        settings.NEO4J_PASSWORD,
+    ):
+        secret_clean = secret.strip() if isinstance(secret, str) else ""
+        if secret_clean and len(secret_clean) >= 6:
+            scrubbed = scrubbed.replace(secret_clean, "[REDACTED_SECRET]")
+
+    return scrubbed
 
 
 class TextModelConfigurationError(RuntimeError):
@@ -171,7 +201,7 @@ class BusinessAssistantTextRuntime:
             raise TextModelExecutionError("The text model request failed.") from exc
         if not isinstance(content, str) or not content.strip():
             raise TextModelExecutionError("The text model returned an empty response.")
-        return content.strip()
+        return scrub_sensitive_secrets(content.strip())
 
     def _create_client(self) -> Any:
         """Construct the provider client without relying on positional-key compatibility."""
