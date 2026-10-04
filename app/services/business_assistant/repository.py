@@ -154,6 +154,18 @@ class BusinessAssistantRepository:
             .first()
         )
 
+    def get_message(self, message_id: int) -> Optional[BusinessAssistantMessage]:
+        """Find a message only within the authoritative tenant and user scope."""
+        return (
+            self._db.query(BusinessAssistantMessage)
+            .filter(
+                BusinessAssistantMessage.id == message_id,
+                BusinessAssistantMessage.tenant_id == self._tenant_id,
+                BusinessAssistantMessage.user_id == self._user_id,
+            )
+            .first()
+        )
+
     def get_reply_to_message(self, message_id: int) -> Optional[BusinessAssistantMessage]:
         """Return a generated reply only when it belongs to this tenant and user scope."""
         return (
@@ -254,20 +266,20 @@ class BusinessAssistantRepository:
         self,
         *,
         conversation: BusinessAssistantConversation,
-        message: BusinessAssistantMessage,
+        message: Optional[BusinessAssistantMessage] = None,
         tool_name: str,
         status: str,
         duration_ms: int,
     ) -> None:
         """Append structural tool telemetry without storing arguments or result content."""
-        if conversation.tenant_id != self._tenant_id or message.tenant_id != self._tenant_id:
+        if conversation.tenant_id != self._tenant_id or (message and message.tenant_id != self._tenant_id):
             raise ValueError("Tool run is outside the authenticated scope.")
         self._db.add(
             BusinessAssistantToolRun(
                 tenant_id=self._tenant_id,
                 user_id=self._user_id,
                 conversation_id=conversation.id,
-                message_id=message.id,
+                message_id=message.id if message else None,
                 tool_name=tool_name[:96],
                 status=status[:32],
                 duration_ms=max(0, duration_ms),

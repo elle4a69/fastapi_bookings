@@ -25,6 +25,14 @@ from .realtime import (
     RealtimeProviderUnavailableError,
 )
 
+from .tool_registry import (
+    BusinessAssistantToolRegistry,
+    ProductHelpToolRegistry,
+    PRODUCT_HELP_TOOLS,
+    BOOKING_AVAILABILITY_TOOLS,
+    ALL_BUSINESS_ASSISTANT_TOOLS,
+)
+
 __all__ = [
     "BusinessAssistantRepository",
     "BusinessAssistantService",
@@ -44,4 +52,9 @@ __all__ = [
     "RealtimeConfigurationError",
     "RealtimeInvalidSdpError",
     "RealtimeProviderUnavailableError",
+    "BusinessAssistantToolRegistry",
+    "ProductHelpToolRegistry",
+    "PRODUCT_HELP_TOOLS",
+    "BOOKING_AVAILABILITY_TOOLS",
+    "ALL_BUSINESS_ASSISTANT_TOOLS",
 ]

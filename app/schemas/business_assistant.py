@@ -167,3 +167,19 @@ class SupportTicketCreateRead(BaseModel):
 
     ticket: SupportTicketRead
     duplicate_ticket: bool
+
+
+class BusinessAssistantToolExecutionRequest(BaseModel):
+    """Tool invocation payload submitted for server-authorised execution."""
+
+    name: str = Field(min_length=1, max_length=96)
+    arguments: dict[str, object] = Field(default_factory=dict)
+
+
+class BusinessAssistantToolExecutionResponse(BaseModel):
+    """Authoritative structured output returned from an executed tool."""
+
+    status: str
+    result: Optional[dict[str, object]] = None
+    reason: Optional[str] = None
+

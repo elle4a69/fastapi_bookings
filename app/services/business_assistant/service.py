@@ -308,9 +308,9 @@ class BusinessAssistantService:
                 limit=runtime.max_history_messages,
             )
             from .adapters import BusinessAssistantReadAdapters
-            from .tool_registry import ProductHelpToolRegistry
+            from .tool_registry import BusinessAssistantToolRegistry
 
-            tool_registry = ProductHelpToolRegistry(
+            tool_registry = BusinessAssistantToolRegistry(
                 BusinessAssistantReadAdapters(
                     self._db,
                     tenant_id=conversation.tenant_id,
@@ -318,7 +318,7 @@ class BusinessAssistantService:
                 )
             )
 
-            def execute_product_help_tool(name: str, arguments: dict[str, object]) -> dict[str, object]:
+            def execute_assistant_tool(name: str, arguments: dict[str, object]) -> dict[str, object]:
                 started_at = monotonic()
                 try:
                     result = tool_registry.execute(name, arguments)
@@ -326,7 +326,7 @@ class BusinessAssistantService:
                     return result
                 except Exception:
                     tool_status = "failed"
-                    return {"status": "unavailable", "reason": "That product-help read is currently unavailable."}
+                    return {"status": "unavailable", "reason": f"Tool '{name}' is currently unavailable."}
                 finally:
                     self._repository.record_tool_run(
                         conversation=conversation,
@@ -340,7 +340,7 @@ class BusinessAssistantService:
                 history,
                 product_context=self.read_product_context().instruction_text(),
                 tools=tool_registry.schemas,
-                tool_executor=execute_product_help_tool,
+                tool_executor=execute_assistant_tool,
             )
         except Exception:
             self._repository.mark_turn_failed(user_message)
@@ -355,6 +355,52 @@ class BusinessAssistantService:
         self._db.commit()
         self._db.refresh(assistant_message)
         return TextTurnResult(user_message=user_message, assistant_message=assistant_message)
+
+    def execute_tool(
+        self,
+        *,
+        conversation_id: int,
+        name: str,
+        arguments: dict[str, object],
+        message_id: Optional[int] = None,
+    ) -> dict[str, object]:
+        """Execute one server-authorised tool within conversation scope with audit recording."""
+        conversation = self._repository.get_conversation(conversation_id)
+        if not conversation:
+            raise LookupError("Conversation was not found in the authenticated scope.")
+
+        message = None
+        if message_id is not None:
+            message = self._repository.get_message(message_id)
+            if not message or message.conversation_id != conversation.id:
+                raise LookupError("Message was not found in the conversation scope.")
+
+        from .adapters import BusinessAssistantReadAdapters
+        from .tool_registry import BusinessAssistantToolRegistry
+
+        adapters = BusinessAssistantReadAdapters(
+            self._db,
+            tenant_id=conversation.tenant_id,
+            user_id=conversation.user_id,
+        )
+        registry = BusinessAssistantToolRegistry(adapters)
+        started_at = monotonic()
+        try:
+            result = registry.execute(name, arguments)
+            tool_status = str(result.get("status") or "completed")
+            return result
+        except Exception as exc:
+            tool_status = "failed"
+            return {"status": "unavailable", "reason": str(exc)}
+        finally:
+            self._repository.record_tool_run(
+                conversation=conversation,
+                message=message,
+                tool_name=name,
+                status=tool_status,
+                duration_ms=int((monotonic() - started_at) * 1000),
+            )
+            self._db.commit()
 
     def create_ticket(
         self,

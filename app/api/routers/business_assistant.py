@@ -23,6 +23,8 @@ from ...schemas.business_assistant import (
     SupportTicketCreateRead,
     SupportTicketEventRead,
     SupportTicketRead,
+    BusinessAssistantToolExecutionRequest,
+    BusinessAssistantToolExecutionResponse,
 )
 from ...services.business_assistant import (
     BusinessAssistantService,
@@ -316,6 +318,38 @@ def persist_realtime_turn(
         user_message=BusinessAssistantMessageRead.model_validate(result.user_message),
         assistant_message=BusinessAssistantMessageRead.model_validate(result.assistant_message),
         duplicate_turn=result.duplicate_turn,
+    )
+
+
+@router.post(
+    "/conversations/{conversation_id}/tools",
+    response_model=BusinessAssistantToolExecutionResponse,
+)
+@router.post(
+    "/conversations/{conversation_id}/realtime/tools",
+    response_model=BusinessAssistantToolExecutionResponse,
+)
+def execute_tool(
+    conversation_id: DatabaseId,
+    payload: BusinessAssistantToolExecutionRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> BusinessAssistantToolExecutionResponse:
+    """Execute an allowlisted tool through the server-authoritative policy engine."""
+    service = _service(db, tenant, user)
+    try:
+        result = service.execute_tool(
+            conversation_id=conversation_id,
+            name=payload.name,
+            arguments=payload.arguments,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return BusinessAssistantToolExecutionResponse(
+        status=result.get("status", "ok"),
+        result=result if result.get("status") == "ok" else None,
+        reason=result.get("reason"),
     )
 
 
