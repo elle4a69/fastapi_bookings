@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BusinessAssistantConversationCreate(BaseModel):
@@ -153,14 +153,24 @@ class SupportTicketRead(BaseModel):
     affected_product_area: Optional[str] = None
     user_impact: Optional[str] = None
     acceptance_criteria: Optional[str] = None
-    authorisation_state: str = "not_required"
-    requires_owner_approval: bool = False
+    authorisation_state: Optional[str] = "not_required"
+    requires_owner_approval: Optional[bool] = False
     resolution_summary: Optional[str] = None
     coding_task_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("authorisation_state", mode="before")
+    @classmethod
+    def _validate_authorisation_state(cls, v: Optional[str]) -> str:
+        return v or "not_required"
+
+    @field_validator("requires_owner_approval", mode="before")
+    @classmethod
+    def _validate_requires_owner_approval(cls, v: Optional[bool]) -> bool:
+        return False if v is None else bool(v)
 
 
 class SupportTicketApprovalRequest(BaseModel):

@@ -143,3 +143,48 @@ def test_ticket_and_events_are_hidden_from_other_users_and_tenants(client, db_se
         assert client.get(f"/api/admin/business-assistant/tickets/{ticket_id}", headers=headers).status_code == 404
         assert client.get(f"/api/admin/business-assistant/tickets/{ticket_id}/events", headers=headers).status_code == 404
         assert client.get("/api/admin/business-assistant/tickets", headers=headers).json() == []
+
+
+def test_legacy_ticket_with_null_fields_serializes_cleanly_on_list_and_get(client, db_session):
+    tenant, user = _owner(db_session, "legacy-ticket")
+    headers = _headers(tenant, user)
+
+    legacy_ticket = SupportTicket(
+        tenant_id=tenant.id,
+        user_id=user.id,
+        category="bug",
+        severity="normal",
+        status="open",
+        title="Legacy schema ticket",
+        description="Ticket created before expanded fields were populated.",
+        deduplication_key="legacy-dedup-key-null-check",
+    )
+    legacy_ticket.observed_behaviour = None
+    legacy_ticket.affected_product_area = None
+    legacy_ticket.user_impact = None
+    legacy_ticket.acceptance_criteria = None
+    legacy_ticket.authorisation_state = None
+    legacy_ticket.requires_owner_approval = None
+    legacy_ticket.resolution_summary = None
+    legacy_ticket.coding_task_id = None
+    db_session.add(legacy_ticket)
+    db_session.commit()
+
+    listed = client.get("/api/admin/business-assistant/tickets", headers=headers)
+    assert listed.status_code == 200
+    tickets = listed.json()
+    assert len(tickets) == 1
+    item = tickets[0]
+    assert item["id"] == legacy_ticket.id
+    assert item["title"] == "Legacy schema ticket"
+    assert item["authorisation_state"] == "not_required"
+    assert item["requires_owner_approval"] is False
+    assert item["observed_behaviour"] is None
+    assert item["affected_product_area"] is None
+
+    fetched = client.get(f"/api/admin/business-assistant/tickets/{legacy_ticket.id}", headers=headers)
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["id"] == legacy_ticket.id
+    assert body["authorisation_state"] == "not_required"
+    assert body["requires_owner_approval"] is False

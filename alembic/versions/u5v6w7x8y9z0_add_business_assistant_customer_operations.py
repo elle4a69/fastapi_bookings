@@ -33,11 +33,11 @@ def upgrade() -> None:
         with op.batch_alter_table("clients") as batch_op:
             if "opted_out" not in existing_client_cols:
                 batch_op.add_column(
-                    sa.Column("opted_out", sa.Boolean(), nullable=False, server_default=sa.text("0"))
+                    sa.Column("opted_out", sa.Boolean(), nullable=False, server_default=sa.false())
                 )
             if "sms_consent" not in existing_client_cols:
                 batch_op.add_column(
-                    sa.Column("sms_consent", sa.Boolean(), nullable=False, server_default=sa.text("1"))
+                    sa.Column("sms_consent", sa.Boolean(), nullable=False, server_default=sa.true())
                 )
 
     # 2. Create business_assistant_message_drafts

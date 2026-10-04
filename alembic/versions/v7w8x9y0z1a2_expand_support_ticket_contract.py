@@ -41,7 +41,7 @@ def upgrade() -> None:
                 batch_op.create_index("ix_business_assistant_support_tickets_authorisation_state", ["authorisation_state"])
             if "requires_owner_approval" not in existing_cols:
                 batch_op.add_column(
-                    sa.Column("requires_owner_approval", sa.Boolean(), nullable=False, server_default=sa.text("0"))
+                    sa.Column("requires_owner_approval", sa.Boolean(), nullable=False, server_default=sa.false())
                 )
             if "resolution_summary" not in existing_cols:
                 batch_op.add_column(sa.Column("resolution_summary", sa.Text(), nullable=True))
