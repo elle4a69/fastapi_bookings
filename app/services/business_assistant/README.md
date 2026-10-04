@@ -24,6 +24,7 @@ app/services/business_assistant/
 ├── product_context.py   # Read-only allowlisted native setup snapshot
 ├── tool_registry.py     # Modular tool packs (product help, booking, business knowledge)
 ├── realtime.py          # Server-held SDP exchange for authenticated voice sessions
+├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
 ├── adapters/
 │   ├── reads.py         # Scoped native read adapters for product help, settings, and scheduling
 │   └── __init__.py      # Adapter exports
@@ -233,17 +234,51 @@ Mounted at `/api/admin/business-assistant`:
 - `POST /tickets/{id}/reject` allows only tenant owners to reject elevated tickets.
   Transitions status to `rejected`, records `owner_rejected`, and releases the deduplication claim.
 
+### Coding-worker connector contract (WP7 / Section 8.1)
+
+The coding-worker connector (`CodingWorkerConnector` in `coding_worker.py`) provides an isolated,
+authoritative execution bridge fulfilling all 9 hard requirements of Section 8.1 with zero synthetic mocks:
+
+1. **Idempotent Claim**: Claiming an eligible ticket in `awaiting_engineering` atomically
+   transitions `status="in_progress"`, generates a unique `coding_task_id` (`cw-...`) and cryptographically
+   secure `claim_token`, and appends a `worker_claimed` event. Concurrent duplicate claims are rejected
+   (`DuplicateClaimError`). Tickets with elevated approval requirements cannot be claimed without owner approval (`TicketNotEligibleError`).
+2. **Authorised Scope Inspection**: The worker is strictly restricted to authorised repository paths
+   (`app/`, `frontend/`, `tests/`, `docs/`, `alembic/`, `scripts/`). Path traversal (`../`), `.env*`, `.git/`,
+   `*.key`, `*.pem`, `id_rsa*`, secrets, and credential patterns are prohibited and rejected (`ScopeAccessViolationError`).
+3. **Bounded Change Creation**: Modifications stage inside an isolated scratch sandbox (`CodingWorkerWorkspace`)
+   enforcing safety caps: maximum 10 modified files (`MAX_FILES`), maximum 1 MB per file (`MAX_BYTES_PER_FILE`),
+   and maximum 1000 diff lines (`MAX_DIFF_LINES`), guarding against uncontrolled codebase mutations (`BoundedChangeViolationError`).
+4. **Test Verification & Real Exit Results**: Subprocess execution of authorised test runners (`sys.executable`,
+   `pytest`, `npm`) measures duration, captures actual integer exit code, scrubs secrets, normalises absolute
+   paths, and bounds output to 4000 characters without leaking credentials (`TestVerificationRunner`).
+5. **Independent Review Request**: On successful verification (exit code 0), tickets transition to `status="pending_review"`
+   and generate a verifiable `ReviewBundle` (ticket ID, task ID, patch ID, diff summary, test result, user-safe summary).
+   A `review_requested` lifecycle event is appended.
+6. **Commit/Diff Identifier & Sanitised Summary**: Changes produce unified diff statistics (files changed, additions,
+   deletions) and a SHA-256 patch identifier. A user-safe resolution summary is generated that omits machine-specific
+   filesystem paths, private worker prompts, and internal tokens.
+7. **Honest Failure**: When tests fail, files are inaccessible, or bounded limits are violated, tickets fail cleanly
+   (`status="failed"`), record user-safe failure reasons and exit codes in `SupportTicketEvent(event_type="worker_failed")`,
+   and release active deduplication claims without database corruption.
+8. **Separation of Deployment**: The worker is architecturally barred from deploying or pushing to production.
+   Calling `deploy()` or attempting deployment instructions raises `DeploymentSeparationError`. Deployments remain gated
+   behind separate owner approval.
+9. **Interruption Recovery**: `reconcile_interrupted_tickets` identifies orphaned in-progress tickets exceeding an
+   inactivity threshold, safely transitioning them to `failed` (with claim release) or resetting them to `awaiting_engineering`
+   for re-dispatch without duplicate execution.
+
 ## Current limitations
 
-Live customer SMS broadcast, external worker dispatch, and autonomous website
-publication belong to later work packages after their specific gates pass.
-Schema reconciliation preserves existing rows and is deliberately non-reversible;
-database rollback procedures must restore from a verified backup rather than
-dropping feature tables.
+Live customer SMS broadcast and autonomous website publication belong to later
+work packages after their specific gates pass. Schema reconciliation preserves
+existing rows and is deliberately non-reversible; database rollback procedures
+must restore from a verified backup rather than dropping feature tables.
 
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_adapters.py tests/test_business_assistant_tool_execution.py tests/test_business_assistant_knowledge_curation.py tests/test_business_assistant_customer_operations.py tests/test_business_assistant_tickets_workflow.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py -q
 ```
+
 

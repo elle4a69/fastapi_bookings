@@ -17,6 +17,7 @@ ACTIVE_TICKET_STATUSES: tuple[str, ...] = (
     "in_progress",
     "pending_approval",
     "pending_owner_approval",
+    "pending_review",
 )
 
 CLOSED_TICKET_STATUSES: tuple[str, ...] = (
@@ -24,6 +25,7 @@ CLOSED_TICKET_STATUSES: tuple[str, ...] = (
     "rejected",
     "closed",
     "cancelled",
+    "failed",
 )
 
 ELEVATED_APPROVAL_CATEGORIES: tuple[str, ...] = (
