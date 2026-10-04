@@ -183,3 +183,70 @@ class BusinessAssistantToolExecutionResponse(BaseModel):
     result: Optional[dict[str, object]] = None
     reason: Optional[str] = None
 
+
+class BusinessRuleDraftCreate(BaseModel):
+    """Input payload to create or update a drafted business rule."""
+
+    memory_key: str = Field(min_length=2, max_length=128)
+    content: str = Field(min_length=5, max_length=10_000)
+    category: str = Field(default="policy", max_length=64)
+    curator_item_id: Optional[int] = Field(default=None, ge=1)
+
+
+class BusinessRuleRead(BaseModel):
+    """User-safe representation of a business rule and its assistant interpretation."""
+
+    id: int
+    memory_key: str
+    content: str
+    interpretation: Optional[str] = None
+    category: str
+    status: str
+    version: int
+    payload_hash: Optional[str] = None
+    provenance: dict = Field(default_factory=dict)
+    curator_item_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    activated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BusinessRuleDraftResponse(BaseModel):
+    """Result of drafting a business rule including confirmation token for activation."""
+
+    rule: BusinessRuleRead
+    interpretation: str
+    confirmation_token: str
+    payload_hash: str
+
+
+class BusinessRuleActivateRequest(BaseModel):
+    """Explicit confirmation payload bound to versioned payload hash."""
+
+    confirmation_token: str = Field(min_length=16)
+
+
+class CuratorQuestionRead(BaseModel):
+    """Pending or reviewable curator question visible to tenant staff."""
+
+    id: int
+    category: str
+    user_query: Optional[str] = None
+    proposed_response: Optional[str] = None
+    reason_code: str
+    status: str
+    confidence_score: float = 0.0
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CuratorQuestionResolveRequest(BaseModel):
+    """Input for explicitly resolving or dismissing a curator question."""
+
+    resolution: Literal["resolved", "dismissed", "rejected"] = "resolved"
+    note: Optional[str] = Field(default=None, max_length=500)
+
+

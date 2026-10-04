@@ -10,10 +10,24 @@ from sqlalchemy.orm import Session
 
 from ...models.business_assistant import (
     BusinessAssistantConversation,
+    BusinessAssistantMemory,
     BusinessAssistantMessage,
+    BusinessAssistantOnboardingProgress,
     SupportTicket,
     SupportTicketEvent,
-    BusinessAssistantOnboardingProgress,
+)
+from ...models.curated_memory import CuratedMemory, KnowledgeProposal
+from .confirmation import (
+    ConfirmationError,
+    ConfirmationExpiredError,
+    ConfirmationPayloadMismatchError,
+    ConfirmationScopeMismatchError,
+    ConfirmationSignatureError,
+    DynamicFactRejectedError,
+    compute_rule_payload_hash,
+    generate_confirmation_token,
+    validate_static_business_knowledge,
+    verify_confirmation_token,
 )
 from .product_context import ProductContext, ProductContextAdapter
 from .repository import BusinessAssistantRepository
@@ -70,6 +84,8 @@ class BusinessAssistantService:
 
     def __init__(self, db: Session, tenant_id: int, user_id: int) -> None:
         self._db = db
+        self._tenant_id = tenant_id
+        self._user_id = user_id
         self._repository = BusinessAssistantRepository(db, tenant_id, user_id)
         self._product_context = ProductContextAdapter(db, tenant_id)
 
@@ -315,7 +331,8 @@ class BusinessAssistantService:
                     self._db,
                     tenant_id=conversation.tenant_id,
                     user_id=conversation.user_id,
-                )
+                ),
+                service=self,
             )
 
             def execute_assistant_tool(name: str, arguments: dict[str, object]) -> dict[str, object]:
@@ -383,7 +400,7 @@ class BusinessAssistantService:
             tenant_id=conversation.tenant_id,
             user_id=conversation.user_id,
         )
-        registry = BusinessAssistantToolRegistry(adapters)
+        registry = BusinessAssistantToolRegistry(adapters, service=self)
         started_at = monotonic()
         try:
             result = registry.execute(name, arguments)
@@ -530,3 +547,180 @@ class BusinessAssistantService:
         self._db.commit()
         self._db.refresh(progress)
         return progress
+
+    def draft_business_rule(
+        self,
+        *,
+        memory_key: str,
+        content: str,
+        category: str = "policy",
+        curator_item_id: Optional[int] = None,
+    ) -> tuple[BusinessAssistantMemory, str, str, str]:
+        """Draft a business rule, validate against dynamic facts, and return draft with confirmation token.
+
+        Separation of drafting and activation:
+        This operation ONLY creates or updates a record with status='draft'. It has NO active effect.
+        An explicit confirmation bound to exact version and payload hash is required for activation.
+        """
+        clean_key = memory_key.strip()
+        clean_content = content.strip()
+
+        # Dynamic facts prohibition: fail closed if dynamic facts are present
+        validate_static_business_knowledge(clean_content, category=category)
+
+        # Validate curator proposal if linked
+        if curator_item_id is not None:
+            curator_prop = self._repository.get_curator_proposal(curator_item_id)
+            if not curator_prop:
+                raise LookupError("Curator proposal not found in this tenant scope.")
+
+        interpretation = (
+            f"Assistant interpretation: Durable business policy for '{clean_key}' in domain '{category}'. "
+            f"Defines operational policy: '{clean_content}'. Applies tenant-wide once confirmed."
+        )
+
+        existing = self._repository.get_memory_by_key(clean_key)
+        if existing:
+            version = (existing.version or 1) + 1
+            hash_val = compute_rule_payload_hash(
+                tenant_id=self._tenant_id,
+                user_id=self._user_id,
+                memory_key=clean_key,
+                content=clean_content,
+                version=version,
+            )
+            memory = self._repository.update_memory_draft(
+                memory=existing,
+                content=clean_content,
+                interpretation=interpretation,
+                category=category,
+                curator_item_id=curator_item_id,
+                payload_hash=hash_val,
+                provenance_update={"updated_by_user_id": self._user_id, "source": "staff_draft"},
+            )
+        else:
+            version = 1
+            hash_val = compute_rule_payload_hash(
+                tenant_id=self._tenant_id,
+                user_id=self._user_id,
+                memory_key=clean_key,
+                content=clean_content,
+                version=version,
+            )
+            memory = self._repository.create_memory_draft(
+                memory_key=clean_key,
+                content=clean_content,
+                interpretation=interpretation,
+                category=category,
+                curator_item_id=curator_item_id,
+                payload_hash=hash_val,
+                provenance={"created_by_user_id": self._user_id, "source": "staff_draft"},
+            )
+
+        token = generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            action="activate_business_rule",
+            target_key=clean_key,
+            version=memory.version,
+            payload_hash=hash_val,
+        )
+
+        self._db.commit()
+        self._db.refresh(memory)
+        return memory, interpretation, token, hash_val
+
+    def get_business_rule(self, id_or_key: int | str) -> BusinessAssistantMemory:
+        """Find a business rule only when it belongs to the current tenant and user."""
+        if isinstance(id_or_key, int) or (isinstance(id_or_key, str) and id_or_key.isdigit()):
+            memory = self._repository.get_memory_by_id(int(id_or_key))
+        else:
+            memory = self._repository.get_memory_by_key(str(id_or_key))
+        if not memory:
+            raise LookupError("Business rule was not found in the authenticated scope.")
+        return memory
+
+    def list_business_rules(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantMemory]:
+        """List business rules scoped to the authenticated tenant and user."""
+        return self._repository.list_memories(status=status, limit=limit)
+
+    def activate_business_rule(
+        self,
+        *,
+        id_or_key: int | str,
+        confirmation_token: str,
+    ) -> BusinessAssistantMemory:
+        """Activate a drafted business rule after verifying confirmation token binding."""
+        memory = self.get_business_rule(id_or_key)
+
+        # Explicit confirmation binding check:
+        # Cryptographically verifies user, tenant, target_key, version, and payload_hash
+        verify_confirmation_token(
+            token=confirmation_token,
+            expected_tenant_id=self._tenant_id,
+            expected_user_id=self._user_id,
+            expected_action="activate_business_rule",
+            expected_target_key=memory.memory_key,
+            expected_version=memory.version,
+            expected_payload_hash=memory.payload_hash or "",
+        )
+
+        activated = self._repository.activate_memory(
+            memory=memory,
+            actor_user_id=self._user_id,
+            provenance_update={"activation_method": "confirmed_token"},
+        )
+
+        # Resolve associated curator question if present
+        if activated.curator_item_id:
+            proposal = self._repository.get_curator_proposal(activated.curator_item_id)
+            if proposal:
+                self._repository.resolve_curator_proposal(
+                    proposal=proposal,
+                    actor_user_id=self._user_id,
+                    resolution_code="business_rule_activated",
+                    status="resolved",
+                )
+
+        # Sync into CuratedMemory for system retrieval
+        self._repository.sync_curated_memory(memory=activated)
+
+        self._db.commit()
+        self._db.refresh(activated)
+        return activated
+
+    def list_curator_questions(
+        self,
+        *,
+        status: str = "pending",
+        limit: int = 50,
+    ) -> list[KnowledgeProposal]:
+        """List curator questions requiring guidance, strictly isolated to current tenant."""
+        return self._repository.list_curator_proposals(status=status, limit=limit)
+
+    def resolve_curator_question(
+        self,
+        *,
+        curator_item_id: int,
+        resolution: str = "resolved",
+        note: Optional[str] = None,
+    ) -> KnowledgeProposal:
+        """Resolve, dismiss, or reject a curator question within tenant boundary."""
+        proposal = self._repository.get_curator_proposal(curator_item_id)
+        if not proposal:
+            raise LookupError("Curator proposal was not found in the authenticated scope.")
+        resolved = self._repository.resolve_curator_proposal(
+            proposal=proposal,
+            actor_user_id=self._user_id,
+            resolution_code=f"{resolution}:{note}" if note else resolution,
+            status=resolution,
+        )
+        self._db.commit()
+        self._db.refresh(resolved)
+        return resolved
+

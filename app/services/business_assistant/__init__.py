@@ -25,11 +25,24 @@ from .realtime import (
     RealtimeProviderUnavailableError,
 )
 
+from .confirmation import (
+    ConfirmationError,
+    ConfirmationExpiredError,
+    ConfirmationPayloadMismatchError,
+    ConfirmationScopeMismatchError,
+    ConfirmationSignatureError,
+    DynamicFactRejectedError,
+    compute_rule_payload_hash,
+    generate_confirmation_token,
+    validate_static_business_knowledge,
+    verify_confirmation_token,
+)
 from .tool_registry import (
     BusinessAssistantToolRegistry,
     ProductHelpToolRegistry,
     PRODUCT_HELP_TOOLS,
     BOOKING_AVAILABILITY_TOOLS,
+    BUSINESS_KNOWLEDGE_TOOLS,
     ALL_BUSINESS_ASSISTANT_TOOLS,
 )
 
@@ -56,5 +69,16 @@ __all__ = [
     "ProductHelpToolRegistry",
     "PRODUCT_HELP_TOOLS",
     "BOOKING_AVAILABILITY_TOOLS",
+    "BUSINESS_KNOWLEDGE_TOOLS",
     "ALL_BUSINESS_ASSISTANT_TOOLS",
+    "ConfirmationError",
+    "ConfirmationExpiredError",
+    "ConfirmationPayloadMismatchError",
+    "ConfirmationScopeMismatchError",
+    "ConfirmationSignatureError",
+    "DynamicFactRejectedError",
+    "compute_rule_payload_hash",
+    "generate_confirmation_token",
+    "validate_static_business_knowledge",
+    "verify_confirmation_token",
 ]

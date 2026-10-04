@@ -162,7 +162,7 @@ class BusinessAssistantToolRun(Base):
 
 
 class BusinessAssistantMemory(Base):
-    """Approved, scoped memory reserved for a later policy-controlled workflow."""
+    """Approved, scoped memory reserved for policy-controlled business knowledge."""
 
     __tablename__ = "business_assistant_memories"
     __table_args__ = (
@@ -175,12 +175,32 @@ class BusinessAssistantMemory(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     memory_key = Column(String(128), nullable=False)
     content = Column(Text, nullable=False)
+    interpretation = Column(Text, nullable=True)
+    category = Column(String(64), nullable=False, default="policy")
+    version = Column(Integer, nullable=False, default=1)
+    payload_hash = Column(String(64), nullable=True)
+    provenance = Column(JSON, nullable=False, default=dict)
+    curator_item_id = Column(
+        Integer,
+        ForeignKey("knowledge_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status = Column(String(32), nullable=False, default="draft", index=True)
+    activated_at = Column(DateTime(timezone=True), nullable=True)
+    activated_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     tenant = relationship("Tenant")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
+    activated_by = relationship("User", foreign_keys=[activated_by_user_id])
+    curator_proposal = relationship("KnowledgeProposal", foreign_keys=[curator_item_id])
 
 
 class BusinessAssistantOnboardingProgress(Base):

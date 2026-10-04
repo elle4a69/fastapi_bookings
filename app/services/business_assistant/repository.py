@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ...models.business_assistant import (
     BusinessAssistantConversation,
+    BusinessAssistantMemory,
     BusinessAssistantMessage,
     BusinessAssistantOnboardingProgress,
     BusinessAssistantToolRun,
@@ -16,6 +17,7 @@ from ...models.business_assistant import (
     SupportTicketDeduplicationClaim,
     SupportTicketEvent,
 )
+from ...models.curated_memory import CuratedMemory, KnowledgeProposal
 
 
 class BusinessAssistantRepository:
@@ -434,3 +436,235 @@ class BusinessAssistantRepository:
             .order_by(SupportTicketEvent.created_at.asc(), SupportTicketEvent.id.asc())
             .all()
         )
+
+    def create_memory_draft(
+        self,
+        *,
+        memory_key: str,
+        content: str,
+        interpretation: Optional[str] = None,
+        category: str = "policy",
+        curator_item_id: Optional[int] = None,
+        payload_hash: Optional[str] = None,
+        provenance: Optional[dict] = None,
+    ) -> BusinessAssistantMemory:
+        """Create a new drafted business rule in authoritative tenant and user scope."""
+        memory = BusinessAssistantMemory(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            memory_key=memory_key,
+            content=content,
+            interpretation=interpretation,
+            category=category,
+            version=1,
+            payload_hash=payload_hash,
+            curator_item_id=curator_item_id,
+            status="draft",
+            provenance=provenance or {"created_by_user_id": self._user_id, "source": "staff_draft"},
+        )
+        self._db.add(memory)
+        self._db.flush()
+        return memory
+
+    def get_memory_by_key(self, memory_key: str) -> Optional[BusinessAssistantMemory]:
+        """Retrieve a business rule by its memory_key within tenant and user scope."""
+        return (
+            self._db.query(BusinessAssistantMemory)
+            .filter(
+                BusinessAssistantMemory.tenant_id == self._tenant_id,
+                BusinessAssistantMemory.user_id == self._user_id,
+                BusinessAssistantMemory.memory_key == memory_key,
+            )
+            .first()
+        )
+
+    def get_memory_by_id(self, memory_id: int) -> Optional[BusinessAssistantMemory]:
+        """Retrieve a business rule by its ID within tenant and user scope."""
+        return (
+            self._db.query(BusinessAssistantMemory)
+            .filter(
+                BusinessAssistantMemory.id == memory_id,
+                BusinessAssistantMemory.tenant_id == self._tenant_id,
+                BusinessAssistantMemory.user_id == self._user_id,
+            )
+            .first()
+        )
+
+    def list_memories(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantMemory]:
+        """List business rules scoped to the current tenant and user."""
+        query = self._db.query(BusinessAssistantMemory).filter(
+            BusinessAssistantMemory.tenant_id == self._tenant_id,
+            BusinessAssistantMemory.user_id == self._user_id,
+        )
+        if status:
+            query = query.filter(BusinessAssistantMemory.status == status)
+        return (
+            query.order_by(
+                BusinessAssistantMemory.updated_at.desc(),
+                BusinessAssistantMemory.id.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+    def update_memory_draft(
+        self,
+        *,
+        memory: BusinessAssistantMemory,
+        content: str,
+        interpretation: Optional[str] = None,
+        category: Optional[str] = None,
+        curator_item_id: Optional[int] = None,
+        payload_hash: Optional[str] = None,
+        provenance_update: Optional[dict] = None,
+    ) -> BusinessAssistantMemory:
+        """Update an existing business rule draft, incrementing its version."""
+        if memory.tenant_id != self._tenant_id or memory.user_id != self._user_id:
+            raise ValueError("Memory record is outside the authenticated scope.")
+        memory.content = content
+        if interpretation is not None:
+            memory.interpretation = interpretation
+        if category is not None:
+            memory.category = category
+        if curator_item_id is not None:
+            memory.curator_item_id = curator_item_id
+        memory.version = (memory.version or 1) + 1
+        memory.payload_hash = payload_hash
+        memory.status = "draft"
+        memory.updated_at = datetime.now(timezone.utc)
+        current_prov = dict(memory.provenance or {})
+        if provenance_update:
+            current_prov.update(provenance_update)
+        memory.provenance = current_prov
+        self._db.flush()
+        return memory
+
+    def activate_memory(
+        self,
+        *,
+        memory: BusinessAssistantMemory,
+        actor_user_id: int,
+        provenance_update: Optional[dict] = None,
+    ) -> BusinessAssistantMemory:
+        """Activate a business rule, recording actor and provenance."""
+        if memory.tenant_id != self._tenant_id or memory.user_id != self._user_id:
+            raise ValueError("Memory record is outside the authenticated scope.")
+        now = datetime.now(timezone.utc)
+        memory.status = "active"
+        memory.activated_at = now
+        memory.activated_by_user_id = actor_user_id
+        memory.updated_at = now
+        current_prov = dict(memory.provenance or {})
+        current_prov["activated_at"] = now.isoformat()
+        current_prov["activated_by_user_id"] = actor_user_id
+        if provenance_update:
+            current_prov.update(provenance_update)
+        memory.provenance = current_prov
+        self._db.flush()
+        return memory
+
+    def list_curator_proposals(
+        self,
+        *,
+        status: str = "pending",
+        limit: int = 50,
+    ) -> list[KnowledgeProposal]:
+        """List reviewable curator proposals strictly within tenant boundary."""
+        query = self._db.query(KnowledgeProposal).filter(
+            KnowledgeProposal.tenant_id == self._tenant_id,
+        )
+        if status != "all":
+            query = query.filter(KnowledgeProposal.status == status)
+        return (
+            query.order_by(
+                KnowledgeProposal.created_at.desc(),
+                KnowledgeProposal.id.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+    def get_curator_proposal(self, proposal_id: int) -> Optional[KnowledgeProposal]:
+        """Retrieve a curator proposal strictly within tenant boundary."""
+        return (
+            self._db.query(KnowledgeProposal)
+            .filter(
+                KnowledgeProposal.id == proposal_id,
+                KnowledgeProposal.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def resolve_curator_proposal(
+        self,
+        *,
+        proposal: KnowledgeProposal,
+        actor_user_id: int,
+        resolution_code: str = "resolved",
+        status: str = "resolved",
+    ) -> KnowledgeProposal:
+        """Resolve a curator proposal recording reviewer and resolution code."""
+        if proposal.tenant_id != self._tenant_id:
+            raise ValueError("Curator proposal is outside the authenticated scope.")
+        proposal.status = status
+        proposal.resolution_code = resolution_code
+        proposal.reviewed_by_user_id = actor_user_id
+        proposal.reviewed_at = datetime.now(timezone.utc)
+        self._db.flush()
+        return proposal
+
+    def sync_curated_memory(
+        self,
+        *,
+        memory: BusinessAssistantMemory,
+    ) -> CuratedMemory:
+        """Sync an active business rule into CuratedMemory for system retrieval."""
+        if memory.tenant_id != self._tenant_id:
+            raise ValueError("Memory record is outside the authenticated scope.")
+        source_ref = f"business_assistant_memory:{memory.id}"
+        existing = (
+            self._db.query(CuratedMemory)
+            .filter(
+                CuratedMemory.tenant_id == self._tenant_id,
+                CuratedMemory.source_reference == source_ref,
+            )
+            .first()
+        )
+        now = datetime.now(timezone.utc)
+        if existing:
+            existing.category = memory.category
+            existing.user_query = memory.memory_key
+            existing.ideal_response = memory.content
+            existing.content_hash = memory.payload_hash
+            existing.status = "active"
+            existing.verified_by_user_id = memory.activated_by_user_id
+            existing.last_verified_at = now
+            existing.updated_at = now
+            self._db.flush()
+            return existing
+
+        curated = CuratedMemory(
+            tenant_id=self._tenant_id,
+            category=memory.category,
+            user_query=memory.memory_key,
+            ideal_response=memory.content,
+            knowledge_kind="response_guidance" if "guidance" in memory.category.lower() else "durable_fact",
+            authority="owner_verified",
+            status="active",
+            conflict_state="clear",
+            content_hash=memory.payload_hash,
+            source_reference=source_ref,
+            verified_by_user_id=memory.activated_by_user_id,
+            last_verified_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        self._db.add(curated)
+        self._db.flush()
+        return curated
+

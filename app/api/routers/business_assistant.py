@@ -1,5 +1,7 @@
 """Authenticated text conversation API for the internal Business Assistant."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -25,6 +27,12 @@ from ...schemas.business_assistant import (
     SupportTicketRead,
     BusinessAssistantToolExecutionRequest,
     BusinessAssistantToolExecutionResponse,
+    BusinessRuleActivateRequest,
+    BusinessRuleDraftCreate,
+    BusinessRuleDraftResponse,
+    BusinessRuleRead,
+    CuratorQuestionRead,
+    CuratorQuestionResolveRequest,
 )
 from ...services.business_assistant import (
     BusinessAssistantService,
@@ -41,6 +49,12 @@ from ...services.business_assistant import (
     RealtimeConfigurationError,
     RealtimeInvalidSdpError,
     RealtimeProviderUnavailableError,
+    ConfirmationError,
+    ConfirmationExpiredError,
+    ConfirmationPayloadMismatchError,
+    ConfirmationScopeMismatchError,
+    ConfirmationSignatureError,
+    DynamicFactRejectedError,
 )
 
 router = APIRouter(prefix="/business-assistant", tags=["Business Assistant"])
@@ -426,3 +440,130 @@ def list_ticket_events(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.") from exc
     return [SupportTicketEventRead.model_validate(event) for event in events]
+
+
+@router.post("/knowledge/rules/draft", response_model=BusinessRuleDraftResponse, status_code=status.HTTP_201_CREATED)
+def draft_business_rule(
+    payload: BusinessRuleDraftCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> BusinessRuleDraftResponse:
+    """Draft a business rule, validate against dynamic facts, and return assistant interpretation with confirmation token."""
+    service = _service(db, tenant, user)
+    try:
+        memory, interpretation, token, hash_val = service.draft_business_rule(
+            memory_key=payload.memory_key,
+            content=payload.content,
+            category=payload.category,
+            curator_item_id=payload.curator_item_id,
+        )
+    except DynamicFactRejectedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "DYNAMIC_FACT_REJECTED",
+                "message": str(exc),
+                "detected_types": list(exc.detected_types),
+            },
+        ) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return BusinessRuleDraftResponse(
+        rule=BusinessRuleRead.model_validate(memory),
+        interpretation=interpretation,
+        confirmation_token=token,
+        payload_hash=hash_val,
+    )
+
+
+@router.get("/knowledge/rules", response_model=list[BusinessRuleRead])
+def list_business_rules(
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> list[BusinessRuleRead]:
+    """List business rules scoped to the current tenant and user."""
+    service = _service(db, tenant, user)
+    rules = service.list_business_rules(status=status, limit=limit)
+    return [BusinessRuleRead.model_validate(r) for r in rules]
+
+
+@router.get("/knowledge/rules/{rule_identifier}", response_model=BusinessRuleRead)
+def get_business_rule(
+    rule_identifier: str,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> BusinessRuleRead:
+    """Get a business rule by ID or memory_key within tenant scope."""
+    service = _service(db, tenant, user)
+    try:
+        memory = service.get_business_rule(rule_identifier)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business rule not found.") from exc
+    return BusinessRuleRead.model_validate(memory)
+
+
+@router.post("/knowledge/rules/{rule_identifier}/activate", response_model=BusinessRuleRead)
+def activate_business_rule(
+    rule_identifier: str,
+    payload: BusinessRuleActivateRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> BusinessRuleRead:
+    """Activate a drafted business rule after validating confirmation token binding."""
+    service = _service(db, tenant, user)
+    try:
+        activated = service.activate_business_rule(
+            id_or_key=rule_identifier,
+            confirmation_token=payload.confirmation_token,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Business rule not found.") from exc
+    except ConfirmationExpiredError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation token has expired.") from exc
+    except ConfirmationScopeMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BusinessRuleRead.model_validate(activated)
+
+
+@router.get("/knowledge/curator/questions", response_model=list[CuratorQuestionRead])
+def list_curator_questions(
+    status: str = Query(default="pending"),
+    limit: int = Query(default=50, ge=1, le=100),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> list[CuratorQuestionRead]:
+    """List reviewable curator questions strictly within tenant scope."""
+    service = _service(db, tenant, user)
+    questions = service.list_curator_questions(status=status, limit=limit)
+    return [CuratorQuestionRead.model_validate(q) for q in questions]
+
+
+@router.post("/knowledge/curator/questions/{question_id}/resolve", response_model=CuratorQuestionRead)
+def resolve_curator_question(
+    question_id: DatabaseId,
+    payload: CuratorQuestionResolveRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> CuratorQuestionRead:
+    """Resolve, dismiss, or reject a curator question within tenant scope."""
+    service = _service(db, tenant, user)
+    try:
+        resolved = service.resolve_curator_question(
+            curator_item_id=question_id,
+            resolution=payload.resolution,
+            note=payload.note,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curator question not found.") from exc
+    return CuratorQuestionRead.model_validate(resolved)
+

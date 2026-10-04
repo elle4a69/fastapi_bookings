@@ -141,9 +141,137 @@ BOOKING_AVAILABILITY_TOOLS: tuple[dict[str, Any], ...] = (
     },
 )
 
+BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "list_curator_questions",
+            "description": "List pending or unresolved curator questions requiring business policy guidance.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["pending", "resolved", "all"],
+                        "description": "Filter by proposal status (default: 'pending').",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return (1-50, default 20).",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draft_business_rule",
+            "description": "Draft a business rule or policy, validate against dynamic facts, and return the assistant's interpretation and confirmation token.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "memory_key": {
+                        "type": "string",
+                        "description": "Unique key or slug for the rule (e.g. 'cancellation_policy', 'pet_policy').",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The durable rule description or policy text. Dynamic operational facts (prices, slots, dates) are forbidden.",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Category for the rule (default: 'policy').",
+                    },
+                    "curator_item_id": {
+                        "type": "integer",
+                        "description": "Optional ID of a curator proposal being resolved by this rule.",
+                    },
+                },
+                "required": ["memory_key", "content"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_business_rule",
+            "description": "Inspect a drafted or active business rule and its stored assistant interpretation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "memory_key": {
+                        "type": "string",
+                        "description": "Key or slug of the business rule to inspect.",
+                    },
+                },
+                "required": ["memory_key"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "activate_business_rule",
+            "description": "Activate a previously drafted business rule using an authoritative confirmation token bound to its exact version and payload hash.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "memory_key": {
+                        "type": "string",
+                        "description": "Key of the business rule to activate.",
+                    },
+                    "confirmation_token": {
+                        "type": "string",
+                        "description": "Authoritative confirmation token received when drafting the rule.",
+                    },
+                },
+                "required": ["memory_key", "confirmation_token"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_curator_question",
+            "description": "Resolve, dismiss, or reject a curator question without drafting a rule.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "curator_item_id": {
+                        "type": "integer",
+                        "description": "ID of the curator question to resolve.",
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "enum": ["resolved", "dismissed", "rejected"],
+                        "description": "Resolution status (default: 'resolved').",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional explanatory note for the resolution.",
+                    },
+                },
+                "required": ["curator_item_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+)
+
 ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *PRODUCT_HELP_TOOLS,
     *BOOKING_AVAILABILITY_TOOLS,
+    *BUSINESS_KNOWLEDGE_TOOLS,
 )
 
 
@@ -154,10 +282,23 @@ class BusinessAssistantToolRegistry:
         self,
         adapters: BusinessAssistantReadAdapters,
         *,
+        service: Optional[Any] = None,
         packs: tuple[str, ...] = ("product_help", "booking_availability"),
     ) -> None:
         self._adapters = adapters
+        self._service = service
         self._packs = packs
+
+    def _get_service(self) -> Any:
+        if self._service is not None:
+            return self._service
+        from .service import BusinessAssistantService
+
+        return BusinessAssistantService(
+            self._adapters._db,
+            self._adapters._tenant_id,
+            self._adapters._user_id,
+        )
 
     @property
     def schemas(self) -> tuple[dict[str, Any], ...]:
@@ -166,6 +307,8 @@ class BusinessAssistantToolRegistry:
             active.extend(PRODUCT_HELP_TOOLS)
         if "booking_availability" in self._packs:
             active.extend(BOOKING_AVAILABILITY_TOOLS)
+        if "business_knowledge" in self._packs:
+            active.extend(BUSINESS_KNOWLEDGE_TOOLS)
         return tuple(active)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -267,6 +410,156 @@ class BusinessAssistantToolRegistry:
                     limit=limit,
                 )
             except (ValueError, LookupError, PermissionError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "list_curator_questions":
+            status_filter = arguments.get("status", "pending")
+            if not isinstance(status_filter, str) or status_filter not in ("pending", "resolved", "all"):
+                return {"status": "rejected", "reason": "status must be one of 'pending', 'resolved', 'all'."}
+            limit = arguments.get("limit", 20)
+            if not isinstance(limit, int) or limit < 1 or limit > 50:
+                return {"status": "rejected", "reason": "limit must be an integer between 1 and 50."}
+            try:
+                service = self._get_service()
+                questions = service.list_curator_questions(status=status_filter, limit=limit)
+                return {
+                    "status": "ok",
+                    "questions": [
+                        {
+                            "id": q.id,
+                            "category": q.category,
+                            "user_query": q.user_query,
+                            "proposed_response": q.proposed_response,
+                            "reason_code": q.reason_code,
+                            "status": q.status,
+                            "confidence_score": q.confidence_score,
+                            "created_at": q.created_at.isoformat() if q.created_at else None,
+                        }
+                        for q in questions
+                    ],
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "draft_business_rule":
+            memory_key = arguments.get("memory_key")
+            content = arguments.get("content")
+            if not memory_key or not isinstance(memory_key, str):
+                return {"status": "rejected", "reason": "memory_key is required and must be a string."}
+            if not content or not isinstance(content, str):
+                return {"status": "rejected", "reason": "content is required and must be a string."}
+            category = arguments.get("category", "policy")
+            if not isinstance(category, str):
+                return {"status": "rejected", "reason": "category must be a string."}
+            curator_item_id = arguments.get("curator_item_id")
+            if curator_item_id is not None and not isinstance(curator_item_id, int):
+                return {"status": "rejected", "reason": "curator_item_id must be an integer."}
+            try:
+                service = self._get_service()
+                memory, interpretation, token, hash_val = service.draft_business_rule(
+                    memory_key=memory_key,
+                    content=content,
+                    category=category,
+                    curator_item_id=curator_item_id,
+                )
+                return {
+                    "status": "ok",
+                    "draft": {
+                        "id": memory.id,
+                        "memory_key": memory.memory_key,
+                        "content": memory.content,
+                        "category": memory.category,
+                        "status": memory.status,
+                        "version": memory.version,
+                        "payload_hash": hash_val,
+                    },
+                    "interpretation": interpretation,
+                    "confirmation_token": token,
+                    "payload_hash": hash_val,
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "get_business_rule":
+            memory_key = arguments.get("memory_key")
+            if not memory_key or not isinstance(memory_key, str):
+                return {"status": "rejected", "reason": "memory_key is required and must be a string."}
+            try:
+                service = self._get_service()
+                memory = service.get_business_rule(memory_key)
+                return {
+                    "status": "ok",
+                    "rule": {
+                        "id": memory.id,
+                        "memory_key": memory.memory_key,
+                        "content": memory.content,
+                        "interpretation": memory.interpretation,
+                        "category": memory.category,
+                        "status": memory.status,
+                        "version": memory.version,
+                        "payload_hash": memory.payload_hash,
+                        "created_at": memory.created_at.isoformat() if memory.created_at else None,
+                        "updated_at": memory.updated_at.isoformat() if memory.updated_at else None,
+                        "activated_at": memory.activated_at.isoformat() if memory.activated_at else None,
+                    },
+                }
+            except LookupError as exc:
+                return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "activate_business_rule":
+            memory_key = arguments.get("memory_key")
+            confirmation_token = arguments.get("confirmation_token")
+            if not memory_key or not isinstance(memory_key, str):
+                return {"status": "rejected", "reason": "memory_key is required and must be a string."}
+            if not confirmation_token or not isinstance(confirmation_token, str):
+                return {"status": "rejected", "reason": "confirmation_token is required and must be a string."}
+            try:
+                service = self._get_service()
+                activated = service.activate_business_rule(
+                    id_or_key=memory_key,
+                    confirmation_token=confirmation_token,
+                )
+                return {
+                    "status": "ok",
+                    "rule": {
+                        "id": activated.id,
+                        "memory_key": activated.memory_key,
+                        "status": activated.status,
+                        "version": activated.version,
+                        "activated_at": activated.activated_at.isoformat() if activated.activated_at else None,
+                    },
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "resolve_curator_question":
+            curator_item_id = arguments.get("curator_item_id")
+            if curator_item_id is None or not isinstance(curator_item_id, int):
+                return {"status": "rejected", "reason": "curator_item_id is required and must be an integer."}
+            resolution = arguments.get("resolution", "resolved")
+            if resolution not in ("resolved", "dismissed", "rejected"):
+                return {"status": "rejected", "reason": "resolution must be 'resolved', 'dismissed', or 'rejected'."}
+            note = arguments.get("note")
+            if note is not None and not isinstance(note, str):
+                return {"status": "rejected", "reason": "note must be a string."}
+            try:
+                service = self._get_service()
+                resolved = service.resolve_curator_question(
+                    curator_item_id=curator_item_id,
+                    resolution=resolution,
+                    note=note,
+                )
+                return {
+                    "status": "ok",
+                    "resolved_item": {
+                        "id": resolved.id,
+                        "status": resolved.status,
+                        "resolution_code": resolved.resolution_code,
+                    },
+                }
+            except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
         return {"status": "rejected", "reason": f"Capability '{name}' is not supported."}

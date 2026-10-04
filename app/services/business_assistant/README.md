@@ -5,7 +5,8 @@
 This package owns tenant- and user-scoped persistence operations, bounded
 text generation, and server-authorised tool execution for internal Business
 Assistant conversations. It supports conversational onboarding, live product
-help, tenant settings discovery, and real-time appointment availability inquiry.
+help, tenant settings discovery, real-time appointment availability inquiry,
+and authoritative business knowledge curation.
 It deliberately excludes synthetic mocks, unconfirmed booking writes, customer
 messaging, coding worker dispatch, deployment, and direct database access by a
 model.
@@ -14,13 +15,14 @@ model.
 
 ```text
 app/services/business_assistant/
-├── repository.py        # Scoped SQLAlchemy persistence and tool run telemetry
+├── repository.py        # Scoped SQLAlchemy persistence, memory lifecycle, and tool telemetry
 ├── runtime.py           # Configured bounded provider request and function-calling loop
-├── service.py           # Persist-before-generation turn coordinator and tool executor
+├── service.py           # Turn coordinator, business rule drafting/activation, and curator workflows
+├── confirmation.py      # Cryptographic confirmation tokens and dynamic-fact rejection policy
 ├── tickets.py           # Ticket-summary safety checks and duplicate fingerprinting
 ├── idempotency.py       # Canonical payload hashes and key-reuse conflict checks
 ├── product_context.py   # Read-only allowlisted native setup snapshot
-├── tool_registry.py     # Modular tool packs and function dispatch engine
+├── tool_registry.py     # Modular tool packs (product help, booking, business knowledge)
 ├── realtime.py          # Server-held SDP exchange for authenticated voice sessions
 ├── adapters/
 │   ├── reads.py         # Scoped native read adapters for product help, settings, and scheduling
@@ -56,13 +58,28 @@ separate from customer conversation and message tables.
 - Tool audit records (`business_assistant_tool_runs`) contain structural
   metadata only (`tool_name`, `status`, `duration_ms`). Raw tool arguments,
   results, credentials, and worker logs are never persisted in telemetry.
+- **Drafting vs. Activation Separation**: Users can draft business policies and
+  inspect the assistant's structured interpretation without external effect.
+  Drafts remain non-operational (`status="draft"`) until explicit activation.
+- **Confirmation Binding**: Activating a business rule requires a cryptographic
+  HMAC confirmation token bound to tenant, initiating user, target rule key,
+  exact version, and payload hash. Tokens cannot be reused across versions,
+  users, or tenants.
+- **Dynamic Facts Prohibition**: Operational facts (live availability slots,
+  calendar bookings, current pricing, specific booking IDs, temporal references,
+  customer PII) are strictly rejected from static business knowledge and must
+  be resolved via live domain services.
+- **Actor and Provenance Tracking**: Every rule draft and activation records
+  authoritative actor `user_id`, timestamps, and detailed provenance. Active
+  rules sync into `CuratedMemory` for platform-wide knowledge retrieval.
 
 ## Configuration and dependencies
 
 The package uses the application SQLAlchemy session, existing `tenants`,
-`users`, `services`, `providers`, and `locations` tables, and migrations
-`g7h9j1k3m5n7` and `h8j0k2m4n6p8`. The text path uses only validated
-application settings: `OPENAI_API_KEY`, `BUSINESS_ASSISTANT_TEXT_MODEL`,
+`users`, `services`, `providers`, `locations`, `curated_memories`, and
+`knowledge_proposals` tables, migrations `g7h9j1k3m5n7`, `h8j0k2m4n6p8`, and
+`p1q2r3s4t5u6`. The text path uses only validated application settings:
+`OPENAI_API_KEY`, `BUSINESS_ASSISTANT_TEXT_MODEL`,
 `BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES`,
 `BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS`, and
 `BUSINESS_ASSISTANT_TURN_TIMEOUT_SECONDS`. Missing provider configuration
@@ -77,7 +94,7 @@ explicit unavailable result rather than a simulated exchange.
 
 ### Tool execution engine and tool packs
 
-The assistant accesses two modular server-authorised tool packs:
+The assistant accesses three modular server-authorised tool packs:
 
 1. **Product Help & Onboarding Pack:**
    - `read_product_help`: Returns live setup metrics (active services, providers,
@@ -94,6 +111,17 @@ The assistant accesses two modular server-authorised tool packs:
    - `check_slot_availability`: Computes live 15-minute slot availability via the
      scheduling engine (`compute_availability`), taking into account provider workdays,
      special day overrides, existing bookings, and buffer times. Zero mocks are used.
+3. **Business Knowledge & Curator Pack:**
+   - `list_curator_questions`: Lists unresolved or pending curator questions
+     scoped strictly to the tenant.
+   - `draft_business_rule`: Drafts a business rule, validates against dynamic
+     operational facts, and returns assistant interpretation and confirmation token.
+   - `get_business_rule`: Inspects a drafted or active business rule and its stored
+     assistant interpretation.
+   - `activate_business_rule`: Confirms and activates a rule with cryptographic
+     token bound to exact version and payload hash.
+   - `resolve_curator_question`: Resolves or dismisses a curator item within tenant
+     scope.
 
 ### Text API contract
 
@@ -108,6 +136,19 @@ Mounted at `/api/admin/business-assistant`:
 - `POST /conversations/{id}/tools` and `POST /conversations/{id}/realtime/tools`
   execute an allowlisted tool directly through the policy engine, returning structured
   results and recording telemetry.
+
+### Business Knowledge and Curator API contract
+
+- `POST /knowledge/rules/draft` drafts a business rule, checks for forbidden dynamic
+  facts, persists a draft record, and returns an authoritative confirmation token.
+- `GET /knowledge/rules` lists tenant-scoped business rules with optional status filter.
+- `GET /knowledge/rules/{id_or_key}` retrieves a business rule and its interpretation.
+- `POST /knowledge/rules/{id_or_key}/activate` activates a drafted rule using its
+  cryptographically bound confirmation token, resolving any linked curator question
+  and syncing into `CuratedMemory`.
+- `GET /knowledge/curator/questions` lists pending curator questions in the current tenant.
+- `POST /knowledge/curator/questions/{id}/resolve` marks a curator proposal as resolved,
+  dismissed, or rejected.
 
 ### Realtime voice contract
 
@@ -137,8 +178,8 @@ Mounted at `/api/admin/business-assistant`:
 
 ## Current limitations
 
-Confirmation-controlled mutations, memory activation, ticket triage, and worker
-dispatch belong to later work packages after their contracts are approved.
+Live customer SMS broadcast, external worker dispatch, and autonomous website
+publication belong to later work packages after their specific gates pass.
 Schema reconciliation preserves existing rows and is deliberately non-reversible;
 database rollback procedures must restore from a verified backup rather than
 dropping feature tables.
@@ -146,5 +187,5 @@ dropping feature tables.
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_adapters.py tests/test_business_assistant_tool_execution.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_adapters.py tests/test_business_assistant_tool_execution.py tests/test_business_assistant_knowledge_curation.py -q
 ```
