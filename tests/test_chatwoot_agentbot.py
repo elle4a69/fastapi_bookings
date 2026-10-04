@@ -9,6 +9,13 @@ from app.services.messaging.chatwoot_handoff import handoff_to_human, send_bot_m
 from app.api.routers.chatwoot_agentbot import requires_human_handoff
 
 
+@pytest.fixture(autouse=True)
+def reset_chatwoot_webhook_secret(monkeypatch):
+    """Ensure test suite runs with isolated webhook secret state."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "CHATWOOT_WEBHOOK_SECRET", "")
+
+
 @pytest.mark.asyncio
 async def test_handoff_to_human_with_note():
     """Test handoff_to_human patches conversation status and sends private note."""
@@ -396,4 +403,34 @@ async def test_send_bot_message_http_error():
                 content="test",
                 client=client,
             )
+
+
+def test_chatwoot_agentbot_webhook_secret_enforcement(monkeypatch):
+    """Test that webhook secret is strictly enforced when configured."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "CHATWOOT_WEBHOOK_SECRET", "super_secret_webhook_key_123")
+    client = TestClient(app)
+
+    # 1. Missing token -> 401
+    resp = client.post(
+        "/api/v1/chatwoot/webhook",
+        json={"event": "conversation_status_changed", "conversation": {"id": 1}, "account": {"id": 1}},
+    )
+    assert resp.status_code == 401
+
+    # 2. Invalid token -> 401
+    resp = client.post(
+        "/api/v1/chatwoot/webhook",
+        headers={"X-Chatwoot-Token": "wrong_key"},
+        json={"event": "conversation_status_changed", "conversation": {"id": 1}, "account": {"id": 1}},
+    )
+    assert resp.status_code == 401
+
+    # 3. Valid token -> 200
+    resp = client.post(
+        "/api/v1/chatwoot/webhook",
+        headers={"X-Chatwoot-Token": "super_secret_webhook_key_123"},
+        json={"event": "conversation_status_changed", "conversation": {"id": 1}, "account": {"id": 1}},
+    )
+    assert resp.status_code == 200
 

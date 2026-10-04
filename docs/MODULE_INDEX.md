@@ -25,17 +25,18 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `app/services/channel/` | Communication Channel Transports | `conversation.py`, `channel.py`, `__init__.py` | `.\.venv\Scripts\python -m pytest -q tests/tes...` | **Compliant (Rule 10)** | [README.md](app/services/channel/README.md) |
 | `app/services/curation/` | Semantic Memory Curation | `knowledge_policy.py`, `memory_curator.py`, `retrieval.py` | `.\.venv\Scripts\python.exe -m py_compile app/...` | **Compliant (Rule 10)** | [README.md](app/services/curation/README.md) |
 | `app/services/knowledge/` | Knowledge Subsystems & Graphiti | `__init__.py`, `types.py`, `policy.py` | `python -m pytest tests/test_knowledge_phase1_...` | **Compliant (Rule 10)** | [README.md](app/services/knowledge/README.md) |
-| `app/services/localization/` | Dynamic Localization & Terminology | `presets.py`, `tenant_translation.py`, `translation.py` | `python -m pytest tests/test_tenant_translatio...` | **Compliant (Rule 10)** | [README.md](app/services/localization/README.md) |
+| `app/services/localization/` | Dynamic Localization & Terminology | `presets.py`, `tenant_translation.py`, `translations.py` | `python -m pytest tests/test_tenant_translatio...` | **Compliant (Rule 10)** | [README.md](app/services/localization/README.md) |
 | `app/services/messaging/` | Chatwoot & Omnichannel Messaging | `chatwoot_handoff.py`, `__init__.py` | `python -m pytest tests/test_chatwoot_agentbot...` | **Compliant (Rule 10)** | [README.md](app/services/messaging/README.md) |
 | `app/services/` | Application Business Services | `agent_runner.py`, `chatwoot_provisioner.py`, `contact_sync.py` | `python -m pytest tests/test_chatwoot_provisio...` | **Compliant (Rule 10)** | [README.md](app/services/README.md) |
 | `app/services/resident_agent/` | Autonomous Resident Sentinel | `sentinel.py`, `fuzzer.py`, `auditor.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](app/services/resident_agent/README.md) |
 | `app/services/routing/` | Routing & Geospatial Engine | `travel_service.py`, `geocoding.py`, `distance_calculator.py` | `python -m pytest tests/test_distance_calculat...` | **Compliant (Rule 10)** | [README.md](app/services/routing/README.md) |
 | `app/services/scheduling/` | Scheduling & Slot Allocation | `calcom_adapter.py`, `slot_allocation_service.py`, `scheduling_service.py` | `pytest tests/test_concurrency.py -v` | **Compliant (Rule 10)** | [README.md](app/services/scheduling/README.md) |
 | `app/services/sms/` | Autonomous SMS Dialogue Engine | `inbound_service.py`, `ai_orchestrator.py`, `booking_facade.py` | `python -m pytest tests/test_sms_chatwoot.py t...` | **Compliant (Rule 10)** | [README.md](app/services/sms/README.md) |
+| `docs/audits/` | Documentation & Architecture Catalog | `SYSTEM_AUDIT_REPORT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/audits/README.md) |
 | `docs/` | Documentation & Architecture Catalog | `ARCHITECTURE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/README.md) |
 | `frontend/` | React Frontend SPA | `App.tsx`, `api.ts`, `AuthContext.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/README.md) |
 | `frontend/src/pages/admin/assistant-studio/` | Frontend Admin Assistant Studio | `index.tsx`, `types.ts`, `assistant_studio.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/assistant-studio/README.md) |
-| `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `realtime-voice-protocol.ts`, `use-business-assistant-realtime-voice.ts` | `npm test -- src/pages/admin/business-assistan...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
+| `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
 | `frontend/src/pages/admin/catalog/` | Frontend Admin Catalog & Services | `services.tsx`, `providers.tsx`, `locations.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/catalog/README.md) |
 | `frontend/src/pages/admin/finance/` | Frontend Admin Finance & Billing | `invoices.tsx`, `payments.tsx`, `promotions.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/finance/README.md) |
 | `frontend/src/pages/admin/` | Frontend Administration Views | `navigation.ts`, `relationships-matrix.tsx`, `relationships.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/README.md) |
@@ -94,9 +95,9 @@ The SMS Assistant module owns: - Inbound carrier webhook intake with cryptograph
 ### 3.6 Business Assistant Foundation
 
 #### [Business Assistant Foundation](app/services/business_assistant/README.md) (`app/services/business_assistant`)
-This package owns tenant- and user-scoped persistence operations and bounded text generation for internal Business Assistant conversations. It deliberately excludes tools, realtime media, external messaging, booking changes, coding worker dispatch, d...
-- **Key Files**: `business_assistant.py`, `repository.py`, `runtime.py`, `service.py`, `tickets.py`, `idempotency.py`, `product_context.py`, `tool_registry.py`, `realtime.py`, `__init__.py`
-- **Verification**: `.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py -q`
+This package owns tenant- and user-scoped persistence operations, bounded text generation, and server-authorised tool execution for internal Business Assistant conversations. It supports conversational onboarding, live product help, tenant settings d...
+- **Key Files**: `business_assistant.py`, `repository.py`, `runtime.py`, `service.py`, `confirmation.py`, `tickets.py`, `idempotency.py`, `product_context.py`, `tool_registry.py`, `website_sanitiser.py`, `realtime.py`, `coding_worker.py`
+- **Verification**: `.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py tests/test_business_assistant_hardening_and_rollout.py -q`
 - **Known Debt/Issues**: 1 item(s) logged
 
 ### 3.7 Chatwoot & Omnichannel Messaging
@@ -149,6 +150,12 @@ The `alembic/` package manages relational schema migrations, version tracking, a
 
 ### 3.13 Documentation & Architecture Catalog
 
+#### [Platform Audits, Security Reviews & Diagnostic Ledgers](docs/audits/README.md) (`docs/audits`)
+The Audits module provides forensic investigations, architectural gap assessments, and verified remediation blueprints across all core systems of the FastAPI Bookings platform....
+- **Key Files**: `SYSTEM_AUDIT_REPORT.md`
+- **Verification**: `python scripts/verify_living_docs.py`
+- **Known Debt/Issues**: 10 item(s) logged
+
 #### [FastAPI Bookings — Central Documentation Index](docs/README.md) (`docs`)
 This documentation suite serves as the single source of truth for the system architecture, component contracts, operational guides, and testing protocols. ...
 - **Key Files**: `ARCHITECTURE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md`, `module_manifest.json`, `main.py`, `config.py`
@@ -159,7 +166,7 @@ This documentation suite serves as the single source of truth for the system arc
 
 #### [Dynamic Wording & Industry Translations Engine](app/services/localization/README.md) (`app/services/localization`)
 The Localization and Translation Engine owns: - Multi-industry vocabulary adaptability across Allied Health, Automotive, Salons/Wellness, and Professional Services. - Three-tier cascading terminology resolution: System Defaults -> Industry Preset -> ...
-- **Key Files**: `presets.py`, `tenant_translation.py`, `translation.py`, `translations.py`, `TranslationContext.tsx`, `__init__.py`
+- **Key Files**: `presets.py`, `tenant_translation.py`, `translations.py`, `TranslationContext.tsx`, `__init__.py`, `translation.py`
 - **Verification**: `python -m pytest tests/test_tenant_translations.py -v`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -173,10 +180,10 @@ The Assistant Studio owns: - **Zero-Mock Platform Compliance (AGENTS.md Rule 3)*
 
 ### 3.16 Frontend Admin Business Assistant
 
-#### [Business Assistant Page](frontend/src/pages/admin/business-assistant/README.md) (`frontend/src/pages/admin/business-assistant`)
-This page provides the owner/admin text and voice conversation interface. It renders only persisted tenant-scoped history returned by the backend and does not generate browser-side replies or simulate processing....
-- **Key Files**: `index.tsx`, `realtime-voice-protocol.ts`, `use-business-assistant-realtime-voice.ts`, `voice-protocol.ts`, `business-assistant-realtime-voice.ts`
-- **Verification**: `npm test -- src/pages/admin/business-assistant`
+#### [Business Assistant Frontend](frontend/src/pages/admin/business-assistant/README.md) (`frontend/src/pages/admin/business-assistant`)
+This module delivers both a full-page Business Assistant management view and a persistent, application-wide floating drawer accessible across all authenticated admin routes....
+- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-realtime-voice.ts`, `realtime-protocol.ts`, `ticket-status.tsx`, `use-business-assistant-realtime-voice.ts`, `realtime-voice-protocol.ts`, `drawer.tsx`, `assistant-context.tsx`
+- **Verification**: `npm test`
 - **Known Debt/Issues**: 3 item(s) logged
 
 ### 3.17 Frontend Admin Catalog & Services
@@ -199,7 +206,7 @@ The `frontend/src/pages/admin/finance/` directory implements financial administr
 
 #### [SMS Assistant Control Center](frontend/src/pages/admin/sms/README.md) (`frontend/src/pages/admin/sms`)
 The `frontend/src/pages/admin/sms/` directory provides the command and operations center for the conversational SMS AI agent in **FastAPI Bookings**. It gives operational staff real-time visibility and intervention authority over inbound and outbound...
-- **Key Files**: `sms-assistant.tsx`, `assistant-thread-panel.tsx`, `assistant-messages-page.tsx`, `inbox.tsx`, `quick-tools-sheet.tsx`, `arrivals-tab.tsx`, `triage-tab.tsx`, `assistant-bootcamp-page.tsx`, `bootcamp-tab.tsx`, `bootcamp-settings-tab.tsx`, `settings.tsx`, `settings-dialog-layout.ts`
+- **Key Files**: `sms-assistant.tsx`, `assistant-thread-panel.tsx`, `assistant-messages-page.tsx`, `inbox.tsx`, `quick-tools-sheet.tsx`, `arrivals-tab.tsx`, `triage-tab.tsx`, `assistant-bootcamp-page.tsx`, `bootcamp-tab.tsx`, `bootcamp-settings-tab.tsx`, `settings.tsx`, `simulator.tsx`
 - **Verification**: `npm run build`
 - **Known Debt/Issues**: 7 item(s) logged
 
@@ -328,4 +335,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-02 17:34:40Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-04 18:49:39Z by `scripts/index_living_docs.py`.*

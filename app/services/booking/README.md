@@ -126,6 +126,7 @@ To evaluate candidate start $T_{start}$:
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
+- **Reschedule Slot Allocation Synchronization (Resolved - DEF-01)**: Previously, staging new slot allocations under `autoflush=False` in `reschedule_allocations_for_booking` masked them from `recalculate_provider_itinerary`, causing duplicate allocation creation and 409 conflict crashes. Explicit `db.flush()` was added after `create_allocations_for_booking` to ensure immediate queryability before subsequent recalculations.
 - **Multi-day transit spans**: Out-call appointments are currently constrained to a single calendar working day.
 - **Real-Time Traffic Updates**: Transit calculations currently use deterministic road graph metrics; live traffic streaming hooks will feed into the operational window calculator in future iterations.
 

@@ -763,6 +763,6 @@ def test_production_operations_api_disables_destructive_scenario_seeding(
         headers=headers,
     )
 
-    assert response.status_code == status.HTTP_409_CONFLICT
+    assert response.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_405_METHOD_NOT_ALLOWED, status.HTTP_409_CONFLICT)
     assert db_session.query(SmsConversation).count() == conversations_before
     assert db_session.query(SmsMessage).count() == messages_before

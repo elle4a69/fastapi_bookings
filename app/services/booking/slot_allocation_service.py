@@ -315,7 +315,7 @@ def reschedule_allocations_for_booking(
     booking.start_time = normalize_to_utc(new_start)
     booking.end_time = normalize_to_utc(new_end)
 
-    return create_allocations_for_booking(
+    allocations = create_allocations_for_booking(
         db,
         booking=booking,
         buffer_before=buffer_before,
@@ -323,6 +323,8 @@ def reschedule_allocations_for_booking(
         operational_window_start=operational_window_start,
         operational_window_end=operational_window_end,
     )
+    db.flush()
+    return allocations
 
 
 def audit_and_repair_slot_allocations(

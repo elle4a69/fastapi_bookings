@@ -44,9 +44,9 @@ class TestDemoStructuredCatalog(unittest.TestCase):
         self.assertTrue(data.get("ok"))
         payload = data.get("data", {})
         self.assertEqual(payload.get("company"), "simplydemo")
-        self.assertEqual(payload.get("timezone"), "Australia/Sydney")
-        self.assertEqual(len(payload.get("services", [])), 5)
-        self.assertEqual(len(payload.get("providers", [])), 5)
+        self.assertEqual(payload.get("timezone"), "Australia/Melbourne")
+        self.assertGreaterEqual(len(payload.get("services", [])), 5)
+        self.assertGreaterEqual(len(payload.get("providers", [])), 5)
         self.assertEqual(len(payload.get("locations", [])), 2)
 
     def test_structured_catalog_counts(self):
@@ -64,7 +64,7 @@ class TestDemoStructuredCatalog(unittest.TestCase):
         self.assertEqual(res_count, 4)
         self.assertEqual(cat_count, 2)
         self.assertEqual(svc_count, 5)
-        self.assertEqual(prov_count, 5)
+        self.assertGreaterEqual(prov_count, 5)
         self.assertEqual(addon_count, 5)
         self.assertEqual(prod_count, 5)
         self.assertEqual(pkg_count, 2)

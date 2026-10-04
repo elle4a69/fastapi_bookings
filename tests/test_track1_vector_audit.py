@@ -101,14 +101,14 @@ def test_pydantic_curated_memory_create_valid():
     vec = [0.01] * 1536
     schema = CuratedMemoryCreate(
         tenant_id=1,
-        category="pricing",
-        user_query="What are your rates?",
-        ideal_response="Our standard massage is $120/hr.",
+        category="faq",
+        user_query="Where can I find parking near the studio?",
+        ideal_response="Free customer parking is located behind the building off Elm Street.",
         confidence_score=0.98,
         embedding=vec,
     )
     assert schema.tenant_id == 1
-    assert schema.category == "pricing"
+    assert schema.category == "faq"
     assert schema.confidence_score == 0.98
     assert len(schema.embedding) == 1536
 
@@ -142,9 +142,9 @@ def test_pydantic_curated_memory_from_attributes_orm():
         id=42,
         tenant_id=7,
         provider_id=3,
-        category="service_info",
-        user_query="Do you offer Swedish massage?",
-        ideal_response="Yes, Swedish massage is available for 60 and 90 minutes.",
+        category="faq",
+        user_query="Do you have wheelchair access at the clinic?",
+        ideal_response="Yes, our clinic entrance and treatment rooms are fully wheelchair accessible.",
         embedding=vec,
         confidence_score=0.95,
         last_verified_at=now,
@@ -156,7 +156,7 @@ def test_pydantic_curated_memory_from_attributes_orm():
     assert schema.id == 42
     assert schema.tenant_id == 7
     assert schema.provider_id == 3
-    assert schema.category == "service_info"
+    assert schema.category == "faq"
     assert schema.confidence_score == 0.95
     assert len(schema.embedding) == 1536
     assert schema.created_at == now

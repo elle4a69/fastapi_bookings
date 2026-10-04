@@ -43,7 +43,7 @@ def test_seed_clean_numbered_mock_data(db_session):
 
 
 def test_seed_scenarios_endpoint(client, db_session):
-    """Verify POST /api/admin/sms/conversations/seed-scenarios endpoint."""
+    """Verify POST /api/admin/sms/conversations/seed-scenarios is purged per Rule 3."""
     # Ensure tenant and admin user
     tenant = db_session.query(Tenant).filter(Tenant.subdomain == "simplydemo").first()
     if not tenant:
@@ -63,33 +63,13 @@ def test_seed_scenarios_endpoint(client, db_session):
         "X-Tenant": tenant.subdomain
     }
 
-    # Call seed-scenarios
+    # Calling purged route returns 404 or 405
     resp = client.post(
         "/api/admin/sms/conversations/seed-scenarios",
         json={"clear_existing": True},
         headers=headers
     )
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["success"] is True
-    assert data["scenarios_count"] == 16
-    assert data["conversations_count"] == 5
-    assert data["arrivals_count"] >= 3
-    assert data["drafts_count"] >= 5
-
-    # Verify messages created
-    messages = db_session.query(SmsMessage).filter(SmsMessage.tenant_id == tenant.id).all()
-    assert len(messages) >= 16
-
-    # Verify arrival sessions created
-    arrivals = db_session.query(SmsArrivalSession).all()
-    assert len(arrivals) >= 3
-
-    # Check conversation list endpoint sees these conversations
-    convs_resp = client.get("/api/admin/sms/conversations", headers=headers)
-    assert convs_resp.status_code == 200
-    conv_list = convs_resp.json()
-    assert len(conv_list) >= 5
+    assert resp.status_code in (404, 405)
 
 
 def test_run_seed_wrapper(db_session, monkeypatch):

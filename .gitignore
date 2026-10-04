@@ -16,6 +16,7 @@ scratch/
 node_modules/
 *.zip
 *_report.md
+!docs/audits/SYSTEM_AUDIT_REPORT.md
 
 # Databases
 *.db

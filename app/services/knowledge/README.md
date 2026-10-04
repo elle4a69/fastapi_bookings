@@ -567,7 +567,7 @@ To prevent unreviewed or unsafe content from bypassing classification:
 ### 14.3 Harmonized Bootcamp Learning Flows
 1. **Information Requests**: Lessons submitted via `/conversations/{id}/information-request/respond` are stored as pending `KnowledgeProposal` (`proposal_type="gap"`) and processed through `UnifiedCurator` / worker. They are NEVER written directly into prompt-bearing `SmsBootcampSettings.custom_training_notes`.
 2. **Corrections**: Flag-only corrections (reason without replacement text) are recorded strictly as `evidence_only` feedback telemetry (`decision_code="evidence_only"`). They NEVER create durable facts in `CuratedMemory`. Only corrections with non-empty `corrected_wording` passing the classifier propose factual knowledge.
-3. **Draft Approvals / Edits**: When an operator edits a draft, it is retained as evidence. Minor edits produce `decision_code="evidence_only"`. Material edits propose procedural style guidance (`knowledge_kind="style_example"`, `category="style"`) which upon approval creates `MessageStyleExample` and NEVER pollutes `CuratedMemory`.
+3. **Draft Approvals / Edits**: When an operator edits a draft, it is retained as evidence. Minor incidental edits (`ratio > 0.85` and `delta < 5`) produce `decision_code="evidence_only"` and are classified as `incidental` before material safety evaluation, ensuring incidental punctuation/formatting edits are not rejected as unsafe drafts. Material edits propose procedural style guidance (`knowledge_kind="style_example"`, `category="style"`) which upon approval creates `MessageStyleExample` and NEVER pollutes `CuratedMemory`.
 
 ### 14.4 Standardized Auditable Decision Codes
 Every curator decision emits one of the 6 standardized auditable codes:

@@ -8,6 +8,7 @@ import threading
 # Uses a hard assignment so shell env overrides are also suppressed.
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-long-strictly-for-tests")
+os.environ["CHATWOOT_WEBHOOK_SECRET"] = ""
 
 import pytest
 from sqlalchemy import create_engine

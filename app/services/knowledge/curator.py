@@ -500,6 +500,27 @@ class UnifiedCurator:
         # -------------------------------------------------------------
         # Step 5: Evidence & Authority Evaluation (Spec 16, 24, 26)
         # -------------------------------------------------------------
+        if event_type == "draft_edit":
+            diff = event.diff_payload or compute_text_diff(
+                event.original_ai_content, event.human_content
+            )
+            ratio = float(diff.get("ratio", 1.0))
+            orig_len = int(diff.get("original_length", 0))
+            new_len = int(diff.get("new_length", 0))
+            delta = abs(orig_len - new_len)
+
+            if ratio > 0.85 and delta < 5:
+                # Minor / Incidental Edit: Retain as evidence, do not invent universal rules
+                event.status = "processed"
+                return CuratorDecision(
+                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit", "evidence_only")),
+                    status="processed",
+                    decision_code="evidence_only",
+                    classification="incidental",
+                    retained_as_evidence=True,
+                    rationale="Minor draft edit retained as evidence without universal rule creation",
+                )
+
         if event_type in ("draft_edit", "approved_draft") and clean_human:
             # Drafts do not become durable facts, but a material edit can create
             # a style-evidence proposal.  Apply the same PII/template/injection
@@ -523,27 +544,6 @@ class UnifiedCurator:
                     reason_code=f"classifier_{draft_classification.category.value.lower()}",
                     requires_review=True,
                     rationale="Draft learning candidate rejected by the safety classifier",
-                )
-
-        if event_type == "draft_edit":
-            diff = event.diff_payload or compute_text_diff(
-                event.original_ai_content, event.human_content
-            )
-            ratio = float(diff.get("ratio", 1.0))
-            orig_len = int(diff.get("original_length", 0))
-            new_len = int(diff.get("new_length", 0))
-            delta = abs(orig_len - new_len)
-
-            if ratio > 0.85 and delta < 5:
-                # Minor / Incidental Edit: Retain as evidence, do not invent universal rules
-                event.status = "processed"
-                return CuratorDecision(
-                    action=CuratorActionValue("NOOP", ("incidental_edit", "ignored", "minor_edit", "evidence_only")),
-                    status="processed",
-                    decision_code="evidence_only",
-                    classification="incidental",
-                    retained_as_evidence=True,
-                    rationale="Minor draft edit retained as evidence without universal rule creation",
                 )
 
             # Material Edit: Record behavioural signal and increment evidence count
