@@ -95,6 +95,7 @@ async with async_session_scope() as session:
 - **Connection Pool Safety**: `pool_pre_ping=True` ensures stale connections dropped by network firewalls or database restarts are evicted before issuing queries.
 - **Fail-Closed Cleanup**: Both `get_db` and `get_async_db` wrap session lifecycles in `try ... finally` blocks to prevent connection leaks into connection pools.
 - **Savepoint Isolation in Testing**: Test suites in `tests/conftest.py` wrap every test in an isolated connection transaction with nested savepoints (`connection.begin_nested()`), rolling back changes immediately upon test completion.
+- **Zero-PII Parameter Masking**: Both SQLite and PostgreSQL engines are initialized with `hide_parameters=True`, preventing sensitive SQL parameters (passwords, customer names, phone numbers, tokens, credit cards) from being exposed in error tracebacks, console logs, or monitoring sinks during database exceptions.
 - **Production Guardrail**: `app/core/config.py` enforces `if self.DATABASE_URL.startswith("sqlite"): raise ValueError("SQLite database is not allowed in production environment")`.
 
 ---

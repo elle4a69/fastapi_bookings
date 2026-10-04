@@ -261,3 +261,58 @@ class TestPrivacySafeLogFilter:
         record = self._make_record("secret=mysecretvalue token=abc123")
         result = f.filter(record)
         assert result is True
+
+
+class TestJsonFormatterAndEngineZeroPII:
+    """Verify zero-PII guarantee in JSON log formatting and database parameters."""
+
+    def test_json_formatter_scrubs_pii_in_message_and_traceback(self):
+        import json
+        import logging
+        from app.main import JSONFormatter
+
+        formatter = JSONFormatter()
+
+        # Test message scrubbing
+        record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=10,
+            msg="Customer phone is 0412 345 678 and email is secret@client.com",
+            args=(),
+            exc_info=None,
+        )
+        output = formatter.format(record)
+        data = json.loads(output)
+        assert "0412 345 678" not in data["message"]
+        assert "secret@client.com" not in data["message"]
+        assert "[PHONE]" in data["message"]
+        assert "[EMAIL]" in data["message"]
+
+        # Test exception scrubbing
+        try:
+            raise ValueError("Exception with card 4532-1234-5678-9010 and 0412 345 678")
+        except Exception:
+            import sys
+            exc_info = sys.exc_info()
+
+        exc_record = logging.LogRecord(
+            name="test_logger",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=20,
+            msg="Error occurred",
+            args=(),
+            exc_info=exc_info,
+        )
+        exc_output = formatter.format(exc_record)
+        exc_data = json.loads(exc_output)
+        assert "4532-1234-5678-9010" not in exc_data["exception"]
+        assert "0412 345 678" not in exc_data["exception"]
+        assert "[CREDIT_CARD]" in exc_data["exception"] or "[PHONE]" in exc_data["exception"]
+
+    def test_database_engine_hide_parameters_configured(self):
+        from app.db.database import engine
+        assert engine.hide_parameters is True
+

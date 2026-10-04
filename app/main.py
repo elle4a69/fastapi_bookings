@@ -28,16 +28,18 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from .core.config import settings
 from .db.database import Base, engine, get_db
+from .services.curation.pii_scrubber import scrub_pii
 
 
 class JSONFormatter(logging.Formatter):
-    """Emit each log record as a single JSON line."""
+    """Emit each log record as a single JSON line with automated PII scrubbing."""
 
     def format(self, record: logging.LogRecord) -> str:
+        raw_msg = record.getMessage()
         log_data: dict = {
             "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "message": record.getMessage(),
+            "message": scrub_pii(raw_msg) if raw_msg else "",
             "logger": record.name,
         }
         current_span = trace.get_current_span()
@@ -46,7 +48,8 @@ class JSONFormatter(logging.Formatter):
             log_data["trace_id"] = f"{ctx.trace_id:032x}"
             log_data["span_id"] = f"{ctx.span_id:016x}"
         if record.exc_info:
-            log_data["exception"] = "".join(traceback.format_exception(*record.exc_info))
+            raw_exc = "".join(traceback.format_exception(*record.exc_info))
+            log_data["exception"] = scrub_pii(raw_exc)
         return json.dumps(log_data)
 
 

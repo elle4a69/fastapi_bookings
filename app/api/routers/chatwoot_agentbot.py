@@ -334,9 +334,8 @@ async def chatwoot_agentbot_webhook(
     # 3. Detect intent: Human agent handoff vs AI agent execution
     if requires_human_handoff(content):
         logger.info(
-            "Human handoff requested for conversation=%s (content: '%s')",
+            "Human handoff requested for conversation=%s",
             conversation_id,
-            content,
         )
 
         # Execute human handoff if token is available
@@ -348,7 +347,7 @@ async def chatwoot_agentbot_webhook(
                     api_access_token=api_token,
                     account_id=account_id,
                     conversation_id=conversation_id,
-                    note=f"Automated Handoff: Customer requested human assistance ('{content}')",
+                    note="Automated Handoff: Customer requested human assistance",
                 )
                 # Send polite notification to customer
                 await send_bot_message(

@@ -23,7 +23,7 @@ def _create_engine(url: str):
     connect_args = {}
     if url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
-        return create_engine(url, connect_args=connect_args)
+        return create_engine(url, connect_args=connect_args, hide_parameters=True)
     return create_engine(
         url,
         pool_size=settings.DB_POOL_SIZE,
@@ -32,6 +32,7 @@ def _create_engine(url: str):
         pool_recycle=settings.DB_POOL_RECYCLE,
         pool_pre_ping=True,
         connect_args=connect_args,
+        hide_parameters=True,
     )
 
 
