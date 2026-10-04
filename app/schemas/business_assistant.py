@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from uuid import UUID
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -93,6 +93,13 @@ class BusinessAssistantRealtimeTurnRead(BaseModel):
     user_message: BusinessAssistantMessageRead
     assistant_message: BusinessAssistantMessageRead
     duplicate_turn: bool = False
+
+
+class BusinessAssistantRealtimeSessionConfigRead(BaseModel):
+    """Safe OpenAI Realtime voice session configuration including instructions and tool schemas."""
+
+    instructions: str
+    tools: list[dict[str, Any]]
 
 
 OnboardingStep = Literal[

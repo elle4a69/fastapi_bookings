@@ -14,7 +14,7 @@ PRODUCT_HELP_TOOLS: tuple[dict[str, Any], ...] = (
             "name": "read_product_help",
             "description": "Read the current authorised setup summary for product help and onboarding.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -23,7 +23,7 @@ PRODUCT_HELP_TOOLS: tuple[dict[str, Any], ...] = (
             "name": "read_onboarding_progress",
             "description": "Read the current owner's durable onboarding milestones and authorised setup summary.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -41,7 +41,7 @@ PRODUCT_HELP_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
 )
@@ -66,7 +66,7 @@ BOOKING_AVAILABILITY_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -92,7 +92,7 @@ BOOKING_AVAILABILITY_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -136,7 +136,7 @@ BOOKING_AVAILABILITY_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["service_id", "start_date"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
 )
@@ -162,7 +162,7 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -193,7 +193,7 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["memory_key", "content"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -212,7 +212,7 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["memory_key"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -235,7 +235,7 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["memory_key", "confirmation_token"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -263,7 +263,7 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["curator_item_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
 )
@@ -297,7 +297,7 @@ CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -320,7 +320,7 @@ CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["conversation_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -347,7 +347,7 @@ CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["conversation_id", "content"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -394,7 +394,7 @@ CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["title", "content"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
 )
@@ -450,7 +450,7 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["category", "title", "description"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -469,7 +469,7 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["ticket_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -496,7 +496,7 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -519,7 +519,7 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["ticket_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
 )
@@ -540,7 +540,7 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
                 },
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -590,7 +590,7 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["proposal_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {
@@ -609,7 +609,7 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
                 "required": ["proposal_id"],
                 "additionalProperties": False,
             },
-            "strict": True,
+            "strict": False,
         },
     },
     {

@@ -372,7 +372,7 @@ class BusinessAssistantService:
                 limit=runtime.max_history_messages,
             )
             from .adapters import BusinessAssistantReadAdapters
-            from .tool_registry import BusinessAssistantToolRegistry
+            from .tool_registry import BusinessAssistantToolRegistry, ALL_TOOL_PACKS
 
             tool_registry = BusinessAssistantToolRegistry(
                 BusinessAssistantReadAdapters(
@@ -381,6 +381,7 @@ class BusinessAssistantService:
                     user_id=conversation.user_id,
                 ),
                 service=self,
+                packs=ALL_TOOL_PACKS,
             )
 
             def execute_assistant_tool(name: str, arguments: dict[str, object]) -> dict[str, object]:

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  formatRealtimeSessionUpdate,
   pairReadyRealtimeTranscripts,
   parseRealtimeAssistantTranscript,
   parseRealtimeUserTranscript,
@@ -61,4 +62,29 @@ test('realtime protocol never lets a late pending event replace a completed tran
   assert.ok(pending)
   const result = upsertRealtimeUserTranscript([complete!], pending!)
   assert.deepEqual(result, [complete])
+})
+
+test('formatRealtimeSessionUpdate constructs a valid session.update event payload', () => {
+  const instructions = 'You are the Business Assistant'
+  const tools = [
+    {
+      type: 'function',
+      name: 'list_services',
+      description: 'List available services',
+      parameters: { type: 'object', properties: {} },
+    },
+  ]
+  const updateEvent = formatRealtimeSessionUpdate(instructions, tools)
+  assert.equal(updateEvent.type, 'session.update')
+  assert.deepEqual(updateEvent.session, {
+    instructions: 'You are the Business Assistant',
+    tools: [
+      {
+        type: 'function',
+        name: 'list_services',
+        description: 'List available services',
+        parameters: { type: 'object', properties: {} },
+      },
+    ],
+  })
 })

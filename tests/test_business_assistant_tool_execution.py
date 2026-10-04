@@ -88,7 +88,7 @@ def test_tool_schemas_and_pack_composition(db_session):
         assert schema["type"] == "function"
         fn = schema["function"]
         assert "name" in fn and "description" in fn and "parameters" in fn
-        assert fn["strict"] is True
+        assert fn["strict"] is False
         assert fn["parameters"]["type"] == "object"
         assert fn["parameters"]["additionalProperties"] is False
 

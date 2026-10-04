@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { authenticatedAdminFetch } from '@/lib/api'
 
 import {
+  formatRealtimeSessionUpdate,
   formatRealtimeToolOutput,
   pairReadyRealtimeTranscripts,
   parseRealtimeAssistantTranscript,
@@ -256,15 +257,48 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
         if (['failed', 'disconnected', 'closed'].includes(peerConnection.connectionState)) stopVoice()
       }
       microphoneStream.getAudioTracks().forEach((track) => peerConnection.addTrack(track, microphoneStream))
-      const dataChannel = peerConnection.createDataChannel('realtime-events')
-      dataChannelRef.current = dataChannel
-      dataChannel.onmessage = (event) => {
-        try {
-          const payload = asRecord(JSON.parse(String(event.data)))
-          if (payload) void handleRealtimeEvent(payload)
-        } catch {
-          optionsRef.current.onError('Realtime voice sent an invalid event. You can continue in text.')
+
+      const sessionConfigPromise = authenticatedAdminFetch(
+        `/api/admin/business-assistant/conversations/${conversationId}/realtime/session`,
+      )
+        .then(async (res) => {
+          if (!res.ok) return null
+          return (await res.json()) as { instructions: string; tools: Array<Record<string, unknown>> }
+        })
+        .catch(() => null)
+
+      let sessionUpdated = false
+      const sendSessionUpdate = async (channel: RTCDataChannel) => {
+        if (sessionUpdated) return
+        const config = await sessionConfigPromise
+        if (config && channel.readyState === 'open' && generationRef.current === generation && !sessionUpdated) {
+          sessionUpdated = true
+          channel.send(JSON.stringify(formatRealtimeSessionUpdate(config.instructions, config.tools)))
         }
+      }
+
+      const attachChannel = (channel: RTCDataChannel) => {
+        dataChannelRef.current = channel
+        channel.onmessage = (event) => {
+          try {
+            const payload = asRecord(JSON.parse(String(event.data)))
+            if (payload) void handleRealtimeEvent(payload)
+          } catch {
+            optionsRef.current.onError('Realtime voice sent an invalid event. You can continue in text.')
+          }
+        }
+        channel.onopen = () => {
+          void sendSessionUpdate(channel)
+        }
+        if (channel.readyState === 'open') {
+          void sendSessionUpdate(channel)
+        }
+      }
+
+      const dataChannel = peerConnection.createDataChannel('oai-events')
+      attachChannel(dataChannel)
+      peerConnection.ondatachannel = (event) => {
+        attachChannel(event.channel)
       }
 
       const offer = await peerConnection.createOffer()
@@ -283,6 +317,9 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
       if (!answerSdp.trim()) throw new Error('Realtime voice returned an empty session answer.')
       if (generationRef.current !== generation) return
       await peerConnection.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+      if (dataChannelRef.current?.readyState === 'open') {
+        void sendSessionUpdate(dataChannelRef.current)
+      }
     } catch (error: unknown) {
       if (generationRef.current !== generation) return
       stopVoice()

@@ -134,7 +134,7 @@ The package uses the application SQLAlchemy session, existing `tenants`,
 `OPENAI_API_KEY`, `BUSINESS_ASSISTANT_TEXT_MODEL`,
 `BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES`,
 `BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS`, and
-`BUSINESS_ASSISTANT_TURN_TIMEOUT_SECONDS`. Missing provider configuration
+`BUSINESS_ASSISTANT_TURN_TIMEOUT_SECONDS`. Completion options adapt to the configured model: `reasoning_effort="none"` is supplied only to models requiring it for function tools in chat completions (such as `gpt-5*`), while remaining strictly omitted for standard chat models (`gpt-4o`, `gpt-4o-mini`) to prevent HTTP 400 rejection; function schemas use non-strict parameter definitions allowing safe optional arguments. Missing provider configuration
 returns an explicit error after the user message has been safely persisted.
 `BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS` bounds tool-calling rounds.
 Realtime voice uses server-held `OPENAI_API_KEY`,
@@ -267,6 +267,10 @@ Mounted at `/api/admin/business-assistant`:
 
 ### Realtime voice contract (WP8)
 
+- `GET /conversations/{id}/realtime/session`:
+  - Returns the OpenAI Realtime session configuration (`instructions` and `tools`) for the authenticated conversation.
+  - Formats combined system instructions with live product context and converts all 24 tools across all 6 tool packs (`PRODUCT_HELP_TOOLS`, `BOOKING_AVAILABILITY_TOOLS`, `BUSINESS_KNOWLEDGE_TOOLS`, `CUSTOMER_OPERATIONS_TOOLS`, `SUPPORT_ENGINEERING_TOOLS`, `WEBSITE_BUILDER_TOOLS`) to Realtime tool definitions.
+  - Used by the frontend client upon WebRTC data channel (`oai-events`) connection to issue `session.update`, ensuring the realtime assistant possesses complete platform identity and tool capabilities.
 - `POST /conversations/{id}/realtime`:
   - Validates inbound WebRTC SDP offers against RFC 4566 specifications (`v=0` header line, valid UTF-8, non-empty) and payload size limit (`BUSINESS_ASSISTANT_REALTIME_SDP_MAX_BYTES`, default 64 KB).
   - Validates request `Origin` header against configured `FRONTEND_ORIGINS` and request `Host`.

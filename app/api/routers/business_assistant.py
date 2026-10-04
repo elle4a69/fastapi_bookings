@@ -15,6 +15,7 @@ from ...schemas.business_assistant import (
     BusinessAssistantMessageRead,
     BusinessAssistantRealtimeTurnCreate,
     BusinessAssistantRealtimeTurnRead,
+    BusinessAssistantRealtimeSessionConfigRead,
     BusinessAssistantOnboardingProgressRead,
     BusinessAssistantOnboardingProgressUpdate,
     BusinessAssistantOnboardingRead,
@@ -74,6 +75,7 @@ from ...services.business_assistant import (
     RealtimeConfigurationError,
     RealtimeInvalidSdpError,
     RealtimeProviderUnavailableError,
+    build_realtime_session_config,
     ConfirmationError,
     ConfirmationExpiredError,
     ConfirmationPayloadMismatchError,
@@ -354,6 +356,27 @@ async def exchange_realtime_sdp(
         media_type="application/sdp",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get(
+    "/conversations/{conversation_id}/realtime/session",
+    response_model=BusinessAssistantRealtimeSessionConfigRead,
+)
+def get_realtime_session_config(
+    conversation_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> BusinessAssistantRealtimeSessionConfigRead:
+    """Return instructions and all tool schemas for an authenticated voice session."""
+    service = _service(db, tenant, user)
+    try:
+        service.get_conversation(conversation_id=conversation_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.") from exc
+    product_context = service.read_product_context()
+    config = build_realtime_session_config(product_context_text=product_context.instruction_text())
+    return BusinessAssistantRealtimeSessionConfigRead(**config)
 
 
 @router.post(

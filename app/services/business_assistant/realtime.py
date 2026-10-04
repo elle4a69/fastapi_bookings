@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from ...core.config import settings
+from .runtime import SYSTEM_INSTRUCTIONS
+from .tool_registry import ALL_BUSINESS_ASSISTANT_TOOLS
 
 
 class RealtimeConfigurationError(RuntimeError):
@@ -17,6 +21,33 @@ class RealtimeInvalidSdpError(RuntimeError):
 
 class RealtimeProviderUnavailableError(RuntimeError):
     """Raised when the upstream provider cannot establish a valid voice session."""
+
+
+def build_realtime_session_config(
+    *,
+    product_context_text: str | None = None,
+) -> dict[str, Any]:
+    """Build the OpenAI Realtime session configuration including instructions and tools."""
+    instructions = SYSTEM_INSTRUCTIONS
+    if product_context_text and product_context_text.strip():
+        instructions = f"{SYSTEM_INSTRUCTIONS}\n\n{product_context_text.strip()}"
+
+    realtime_tools: list[dict[str, Any]] = []
+    for tool in ALL_BUSINESS_ASSISTANT_TOOLS:
+        fn = tool.get("function", {})
+        realtime_tools.append(
+            {
+                "type": "function",
+                "name": fn.get("name"),
+                "description": fn.get("description", ""),
+                "parameters": fn.get("parameters", {}),
+            }
+        )
+
+    return {
+        "instructions": instructions,
+        "tools": realtime_tools,
+    }
 
 
 def validate_sdp(data: bytes, max_bytes: int, *, is_offer: bool = True) -> None:

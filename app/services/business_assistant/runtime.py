@@ -229,5 +229,8 @@ class BusinessAssistantTextRuntime:
         if include_tools:
             options["tools"] = list(tools)
             options["tool_choice"] = "auto"
-            options["reasoning_effort"] = "none"
+            # Only models that require reasoning_effort="none" (e.g. gpt-5* series chat completions with tools)
+            # receive this parameter. Standard models like gpt-4o / gpt-4o-mini reject reasoning_effort with HTTP 400.
+            if self._model_name.strip().lower().startswith("gpt-5"):
+                options["reasoning_effort"] = "none"
         return options

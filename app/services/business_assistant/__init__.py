@@ -23,6 +23,7 @@ from .realtime import (
     RealtimeConfigurationError,
     RealtimeInvalidSdpError,
     RealtimeProviderUnavailableError,
+    build_realtime_session_config,
     validate_sdp,
 )
 
@@ -113,6 +114,7 @@ __all__ = [
     "RealtimeConfigurationError",
     "RealtimeInvalidSdpError",
     "RealtimeProviderUnavailableError",
+    "build_realtime_session_config",
     "validate_sdp",
     "BusinessAssistantToolRegistry",
     "ProductHelpToolRegistry",

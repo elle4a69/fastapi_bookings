@@ -143,5 +143,42 @@ def test_realtime_routes_hide_another_tenants_conversation(client, db_session):
         headers=headers_b,
         json=_turn_payload(),
     )
+    session_config = client.get(
+        f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/session",
+        headers=headers_b,
+    )
     assert sdp.status_code == 404
     assert turn.status_code == 404
+    assert session_config.status_code == 404
+
+
+def test_realtime_session_config_returns_instructions_and_all_tool_schemas(client, db_session):
+    tenant, user = _owner(db_session, "session-config")
+    headers = _headers(tenant, user)
+    conversation_id = _conversation(client, headers)
+
+    response = client.get(
+        f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/session",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "instructions" in data
+    assert "You are the internal Business Assistant" in data["instructions"]
+    assert "tools" in data
+    assert len(data["tools"]) == 24
+
+    tool_names = {tool["name"] for tool in data["tools"]}
+    assert "read_product_help" in tool_names
+    assert "list_services" in tool_names
+    assert "list_providers" in tool_names
+    assert "check_slot_availability" in tool_names
+    assert "get_business_rule" in tool_names
+    assert "create_support_ticket" in tool_names
+    assert "inspect_website_state" in tool_names
+
+    for tool in data["tools"]:
+        assert tool["type"] == "function"
+        assert isinstance(tool["name"], str) and tool["name"]
+        assert isinstance(tool["description"], str)
+        assert isinstance(tool["parameters"], dict)

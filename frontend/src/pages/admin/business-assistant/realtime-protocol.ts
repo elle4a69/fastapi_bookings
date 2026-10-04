@@ -126,6 +126,19 @@ export function formatRealtimeToolOutput(callId: string, output: Record<string, 
   }
 }
 
+export function formatRealtimeSessionUpdate(
+  instructions: string,
+  tools: Array<Record<string, unknown>>,
+): Record<string, unknown> {
+  return {
+    type: 'session.update',
+    session: {
+      instructions,
+      tools,
+    },
+  }
+}
+
 export function upsertRealtimeUserTranscript(
   current: RealtimeUserTranscript[],
   update: RealtimeUserTranscript,
