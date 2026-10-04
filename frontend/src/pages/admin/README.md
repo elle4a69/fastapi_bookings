@@ -2,6 +2,8 @@
 
 ## Purpose & Scope
 The `frontend/src/pages/admin/` directory implements the staff and administrative console for **FastAPI Bookings**. It serves business owners, operators, dispatchers, and practitioners. Key responsibilities include:
+
+- The isolated `/admin/gpt-live` Business Assistant voice page owns its browser WebRTC transport and timestamp-based captions; its full contract is documented in `gpt-live/README.md`.
 - Operational scheduling, calendar visualizer, and booking lifecycle control.
 - Tenant configuration, modular app store, and tier entitlements.
 - AI orchestration via the SMS Assistant and Resident Agent.

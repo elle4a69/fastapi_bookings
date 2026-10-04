@@ -146,6 +146,7 @@ from .api.routers import (
     translations,
     business_assistant,
 )
+from .services.business_assistant.gpt_live.router import router as gpt_live_router
 
 
 
@@ -503,6 +504,7 @@ app.include_router(itinerary.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api/admin")
 app.include_router(assistant_studio.router, prefix="/api/admin/assistant-studio", tags=["Assistant Studio"])
 app.include_router(business_assistant.router, prefix="/api/admin")
+app.include_router(gpt_live_router, prefix="/api/admin")
 
 
 

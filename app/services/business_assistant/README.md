@@ -25,6 +25,7 @@ app/services/business_assistant/
 ├── tool_registry.py     # Modular tool packs (product help, booking, business knowledge, website builder)
 ├── website_sanitiser.py # XSS, script injection, PII sanitiser and asset domain validator
 ├── realtime.py          # Server-held SDP exchange for authenticated voice sessions
+├── gpt_live/            # Isolated GPT-Live WebRTC session creation boundary
 ├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
 ├── rollout.py           # Staged rollout lifecycle, stage gate evaluation and safe degradation
 ├── adapters/
@@ -366,6 +367,5 @@ must restore from a verified backup rather than dropping feature tables.
 ```powershell
 .venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py tests/test_business_assistant_hardening_and_rollout.py -q
 ```
-
 
 

@@ -31,7 +31,7 @@ frontend/
 │   ├── layouts/                 # AdminLayout with responsive padding & safe-area insets
 │   ├── lib/                     # Axios API client, utils, auth tokens
 │   ├── pages/                   # Admin, Portal, and Public route components
-│   │   ├── admin/               # Admin dashboard, calendar, catalog, SMS, assistant studio
+│   │   ├── admin/               # Admin dashboard, calendar, catalog, SMS, assistant studio, isolated GPT-Live voice page
 │   │   ├── portal/              # Client self-service portal
 │   │   └── public/              # Public booking flow and directory
 │   ├── App.tsx                  # Main router and lazy route configurations

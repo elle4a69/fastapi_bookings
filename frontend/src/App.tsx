@@ -41,6 +41,7 @@ const SmsAssistantPage = lazy(() => import("@/pages/admin/sms-assistant"))
 
 const AssistantStudioPage = lazy(() => import("@/pages/admin/assistant-studio"))
 const BusinessAssistantPage = lazy(() => import("@/pages/admin/business-assistant"))
+const GPTLivePage = lazy(() => import("@/pages/admin/gpt-live"))
 
 const MessagesPage = lazy(() => import("@/pages/admin/notifications/messages"))
 const TemplatesPage = lazy(() => import("@/pages/admin/notifications/templates"))
@@ -221,6 +222,7 @@ function App() {
                 ))}
                 <Route path="/admin/assistant-studio" element={<AssistantStudioPage />} />
                 <Route path="/admin/business-assistant" element={<BusinessAssistantPage />} />
+                <Route path="/admin/gpt-live" element={<GPTLivePage />} />
                 <Route path="/admin/assistant-studio/:tab" element={<AssistantStudioPage />} />
                 <Route path="/admin/resident-agent" element={<ResidentAgentPage />} />
                 <Route path="/admin/coding-studio" element={<ResidentAgentPage initialTab="coding" />} />
