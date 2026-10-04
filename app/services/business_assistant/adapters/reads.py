@@ -105,6 +105,32 @@ class SystemSettingsRead:
 
 
 @dataclass(frozen=True)
+class WebsiteStateInfo:
+    """Safe tenant website status and proposal lifecycle overview."""
+
+    tenant_id: int
+    is_published: bool
+    published_at: Optional[str]
+    template_id: str
+    theme_id: str
+    seo_title: Optional[str]
+    seo_description: Optional[str]
+    active_version: Optional[int]
+    latest_proposal_id: Optional[int]
+    latest_proposal_status: Optional[str]
+    latest_proposal_version: Optional[int]
+    published_proposal_id: Optional[int]
+    published_proposal_version: Optional[int]
+    has_pending_draft: bool
+    sections_count: int
+    recent_proposals: list[dict[str, Any]]
+
+    def tool_result(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+
+@dataclass(frozen=True)
 class ServiceSummaryRead:
     """Allowlisted bookable service representation."""
 
@@ -192,12 +218,22 @@ class TicketHandoffStatus:
 class BusinessAssistantReadAdapters:
     """Expose real native reads through the authoritative scoped service boundary."""
 
-    def __init__(self, db: Session, *, tenant_id: int, user_id: int) -> None:
+    def __init__(
+        self,
+        db: Session,
+        tenant_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
         self._db = db
-        self._tenant_id = tenant_id
-        self._user_id = user_id
-        self._repository = BusinessAssistantRepository(db, tenant_id, user_id)
-        self._product_context = ProductContextAdapter(db, tenant_id)
+        t_id = tenant_id if tenant_id is not None else kwargs.get("tenant_id")
+        u_id = user_id if user_id is not None else kwargs.get("user_id")
+        if t_id is None or u_id is None:
+            raise ValueError("tenant_id and user_id are required.")
+        self._tenant_id = t_id
+        self._user_id = u_id
+        self._repository = BusinessAssistantRepository(db, t_id, u_id)
+        self._product_context = ProductContextAdapter(db, t_id)
 
     def _get_user(self) -> Optional[User]:
         return (
@@ -612,6 +648,48 @@ class BusinessAssistantReadAdapters:
                 for m in messages
             ],
         }
+
+    def inspect_website_state(self, include_history: bool = False) -> WebsiteStateInfo:
+        """Inspect current tenant website state and proposal history."""
+        website = self._repository.get_tenant_website()
+        latest_proposal = self._repository.get_latest_website_proposal()
+        published_proposal = self._repository.get_published_website_proposal()
+        history: list[dict[str, Any]] = []
+        if include_history:
+            proposals = self._repository.list_website_proposals(limit=10)
+            history = [
+                {
+                    "id": p.id,
+                    "version": p.version,
+                    "title": p.title,
+                    "status": p.status,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "published_at": p.published_at.isoformat() if p.published_at else None,
+                    "rollback_version": p.rollback_version,
+                }
+                for p in proposals
+            ]
+
+        sections_count = len(website.sections_data) if website and isinstance(website.sections_data, dict) else 0
+
+        return WebsiteStateInfo(
+            tenant_id=self._tenant_id,
+            is_published=website.is_published if website else False,
+            published_at=website.published_at.isoformat() if website and website.published_at else None,
+            template_id=website.template_id if website else "minimalist",
+            theme_id=website.theme_id if website else "ocean_slate",
+            seo_title=website.seo_title if website else None,
+            seo_description=website.seo_description if website else None,
+            active_version=published_proposal.version if published_proposal else (1 if website and website.is_published else None),
+            latest_proposal_id=latest_proposal.id if latest_proposal else None,
+            latest_proposal_status=latest_proposal.status if latest_proposal else None,
+            latest_proposal_version=latest_proposal.version if latest_proposal else None,
+            published_proposal_id=published_proposal.id if published_proposal else None,
+            published_proposal_version=published_proposal.version if published_proposal else None,
+            has_pending_draft=bool(latest_proposal and latest_proposal.status in ("draft", "preview")),
+            sections_count=sections_count,
+            recent_proposals=history,
+        )
 
 
 def _mask_contact(value: str | None) -> str:

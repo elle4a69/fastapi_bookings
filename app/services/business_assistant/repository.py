@@ -15,10 +15,12 @@ from ...models.business_assistant import (
     BusinessAssistantMessageDraft,
     BusinessAssistantOnboardingProgress,
     BusinessAssistantToolRun,
+    BusinessAssistantWebsiteProposal,
     SupportTicket,
     SupportTicketDeduplicationClaim,
     SupportTicketEvent,
 )
+from ...models.tenant_website import TenantWebsite
 from ...models.booking import Booking
 from ...models.client import Client
 from ...models.conversation import Conversation, Message
@@ -1137,4 +1139,208 @@ class BusinessAssistantRepository:
         proposal.updated_at = datetime.now(timezone.utc)
         self._db.flush()
         return proposal
+
+    # --- Website Builder Persistence Methods ---
+
+    def get_tenant_website(self) -> Optional[TenantWebsite]:
+        """Fetch current live tenant website configuration."""
+        return (
+            self._db.query(TenantWebsite)
+            .filter(TenantWebsite.tenant_id == self._tenant_id)
+            .first()
+        )
+
+    def save_tenant_website(
+        self,
+        *,
+        template_id: Optional[str] = None,
+        theme_id: Optional[str] = None,
+        custom_colors: Optional[dict] = None,
+        sections_data: Optional[dict] = None,
+        seo_title: Optional[str] = None,
+        seo_description: Optional[str] = None,
+        is_published: Optional[bool] = None,
+    ) -> TenantWebsite:
+        """Get or initialize and update tenant website configuration."""
+        website = self.get_tenant_website()
+        now = datetime.now(timezone.utc)
+        if not website:
+            website = TenantWebsite(
+                tenant_id=self._tenant_id,
+                template_id=template_id or "minimalist",
+                theme_id=theme_id or "ocean_slate",
+                custom_colors=custom_colors or {},
+                sections_data=sections_data or {},
+                is_published=bool(is_published),
+                published_at=now if is_published else None,
+                seo_title=seo_title,
+                seo_description=seo_description,
+                created_at=now,
+                updated_at=now,
+            )
+            self._db.add(website)
+        else:
+            if template_id is not None:
+                website.template_id = template_id
+            if theme_id is not None:
+                website.theme_id = theme_id
+            if custom_colors is not None:
+                website.custom_colors = custom_colors
+            if sections_data is not None:
+                website.sections_data = sections_data
+            if seo_title is not None:
+                website.seo_title = seo_title
+            if seo_description is not None:
+                website.seo_description = seo_description
+            if is_published is not None:
+                website.is_published = is_published
+                if is_published and not website.published_at:
+                    website.published_at = now
+            website.updated_at = now
+        self._db.flush()
+        return website
+
+    def create_website_proposal(
+        self,
+        *,
+        title: str,
+        content_payload: dict,
+        version: int,
+        status: str = "draft",
+        request_key: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+        rollback_version: Optional[int] = None,
+    ) -> BusinessAssistantWebsiteProposal:
+        """Persist a versioned website edit proposal."""
+        now = datetime.now(timezone.utc)
+        proposal = BusinessAssistantWebsiteProposal(
+            tenant_id=self._tenant_id,
+            created_by_user_id=self._user_id,
+            version=version,
+            title=title.strip(),
+            content_payload=content_payload,
+            status=status,
+            published_at=now if status == "published" else None,
+            published_by_user_id=self._user_id if status == "published" else None,
+            rollback_version=rollback_version,
+            payload_hash=payload_hash,
+            request_key=request_key,
+            created_at=now,
+            updated_at=now,
+        )
+        self._db.add(proposal)
+        self._db.flush()
+        return proposal
+
+    def get_website_proposal(
+        self,
+        proposal_id: int,
+    ) -> Optional[BusinessAssistantWebsiteProposal]:
+        """Fetch a website proposal strictly within tenant boundary."""
+        return (
+            self._db.query(BusinessAssistantWebsiteProposal)
+            .filter(
+                BusinessAssistantWebsiteProposal.id == proposal_id,
+                BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def get_website_proposal_by_request_key(
+        self,
+        request_key: str,
+    ) -> Optional[BusinessAssistantWebsiteProposal]:
+        """Find a website proposal by idempotency request key."""
+        return (
+            self._db.query(BusinessAssistantWebsiteProposal)
+            .filter(
+                BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id,
+                BusinessAssistantWebsiteProposal.created_by_user_id == self._user_id,
+                BusinessAssistantWebsiteProposal.request_key == request_key,
+            )
+            .first()
+        )
+
+    def get_latest_website_proposal(self) -> Optional[BusinessAssistantWebsiteProposal]:
+        """Fetch the highest version website proposal for the active tenant."""
+        return (
+            self._db.query(BusinessAssistantWebsiteProposal)
+            .filter(BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id)
+            .order_by(
+                BusinessAssistantWebsiteProposal.version.desc(),
+                BusinessAssistantWebsiteProposal.id.desc(),
+            )
+            .first()
+        )
+
+    def get_published_website_proposal(self) -> Optional[BusinessAssistantWebsiteProposal]:
+        """Fetch the currently published proposal with the highest published version."""
+        return (
+            self._db.query(BusinessAssistantWebsiteProposal)
+            .filter(
+                BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id,
+                BusinessAssistantWebsiteProposal.status == "published",
+            )
+            .order_by(
+                BusinessAssistantWebsiteProposal.version.desc(),
+                BusinessAssistantWebsiteProposal.id.desc(),
+            )
+            .first()
+        )
+
+    def get_website_proposal_by_version(
+        self,
+        version: int,
+    ) -> Optional[BusinessAssistantWebsiteProposal]:
+        """Find a proposal by exact version number within tenant boundary."""
+        return (
+            self._db.query(BusinessAssistantWebsiteProposal)
+            .filter(
+                BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id,
+                BusinessAssistantWebsiteProposal.version == version,
+            )
+            .first()
+        )
+
+    def list_website_proposals(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantWebsiteProposal]:
+        """List website proposals scoped to the active tenant."""
+        q = self._db.query(BusinessAssistantWebsiteProposal).filter(
+            BusinessAssistantWebsiteProposal.tenant_id == self._tenant_id,
+        )
+        if status:
+            q = q.filter(BusinessAssistantWebsiteProposal.status == status)
+        safe_limit = min(max(limit, 1), 100)
+        return (
+            q.order_by(
+                BusinessAssistantWebsiteProposal.version.desc(),
+                BusinessAssistantWebsiteProposal.id.desc(),
+            )
+            .limit(safe_limit)
+            .all()
+        )
+
+    def update_website_proposal_status(
+        self,
+        *,
+        proposal: BusinessAssistantWebsiteProposal,
+        status: str,
+        published_by_user_id: Optional[int] = None,
+    ) -> BusinessAssistantWebsiteProposal:
+        """Update proposal lifecycle status within authenticated boundary."""
+        if proposal.tenant_id != self._tenant_id:
+            raise ValueError("Website proposal is outside the authenticated scope.")
+        proposal.status = status
+        now = datetime.now(timezone.utc)
+        if status == "published":
+            proposal.published_at = now
+            proposal.published_by_user_id = published_by_user_id or self._user_id
+        proposal.updated_at = now
+        self._db.flush()
+        return proposal
+
 

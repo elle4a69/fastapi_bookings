@@ -48,6 +48,16 @@ from ...schemas.business_assistant import (
     BusinessRuleRead,
     CuratorQuestionRead,
     CuratorQuestionResolveRequest,
+    WebsiteStateRead,
+    WebsiteProposalCreate,
+    WebsiteProposalRead,
+    WebsiteProposalResponse,
+    WebsiteProposalPreviewRead,
+    WebsitePublicationRequest,
+    WebsitePublicationResponse,
+    WebsitePublicationTokenResponse,
+    WebsiteRollbackRequest,
+    WebsiteRollbackResponse,
 )
 from ...services.business_assistant import (
     BusinessAssistantService,
@@ -70,6 +80,8 @@ from ...services.business_assistant import (
     ConfirmationScopeMismatchError,
     ConfirmationSignatureError,
     DynamicFactRejectedError,
+    WebsiteContentSafetyError,
+    WebsiteVersionConflictError,
 )
 
 router = APIRouter(prefix="/business-assistant", tags=["Business Assistant"])
@@ -886,5 +898,168 @@ def approve_campaign_proposal(
     except (ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return CampaignProposalRead.model_validate(approved)
+
+
+# --- Website Builder Endpoints (WP10) ---
+
+
+@router.get("/website/state", response_model=WebsiteStateRead)
+def get_website_state(
+    include_history: bool = Query(default=False),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> WebsiteStateRead:
+    """Inspect current live website state, active configuration, and proposals."""
+    service = _service(db, tenant, user)
+    state = service.inspect_website_state(include_history=include_history)
+    return WebsiteStateRead(**state)
+
+
+@router.post("/website/proposals", response_model=WebsiteProposalResponse, status_code=status.HTTP_201_CREATED)
+def propose_website_edit(
+    payload: WebsiteProposalCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> WebsiteProposalResponse:
+    """Propose bounded website content or layout changes. Remained in draft status."""
+    service = _service(db, tenant, user)
+    try:
+        proposal = service.propose_website_edit(
+            title=payload.title,
+            content_payload=payload.content_payload,
+            expected_version=payload.expected_version,
+            request_key=payload.request_key,
+        )
+    except WebsiteVersionConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except WebsiteContentSafetyError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except IdempotencyKeyConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return WebsiteProposalResponse(
+        proposal=WebsiteProposalRead.model_validate(proposal),
+        instructions="Proposal created in 'draft' status. Preview or request publication approval to proceed.",
+    )
+
+
+@router.get("/website/proposals/{proposal_id}/preview", response_model=WebsiteProposalPreviewRead)
+def preview_website_proposal(
+    proposal_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> WebsiteProposalPreviewRead:
+    """Render full preview of proposed website changes merged with live site, advancing status to 'preview'."""
+    service = _service(db, tenant, user)
+    try:
+        proposal, preview = service.preview_website_edit(proposal_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return WebsiteProposalPreviewRead(
+        proposal=WebsiteProposalRead.model_validate(proposal),
+        preview=preview,
+    )
+
+
+@router.post("/website/proposals/{proposal_id}/request-publish", response_model=WebsitePublicationTokenResponse)
+def request_website_publication(
+    proposal_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> WebsitePublicationTokenResponse:
+    """Request publication approval token for proposal. Publication CANNOT occur automatically."""
+    service = _service(db, tenant, user)
+    try:
+        proposal, token = service.request_website_publication(proposal_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return WebsitePublicationTokenResponse(
+        proposal_id=proposal.id,
+        version=proposal.version,
+        status=proposal.status,
+        confirmation_token=token,
+        instructions="Present confirmation token to tenant owner for explicit publication approval. Automatic publication from conversational confirmation alone is prohibited.",
+    )
+
+
+@router.post("/website/proposals/{proposal_id}/publish", response_model=WebsitePublicationResponse)
+def publish_website_proposal(
+    proposal_id: DatabaseId,
+    payload: WebsitePublicationRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> WebsitePublicationResponse:
+    """Publish a website proposal live. Requires tenant owner authority and valid confirmation token."""
+    service = _service(db, tenant, user)
+    try:
+        proposal, website = service.publish_website_proposal(
+            proposal_id=proposal_id,
+            confirmation_token=payload.confirmation_token,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ConfirmationExpiredError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation token has expired.") from exc
+    except ConfirmationScopeMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return WebsitePublicationResponse(
+        ok=True,
+        proposal=WebsiteProposalRead.model_validate(proposal),
+        is_published=website.is_published,
+        published_at=website.published_at,
+    )
+
+
+@router.post("/website/rollback", response_model=WebsiteRollbackResponse)
+def rollback_website_version(
+    payload: WebsiteRollbackRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> WebsiteRollbackResponse:
+    """Rollback website content to a previous version. Requires tenant owner authority."""
+    service = _service(db, tenant, user)
+    try:
+        rollback_proposal = service.rollback_website_version(
+            target_version=payload.target_version,
+            confirmation_token=payload.confirmation_token,
+            expected_current_version=payload.expected_current_version,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except WebsiteVersionConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ConfirmationExpiredError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation token has expired.") from exc
+    except ConfirmationScopeMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return WebsiteRollbackResponse(
+        ok=True,
+        proposal=WebsiteProposalRead.model_validate(rollback_proposal),
+    )
+
 
 

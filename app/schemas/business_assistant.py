@@ -443,4 +443,113 @@ class CampaignProposalApproveRequest(BaseModel):
     confirmation_token: str = Field(min_length=16)
 
 
+# --- Website Builder Schemas (WP10) ---
+
+
+class WebsiteStateRead(BaseModel):
+    """Safe overview of tenant website configuration, publication state, and proposal status."""
+
+    tenant_id: int
+    is_published: bool
+    published_at: Optional[str] = None
+    template_id: str = "minimalist"
+    theme_id: str = "ocean_slate"
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    active_version: Optional[int] = None
+    latest_proposal_id: Optional[int] = None
+    latest_proposal_status: Optional[str] = None
+    latest_proposal_version: Optional[int] = None
+    published_proposal_id: Optional[int] = None
+    published_proposal_version: Optional[int] = None
+    has_pending_draft: bool = False
+    sections_count: int = 0
+    recent_proposals: list[dict] = Field(default_factory=list)
+
+
+class WebsiteProposalCreate(BaseModel):
+    """Input payload to propose a bounded website edit."""
+
+    title: str = Field(min_length=1, max_length=200)
+    content_payload: dict = Field(default_factory=dict)
+    expected_version: Optional[int] = None
+    request_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+
+class WebsiteProposalRead(BaseModel):
+    """Persisted website proposal across draft, preview, published, and rolled_back lifecycle states."""
+
+    id: int
+    tenant_id: int
+    created_by_user_id: Optional[int] = None
+    version: int
+    title: str
+    content_payload: dict = Field(default_factory=dict)
+    status: str
+    published_at: Optional[datetime] = None
+    published_by_user_id: Optional[int] = None
+    rollback_version: Optional[int] = None
+    payload_hash: Optional[str] = None
+    request_key: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WebsiteProposalResponse(BaseModel):
+    """Response containing created website proposal."""
+
+    proposal: WebsiteProposalRead
+    instructions: str = "Proposal created in 'draft' status. Preview or request publication approval to proceed."
+
+
+class WebsiteProposalPreviewRead(BaseModel):
+    """Rendered preview data paired with proposal record."""
+
+    proposal: WebsiteProposalRead
+    preview: dict = Field(default_factory=dict)
+
+
+class WebsitePublicationRequest(BaseModel):
+    """Explicit owner approval request requiring cryptographic confirmation token."""
+
+    confirmation_token: str = Field(min_length=16)
+
+
+class WebsitePublicationResponse(BaseModel):
+    """Result of successfully publishing a website proposal."""
+
+    ok: bool = True
+    proposal: WebsiteProposalRead
+    is_published: bool
+    published_at: Optional[datetime] = None
+
+
+class WebsitePublicationTokenResponse(BaseModel):
+    """Publication confirmation token returned for explicit owner gate presentation."""
+
+    proposal_id: int
+    version: int
+    status: str
+    confirmation_token: str
+    instructions: str
+
+
+class WebsiteRollbackRequest(BaseModel):
+    """Payload to rollback website content to a previous version."""
+
+    target_version: int = Field(ge=1)
+    expected_current_version: Optional[int] = None
+    confirmation_token: Optional[str] = None
+
+
+class WebsiteRollbackResponse(BaseModel):
+    """Result of rolling back website version."""
+
+    ok: bool = True
+    proposal: WebsiteProposalRead
+
+
+
 

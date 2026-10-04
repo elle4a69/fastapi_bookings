@@ -414,3 +414,42 @@ class BusinessAssistantCampaignProposal(Base):
 
     tenant = relationship("Tenant")
     user = relationship("User")
+
+
+class BusinessAssistantWebsiteProposal(Base):
+    """A versioned website edit proposal across draft, preview, published, and rolled_back lifecycle states.
+
+    Publication requires explicit owner approval and cryptographic confirmation token.
+    Automatic publication from conversational turns alone is strictly prohibited.
+    """
+
+    __tablename__ = "business_assistant_website_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'preview', 'published', 'rolled_back')",
+            name="ck_business_assistant_website_proposal_status",
+        ),
+        Index("ix_business_assistant_website_proposals_scope_status", "tenant_id", "status", "created_at"),
+        Index("ix_business_assistant_website_proposals_scope_version", "tenant_id", "version"),
+        Index("ix_business_assistant_website_proposals_request_key", "tenant_id", "created_by_user_id", "request_key"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    version = Column(Integer, nullable=False, default=1)
+    title = Column(String(200), nullable=False)
+    content_payload = Column(JSON, nullable=False, default=dict)
+    status = Column(String(32), nullable=False, default="draft", index=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    published_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    rollback_version = Column(Integer, nullable=True)
+    payload_hash = Column(String(64), nullable=True)
+    request_key = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+    tenant = relationship("Tenant")
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    published_by_user = relationship("User", foreign_keys=[published_by_user_id])
+

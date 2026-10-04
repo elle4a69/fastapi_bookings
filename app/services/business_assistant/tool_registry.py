@@ -524,12 +524,130 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
     },
 )
 
+WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_website_state",
+            "description": "Inspect the active tenant's public website configuration, published status, active version, and pending draft proposals.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "include_history": {
+                        "type": "boolean",
+                        "description": "Whether to include recent proposal history (default false).",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_website_edit",
+            "description": "Propose bounded content, layout, template, or theme edits for the tenant website. Edits remain safely in draft state and cannot publish automatically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Brief description of the proposed website modification (1-200 characters).",
+                    },
+                    "content_payload": {
+                        "type": "object",
+                        "description": "Dictionary containing proposed section modifications (hero, about, services, booking, testimonials, contact, footer) or template/theme settings.",
+                    },
+                    "expected_version": {
+                        "type": "integer",
+                        "description": "Optional expected current proposal version to enforce optimistic concurrency checks.",
+                    },
+                    "request_key": {
+                        "type": "string",
+                        "description": "Optional client-supplied idempotency key (8-128 characters).",
+                    },
+                },
+                "required": ["title", "content_payload"],
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "preview_website_edit",
+            "description": "Render a full preview of proposed website changes merged with the current live website and advance the proposal state to 'preview'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the website proposal to preview.",
+                    },
+                },
+                "required": ["proposal_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_website_publication",
+            "description": "Request publication approval for a website proposal. Generates a cryptographic confirmation token. Publication CANNOT occur through ordinary conversational confirmation; it requires explicit owner approval.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the website proposal to request publication for.",
+                    },
+                },
+                "required": ["proposal_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rollback_website_version",
+            "description": "Rollback the live website configuration to a previously published version with optimistic concurrency checks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_version": {
+                        "type": "integer",
+                        "description": "Version number to rollback to.",
+                    },
+                    "expected_current_version": {
+                        "type": "integer",
+                        "description": "Optional expected current version for optimistic concurrency.",
+                    },
+                    "confirmation_token": {
+                        "type": "string",
+                        "description": "Optional cryptographic confirmation token if required.",
+                    },
+                },
+                "required": ["target_version"],
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    },
+)
+
 ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *PRODUCT_HELP_TOOLS,
     *BOOKING_AVAILABILITY_TOOLS,
     *BUSINESS_KNOWLEDGE_TOOLS,
     *CUSTOMER_OPERATIONS_TOOLS,
     *SUPPORT_ENGINEERING_TOOLS,
+    *WEBSITE_BUILDER_TOOLS,
 )
 
 ALL_TOOL_PACKS: tuple[str, ...] = (
@@ -538,7 +656,9 @@ ALL_TOOL_PACKS: tuple[str, ...] = (
     "business_knowledge",
     "customer_operations",
     "support_engineering",
+    "website_builder",
 )
+
 
 
 
@@ -580,6 +700,8 @@ class BusinessAssistantToolRegistry:
             active.extend(CUSTOMER_OPERATIONS_TOOLS)
         if "support_engineering" in self._packs:
             active.extend(SUPPORT_ENGINEERING_TOOLS)
+        if "website_builder" in self._packs:
+            active.extend(WEBSITE_BUILDER_TOOLS)
         return tuple(active)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1087,6 +1209,117 @@ class BusinessAssistantToolRegistry:
                     "authorisation_state": ticket.authorisation_state,
                     "confirmation_token": token,
                     "instructions": "Present confirmation token to tenant owner for explicit dispatch approval.",
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "inspect_website_state":
+            include_history = arguments.get("include_history", False)
+            if not isinstance(include_history, bool):
+                return {"status": "rejected", "reason": "include_history must be a boolean."}
+            try:
+                state_info = self._adapters.inspect_website_state(include_history=include_history)
+                return {"status": "ok", "website_state": state_info.tool_result()}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "propose_website_edit":
+            title = arguments.get("title")
+            if not title or not isinstance(title, str):
+                return {"status": "rejected", "reason": "title is required and must be a non-empty string."}
+            content_payload = arguments.get("content_payload")
+            if content_payload is None or not isinstance(content_payload, dict):
+                return {"status": "rejected", "reason": "content_payload is required and must be a dictionary."}
+            expected_version = arguments.get("expected_version")
+            if expected_version is not None and not isinstance(expected_version, int):
+                return {"status": "rejected", "reason": "expected_version must be an integer if provided."}
+            request_key = arguments.get("request_key")
+            if request_key is not None and not isinstance(request_key, str):
+                return {"status": "rejected", "reason": "request_key must be a string if provided."}
+            try:
+                service = self._get_service()
+                proposal = service.propose_website_edit(
+                    title=title,
+                    content_payload=content_payload,
+                    expected_version=expected_version,
+                    request_key=request_key,
+                )
+                return {
+                    "status": "ok",
+                    "proposal": {
+                        "id": proposal.id,
+                        "title": proposal.title,
+                        "version": proposal.version,
+                        "status": proposal.status,
+                        "payload_hash": proposal.payload_hash,
+                        "created_at": proposal.created_at.isoformat() if proposal.created_at else None,
+                    },
+                    "instructions": "Proposal created in 'draft' status. Preview or request publication approval to proceed.",
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "preview_website_edit":
+            proposal_id = arguments.get("proposal_id")
+            if proposal_id is None or not isinstance(proposal_id, int):
+                return {"status": "rejected", "reason": "proposal_id is required and must be an integer."}
+            try:
+                service = self._get_service()
+                proposal, preview = service.preview_website_edit(proposal_id)
+                return {
+                    "status": "ok",
+                    "proposal_id": proposal.id,
+                    "version": proposal.version,
+                    "proposal_status": proposal.status,
+                    "preview": preview,
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "request_website_publication":
+            proposal_id = arguments.get("proposal_id")
+            if proposal_id is None or not isinstance(proposal_id, int):
+                return {"status": "rejected", "reason": "proposal_id is required and must be an integer."}
+            try:
+                service = self._get_service()
+                proposal, token = service.request_website_publication(proposal_id)
+                return {
+                    "status": "ok",
+                    "proposal_id": proposal.id,
+                    "version": proposal.version,
+                    "proposal_status": proposal.status,
+                    "confirmation_token": token,
+                    "instructions": "Present confirmation token to tenant owner for explicit publication approval. Automatic publication from conversational confirmation alone is prohibited.",
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "rollback_website_version":
+            target_version = arguments.get("target_version")
+            if target_version is None or not isinstance(target_version, int):
+                return {"status": "rejected", "reason": "target_version is required and must be an integer."}
+            expected_current_version = arguments.get("expected_current_version")
+            if expected_current_version is not None and not isinstance(expected_current_version, int):
+                return {"status": "rejected", "reason": "expected_current_version must be an integer."}
+            confirmation_token = arguments.get("confirmation_token")
+            if confirmation_token is not None and not isinstance(confirmation_token, str):
+                return {"status": "rejected", "reason": "confirmation_token must be a string."}
+            try:
+                service = self._get_service()
+                rollback = service.rollback_website_version(
+                    target_version=target_version,
+                    confirmation_token=confirmation_token,
+                    expected_current_version=expected_current_version,
+                )
+                return {
+                    "status": "ok",
+                    "rollback_proposal": {
+                        "id": rollback.id,
+                        "version": rollback.version,
+                        "status": rollback.status,
+                        "rollback_version": rollback.rollback_version,
+                        "published_at": rollback.published_at.isoformat() if rollback.published_at else None,
+                    },
                 }
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}

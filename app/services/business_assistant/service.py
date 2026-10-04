@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import monotonic
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Any, Callable, Optional, TYPE_CHECKING
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -15,11 +15,13 @@ from ...models.business_assistant import (
     BusinessAssistantMessage,
     BusinessAssistantMessageDraft,
     BusinessAssistantOnboardingProgress,
+    BusinessAssistantWebsiteProposal,
     SupportTicket,
     SupportTicketDeduplicationClaim,
     SupportTicketEvent,
 )
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
+from ...models.tenant_website import DEFAULT_SECTIONS_DATA, TenantWebsite
 from ...models.user import User
 from .confirmation import (
     ConfirmationError,
@@ -31,6 +33,7 @@ from .confirmation import (
     compute_campaign_payload_hash,
     compute_draft_payload_hash,
     compute_rule_payload_hash,
+    compute_website_payload_hash,
     generate_confirmation_token,
     validate_static_business_knowledge,
     verify_confirmation_token,
@@ -39,6 +42,11 @@ from .product_context import ProductContext, ProductContextAdapter
 from .repository import BusinessAssistantRepository
 from .idempotency import IdempotencyKeyConflictError, payload_hash, require_matching_payload
 from .tickets import ELEVATED_APPROVAL_CATEGORIES, sanitise_ticket_text, ticket_deduplication_key
+from .website_sanitiser import (
+    WebsiteContentSafetyError,
+    WebsiteVersionConflictError,
+    validate_and_sanitise_website_content,
+)
 
 if TYPE_CHECKING:
     from .runtime import BusinessAssistantTextRuntime
@@ -1309,6 +1317,340 @@ class BusinessAssistantService:
         self._db.commit()
         self._db.refresh(updated)
         return updated
+
+    # --- Website Builder Service Operations ---
+
+    def inspect_website_state(self, include_history: bool = False) -> dict[str, Any]:
+        """Inspect current live website state, draft proposals, and version information."""
+        from .adapters.reads import BusinessAssistantReadAdapters
+
+        adapters = BusinessAssistantReadAdapters(self._db, self._tenant_id, self._user_id)
+        return adapters.inspect_website_state(include_history=include_history).tool_result()
+
+    def propose_website_edit(
+        self,
+        *,
+        title: str,
+        content_payload: dict[str, Any],
+        expected_version: Optional[int] = None,
+        request_key: Optional[str] = None,
+    ) -> BusinessAssistantWebsiteProposal:
+        """Create a new versioned draft website proposal with strict sanitisation and optimistic concurrency."""
+        if not title or not title.strip():
+            raise ValueError("Proposal title cannot be empty.")
+        clean_title = title.strip()
+        if len(clean_title) > 200:
+            raise ValueError("Proposal title cannot exceed 200 characters.")
+
+        # Sanitise content payload and check title safety
+        validate_and_sanitise_website_content(
+            {"title": clean_title, **content_payload},
+        )
+
+        # Idempotency check
+        if request_key:
+            existing = self._repository.get_website_proposal_by_request_key(request_key)
+            if existing:
+                expected_hash = compute_website_payload_hash(
+                    tenant_id=self._tenant_id,
+                    user_id=self._user_id,
+                    title=clean_title,
+                    content_payload=content_payload,
+                    version=existing.version,
+                )
+                if existing.payload_hash and existing.payload_hash != expected_hash:
+                    raise IdempotencyKeyConflictError(
+                        "Request key is already associated with different website proposal content."
+                    )
+                return existing
+
+        # Optimistic concurrency check
+        latest = self._repository.get_latest_website_proposal()
+        current_highest_version = latest.version if latest else 0
+
+        if expected_version is not None and expected_version != current_highest_version:
+            raise WebsiteVersionConflictError(
+                f"Version conflict: current website proposal version is {current_highest_version}, but expected {expected_version}."
+            )
+
+        next_version = current_highest_version + 1
+        hash_val = compute_website_payload_hash(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            title=clean_title,
+            content_payload=content_payload,
+            version=next_version,
+        )
+
+        proposal = self._repository.create_website_proposal(
+            title=clean_title,
+            content_payload=content_payload,
+            version=next_version,
+            status="draft",
+            request_key=request_key,
+            payload_hash=hash_val,
+        )
+        self._db.commit()
+        self._db.refresh(proposal)
+        return proposal
+
+    def preview_website_edit(
+        self,
+        proposal_id: int,
+    ) -> tuple[BusinessAssistantWebsiteProposal, dict[str, Any]]:
+        """Generate rendered preview for a proposal and transition state to 'preview'."""
+        proposal = self.get_website_proposal(proposal_id)
+        if proposal.status == "draft":
+            proposal = self._repository.update_website_proposal_status(
+                proposal=proposal,
+                status="preview",
+            )
+            self._db.commit()
+            self._db.refresh(proposal)
+
+        # Render preview by merging proposed changes onto current base website configuration
+        website = self._repository.get_tenant_website()
+        base_sections = dict(website.sections_data) if website and isinstance(website.sections_data, dict) else dict(DEFAULT_SECTIONS_DATA)
+        proposed_payload = dict(proposal.content_payload) if isinstance(proposal.content_payload, dict) else {}
+
+        # Merge sections_data if present
+        merged_sections = dict(base_sections)
+        if "sections_data" in proposed_payload and isinstance(proposed_payload["sections_data"], dict):
+            for sec_name, sec_val in proposed_payload["sections_data"].items():
+                if isinstance(sec_val, dict) and sec_name in merged_sections and isinstance(merged_sections[sec_name], dict):
+                    merged_sections[sec_name] = {**merged_sections[sec_name], **sec_val}
+                else:
+                    merged_sections[sec_name] = sec_val
+
+        rendered_preview = {
+            "template_id": proposed_payload.get("template_id", website.template_id if website else "minimalist"),
+            "theme_id": proposed_payload.get("theme_id", website.theme_id if website else "ocean_slate"),
+            "custom_colors": proposed_payload.get("custom_colors", website.custom_colors if website else {}),
+            "sections_data": merged_sections,
+            "seo_title": proposed_payload.get("seo_title", website.seo_title if website else None),
+            "seo_description": proposed_payload.get("seo_description", website.seo_description if website else None),
+            "proposal_id": proposal.id,
+            "version": proposal.version,
+            "status": proposal.status,
+        }
+
+        return proposal, rendered_preview
+
+    def request_website_publication(
+        self,
+        proposal_id: int,
+    ) -> tuple[BusinessAssistantWebsiteProposal, str]:
+        """Request publication approval for a proposal, generating cryptographic confirmation token.
+
+        Publication CANNOT occur automatically; token must be presented to tenant owner.
+        """
+        proposal = self.get_website_proposal(proposal_id)
+        if proposal.status not in ("draft", "preview"):
+            raise ValueError(
+                f"Cannot request publication for proposal in '{proposal.status}' status. Only draft or preview proposals can be requested."
+            )
+
+        token = generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            action="publish_website",
+            target_key=f"proposal_{proposal.id}",
+            version=proposal.version,
+            payload_hash=proposal.payload_hash or "",
+        )
+        return proposal, token
+
+    def publish_website_proposal(
+        self,
+        *,
+        proposal_id: int,
+        confirmation_token: str,
+    ) -> tuple[BusinessAssistantWebsiteProposal, TenantWebsite]:
+        """Publish a website proposal after strict owner verification and confirmation token validation."""
+        # 1. Owner authorization gate
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        if not user or user.role != "owner":
+            raise PermissionError("Only tenant owners may approve and publish website proposals.")
+
+        proposal = self.get_website_proposal(proposal_id)
+        if proposal.status not in ("draft", "preview"):
+            raise ValueError(
+                f"Cannot publish proposal in '{proposal.status}' status. Only draft or preview proposals can be published."
+            )
+
+        # 2. Cryptographic confirmation token verification
+        try:
+            verify_confirmation_token(
+                token=confirmation_token,
+                expected_tenant_id=self._tenant_id,
+                expected_user_id=self._user_id,
+                expected_action="publish_website",
+                expected_target_key=f"proposal_{proposal.id}",
+                expected_version=proposal.version,
+                expected_payload_hash=proposal.payload_hash or "",
+            )
+        except ConfirmationScopeMismatchError:
+            # If token was requested by the proposal creator and presented to owner
+            if proposal.created_by_user_id and proposal.created_by_user_id != self._user_id:
+                verify_confirmation_token(
+                    token=confirmation_token,
+                    expected_tenant_id=self._tenant_id,
+                    expected_user_id=proposal.created_by_user_id,
+                    expected_action="publish_website",
+                    expected_target_key=f"proposal_{proposal.id}",
+                    expected_version=proposal.version,
+                    expected_payload_hash=proposal.payload_hash or "",
+                )
+            else:
+                raise
+
+        # 3. Update proposal to published
+        updated_proposal = self._repository.update_website_proposal_status(
+            proposal=proposal,
+            status="published",
+            published_by_user_id=self._user_id,
+        )
+
+        # 4. Apply content to TenantWebsite
+        payload = dict(proposal.content_payload) if isinstance(proposal.content_payload, dict) else {}
+        tenant_website = self._repository.save_tenant_website(
+            template_id=payload.get("template_id"),
+            theme_id=payload.get("theme_id"),
+            custom_colors=payload.get("custom_colors"),
+            sections_data=payload.get("sections_data"),
+            seo_title=payload.get("seo_title"),
+            seo_description=payload.get("seo_description"),
+            is_published=True,
+        )
+
+        self._db.commit()
+        self._db.refresh(updated_proposal)
+        self._db.refresh(tenant_website)
+        return updated_proposal, tenant_website
+
+    def request_website_rollback(
+        self,
+        target_version: int,
+    ) -> tuple[BusinessAssistantWebsiteProposal, str]:
+        """Request confirmation token for rolling back to a previous version."""
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        if not user or user.role != "owner":
+            raise PermissionError("Only tenant owners may request a website rollback.")
+
+        target = self._repository.get_website_proposal_by_version(target_version)
+        if not target:
+            raise LookupError(f"Website proposal version {target_version} does not exist.")
+
+        token = generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            action="rollback_website",
+            target_key=f"version_{target_version}",
+            version=target.version,
+            payload_hash=target.payload_hash or "",
+        )
+        return target, token
+
+    def rollback_website_version(
+        self,
+        *,
+        target_version: int,
+        confirmation_token: Optional[str] = None,
+        expected_current_version: Optional[int] = None,
+    ) -> BusinessAssistantWebsiteProposal:
+        """Rollback website content to a previous published version with optimistic concurrency."""
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        if not user or user.role != "owner":
+            raise PermissionError("Only tenant owners may rollback website versions.")
+
+        target = self._repository.get_website_proposal_by_version(target_version)
+        if not target:
+            raise LookupError(f"Website proposal version {target_version} does not exist.")
+
+        # Concurrency check
+        latest = self._repository.get_latest_website_proposal()
+        current_v = latest.version if latest else 0
+
+        if expected_current_version is not None and expected_current_version != current_v:
+            raise WebsiteVersionConflictError(
+                f"Version conflict: current version is {current_v}, but expected {expected_current_version}."
+            )
+
+        if confirmation_token:
+            try:
+                verify_confirmation_token(
+                    token=confirmation_token,
+                    expected_tenant_id=self._tenant_id,
+                    expected_user_id=self._user_id,
+                    expected_action="rollback_website",
+                    expected_target_key=f"version_{target_version}",
+                    expected_version=target.version,
+                    expected_payload_hash=target.payload_hash or "",
+                )
+            except ConfirmationScopeMismatchError:
+                if target.created_by_user_id and target.created_by_user_id != self._user_id:
+                    verify_confirmation_token(
+                        token=confirmation_token,
+                        expected_tenant_id=self._tenant_id,
+                        expected_user_id=target.created_by_user_id,
+                        expected_action="rollback_website",
+                        expected_target_key=f"version_{target_version}",
+                        expected_version=target.version,
+                        expected_payload_hash=target.payload_hash or "",
+                    )
+                else:
+                    raise
+
+        next_version = current_v + 1
+        title = f"Rollback to version {target_version}: {target.title}"
+        hash_val = compute_website_payload_hash(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            title=title,
+            content_payload=target.content_payload,
+            version=next_version,
+        )
+
+        new_proposal = self._repository.create_website_proposal(
+            title=title,
+            content_payload=target.content_payload,
+            version=next_version,
+            status="published",
+            rollback_version=target_version,
+            payload_hash=hash_val,
+        )
+
+        payload = dict(target.content_payload) if isinstance(target.content_payload, dict) else {}
+        self._repository.save_tenant_website(
+            template_id=payload.get("template_id"),
+            theme_id=payload.get("theme_id"),
+            custom_colors=payload.get("custom_colors"),
+            sections_data=payload.get("sections_data"),
+            seo_title=payload.get("seo_title"),
+            seo_description=payload.get("seo_description"),
+            is_published=True,
+        )
+
+        self._db.commit()
+        self._db.refresh(new_proposal)
+        return new_proposal
+
+    def get_website_proposal(self, proposal_id: int) -> BusinessAssistantWebsiteProposal:
+        """Fetch a website proposal strictly within tenant boundary."""
+        proposal = self._repository.get_website_proposal(proposal_id)
+        if not proposal:
+            raise LookupError("Website proposal was not found in the authenticated scope.")
+        return proposal
+
+    def list_website_proposals(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantWebsiteProposal]:
+        """List website proposals scoped to the authenticated tenant."""
+        return self._repository.list_website_proposals(status=status, limit=limit)
+
 
 
 def _mask_recipient_identifier(value: Optional[str]) -> str:

@@ -295,3 +295,27 @@ def compute_campaign_payload_hash(
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+
+def compute_website_payload_hash(
+    *,
+    tenant_id: int,
+    user_id: int,
+    title: str,
+    content_payload: dict[str, Any],
+    version: int = 1,
+) -> str:
+    """Compute deterministic SHA-256 hash for website proposal versioning and confirmation binding."""
+    canonical = json.dumps(
+        {
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "title": title.strip(),
+            "content_payload": content_payload,
+            "version": version,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+

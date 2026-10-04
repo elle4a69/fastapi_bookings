@@ -22,7 +22,8 @@ app/services/business_assistant/
 ├── tickets.py           # Ticket-summary safety checks and duplicate fingerprinting
 ├── idempotency.py       # Canonical payload hashes and key-reuse conflict checks
 ├── product_context.py   # Read-only allowlisted native setup snapshot
-├── tool_registry.py     # Modular tool packs (product help, booking, business knowledge)
+├── tool_registry.py     # Modular tool packs (product help, booking, business knowledge, website builder)
+├── website_sanitiser.py # XSS, script injection, PII sanitiser and asset domain validator
 ├── realtime.py          # Server-held SDP exchange for authenticated voice sessions
 ├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
 ├── adapters/
@@ -91,13 +92,30 @@ separate from customer conversation and message tables.
 - **Actor and Provenance Tracking**: Every rule draft and activation records
   authoritative actor `user_id`, timestamps, and detailed provenance. Active
   rules sync into `CuratedMemory` for platform-wide knowledge retrieval.
+- **Strict Separate Website Lifecycle (WP10)**: Website content changes advance across
+  strict separate states: `draft` -> `preview` -> `published` -> `rolled_back`.
+  Edits are created in `draft` status, rendered in `preview`, and can only be published
+  via an explicit publication gate.
+- **Prohibition of Conversational Auto-Publish**: Website publication CANNOT occur
+  from ordinary conversational confirmation alone. It requires explicit owner authorization,
+  optimistic version validation, and a cryptographically signed HMAC confirmation token.
+- **Content Sanitisation & Injection Rejection**: Website edits recursively reject XSS scripts,
+  `<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, javascript: protocols, event handlers
+  (`onerror=`, `onload=`, `onclick=`), and `eval()`.
+- **Customer PII & Asset Domain Guardrails**: Public website proposals reject customer PII
+  (names, credit cards, customer phone numbers, customer emails). External media assets are
+  strictly scoped to allowlisted tenant domains and approved image hosts (e.g. Unsplash CDN,
+  tenant custom domain).
+- **Optimistic Version Concurrency & Rollback**: Proposals enforce optimistic concurrency
+  checks to prevent concurrent overwrite. Owners can roll back to any previously published version,
+  creating a new rollback proposal and restoring live website content safely.
 
 ## Configuration and dependencies
 
 The package uses the application SQLAlchemy session, existing `tenants`,
-`users`, `services`, `providers`, `locations`, `curated_memories`, and
-`knowledge_proposals` tables, migrations `g7h9j1k3m5n7`, `h8j0k2m4n6p8`,
-`p1q2r3s4t5u6`, `u5v6w7x8y9z0`, and `v7w8x9y0z1a2`. The text path uses only validated application settings:
+`users`, `services`, `providers`, `locations`, `curated_memories`,
+`tenant_websites`, and `knowledge_proposals` tables, migrations `g7h9j1k3m5n7`,
+`h8j0k2m4n6p8`, `p1q2r3s4t5u6`, `u5v6w7x8y9z0`, `v7w8x9y0z1a2`, and `w8x9y0z1a2b3`. The text path uses only validated application settings:
 `OPENAI_API_KEY`, `BUSINESS_ASSISTANT_TEXT_MODEL`,
 `BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES`,
 `BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS`, and
@@ -157,6 +175,34 @@ The assistant accesses five modular server-authorised tool packs:
    - `get_ticket_status`: Inspects user-safe status and lifecycle events for an existing ticket.
    - `list_support_tickets`: Lists user-safe support tickets with optional status and category filters.
    - `request_ticket_approval`: Requests a confirmation token for an elevated access or security ticket.
+6. **Website Builder Pack (WP10):**
+   - `inspect_website_state`: Inspects the active tenant's website configuration, published status,
+     current live version, and pending draft proposals.
+   - `propose_website_edit`: Proposes bounded content, layout, template, or theme edits. Edits
+     remain safely in draft state and cannot publish automatically.
+   - `preview_website_edit`: Renders a full preview of proposed website changes merged with the live site
+     and advances proposal status from `draft` to `preview`.
+   - `request_website_publication`: Generates a cryptographic HMAC confirmation token for publication.
+     Publication CANNOT occur through ordinary conversational confirmation alone.
+   - `rollback_website_version`: Safely rolls back the website configuration to a previously published
+     version with optimistic concurrency checks.
+
+### Website Builder API and lifecycle contract (WP10)
+
+- `GET /website/state`: Returns the active tenant's live website configuration, publication timestamp,
+  active version, pending draft status, and recent proposal history.
+- `POST /website/proposals`: Creates a versioned website edit proposal in `status="draft"`. Enforces
+  recursive XSS sanitisation, PII filtering, asset domain allowlisting, and optimistic version checks.
+- `GET /website/proposals/{id}/preview`: Renders a comprehensive live preview merged with the tenant's
+  current website configuration, transitioning proposal status to `preview`.
+- `POST /website/proposals/{id}/request-publish`: Generates a cryptographic HMAC confirmation token
+  bound to proposal ID, version, and payload hash for explicit presentation to the tenant owner.
+- `POST /website/proposals/{id}/publish`: Strictly restricted to authenticated tenant owners. Validates
+  the confirmation token signature and payload hash before transitioning the proposal to `published`
+  and updating `tenant_websites` to live.
+- `POST /website/rollback`: Reverts the website configuration to a specified prior version, generating
+  a new published proposal recording `rollback_version` and restoring live content safely.
+
 
 ### Text API contract
 
@@ -293,7 +339,8 @@ must restore from a verified backup rather than dropping feature tables.
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py -q
 ```
+
 
 
