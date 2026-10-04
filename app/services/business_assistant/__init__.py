@@ -46,10 +46,12 @@ from .tool_registry import (
     BOOKING_AVAILABILITY_TOOLS,
     BUSINESS_KNOWLEDGE_TOOLS,
     CUSTOMER_OPERATIONS_TOOLS,
+    SUPPORT_ENGINEERING_TOOLS,
     ALL_BUSINESS_ASSISTANT_TOOLS,
 )
 
 __all__ = [
+    "SUPPORT_ENGINEERING_TOOLS",
     "BusinessAssistantRepository",
     "BusinessAssistantService",
     "BusinessAssistantStorageUnavailableError",

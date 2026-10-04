@@ -8,6 +8,7 @@ tool arguments, tool results, credentials, and worker logs do not belong here.
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -269,6 +270,14 @@ class SupportTicket(Base):
     status = Column(String(32), nullable=False, default="awaiting_engineering", index=True)
     title = Column(String(240), nullable=False)
     description = Column(Text, nullable=False)
+    observed_behaviour = Column(Text, nullable=True)
+    affected_product_area = Column(String(128), nullable=True, index=True)
+    user_impact = Column(Text, nullable=True)
+    acceptance_criteria = Column(Text, nullable=True)
+    authorisation_state = Column(String(64), nullable=False, default="not_required", index=True)
+    requires_owner_approval = Column(Boolean, nullable=False, default=False)
+    resolution_summary = Column(Text, nullable=True)
+    coding_task_id = Column(String(128), nullable=True, index=True)
     request_key = Column(String(128), nullable=True)
     request_payload_hash = Column(String(64), nullable=True)
     deduplication_key = Column(String(64), nullable=False)

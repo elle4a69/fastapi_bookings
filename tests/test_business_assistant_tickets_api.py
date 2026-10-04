@@ -110,7 +110,9 @@ def test_ticket_duplicate_active_content_reuses_the_same_ticket(client, db_sessi
         f"/api/admin/business-assistant/tickets/{first.json()['ticket']['id']}/events",
         headers=headers,
     )
-    assert len(events.json()) == 1
+    assert len(events.json()) == 2
+    assert events.json()[0]["event_type"] == "created"
+    assert events.json()[1]["event_type"] == "duplicate_referenced"
 
 
 def test_ticket_request_key_rejects_a_changed_payload(client, db_session):

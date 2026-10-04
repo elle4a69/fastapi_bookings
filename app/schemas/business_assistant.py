@@ -132,6 +132,10 @@ class SupportTicketCreate(BaseModel):
     severity: Literal["low", "normal", "high", "critical"] = "normal"
     title: str = Field(min_length=1, max_length=240)
     description: str = Field(min_length=1, max_length=20_000)
+    observed_behaviour: Optional[str] = Field(default=None, max_length=20_000)
+    affected_product_area: Optional[str] = Field(default=None, max_length=128)
+    user_impact: Optional[str] = Field(default=None, max_length=20_000)
+    acceptance_criteria: Optional[str] = Field(default=None, max_length=20_000)
     request_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
 
@@ -139,16 +143,39 @@ class SupportTicketRead(BaseModel):
     """User-safe ticket fields for the authenticated tenant scope."""
 
     id: int
-    conversation_id: Optional[int]
+    conversation_id: Optional[int] = None
     category: str
     severity: str
     status: str
     title: str
     description: str
+    observed_behaviour: Optional[str] = None
+    affected_product_area: Optional[str] = None
+    user_impact: Optional[str] = None
+    acceptance_criteria: Optional[str] = None
+    authorisation_state: str = "not_required"
+    requires_owner_approval: bool = False
+    resolution_summary: Optional[str] = None
+    coding_task_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SupportTicketApprovalRequest(BaseModel):
+    """Owner approval or rejection payload for an elevated access/security ticket."""
+
+    confirmation_token: Optional[str] = Field(default=None, min_length=16)
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+class SupportTicketApprovalResponse(BaseModel):
+    """Result of owner approval or rejection action."""
+
+    ticket: SupportTicketRead
+    action: Literal["approved", "rejected"]
+    status: str
 
 
 class SupportTicketEventRead(BaseModel):
@@ -167,6 +194,7 @@ class SupportTicketCreateRead(BaseModel):
 
     ticket: SupportTicketRead
     duplicate_ticket: bool
+    confirmation_token: Optional[str] = None
 
 
 class BusinessAssistantToolExecutionRequest(BaseModel):

@@ -399,11 +399,137 @@ CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
     },
 )
 
+SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "create_support_ticket",
+            "description": "Create a sanitised internal technical support or engineering ticket without automatic dispatch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["support", "bug", "feature", "access", "security", "upgrade"],
+                        "description": "Ticket category.",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Clear, concise title describing the issue or request (1-240 characters).",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Detailed explanation of the issue with all customer PII and secrets omitted.",
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["low", "normal", "high", "critical"],
+                        "description": "Ticket severity (default 'normal').",
+                    },
+                    "observed_behaviour": {
+                        "type": "string",
+                        "description": "Optional observed behaviour or error details.",
+                    },
+                    "affected_product_area": {
+                        "type": "string",
+                        "description": "Optional application area affected (e.g. 'calendar', 'checkout', 'sms', 'invoicing').",
+                    },
+                    "user_impact": {
+                        "type": "string",
+                        "description": "Optional summary of customer or business impact.",
+                    },
+                    "acceptance_criteria": {
+                        "type": "string",
+                        "description": "Optional desired outcome or acceptance criteria.",
+                    },
+                    "request_key": {
+                        "type": "string",
+                        "description": "Optional idempotency key.",
+                    },
+                },
+                "required": ["category", "title", "description"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_ticket_status",
+            "description": "Inspect user-safe status and lifecycle events for an existing support ticket.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticket_id": {
+                        "type": "integer",
+                        "description": "ID of the support ticket to inspect.",
+                    },
+                },
+                "required": ["ticket_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_support_tickets",
+            "description": "List user-safe support tickets created in the current tenant scope.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "description": "Optional filter by ticket status (e.g. 'awaiting_engineering', 'pending_owner_approval', 'resolved').",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["support", "bug", "feature", "access", "security", "upgrade"],
+                        "description": "Optional filter by ticket category.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of tickets to return (1-50, default 20).",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "request_ticket_approval",
+            "description": "Request owner approval token for an elevated access or security ticket.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticket_id": {
+                        "type": "integer",
+                        "description": "ID of the elevated ticket requiring owner approval.",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional explanatory reason for the approval request.",
+                    },
+                },
+                "required": ["ticket_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+)
+
 ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *PRODUCT_HELP_TOOLS,
     *BOOKING_AVAILABILITY_TOOLS,
     *BUSINESS_KNOWLEDGE_TOOLS,
     *CUSTOMER_OPERATIONS_TOOLS,
+    *SUPPORT_ENGINEERING_TOOLS,
 )
 
 
@@ -443,6 +569,8 @@ class BusinessAssistantToolRegistry:
             active.extend(BUSINESS_KNOWLEDGE_TOOLS)
         if "customer_operations" in self._packs:
             active.extend(CUSTOMER_OPERATIONS_TOOLS)
+        if "support_engineering" in self._packs:
+            active.extend(SUPPORT_ENGINEERING_TOOLS)
         return tuple(active)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -832,6 +960,125 @@ class BusinessAssistantToolRegistry:
                 }
             except (ValueError, LookupError, PermissionError) as exc:
                 return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "create_support_ticket":
+            category = arguments.get("category")
+            if not category or not isinstance(category, str):
+                return {"status": "rejected", "reason": "category is required and must be a string."}
+            title = arguments.get("title")
+            if not title or not isinstance(title, str):
+                return {"status": "rejected", "reason": "title is required and must be a string."}
+            description = arguments.get("description")
+            if not description or not isinstance(description, str):
+                return {"status": "rejected", "reason": "description is required and must be a string."}
+            severity = arguments.get("severity", "normal")
+            if not isinstance(severity, str):
+                return {"status": "rejected", "reason": "severity must be a string."}
+            observed_behaviour = arguments.get("observed_behaviour")
+            if observed_behaviour is not None and not isinstance(observed_behaviour, str):
+                return {"status": "rejected", "reason": "observed_behaviour must be a string."}
+            affected_product_area = arguments.get("affected_product_area")
+            if affected_product_area is not None and not isinstance(affected_product_area, str):
+                return {"status": "rejected", "reason": "affected_product_area must be a string."}
+            user_impact = arguments.get("user_impact")
+            if user_impact is not None and not isinstance(user_impact, str):
+                return {"status": "rejected", "reason": "user_impact must be a string."}
+            acceptance_criteria = arguments.get("acceptance_criteria")
+            if acceptance_criteria is not None and not isinstance(acceptance_criteria, str):
+                return {"status": "rejected", "reason": "acceptance_criteria must be a string."}
+            request_key = arguments.get("request_key")
+            if request_key is not None and not isinstance(request_key, str):
+                return {"status": "rejected", "reason": "request_key must be a string."}
+            try:
+                service = self._get_service()
+                result = service.create_or_get_ticket(
+                    category=category,
+                    severity=severity,
+                    title=title,
+                    description=description,
+                    observed_behaviour=observed_behaviour,
+                    affected_product_area=affected_product_area,
+                    user_impact=user_impact,
+                    acceptance_criteria=acceptance_criteria,
+                    request_key=request_key,
+                )
+                t = result.ticket
+                return {
+                    "status": "ok",
+                    "ticket": {
+                        "id": t.id,
+                        "category": t.category,
+                        "severity": t.severity,
+                        "status": t.status,
+                        "title": t.title,
+                        "description": t.description,
+                        "observed_behaviour": t.observed_behaviour,
+                        "affected_product_area": t.affected_product_area,
+                        "user_impact": t.user_impact,
+                        "acceptance_criteria": t.acceptance_criteria,
+                        "authorisation_state": t.authorisation_state,
+                        "requires_owner_approval": t.requires_owner_approval,
+                        "created_at": t.created_at.isoformat(),
+                    },
+                    "duplicate_ticket": result.duplicate_ticket,
+                    "confirmation_token": result.confirmation_token,
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "get_ticket_status":
+            ticket_id = arguments.get("ticket_id")
+            if ticket_id is None or not isinstance(ticket_id, int):
+                return {"status": "rejected", "reason": "ticket_id is required and must be an integer."}
+            try:
+                status_info = self._adapters.get_ticket_handoff_status(ticket_id)
+                return {"status": "ok", "ticket": status_info.tool_result()}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "list_support_tickets":
+            limit = arguments.get("limit", 20)
+            if not isinstance(limit, int) or limit < 1 or limit > 50:
+                return {"status": "rejected", "reason": "limit must be an integer between 1 and 50."}
+            status_arg = arguments.get("status")
+            if status_arg is not None and not isinstance(status_arg, str):
+                return {"status": "rejected", "reason": "status must be a string."}
+            category_arg = arguments.get("category")
+            if category_arg is not None and not isinstance(category_arg, str):
+                return {"status": "rejected", "reason": "category must be a string."}
+            try:
+                ticket_statuses = self._adapters.list_ticket_handoff_statuses(
+                    limit=limit,
+                    status=status_arg,
+                    category=category_arg,
+                )
+                return {
+                    "status": "ok",
+                    "tickets": [ts.tool_result() for ts in ticket_statuses],
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "request_ticket_approval":
+            ticket_id = arguments.get("ticket_id")
+            if ticket_id is None or not isinstance(ticket_id, int):
+                return {"status": "rejected", "reason": "ticket_id is required and must be an integer."}
+            note = arguments.get("note")
+            if note is not None and not isinstance(note, str):
+                return {"status": "rejected", "reason": "note must be a string."}
+            try:
+                service = self._get_service()
+                ticket, token = service.request_ticket_approval(ticket_id=ticket_id, note=note)
+                return {
+                    "status": "ok",
+                    "ticket_id": ticket.id,
+                    "ticket_status": ticket.status,
+                    "authorisation_state": ticket.authorisation_state,
+                    "confirmation_token": token,
+                    "instructions": "Present confirmation token to tenant owner for explicit dispatch approval.",
+                }
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 

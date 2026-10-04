@@ -16,6 +16,7 @@ from ...models.business_assistant import (
     BusinessAssistantMessageDraft,
     BusinessAssistantOnboardingProgress,
     SupportTicket,
+    SupportTicketDeduplicationClaim,
     SupportTicketEvent,
 )
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
@@ -37,7 +38,7 @@ from .confirmation import (
 from .product_context import ProductContext, ProductContextAdapter
 from .repository import BusinessAssistantRepository
 from .idempotency import IdempotencyKeyConflictError, payload_hash, require_matching_payload
-from .tickets import sanitise_ticket_text, ticket_deduplication_key
+from .tickets import ELEVATED_APPROVAL_CATEGORIES, sanitise_ticket_text, ticket_deduplication_key
 
 if TYPE_CHECKING:
     from .runtime import BusinessAssistantTextRuntime
@@ -66,6 +67,7 @@ class TicketCreateResult:
 
     ticket: SupportTicket
     duplicate_ticket: bool = False
+    confirmation_token: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -431,6 +433,10 @@ class BusinessAssistantService:
         severity: str,
         title: str,
         description: str,
+        observed_behaviour: Optional[str] = None,
+        affected_product_area: Optional[str] = None,
+        user_impact: Optional[str] = None,
+        acceptance_criteria: Optional[str] = None,
         request_key: Optional[str] = None,
         conversation_id: Optional[int] = None,
     ) -> SupportTicket:
@@ -439,9 +445,24 @@ class BusinessAssistantService:
             severity=severity,
             title=title,
             description=description,
+            observed_behaviour=observed_behaviour,
+            affected_product_area=affected_product_area,
+            user_impact=user_impact,
+            acceptance_criteria=acceptance_criteria,
             request_key=request_key,
             conversation_id=conversation_id,
         ).ticket
+
+    def _generate_ticket_approval_token(self, ticket: SupportTicket) -> str:
+        """Generate a cryptographically bound confirmation token for owner ticket approval."""
+        return generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=ticket.user_id or self._user_id,
+            action="approve_ticket_dispatch",
+            target_key=f"ticket:{ticket.id}",
+            version=1,
+            payload_hash=ticket.deduplication_key,
+        )
 
     def create_or_get_ticket(
         self,
@@ -450,6 +471,10 @@ class BusinessAssistantService:
         severity: str,
         title: str,
         description: str,
+        observed_behaviour: Optional[str] = None,
+        affected_product_area: Optional[str] = None,
+        user_impact: Optional[str] = None,
+        acceptance_criteria: Optional[str] = None,
         request_key: Optional[str] = None,
         conversation_id: Optional[int] = None,
     ) -> TicketCreateResult:
@@ -462,18 +487,38 @@ class BusinessAssistantService:
 
         safe_title = sanitise_ticket_text(title)
         safe_description = sanitise_ticket_text(description)
+        safe_observed = sanitise_ticket_text(observed_behaviour) if observed_behaviour else None
+        safe_area = sanitise_ticket_text(affected_product_area) if affected_product_area else None
+        safe_impact = sanitise_ticket_text(user_impact) if user_impact else None
+        safe_criteria = sanitise_ticket_text(acceptance_criteria) if acceptance_criteria else None
+
+        # Stop-gate: Access and security categories require explicit owner approval
+        requires_owner_approval = category in ELEVATED_APPROVAL_CATEGORIES
+        if requires_owner_approval:
+            status = "pending_owner_approval"
+            authorisation_state = "pending_approval"
+        else:
+            status = "awaiting_engineering"
+            authorisation_state = "not_required"
+
         request_payload_hash = payload_hash(
             {
                 "category": category,
                 "severity": severity,
                 "title": safe_title,
                 "description": safe_description,
+                "observed_behaviour": safe_observed,
+                "affected_product_area": safe_area,
+                "user_impact": safe_impact,
+                "acceptance_criteria": safe_criteria,
                 "conversation_id": conversation_id,
             }
         )
         deduplication_key = ticket_deduplication_key(
             category=category,
             title=safe_title,
+            affected_product_area=safe_area,
+            tenant_id=self._tenant_id,
             description=safe_description,
         )
         if request_key:
@@ -483,10 +528,23 @@ class BusinessAssistantService:
                     stored_hash=existing.request_payload_hash,
                     incoming_hash=request_payload_hash,
                 )
-                return TicketCreateResult(ticket=existing, duplicate_ticket=True)
+                token = self._generate_ticket_approval_token(existing) if existing.requires_owner_approval else None
+                return TicketCreateResult(ticket=existing, duplicate_ticket=True, confirmation_token=token)
+
         existing = self._repository.get_active_ticket_by_deduplication_key(deduplication_key)
         if existing:
-            return TicketCreateResult(ticket=existing, duplicate_ticket=True)
+            self._repository.record_ticket_event(
+                ticket_id=existing.id,
+                event_type="duplicate_referenced",
+                safe_metadata={
+                    "reason": "Active duplicate ticket referenced",
+                    "referencing_conversation_id": conversation_id,
+                },
+            )
+            self._db.commit()
+            self._db.refresh(existing)
+            token = self._generate_ticket_approval_token(existing) if existing.requires_owner_approval else None
+            return TicketCreateResult(ticket=existing, duplicate_ticket=True, confirmation_token=token)
 
         try:
             ticket = self._repository.create_ticket(
@@ -494,6 +552,13 @@ class BusinessAssistantService:
                 severity=severity,
                 title=safe_title,
                 description=safe_description,
+                observed_behaviour=safe_observed,
+                affected_product_area=safe_area,
+                user_impact=safe_impact,
+                acceptance_criteria=safe_criteria,
+                authorisation_state=authorisation_state,
+                requires_owner_approval=requires_owner_approval,
+                status=status,
                 deduplication_key=deduplication_key,
                 request_key=request_key,
                 request_payload_hash=request_payload_hash if request_key else None,
@@ -516,11 +581,148 @@ class BusinessAssistantService:
                 stored_hash=existing.request_payload_hash if request_key else request_payload_hash,
                 incoming_hash=request_payload_hash,
             )
-            return TicketCreateResult(ticket=existing, duplicate_ticket=True)
-        return TicketCreateResult(ticket=ticket)
+            token = self._generate_ticket_approval_token(existing) if existing.requires_owner_approval else None
+            return TicketCreateResult(ticket=existing, duplicate_ticket=True, confirmation_token=token)
 
-    def list_tickets(self, *, limit: int) -> list[SupportTicket]:
-        return self._repository.list_tickets(limit=limit)
+        token = self._generate_ticket_approval_token(ticket) if requires_owner_approval else None
+        return TicketCreateResult(ticket=ticket, confirmation_token=token)
+
+    def request_ticket_approval(
+        self,
+        *,
+        ticket_id: int,
+        note: Optional[str] = None,
+    ) -> tuple[SupportTicket, str]:
+        """Generate confirmation token and request explicit owner approval for an elevated ticket."""
+        ticket = self.get_ticket(ticket_id=ticket_id)
+        if not ticket.requires_owner_approval and ticket.category not in ELEVATED_APPROVAL_CATEGORIES:
+            raise ValueError(f"Ticket #{ticket_id} ({ticket.category}) does not require elevated owner approval.")
+        if ticket.status != "pending_owner_approval":
+            raise ValueError(
+                f"Ticket #{ticket_id} is in status '{ticket.status}', not pending owner approval."
+            )
+
+        token = self._generate_ticket_approval_token(ticket)
+        if note:
+            self._repository.record_ticket_event(
+                ticket_id=ticket.id,
+                event_type="approval_requested",
+                safe_metadata={
+                    "status": ticket.status,
+                    "category": ticket.category,
+                    "note": note.strip()[:200],
+                },
+            )
+            self._db.commit()
+            self._db.refresh(ticket)
+        return ticket, token
+
+    def approve_ticket_dispatch(
+        self,
+        *,
+        ticket_id: int,
+        confirmation_token: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> SupportTicket:
+        """Approve an elevated access/security ticket. Strictly restricted to tenant owners."""
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        if not user or user.role != "owner":
+            raise PermissionError("Only tenant owners may approve elevated access/security tickets.")
+
+        ticket = self.get_ticket(ticket_id=ticket_id)
+        if ticket.status != "pending_owner_approval":
+            raise ValueError(
+                f"Cannot approve ticket #{ticket_id} in '{ticket.status}' status. Only tickets in 'pending_owner_approval' can be approved."
+            )
+
+        if confirmation_token:
+            verify_confirmation_token(
+                token=confirmation_token,
+                expected_tenant_id=self._tenant_id,
+                expected_user_id=ticket.user_id or self._user_id,
+                expected_action="approve_ticket_dispatch",
+                expected_target_key=f"ticket:{ticket.id}",
+                expected_version=1,
+                expected_payload_hash=ticket.deduplication_key,
+            )
+
+        # Enforce Closed Dispatch Gate: Worker gate remains closed; ticket stays awaiting_engineering
+        previous_status = ticket.status
+        ticket = self._repository.update_ticket_approval(
+            ticket=ticket,
+            status="awaiting_engineering",
+            authorisation_state="approved",
+        )
+        self._repository.record_ticket_event(
+            ticket_id=ticket.id,
+            event_type="owner_approved",
+            safe_metadata={
+                "previous_status": previous_status,
+                "new_status": "awaiting_engineering",
+                "authorisation_state": "approved",
+                "note": note.strip()[:500] if note else None,
+            },
+        )
+        self._db.commit()
+        self._db.refresh(ticket)
+        return ticket
+
+    def reject_ticket_dispatch(
+        self,
+        *,
+        ticket_id: int,
+        note: Optional[str] = None,
+    ) -> SupportTicket:
+        """Reject an elevated access/security ticket. Strictly restricted to tenant owners."""
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        if not user or user.role != "owner":
+            raise PermissionError("Only tenant owners may reject elevated access/security tickets.")
+
+        ticket = self.get_ticket(ticket_id=ticket_id)
+        if ticket.status != "pending_owner_approval":
+            raise ValueError(
+                f"Cannot reject ticket #{ticket_id} in '{ticket.status}' status. Only tickets in 'pending_owner_approval' can be rejected."
+            )
+
+        previous_status = ticket.status
+        ticket = self._repository.update_ticket_approval(
+            ticket=ticket,
+            status="rejected",
+            authorisation_state="rejected",
+            resolution_summary=note,
+        )
+        # Release the active deduplication claim so future re-filing is unblocked
+        claim = (
+            self._db.query(SupportTicketDeduplicationClaim)
+            .filter(SupportTicketDeduplicationClaim.ticket_id == ticket.id)
+            .first()
+        )
+        if claim:
+            self._db.delete(claim)
+            self._db.flush()
+
+        self._repository.record_ticket_event(
+            ticket_id=ticket.id,
+            event_type="owner_rejected",
+            safe_metadata={
+                "previous_status": previous_status,
+                "new_status": "rejected",
+                "authorisation_state": "rejected",
+                "note": note.strip()[:500] if note else None,
+            },
+        )
+        self._db.commit()
+        self._db.refresh(ticket)
+        return ticket
+
+    def list_tickets(
+        self,
+        *,
+        limit: int = 100,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> list[SupportTicket]:
+        return self._repository.list_tickets(limit=limit, status=status, category=category)
 
     def get_ticket(self, *, ticket_id: int) -> SupportTicket:
         ticket = self._repository.get_ticket(ticket_id)

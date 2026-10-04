@@ -167,14 +167,26 @@ class TicketHandoffStatus:
     created_at: datetime
     updated_at: datetime
     event_types: tuple[str, ...]
+    title: str = ""
+    observed_behaviour: Optional[str] = None
+    affected_product_area: Optional[str] = None
+    user_impact: Optional[str] = None
+    acceptance_criteria: Optional[str] = None
+    authorisation_state: str = "not_required"
+    requires_owner_approval: bool = False
+    resolution_summary: Optional[str] = None
 
     def tool_result(self) -> dict[str, Any]:
         """Return status-only metadata, never the ticket body or worker internals."""
-        result = asdict(self)
-        result["event_types"] = list(self.event_types)
-        result["created_at"] = self.created_at.isoformat()
-        result["updated_at"] = self.updated_at.isoformat()
-        return result
+        return {
+            "ticket_id": self.ticket_id,
+            "category": self.category,
+            "severity": self.severity,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "event_types": list(self.event_types),
+        }
 
 
 class BusinessAssistantReadAdapters:
@@ -479,13 +491,28 @@ class BusinessAssistantReadAdapters:
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,
             event_types=tuple(event.event_type for event in events),
+            title=ticket.title,
+            observed_behaviour=ticket.observed_behaviour,
+            affected_product_area=ticket.affected_product_area,
+            user_impact=ticket.user_impact,
+            acceptance_criteria=ticket.acceptance_criteria,
+            authorisation_state=ticket.authorisation_state,
+            requires_owner_approval=ticket.requires_owner_approval,
+            resolution_summary=ticket.resolution_summary,
         )
 
-    def list_ticket_handoff_statuses(self, *, limit: int) -> list[TicketHandoffStatus]:
+    def list_ticket_handoff_statuses(
+        self,
+        *,
+        limit: int = 50,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> list[TicketHandoffStatus]:
         """List status-only ticket records visible to the authenticated ticket owner."""
         if not 1 <= limit <= 100:
             raise ValueError("Ticket status limit must be between 1 and 100.")
-        return [self.get_ticket_handoff_status(ticket.id) for ticket in self._repository.list_tickets(limit=limit)]
+        tickets = self._repository.list_tickets(limit=limit, status=status, category=category)
+        return [self.get_ticket_handoff_status(t.id) for t in tickets]
 
     def search_customer_conversations(
         self,

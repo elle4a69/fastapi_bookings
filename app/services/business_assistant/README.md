@@ -53,8 +53,26 @@ separate from customer conversation and message tables.
 - Active duplicate ticket content is resolved only within the same tenant and
   user. A separate active-ticket claim table provides portable uniqueness while
   allowing a later transactional close workflow to release the claim.
-- Ticket summaries are normalised before persistence. Secrets and direct
-  customer identifiers are rejected rather than silently retained or relayed.
+- Ticket summaries are normalised before persistence. Secrets (private keys,
+  bearer/JWT tokens, database URLs, API tokens, passwords) and direct customer
+  identifiers (emails, phone numbers, credit cards, SSN/TFN) are strictly rejected
+  across all text fields rather than silently retained or relayed.
+- **Active Duplicate Ticket Detection**: Deduplication keys are computed from
+  tenant scope, category, affected product area, and normalized title. When an active
+  ticket (`awaiting_engineering`, `triaged`, `in_progress`, `pending_approval`,
+  `pending_owner_approval`) already exists, subsequent submissions return the
+  existing ticket with `duplicate_ticket=True` and append a `duplicate_referenced`
+  lifecycle event.
+- **Access / Security Approval Stop-Gate**: Tickets in `access` or `security`
+  categories immediately trigger a triage stop gate: `status="pending_owner_approval"`,
+  `authorisation_state="pending_approval"`, and `requires_owner_approval=True`.
+  Only authenticated tenant owners may approve or reject elevated dispatch.
+- **Closed Dispatch Gate**: Automatic coding worker dispatch remains strictly disabled
+  while the worker gate is closed. Accepted and approved tickets remain in
+  `status="awaiting_engineering"`; no worker processes are spawned.
+- **Append-Only Lifecycle Events**: Every ticket transition is immutably recorded
+  in `SupportTicketEvent` (`created`, `duplicate_referenced`, `approval_requested`,
+  `owner_approved`, `owner_rejected`), ensuring an auditable and user-safe history.
 - Tool audit records (`business_assistant_tool_runs`) contain structural
   metadata only (`tool_name`, `status`, `duration_ms`). Raw tool arguments,
   results, credentials, and worker logs are never persisted in telemetry.
@@ -77,8 +95,8 @@ separate from customer conversation and message tables.
 
 The package uses the application SQLAlchemy session, existing `tenants`,
 `users`, `services`, `providers`, `locations`, `curated_memories`, and
-`knowledge_proposals` tables, migrations `g7h9j1k3m5n7`, `h8j0k2m4n6p8`, and
-`p1q2r3s4t5u6`. The text path uses only validated application settings:
+`knowledge_proposals` tables, migrations `g7h9j1k3m5n7`, `h8j0k2m4n6p8`,
+`p1q2r3s4t5u6`, `u5v6w7x8y9z0`, and `v7w8x9y0z1a2`. The text path uses only validated application settings:
 `OPENAI_API_KEY`, `BUSINESS_ASSISTANT_TEXT_MODEL`,
 `BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES`,
 `BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS`, and
@@ -94,7 +112,7 @@ explicit unavailable result rather than a simulated exchange.
 
 ### Tool execution engine and tool packs
 
-The assistant accesses three modular server-authorised tool packs:
+The assistant accesses five modular server-authorised tool packs:
 
 1. **Product Help & Onboarding Pack:**
    - `read_product_help`: Returns live setup metrics (active services, providers,
@@ -131,6 +149,13 @@ The assistant accesses three modular server-authorised tool packs:
      idempotency, and confirmation token. Never executes live sending.
    - `create_campaign_proposal`: Evaluates server-authoritative audience selection with
      explainable inclusion/exclusion criteria, snapshotting recipients and issuing an approval token.
+5. **Support & Engineering Pack:**
+   - `create_support_ticket`: Creates a sanitised support or engineering ticket with
+     structured attributes (`observed_behaviour`, `affected_product_area`, `user_impact`,
+     `acceptance_criteria`) without automatic worker dispatch.
+   - `get_ticket_status`: Inspects user-safe status and lifecycle events for an existing ticket.
+   - `list_support_tickets`: Lists user-safe support tickets with optional status and category filters.
+   - `request_ticket_approval`: Requests a confirmation token for an elevated access or security ticket.
 
 ### Text API contract
 
@@ -192,11 +217,21 @@ Mounted at `/api/admin/business-assistant`:
 ### Support-ticket API contract
 
 - `POST /tickets` creates a sanitised support, bug, feature, access, security,
-  or upgrade ticket. Every accepted ticket remains `awaiting_engineering`.
-- `GET /tickets` lists only the current authenticated user's tickets in that
-  tenant.
-- `GET /tickets/{id}` and `GET /tickets/{id}/events` enforce the same object
-  boundary and return user-safe ticket fields and append-only public events.
+  or upgrade ticket. For ordinary categories, accepted tickets remain `awaiting_engineering`.
+  For `access` and `security` categories, tickets stop at `pending_owner_approval` with
+  `requires_owner_approval=True` and issue a cryptographically bound confirmation token.
+  Active duplicate tickets return the existing ticket with `duplicate_ticket=True` and
+  append a `duplicate_referenced` lifecycle event.
+- `GET /tickets` lists user-safe tickets in tenant scope with optional `status`
+  and `category` query filters.
+- `GET /tickets/{id}` and `GET /tickets/{id}/events` enforce object boundaries and
+  return user-safe ticket fields and append-only lifecycle events (`created`,
+  `duplicate_referenced`, `approval_requested`, `owner_approved`, `owner_rejected`).
+- `POST /tickets/{id}/approve` allows only tenant owners to approve elevated access/security
+  tickets. Transitions status to `awaiting_engineering` and records `owner_approved`. The closed
+  dispatch gate is preserved (no coding worker dispatch).
+- `POST /tickets/{id}/reject` allows only tenant owners to reject elevated tickets.
+  Transitions status to `rejected`, records `owner_rejected`, and releases the deduplication claim.
 
 ## Current limitations
 
@@ -209,5 +244,6 @@ dropping feature tables.
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_adapters.py tests/test_business_assistant_tool_execution.py tests/test_business_assistant_knowledge_curation.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_adapters.py tests/test_business_assistant_tool_execution.py tests/test_business_assistant_knowledge_curation.py tests/test_business_assistant_customer_operations.py tests/test_business_assistant_tickets_workflow.py -q
 ```
+

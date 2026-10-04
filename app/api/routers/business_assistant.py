@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..deps import DatabaseId, get_current_owner, get_current_staff, get_current_tenant, get_db
@@ -33,6 +33,8 @@ from ...schemas.business_assistant import (
     CustomerMessageDraftCreate,
     CustomerMessageDraftRead,
     CustomerMessageDraftResponse,
+    SupportTicketApprovalRequest,
+    SupportTicketApprovalResponse,
     SupportTicketCreate,
     SupportTicketCreateRead,
     SupportTicketEventRead,
@@ -381,6 +383,8 @@ def execute_tool(
 
 @router.get("/tickets", response_model=list[SupportTicketRead])
 def list_tickets(
+    status: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=100),
     tenant: Tenant = Depends(get_current_tenant),
     user: User = Depends(get_current_owner),
@@ -388,7 +392,10 @@ def list_tickets(
 ) -> list[SupportTicketRead]:
     """List only user-safe tickets created by the authenticated staff user."""
     service = _service(db, tenant, user)
-    return [SupportTicketRead.model_validate(ticket) for ticket in service.list_tickets(limit=limit)]
+    return [
+        SupportTicketRead.model_validate(ticket)
+        for ticket in service.list_tickets(limit=limit, status=status, category=category)
+    ]
 
 
 @router.post("/tickets", response_model=SupportTicketCreateRead, status_code=status.HTTP_201_CREATED)
@@ -406,6 +413,10 @@ def create_ticket(
             severity=payload.severity,
             title=payload.title,
             description=payload.description,
+            observed_behaviour=payload.observed_behaviour,
+            affected_product_area=payload.affected_product_area,
+            user_impact=payload.user_impact,
+            acceptance_criteria=payload.acceptance_criteria,
             request_key=payload.request_key,
             conversation_id=payload.conversation_id,
         )
@@ -421,6 +432,7 @@ def create_ticket(
     return SupportTicketCreateRead(
         ticket=SupportTicketRead.model_validate(result.ticket),
         duplicate_ticket=result.duplicate_ticket,
+        confirmation_token=result.confirmation_token,
     )
 
 
@@ -452,6 +464,65 @@ def list_ticket_events(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.") from exc
     return [SupportTicketEventRead.model_validate(event) for event in events]
+
+
+@router.post("/tickets/{ticket_id}/approve", response_model=SupportTicketApprovalResponse)
+def approve_ticket_dispatch(
+    ticket_id: DatabaseId,
+    payload: SupportTicketApprovalRequest = Body(default_factory=SupportTicketApprovalRequest),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> SupportTicketApprovalResponse:
+    """Approve an elevated access or security ticket dispatch. Owner only."""
+    service = _service(db, tenant, user)
+    try:
+        approved = service.approve_ticket_dispatch(
+            ticket_id=ticket_id,
+            confirmation_token=payload.confirmation_token,
+            note=payload.note,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ConfirmationExpiredError, ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return SupportTicketApprovalResponse(
+        ticket=SupportTicketRead.model_validate(approved),
+        action="approved",
+        status=approved.status,
+    )
+
+
+@router.post("/tickets/{ticket_id}/reject", response_model=SupportTicketApprovalResponse)
+def reject_ticket_dispatch(
+    ticket_id: DatabaseId,
+    payload: SupportTicketApprovalRequest = Body(default_factory=SupportTicketApprovalRequest),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> SupportTicketApprovalResponse:
+    """Reject an elevated access or security ticket dispatch. Owner only."""
+    service = _service(db, tenant, user)
+    try:
+        rejected = service.reject_ticket_dispatch(
+            ticket_id=ticket_id,
+            note=payload.note,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return SupportTicketApprovalResponse(
+        ticket=SupportTicketRead.model_validate(rejected),
+        action="rejected",
+        status=rejected.status,
+    )
 
 
 @router.post("/knowledge/rules/draft", response_model=BusinessRuleDraftResponse, status_code=status.HTTP_201_CREATED)

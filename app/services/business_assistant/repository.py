@@ -24,6 +24,7 @@ from ...models.client import Client
 from ...models.conversation import Conversation, Message
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
 from ...core.state_machine import BookingStatus
+from .tickets import ACTIVE_TICKET_STATUSES
 
 
 class BusinessAssistantRepository:
@@ -329,6 +330,13 @@ class BusinessAssistantRepository:
         title: str,
         description: str,
         deduplication_key: str,
+        observed_behaviour: Optional[str] = None,
+        affected_product_area: Optional[str] = None,
+        user_impact: Optional[str] = None,
+        acceptance_criteria: Optional[str] = None,
+        authorisation_state: str = "not_required",
+        requires_owner_approval: bool = False,
+        status: str = "awaiting_engineering",
         request_key: Optional[str] = None,
         request_payload_hash: Optional[str] = None,
         conversation: Optional[BusinessAssistantConversation] = None,
@@ -344,14 +352,36 @@ class BusinessAssistantRepository:
             conversation_id=conversation.id if conversation else None,
             category=category,
             severity=severity,
+            status=status,
             title=title,
             description=description,
+            observed_behaviour=observed_behaviour,
+            affected_product_area=affected_product_area,
+            user_impact=user_impact,
+            acceptance_criteria=acceptance_criteria,
+            authorisation_state=authorisation_state,
+            requires_owner_approval=requires_owner_approval,
             request_key=request_key,
             request_payload_hash=request_payload_hash,
             deduplication_key=deduplication_key,
         )
         self._db.add(ticket)
         self._db.flush()
+
+        # Clear any stale deduplication claim from previously closed/resolved tickets
+        stale_claim = (
+            self._db.query(SupportTicketDeduplicationClaim)
+            .filter(
+                SupportTicketDeduplicationClaim.tenant_id == self._tenant_id,
+                SupportTicketDeduplicationClaim.user_id == self._user_id,
+                SupportTicketDeduplicationClaim.deduplication_key == deduplication_key,
+            )
+            .first()
+        )
+        if stale_claim:
+            self._db.delete(stale_claim)
+            self._db.flush()
+
         self._db.add(
             SupportTicketDeduplicationClaim(
                 ticket_id=ticket.id,
@@ -371,6 +401,24 @@ class BusinessAssistantRepository:
             )
         )
         self._db.flush()
+
+        if requires_owner_approval:
+            self._db.add(
+                SupportTicketEvent(
+                    ticket_id=ticket.id,
+                    tenant_id=self._tenant_id,
+                    actor_user_id=self._user_id,
+                    event_type="approval_requested",
+                    safe_metadata={
+                        "status": ticket.status,
+                        "category": ticket.category,
+                        "authorisation_state": ticket.authorisation_state,
+                        "reason": f"Requires tenant owner approval for elevated {ticket.category} ticket",
+                    },
+                )
+            )
+            self._db.flush()
+
         return ticket
 
     def get_ticket(self, ticket_id: int) -> Optional[SupportTicket]:
@@ -385,15 +433,27 @@ class BusinessAssistantRepository:
             .first()
         )
 
-    def list_tickets(self, *, limit: int) -> list[SupportTicket]:
+    def list_tickets(
+        self,
+        *,
+        limit: int = 100,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> list[SupportTicket]:
         """Return only ticket summaries visible to the authenticated ticket creator."""
-        return (
+        query = (
             self._db.query(SupportTicket)
             .filter(
                 SupportTicket.tenant_id == self._tenant_id,
                 SupportTicket.user_id == self._user_id,
             )
-            .order_by(SupportTicket.updated_at.desc(), SupportTicket.id.desc())
+        )
+        if status:
+            query = query.filter(SupportTicket.status == status)
+        if category:
+            query = query.filter(SupportTicket.category == category)
+        return (
+            query.order_by(SupportTicket.updated_at.desc(), SupportTicket.id.desc())
             .limit(limit)
             .all()
         )
@@ -414,19 +474,49 @@ class BusinessAssistantRepository:
         """Find an active duplicate without revealing tickets outside this user scope."""
         return (
             self._db.query(SupportTicket)
-            .join(
-                SupportTicketDeduplicationClaim,
-                SupportTicketDeduplicationClaim.ticket_id == SupportTicket.id,
-            )
             .filter(
                 SupportTicket.tenant_id == self._tenant_id,
                 SupportTicket.user_id == self._user_id,
-                SupportTicketDeduplicationClaim.tenant_id == self._tenant_id,
-                SupportTicketDeduplicationClaim.user_id == self._user_id,
-                SupportTicketDeduplicationClaim.deduplication_key == deduplication_key,
+                SupportTicket.deduplication_key == deduplication_key,
+                SupportTicket.status.in_(ACTIVE_TICKET_STATUSES),
             )
             .first()
         )
+
+    def record_ticket_event(
+        self,
+        *,
+        ticket_id: int,
+        event_type: str,
+        safe_metadata: Optional[dict] = None,
+    ) -> SupportTicketEvent:
+        """Record an append-only user-safe lifecycle event for a support ticket."""
+        event = SupportTicketEvent(
+            ticket_id=ticket_id,
+            tenant_id=self._tenant_id,
+            actor_user_id=self._user_id,
+            event_type=event_type,
+            safe_metadata=safe_metadata or {},
+        )
+        self._db.add(event)
+        self._db.flush()
+        return event
+
+    def update_ticket_approval(
+        self,
+        *,
+        ticket: SupportTicket,
+        status: str,
+        authorisation_state: str,
+        resolution_summary: Optional[str] = None,
+    ) -> SupportTicket:
+        """Update ticket lifecycle and authorization state upon owner decision."""
+        ticket.status = status
+        ticket.authorisation_state = authorisation_state
+        if resolution_summary is not None:
+            ticket.resolution_summary = resolution_summary
+        self._db.flush()
+        return ticket
 
     def list_ticket_events(self, ticket_id: int) -> list[SupportTicketEvent]:
         """Read events only through the ticket's tenant and initiating-user boundary."""
