@@ -354,3 +354,146 @@ def test_booking_reschedule_with_body_payload(client: TestClient, db_session: Se
     assert res["data"]["status"] == BookingStatus.RESCHEDULED.value
     assert "14:00" in res["data"]["start_time"]
 
+
+def test_idor_notification_template_isolated_by_tenant(client: TestClient, db_session: Session):
+    """Verify two tenants can each create notification template with identical code without collision."""
+    t1 = Tenant(name="Tenant One", subdomain="t1-notif")
+    t2 = Tenant(name="Tenant Two", subdomain="t2-notif")
+    db_session.add_all([t1, t2])
+    db_session.commit()
+    db_session.refresh(t1)
+    db_session.refresh(t2)
+
+    u1 = User(tenant_id=t1.id, login="admin_t1", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    u2 = User(tenant_id=t2.id, login="admin_t2", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    db_session.add_all([u1, u2])
+    db_session.commit()
+
+    tok1 = create_access_token({"sub": str(u1.id)})
+    tok2 = create_access_token({"sub": str(u2.id)})
+    h1 = {"X-Tenant": "t1-notif", "X-Token": tok1}
+    h2 = {"X-Tenant": "t2-notif", "X-Token": tok2}
+
+    payload = {
+        "code": "appointment_reminder",
+        "name": "Appointment Reminder",
+        "channel": "email",
+        "subject": "Your reminder",
+        "body": "Hello {{name}}",
+        "locale": "en",
+        "active": True,
+    }
+
+    r1 = client.post("/api/admin/notification-templates", json=payload, headers=h1)
+    assert r1.status_code == 200, r1.text
+
+    # Tenant 2 can create same code without 409
+    r2 = client.post("/api/admin/notification-templates", json=payload, headers=h2)
+    assert r2.status_code == 200, r2.text
+
+    # Duplicate in same tenant gives 409
+    r3 = client.post("/api/admin/notification-templates", json=payload, headers=h1)
+    assert r3.status_code == 409
+
+
+def test_idor_package_step_isolation(client: TestClient, db_session: Session):
+    """Verify package step routes reject cross-tenant manipulation and cross-tenant services."""
+    from app.models.package import ServicePackage, PackageStep
+
+    t1 = Tenant(name="T1 Pkg", subdomain="t1-pkg")
+    t2 = Tenant(name="T2 Pkg", subdomain="t2-pkg")
+    db_session.add_all([t1, t2])
+    db_session.commit()
+    db_session.refresh(t1)
+    db_session.refresh(t2)
+
+    u1 = User(tenant_id=t1.id, login="admin_t1_p", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    u2 = User(tenant_id=t2.id, login="admin_t2_p", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    s1 = Service(tenant_id=t1.id, name="S1", duration=30, price=Decimal("10.00"), active=True)
+    s2 = Service(tenant_id=t2.id, name="S2", duration=30, price=Decimal("20.00"), active=True)
+    pkg1 = ServicePackage(tenant_id=t1.id, name="Pkg 1", price=Decimal("50.00"), active=True)
+    pkg2 = ServicePackage(tenant_id=t2.id, name="Pkg 2", price=Decimal("60.00"), active=True)
+    db_session.add_all([u1, u2, s1, s2, pkg1, pkg2])
+    db_session.commit()
+
+    step1 = PackageStep(package_id=pkg1.id, service_id=s1.id, order=1, offset_days=0, price=Decimal("10.00"), active=True)
+    db_session.add(step1)
+    db_session.commit()
+
+    tok2 = create_access_token({"sub": str(u2.id)})
+    h2 = {"X-Tenant": "t2-pkg", "X-Token": tok2}
+
+    # Tenant 2 cannot update Tenant 1's step
+    r = client.put(f"/api/admin/packages/steps/{step1.id}", json={"package_id": pkg2.id, "service_id": s2.id, "order": 2, "offset_days": 0, "active": True}, headers=h2)
+    assert r.status_code == 404
+
+    # Tenant 2 cannot delete Tenant 1's step
+    r = client.delete(f"/api/admin/packages/steps/{step1.id}", headers=h2)
+    assert r.status_code == 404
+
+    # Tenant 2 cannot add Tenant 1's service to Tenant 2's package
+    r = client.post(f"/api/admin/packages/{pkg2.id}/steps", json={"package_id": pkg2.id, "service_id": s1.id, "order": 1, "offset_days": 0, "active": True}, headers=h2)
+    assert r.status_code == 404
+
+
+def test_idor_service_resource_requirement_isolation(client: TestClient, db_session: Session):
+    """Verify service resource requirement routes enforce tenant isolation."""
+    from app.models.resource import ServiceResourceRequirement
+
+    t1 = Tenant(name="T1 Res", subdomain="t1-res")
+    t2 = Tenant(name="T2 Res", subdomain="t2-res")
+    db_session.add_all([t1, t2])
+    db_session.commit()
+    db_session.refresh(t1)
+    db_session.refresh(t2)
+
+    u1 = User(tenant_id=t1.id, login="admin_t1_r", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    u2 = User(tenant_id=t2.id, login="admin_t2_r", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    s1 = Service(tenant_id=t1.id, name="S1", duration=30, price=Decimal("10.00"), active=True)
+    db_session.add_all([u1, u2, s1])
+    db_session.commit()
+
+    req1 = ServiceResourceRequirement(service_id=s1.id, resource_type="room", quantity=1)
+    db_session.add(req1)
+    db_session.commit()
+
+    tok2 = create_access_token({"sub": str(u2.id)})
+    h2 = {"X-Tenant": "t2-res", "X-Token": tok2}
+
+    # Tenant 2 cannot create requirement for Tenant 1's service
+    r = client.post("/api/admin/resources/requirements", json={"service_id": s1.id, "resource_type": "chair", "quantity": 1}, headers=h2)
+    assert r.status_code == 404
+
+    # Tenant 2 cannot delete Tenant 1's requirement
+    r = client.delete(f"/api/admin/resources/requirements/{req1.id}", headers=h2)
+    assert r.status_code == 404
+
+
+def test_idor_admin_diagnostics_tenant_scoped(client: TestClient, db_session: Session):
+    """Verify admin diagnostics returns entity counts strictly for the requesting admin's tenant."""
+    t1 = Tenant(name="T1 Diag", subdomain="t1-diag")
+    t2 = Tenant(name="T2 Diag", subdomain="t2-diag")
+    db_session.add_all([t1, t2])
+    db_session.commit()
+    db_session.refresh(t1)
+    db_session.refresh(t2)
+
+    u1 = User(tenant_id=t1.id, login="admin_t1_d", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    u2 = User(tenant_id=t2.id, login="admin_t2_d", password_hash="fake", role="owner", created_at=datetime.now(timezone.utc))
+    
+    # 3 services in t1, 1 service in t2
+    for i in range(3):
+        db_session.add(Service(tenant_id=t1.id, name=f"S1-{i}", duration=30, price=Decimal("10.00"), active=True))
+    db_session.add(Service(tenant_id=t2.id, name="S2-0", duration=30, price=Decimal("10.00"), active=True))
+    db_session.add_all([u1, u2])
+    db_session.commit()
+
+    tok1 = create_access_token({"sub": str(u1.id)})
+    h1 = {"X-Tenant": "t1-diag", "X-Token": tok1}
+
+    r1 = client.get("/api/admin/system/diagnostics", headers=h1)
+    assert r1.status_code == 200
+    counts1 = r1.json()["counts"]
+    assert counts1["services"] == 3
+
+

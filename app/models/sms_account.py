@@ -30,7 +30,7 @@ class SmsAccount(Base):
                 import json
                 from cryptography.fernet import Fernet
                 
-                secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
+                secret = os.getenv("SECRET_KEY") or "fallback-default-secret-key-change-me"
                 key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
                 fernet_key = base64.urlsafe_b64encode(key_bytes)
                 f = Fernet(fernet_key)
@@ -57,7 +57,7 @@ class SmsAccount(Base):
             import json
             from cryptography.fernet import Fernet
             
-            secret = os.getenv("SECRET_KEY") or os.getenv("PUBLIC_API_KEY") or "fallback-default-secret-key-change-me"
+            secret = os.getenv("SECRET_KEY") or "fallback-default-secret-key-change-me"
             key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
             fernet_key = base64.urlsafe_b64encode(key_bytes)
             f = Fernet(fernet_key)

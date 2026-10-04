@@ -94,6 +94,7 @@ app/models/
 4. **GDPR Consent Partitioning**: `gdpr_consents` is explicitly partitioned by `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`).
 5. **Bootcamp Settings Scoping**: `sms_bootcamp_settings` enforces `UniqueConstraint('tenant_id', 'provider_id', name='uq_sms_bootcamp_settings_tenant_provider')`.
 6. **Bootcamp Message Status Invariant**: `sms_bootcamp_messages.status` enforces `nullable=False`, `default="pending"`, and `server_default="pending"`, ensuring structural integrity across simulations and migrations.
+7. **Cryptographic Token Cipher Isolation (IDOR-08)**: `SmsChatwootBinding` and `SmsAccount` derive Fernet cryptographic ciphers strictly from `settings.SECRET_KEY` (never from `PUBLIC_API_KEY`), ensuring sensitive carrier credentials and Chatwoot access tokens cannot be decrypted using public widget credentials.
 
 ---
 

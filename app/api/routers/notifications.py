@@ -109,7 +109,14 @@ def create_notification_template(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new notification template."""
-    existing = db.query(TemplateModel).filter(TemplateModel.code == template_in.code).first()
+    existing = (
+        db.query(TemplateModel)
+        .filter(
+            TemplateModel.tenant_id == tenant.id,
+            TemplateModel.code == template_in.code,
+        )
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

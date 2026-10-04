@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_db, DatabaseId
 from ...models.package import ServicePackage as PackageModel, PackageStep as StepModel
+from ...models.service import Service
 from ...schemas.package import (
     PackageCreate,
     PackageUpdate,
@@ -100,14 +101,25 @@ def add_package_step(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageStepOut:
-    # Validate package existence
+    # Validate package existence and tenant ownership
     package = db.query(PackageModel).filter(
         PackageModel.id == package_id,
         PackageModel.tenant_id == current_user.tenant_id
     ).first()
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
-    step = StepModel(**step_in.model_dump())
+
+    # Validate service belongs to tenant
+    service = db.query(Service).filter(
+        Service.id == step_in.service_id,
+        Service.tenant_id == current_user.tenant_id,
+    ).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    step_data = step_in.model_dump()
+    step_data["package_id"] = package_id
+    step = StepModel(**step_data)
     db.add(step)
     db.commit()
     db.refresh(step)
@@ -121,10 +133,35 @@ def update_package_step(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageStepOut:
-    step = db.query(StepModel).filter(StepModel.id == step_id).first()
+    step = (
+        db.query(StepModel)
+        .join(PackageModel, StepModel.package_id == PackageModel.id)
+        .filter(
+            StepModel.id == step_id,
+            PackageModel.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
     if not step:
         raise HTTPException(status_code=404, detail="Package step not found")
-    for field, value in step_in.model_dump(exclude_unset=True).items():
+
+    update_data = step_in.model_dump(exclude_unset=True)
+    if "service_id" in update_data:
+        service = db.query(Service).filter(
+            Service.id == update_data["service_id"],
+            Service.tenant_id == current_user.tenant_id,
+        ).first()
+        if not service:
+            raise HTTPException(status_code=404, detail="Service not found")
+    if "package_id" in update_data and update_data["package_id"] != step.package_id:
+        target_pkg = db.query(PackageModel).filter(
+            PackageModel.id == update_data["package_id"],
+            PackageModel.tenant_id == current_user.tenant_id,
+        ).first()
+        if not target_pkg:
+            raise HTTPException(status_code=404, detail="Target package not found")
+
+    for field, value in update_data.items():
         setattr(step, field, value)
     db.commit()
     db.refresh(step)
@@ -137,7 +174,15 @@ def delete_package_step(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> PackageStepOut:
-    step = db.query(StepModel).filter(StepModel.id == step_id).first()
+    step = (
+        db.query(StepModel)
+        .join(PackageModel, StepModel.package_id == PackageModel.id)
+        .filter(
+            StepModel.id == step_id,
+            PackageModel.tenant_id == current_user.tenant_id,
+        )
+        .first()
+    )
     if not step:
         raise HTTPException(status_code=404, detail="Package step not found")
     db.delete(step)

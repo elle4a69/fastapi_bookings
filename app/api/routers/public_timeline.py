@@ -78,14 +78,29 @@ def get_available_slots(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: Session = Depends(get_db),
+    current_tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Return available slots for a service over an optional date range."""
-    service = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+    service = (
+        db.query(ServiceModel)
+        .filter(
+            ServiceModel.id == service_id,
+            ServiceModel.tenant_id == current_tenant.id,
+        )
+        .first()
+    )
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if provider_id:
-        provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+        provider = (
+            db.query(ProviderModel)
+            .filter(
+                ProviderModel.id == provider_id,
+                ProviderModel.tenant_id == current_tenant.id,
+            )
+            .first()
+        )
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
     start = datetime.combine(date_from, datetime.min.time()) if date_from else datetime.utcnow()
@@ -105,14 +120,29 @@ def get_first_available_day(
     service_id: DatabaseId,
     provider_id: Optional[int] = None,
     db: Session = Depends(get_db),
+    current_tenant: Tenant = Depends(get_public_tenant),
 ) -> dict:
     """Return the first date that has at least one available slot."""
-    service = db.query(ServiceModel).filter(ServiceModel.id == service_id).first()
+    service = (
+        db.query(ServiceModel)
+        .filter(
+            ServiceModel.id == service_id,
+            ServiceModel.tenant_id == current_tenant.id,
+        )
+        .first()
+    )
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     provider = None
     if provider_id:
-        provider = db.query(ProviderModel).filter(ProviderModel.id == provider_id).first()
+        provider = (
+            db.query(ProviderModel)
+            .filter(
+                ProviderModel.id == provider_id,
+                ProviderModel.tenant_id == current_tenant.id,
+            )
+            .first()
+        )
     now = datetime.utcnow()
     for day_offset in range(60):
         day_start = now + timedelta(days=day_offset)

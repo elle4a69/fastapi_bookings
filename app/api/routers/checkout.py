@@ -135,7 +135,8 @@ def build_quote(db: Session, payload: QuoteRequest, tenant_id: int) -> dict:
     if payload.package_id:
         package = db.query(ServicePackage).filter(
             ServicePackage.id == payload.package_id,
-            ServicePackage.active.is_(True)
+            ServicePackage.active.is_(True),
+            ServicePackage.tenant_id == tenant_id,
         ).first()
         if not package:
             raise HTTPException(status_code=404, detail="Package not found")

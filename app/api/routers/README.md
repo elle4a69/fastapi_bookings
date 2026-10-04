@@ -133,6 +133,18 @@ Clients pass their JWT access token via the `X-Token` header:
    - Provider timeline endpoints (`GET /api/public/timeline/schedule/{provider_id}`) strictly bind company-wide workdays (`provider_id IS NULL`) and special-day overrides to `current_tenant.id`.
 7. **Admin GDPR Consent Isolation**:
    - GDPR consent queries (`GET /api/admin/gdpr-consents` and `GET /api/admin/gdpr-consents/{client_id}`) strictly enforce `GdprConsent.tenant_id == current_tenant.id`.
+8. **Public Timeline Service and Provider Scoping (IDOR-01)**:
+   - Public slot generation (`GET /api/public/timeline/slots` and `/first-available-day`) injects `get_public_tenant` and validates `ServiceModel.tenant_id == current_tenant.id` and `ProviderModel.tenant_id == current_tenant.id`.
+9. **Device Push Token Registration Isolation (IDOR-02)**:
+   - Device registration (`POST /api/v1/devices/register`) resolves tenant context, populates `tenant_id`, and verifies `user_id`/`client_id` ownership within that tenant.
+10. **Notification Template Code Tenant Scoping (IDOR-03)**:
+    - Template creation (`POST /api/admin/notification-templates`) scopes code uniqueness queries to `tenant.id`.
+11. **Package Step Ownership & Service Scoping (IDOR-04)**:
+    - Step mutations (`PUT/DELETE /api/admin/packages/steps/{step_id}`) join `ServicePackage` to verify `tenant_id`, and step creation validates that the attached `service_id` belongs to the tenant.
+12. **Service Resource Requirement Isolation (IDOR-05)**:
+    - Requirement creation and deletion (`/api/admin/resources/requirements`) joins `Service` to enforce `Service.tenant_id == tenant.id`.
+13. **Checkout Package Scoping & Diagnostics Scoping (IDOR-06, IDOR-07)**:
+    - Total calculations (`POST /api/public/checkout/total`) verify `ServicePackage.tenant_id == tenant_id`, and admin diagnostics (`GET /api/admin/system/diagnostics`) scopes entity counts to `current_admin.tenant_id`.
 
 ---
 

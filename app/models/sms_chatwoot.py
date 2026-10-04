@@ -9,15 +9,13 @@ from ..core.config import settings
 
 
 def _chatwoot_token_cipher():
-    """Build a stable cipher from the application's configured key.
+    """Build a stable cipher from the application's configured secret key.
 
-    The previous implementation read ``os.getenv`` directly. That bypassed
-    Pydantic's ``.env`` loading and meant a manually launched server could use
-    a different key from the application that saved the binding.
+    The key derives strictly from SECRET_KEY, never from PUBLIC_API_KEY.
     """
     from cryptography.fernet import Fernet
 
-    secret = settings.PUBLIC_API_KEY or settings.SECRET_KEY or "fallback-default-secret-key-change-me"
+    secret = settings.SECRET_KEY or "fallback-default-secret-key-change-me"
     key_bytes = hashlib.sha256(secret.encode("utf-8")).digest()
     return Fernet(base64.urlsafe_b64encode(key_bytes))
 

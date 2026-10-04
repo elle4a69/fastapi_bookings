@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..deps import get_current_admin, get_db, get_current_tenant, DatabaseId
 from ...models.resource import Resource as ResourceModel, ServiceResourceRequirement as SRRModel
+from ...models.service import Service
 from ...models.tenant import Tenant
 from ...schemas.resource import (
     ResourceCreate,
@@ -111,9 +112,16 @@ def delete_resource(
 @router.post("/requirements", response_model=ServiceResourceRequirementOut)
 def create_service_resource_requirement(
     requirement_in: ServiceResourceRequirementCreate,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> ServiceResourceRequirementOut:
+    service = db.query(Service).filter(
+        Service.id == requirement_in.service_id,
+        Service.tenant_id == tenant.id,
+    ).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
     requirement = SRRModel(**requirement_in.model_dump())
     db.add(requirement)
     db.commit()
@@ -125,10 +133,17 @@ def create_service_resource_requirement(
 @router.delete("/requirements/{requirement_id}", response_model=None, status_code=204)
 def delete_requirement(
     requirement_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_admin),
 ) -> None:
-    requirement = db.query(SRRModel).filter(SRRModel.id == requirement_id).first()
-    if requirement:
-        db.delete(requirement)
-        db.commit()
+    requirement = (
+        db.query(SRRModel)
+        .join(Service, SRRModel.service_id == Service.id)
+        .filter(SRRModel.id == requirement_id, Service.tenant_id == tenant.id)
+        .first()
+    )
+    if not requirement:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+    db.delete(requirement)
+    db.commit()
