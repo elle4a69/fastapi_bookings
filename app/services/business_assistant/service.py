@@ -195,6 +195,13 @@ class BusinessAssistantService:
         assistant_transcript: str,
     ) -> RealtimeTurnResult:
         """Persist one completed voice pair without granting any voice-only tools."""
+        user_clean = user_transcript.strip()
+        assistant_clean = assistant_transcript.strip()
+        if not user_clean or not assistant_clean:
+            raise ValueError("Transcripts cannot be empty or whitespace only.")
+        if user_item_id == assistant_response_id:
+            raise ValueError("user_item_id and assistant_response_id must be distinct event identifiers.")
+
         conversation = self._repository.get_conversation(conversation_id)
         if not conversation:
             raise LookupError("Conversation was not found in the authenticated scope.")
@@ -400,14 +407,14 @@ class BusinessAssistantService:
                 raise LookupError("Message was not found in the conversation scope.")
 
         from .adapters import BusinessAssistantReadAdapters
-        from .tool_registry import BusinessAssistantToolRegistry
+        from .tool_registry import BusinessAssistantToolRegistry, ALL_TOOL_PACKS
 
         adapters = BusinessAssistantReadAdapters(
             self._db,
             tenant_id=conversation.tenant_id,
             user_id=conversation.user_id,
         )
-        registry = BusinessAssistantToolRegistry(adapters, service=self)
+        registry = BusinessAssistantToolRegistry(adapters, service=self, packs=ALL_TOOL_PACKS)
         started_at = monotonic()
         try:
             result = registry.execute(name, arguments)

@@ -23,6 +23,7 @@ from .realtime import (
     RealtimeConfigurationError,
     RealtimeInvalidSdpError,
     RealtimeProviderUnavailableError,
+    validate_sdp,
 )
 
 from .confirmation import (
@@ -48,6 +49,7 @@ from .tool_registry import (
     CUSTOMER_OPERATIONS_TOOLS,
     SUPPORT_ENGINEERING_TOOLS,
     ALL_BUSINESS_ASSISTANT_TOOLS,
+    ALL_TOOL_PACKS,
 )
 from .coding_worker import (
     BoundedChangeViolationError,
@@ -90,6 +92,7 @@ __all__ = [
     "RealtimeConfigurationError",
     "RealtimeInvalidSdpError",
     "RealtimeProviderUnavailableError",
+    "validate_sdp",
     "BusinessAssistantToolRegistry",
     "ProductHelpToolRegistry",
     "PRODUCT_HELP_TOOLS",
@@ -97,6 +100,7 @@ __all__ = [
     "BUSINESS_KNOWLEDGE_TOOLS",
     "CUSTOMER_OPERATIONS_TOOLS",
     "ALL_BUSINESS_ASSISTANT_TOOLS",
+    "ALL_TOOL_PACKS",
     "ConfirmationError",
     "ConfirmationExpiredError",
     "ConfirmationPayloadMismatchError",

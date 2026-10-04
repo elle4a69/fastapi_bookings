@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class BusinessAssistantConversationCreate(BaseModel):
@@ -70,6 +70,21 @@ class BusinessAssistantRealtimeTurnCreate(BaseModel):
     assistant_response_id: str = Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9._:-]+$")
     user_transcript: str = Field(min_length=1, max_length=20_000)
     assistant_transcript: str = Field(min_length=1, max_length=20_000)
+
+    @field_validator("user_transcript", "assistant_transcript")
+    @classmethod
+    def _validate_non_blank_transcripts(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Transcript cannot be empty or whitespace only.")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _validate_distinct_item_ids(self) -> "BusinessAssistantRealtimeTurnCreate":
+        if self.user_item_id == self.assistant_response_id:
+            raise ValueError("user_item_id and assistant_response_id must be distinct event identifiers.")
+        return self
+
 
 
 class BusinessAssistantRealtimeTurnRead(BaseModel):

@@ -19,6 +19,27 @@ class RealtimeProviderUnavailableError(RuntimeError):
     """Raised when the upstream provider cannot establish a valid voice session."""
 
 
+def validate_sdp(data: bytes, max_bytes: int, *, is_offer: bool = True) -> None:
+    """Validate bounded SDP payload size and structural RFC 4566 compliance."""
+    if not isinstance(data, (bytes, bytearray)) or not data or len(data) > max_bytes:
+        if is_offer:
+            raise RealtimeInvalidSdpError("The realtime SDP offer is invalid or too large.")
+        raise RealtimeProviderUnavailableError("The realtime provider returned an invalid SDP answer.")
+
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        if is_offer:
+            raise RealtimeInvalidSdpError("The realtime SDP offer contains invalid non-text characters.") from exc
+        raise RealtimeProviderUnavailableError("The realtime provider returned an unreadable SDP answer.") from exc
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines or not any(line.startswith("v=0") for line in lines):
+        if is_offer:
+            raise RealtimeInvalidSdpError("The realtime SDP offer is missing required version header (v=0).")
+        raise RealtimeProviderUnavailableError("The realtime provider returned an SDP answer missing version header.")
+
+
 class BusinessAssistantRealtimeRuntime:
     """Exchange SDP with the configured upstream without exposing its credentials."""
 
@@ -27,6 +48,13 @@ class BusinessAssistantRealtimeRuntime:
         self._model_name = model_name
         self._timeout_seconds = timeout_seconds
         self.max_sdp_bytes = max_sdp_bytes
+
+    @classmethod
+    def is_configured(cls) -> bool:
+        """Return True if the server has the necessary API key and model configured."""
+        api_key = settings.OPENAI_API_KEY.strip()
+        model_name = settings.BUSINESS_ASSISTANT_REALTIME_MODEL.strip()
+        return bool(api_key and model_name)
 
     @classmethod
     def from_settings(cls) -> "BusinessAssistantRealtimeRuntime":
@@ -56,14 +84,12 @@ class BusinessAssistantRealtimeRuntime:
             answer = response.content
         except httpx.HTTPError as exc:
             raise RealtimeProviderUnavailableError("The realtime voice exchange failed.") from exc
-        if not answer or len(answer) > self.max_sdp_bytes:
-            raise RealtimeProviderUnavailableError("The realtime provider returned an invalid SDP answer.")
+        validate_sdp(answer, self.max_sdp_bytes, is_offer=False)
         return answer
 
     def _build_exchange_request(self, offer: bytes) -> httpx.Request:
         """Build the provider SDP request without issuing network I/O."""
-        if not offer or len(offer) > self.max_sdp_bytes:
-            raise RealtimeInvalidSdpError("The realtime SDP offer is invalid or too large.")
+        validate_sdp(offer, self.max_sdp_bytes, is_offer=True)
         return httpx.Request(
             "POST",
             "https://api.openai.com/v1/realtime/calls",
@@ -75,3 +101,4 @@ class BusinessAssistantRealtimeRuntime:
                 "Accept": "application/sdp",
             },
         )
+

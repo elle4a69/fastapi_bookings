@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Res
 from sqlalchemy.orm import Session
 
 from ..deps import DatabaseId, get_current_owner, get_current_staff, get_current_tenant, get_db
+from ...core.config import settings
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...schemas.business_assistant import (
@@ -266,6 +267,26 @@ def submit_text_turn(
     )
 
 
+def _validate_realtime_origin(request: Request) -> None:
+    """Validate origin header against allowlisted frontend origins if present."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    clean_origin = origin.strip().rstrip("/").casefold()
+    allowed_raw = [o.strip().rstrip("/").casefold() for o in settings.FRONTEND_ORIGINS.split(",") if o.strip()]
+    if "*" in allowed_raw or clean_origin in allowed_raw:
+        return
+    host = request.headers.get("host")
+    if host:
+        clean_host = host.strip().casefold()
+        if clean_origin in (f"http://{clean_host}", f"https://{clean_host}"):
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Cross-origin request to realtime voice session is not permitted.",
+    )
+
+
 @router.post("/conversations/{conversation_id}/realtime", response_class=Response)
 async def exchange_realtime_sdp(
     conversation_id: DatabaseId,
@@ -275,6 +296,7 @@ async def exchange_realtime_sdp(
     db: Session = Depends(get_db),
 ) -> Response:
     """Exchange one authenticated browser SDP offer through server-held credentials."""
+    _validate_realtime_origin(request)
     service = _service(db, tenant, user)
     try:
         service.get_conversation(conversation_id=conversation_id)

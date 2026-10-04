@@ -532,6 +532,15 @@ ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *SUPPORT_ENGINEERING_TOOLS,
 )
 
+ALL_TOOL_PACKS: tuple[str, ...] = (
+    "product_help",
+    "booking_availability",
+    "business_knowledge",
+    "customer_operations",
+    "support_engineering",
+)
+
+
 
 class BusinessAssistantToolRegistry:
     """Execute server-authorised tools across modular tool packs."""

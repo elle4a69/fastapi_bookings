@@ -198,15 +198,30 @@ Mounted at `/api/admin/business-assistant`:
 - `GET /campaigns/proposals/{id}` retrieves a campaign proposal by ID.
 - `POST /campaigns/proposals/{id}/approve` approves a campaign proposal using its confirmation token; live broadcasting remains strictly disabled.
 
-### Realtime voice contract
+### Realtime voice contract (WP8)
 
-- `POST /conversations/{id}/realtime` accepts a bounded `application/sdp`
-  offer and relays it server-side to the provider's `/v1/realtime/calls`
-  contract, returning the live provider answer as `application/sdp` with
-  `Cache-Control: no-store`.
-- `POST /conversations/{id}/realtime/turns` persists an authenticated completed
-  transcript pair with stable session/event IDs and returns `user_message`,
-  `assistant_message`, and `duplicate_turn`.
+- `POST /conversations/{id}/realtime`:
+  - Validates inbound WebRTC SDP offers against RFC 4566 specifications (`v=0` header line, valid UTF-8, non-empty) and payload size limit (`BUSINESS_ASSISTANT_REALTIME_SDP_MAX_BYTES`, default 64 KB).
+  - Validates request `Origin` header against configured `FRONTEND_ORIGINS` and request `Host`.
+  - Securely relays the offer server-side to OpenAI `/v1/realtime/calls` using server-held credentials (`OPENAI_API_KEY`). API keys are never exposed to the client.
+  - Classifies errors cleanly without simulated mock fallbacks:
+    - `REALTIME_CONFIGURATION_REQUIRED`: Missing provider API key or model configuration.
+    - `REALTIME_INVALID_SDP`: Non-RFC-compliant, malformed, empty, or oversized SDP body.
+    - `REALTIME_PROVIDER_UNAVAILABLE`: Upstream provider unreachable, connection failure, or non-success status code.
+  - Returns provider answer as `application/sdp` with `Cache-Control: no-store`.
+- `POST /conversations/{id}/realtime/turns`:
+  - Persists completed transcript pairs transactionally with `channel="realtime_voice"`.
+  - Enforces transcript safety: empty or whitespace-only transcripts are rejected with 422 Unprocessable Entity, preventing partial or interrupted utterances from triggering side effects.
+  - Validates distinct item IDs (`user_item_id != assistant_response_id`).
+  - Enforces turn deduplication and idempotency on `(tenant_id, conversation_id, session_id, item_id)`. Re-submitting an existing completed turn returns `duplicate_turn=True` without duplicate database rows.
+  - Persisted voice turns are chronologically integrated with text turns and visible via `GET /conversations/{id}/messages`.
+- `POST /conversations/{id}/realtime/tools`:
+  - Enforces absolute tool parity across all 5 server-authorised tool packs (`product_help`, `booking_availability`, `business_knowledge`, `customer_operations`, `support_engineering`). Voice sessions cannot access unallowlisted or broader tools than text sessions.
+  - Enforces strict confirmation policy parity: side-effecting operations (e.g. activating business rules, preparing customer drafts) require valid cryptographic confirmation tokens.
+  - Rejects forbidden, unknown, or unallowlisted tools with structured JSON error responses.
+  - Records structural audit telemetry in `business_assistant_tool_runs` (`tool_name`, `status`, `duration_ms`), never persisting raw arguments, results, or credentials.
+- Graceful degradation:
+  - If realtime voice is unconfigured or upstream unavailable, clients cleanly fall back to standard text conversation endpoints without corruption or state loss.
 
 ### Onboarding and product-help context
 
@@ -278,7 +293,7 @@ must restore from a verified backup rather than dropping feature tables.
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py -q
+.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py -q
 ```
 
 
