@@ -1,11 +1,37 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { Bot, History, LoaderCircle, Menu, MessageCirclePlus, Mic, PhoneOff, Send, TicketPlus, Volume2, X } from 'lucide-react'
+import {
+  Bot,
+  CheckCircle2,
+  History,
+  LoaderCircle,
+  Menu,
+  MessageCirclePlus,
+  Mic,
+  PhoneOff,
+  RotateCcw,
+  Send,
+  Sparkles,
+  TicketPlus,
+  Volume2,
+  X,
+} from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { apiClient, toUserFacingApiError, type UserFacingApiError } from '@/lib/api'
+import {
+  apiClient,
+  toUserFacingApiError,
+  type UserFacingApiError,
+} from '@/lib/api'
 
-import { useBusinessAssistantRealtimeVoice } from './use-business-assistant-realtime-voice'
+import {
+  useRealtimeVoice,
+} from './use-realtime-voice'
+import {
+  type SupportTicket,
+  type TicketCreateResponse,
+} from './ticket-status'
 
 type Conversation = {
   id: number
@@ -31,25 +57,28 @@ type TextTurnResponse = {
   duplicate_request: boolean
 }
 
-type SupportTicket = {
-  id: number
-  conversation_id: number | null
-  category: string
-  severity: string
-  status: string
-  title: string
-  description: string
-  created_at: string
-  updated_at: string
-}
-
-type TicketCreateResponse = {
-  ticket: SupportTicket
-  duplicate_ticket: boolean
+type OnboardingResponse = {
+  progress: {
+    status: 'not_started' | 'in_progress' | 'completed'
+    completed_steps: string[]
+    updated_at: string | null
+  }
+  product_context: {
+    availability: string
+    enabled_modules: string[]
+    setup_counts?: {
+      active_services: number
+      active_providers: number
+      active_locations: number
+    } | null
+  }
 }
 
 function requestKey(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `turn-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )
 }
 
 export default function BusinessAssistantPage() {
@@ -69,15 +98,18 @@ export default function BusinessAssistantPage() {
   const [ticketSeverity, setTicketSeverity] = useState('normal')
   const [creatingTicket, setCreatingTicket] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [onboarding, setOnboarding] = useState<OnboardingResponse | null>(null)
 
-  const { voiceState, startVoice, stopVoice } = useBusinessAssistantRealtimeVoice({
+  const { voiceState, startVoice, stopVoice } = useRealtimeVoice({
     conversationId: activeConversationId,
     onTurnPersisted: (turn) => {
       setMessages((current) => {
         const next = [
-          ...current.filter((message) => (
-            message.id !== turn.user_message.id && message.id !== turn.assistant_message.id
-          )),
+          ...current.filter(
+            (message) =>
+              message.id !== turn.user_message.id &&
+              message.id !== turn.assistant_message.id,
+          ),
           turn.user_message,
           turn.assistant_message,
         ]
@@ -104,12 +136,15 @@ export default function BusinessAssistantPage() {
   const loadConversations = async () => {
     setLoading(true)
     try {
-      const items = await apiClient.get<Conversation[]>('/api/admin/business-assistant/conversations')
+      const items = await apiClient.get<Conversation[]>(
+        '/api/admin/business-assistant/conversations',
+      )
       setConversations(items)
       if (items.length > 0) {
-        const nextId = activeConversationId && items.some((item) => item.id === activeConversationId)
-          ? activeConversationId
-          : items[0].id
+        const nextId =
+          activeConversationId && items.some((item) => item.id === activeConversationId)
+            ? activeConversationId
+            : items[0].id
         setActiveConversationId(nextId)
         await loadMessages(nextId)
       } else {
@@ -124,8 +159,23 @@ export default function BusinessAssistantPage() {
   }
 
   const loadTickets = async () => {
-    const items = await apiClient.get<SupportTicket[]>('/api/admin/business-assistant/tickets')
-    setTickets(items)
+    try {
+      const items = await apiClient.get<SupportTicket[]>('/api/admin/business-assistant/tickets')
+      setTickets(items)
+    } catch {
+      // Non-blocking ticket load failure
+    }
+  }
+
+  const loadOnboarding = async () => {
+    try {
+      const data = await apiClient.get<OnboardingResponse>(
+        '/api/admin/business-assistant/onboarding',
+      )
+      setOnboarding(data)
+    } catch {
+      // Non-blocking onboarding load failure
+    }
   }
 
   useEffect(() => {
@@ -133,7 +183,9 @@ export default function BusinessAssistantPage() {
     const loadInitialConversations = async () => {
       setLoading(true)
       try {
-        const items = await apiClient.get<Conversation[]>('/api/admin/business-assistant/conversations')
+        const items = await apiClient.get<Conversation[]>(
+          '/api/admin/business-assistant/conversations',
+        )
         if (!active) return
         setConversations(items)
         if (items.length > 0) {
@@ -144,6 +196,7 @@ export default function BusinessAssistantPage() {
           if (active) setMessages(history)
         }
         await loadTickets()
+        await loadOnboarding()
       } catch (caught) {
         if (active) {
           setError(caught instanceof Error ? caught.message : 'Unable to load conversations.')
@@ -161,9 +214,12 @@ export default function BusinessAssistantPage() {
   const createConversation = async () => {
     setError(null)
     try {
-      const conversation = await apiClient.post<Conversation>('/api/admin/business-assistant/conversations', {
-        request_key: requestKey(),
-      })
+      const conversation = await apiClient.post<Conversation>(
+        '/api/admin/business-assistant/conversations',
+        {
+          request_key: requestKey(),
+        },
+      )
       setConversations((current) => [conversation, ...current])
       setActiveConversationId(conversation.id)
       setMessages([])
@@ -182,15 +238,21 @@ export default function BusinessAssistantPage() {
     setCreatingTicket(true)
     setError(null)
     try {
-      const result = await apiClient.post<TicketCreateResponse>('/api/admin/business-assistant/tickets', {
-        conversation_id: activeConversationId,
-        category: ticketCategory,
-        severity: ticketSeverity,
-        title,
-        description,
-        request_key: requestKey(),
-      })
-      setTickets((current) => [result.ticket, ...current.filter((ticket) => ticket.id !== result.ticket.id)])
+      const result = await apiClient.post<TicketCreateResponse>(
+        '/api/admin/business-assistant/tickets',
+        {
+          conversation_id: activeConversationId,
+          category: ticketCategory,
+          severity: ticketSeverity,
+          title,
+          description,
+          request_key: requestKey(),
+        },
+      )
+      setTickets((current) => [
+        result.ticket,
+        ...current.filter((ticket) => ticket.id !== result.ticket.id),
+      ])
       setTicketTitle('')
       setTicketDescription('')
       if (result.duplicate_ticket) {
@@ -240,7 +302,7 @@ export default function BusinessAssistantPage() {
       try {
         await loadMessages(activeConversationId)
       } catch {
-        // The structured submission error remains the useful error for this interaction.
+        // Structured error retained
       }
     } finally {
       setSending(false)
@@ -309,7 +371,11 @@ export default function BusinessAssistantPage() {
               onClick={stopVoice}
               data-testid="business-assistant-voice-stop"
             >
-              {voiceState === 'connecting' ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <PhoneOff className="mr-2 h-4 w-4" aria-hidden="true" />}
+              {voiceState === 'connecting' ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <PhoneOff className="mr-2 h-4 w-4" aria-hidden="true" />
+              )}
               {voiceState === 'connecting' ? 'Connecting voice…' : 'End voice'}
             </Button>
           )}
@@ -319,6 +385,39 @@ export default function BusinessAssistantPage() {
           </Button>
         </div>
       </header>
+
+      {/* Onboarding milestone banner if available */}
+      {onboarding && (
+        <section
+          className="rounded-lg border bg-muted/20 p-3 sm:p-4 shadow-xs"
+          aria-label="Onboarding status"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+              <h2 className="text-xs sm:text-sm font-semibold">Tenant Setup Milestones</h2>
+              <Badge variant="outline" className="capitalize text-[11px]">
+                {onboarding.progress.status.replaceAll('_', ' ')}
+              </Badge>
+            </div>
+            {onboarding.product_context.setup_counts && (
+              <p className="text-xs text-muted-foreground">
+                Configured catalog capacity: {onboarding.product_context.setup_counts.active_services} services · {onboarding.product_context.setup_counts.active_providers} providers · {onboarding.product_context.setup_counts.active_locations} locations
+              </p>
+            )}
+          </div>
+          {onboarding.progress.completed_steps.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {onboarding.progress.completed_steps.map((step) => (
+                <Badge key={step} variant="secondary" className="gap-1 text-[10px]">
+                  <CheckCircle2 className="h-3 w-3 text-primary" aria-hidden="true" />
+                  {step.replaceAll('_', ' ')}
+                </Badge>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {historyOpen && (
         <>
@@ -340,7 +439,13 @@ export default function BusinessAssistantPage() {
                 <h2 className="text-base font-semibold">Conversation history</h2>
                 <p className="mt-1 text-sm text-muted-foreground">Choose a saved conversation.</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setHistoryOpen(false)} aria-label="Close history">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setHistoryOpen(false)}
+                aria-label="Close history"
+              >
                 <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
@@ -361,7 +466,9 @@ export default function BusinessAssistantPage() {
                       className="h-auto justify-start px-3 py-2 text-left"
                       onClick={() => void selectConversation(conversation.id)}
                     >
-                      <span className="line-clamp-2 text-sm">{conversation.title || 'New conversation'}</span>
+                      <span className="line-clamp-2 text-sm">
+                        {conversation.title || 'New conversation'}
+                      </span>
                     </Button>
                   ))}
                 </div>
@@ -372,25 +479,47 @@ export default function BusinessAssistantPage() {
       )}
 
       {voiceState !== 'idle' && (
-        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm" role="status">
+        <div
+          className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
+          role="status"
+        >
           <Volume2 className="h-4 w-4" aria-hidden="true" />
-          {voiceState === 'connecting' ? 'Connecting your microphone and private voice session…' : 'Voice is live. You can interrupt naturally or end the call at any time.'}
+          {voiceState === 'connecting'
+            ? 'Connecting your microphone and private voice session…'
+            : 'Voice is live. You can interrupt naturally or end the call at any time.'}
         </div>
       )}
 
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </div>
       )}
 
       {turnError && (
-        <div className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">
-          <p><span className="font-semibold">{turnError.code}</span>: {turnError.message}</p>
-          {turnError.requestId && <p className="font-mono text-xs">Request ID: {turnError.requestId}</p>}
+        <div
+          className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
+          <p>
+            <span className="font-semibold">{turnError.code}</span>: {turnError.message}
+          </p>
+          {turnError.requestId && (
+            <p className="font-mono text-xs">Request ID: {turnError.requestId}</p>
+          )}
           {turnError.retryable && (
             <div>
-              <Button type="button" variant="outline" size="sm" disabled={sending} onClick={() => void sendTurn()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sending}
+                onClick={() => void sendTurn()}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 Retry message
               </Button>
             </div>
@@ -398,7 +527,10 @@ export default function BusinessAssistantPage() {
         </div>
       )}
 
-      <section className="flex min-h-[32rem] min-w-0 flex-col rounded-lg border bg-card" aria-label="Conversation">
+      <section
+        className="flex min-h-[32rem] min-w-0 flex-col rounded-lg border bg-card"
+        aria-label="Conversation"
+      >
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
             {!activeConversationId ? (
@@ -445,7 +577,11 @@ export default function BusinessAssistantPage() {
             />
             <div className="mt-2 flex justify-end">
               <Button type="submit" disabled={!activeConversationId || !draft.trim() || sending}>
-                {sending ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="mr-2 h-4 w-4" aria-hidden="true" />}
+                {sending ? (
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                )}
                 Send
               </Button>
             </div>
@@ -453,11 +589,16 @@ export default function BusinessAssistantPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_20rem]" aria-labelledby="support-ticket-heading">
+      <section
+        className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
+        aria-labelledby="support-ticket-heading"
+      >
         <div>
           <div className="flex items-center gap-2 text-primary">
             <TicketPlus className="h-5 w-5" aria-hidden="true" />
-            <h2 id="support-ticket-heading" className="text-base font-semibold">Support tickets</h2>
+            <h2 id="support-ticket-heading" className="text-base font-semibold">
+              Support tickets
+            </h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Submit a sanitised summary. Tickets remain awaiting engineering review; they do not trigger work automatically.
@@ -518,8 +659,13 @@ export default function BusinessAssistantPage() {
                 required
               />
             </label>
-            <Button type="submit" disabled={!ticketTitle.trim() || !ticketDescription.trim() || creatingTicket}>
-              {creatingTicket && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+            <Button
+              type="submit"
+              disabled={!ticketTitle.trim() || !ticketDescription.trim() || creatingTicket}
+            >
+              {creatingTicket && (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+              )}
               Create ticket
             </Button>
           </form>

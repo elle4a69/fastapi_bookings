@@ -1,4 +1,4 @@
-import { BellIcon, BookOpenCheckIcon, Compass, Download, Menu } from "lucide-react"
+import { BellIcon, BookOpenCheckIcon, Bot, Compass, Download, Menu } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -10,8 +10,8 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { usePwaInstall } from "@/hooks/use-pwa-install"
 import { IosInstallDialog } from "@/components/ios-install-dialog"
-
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useBusinessAssistant } from "@/pages/admin/business-assistant/business-assistant-context"
 
 function getPageLabel(pathname: string) {
   for (const section of navigation) {
@@ -34,6 +34,7 @@ function getPageLabel(pathname: string) {
 export function AppHeader({ unreadCount = 0 }: { unreadCount?: number }) {
   const { pathname } = useLocation()
   const { canInstall, isIOS, showIosInstructions, setShowIosInstructions, install } = usePwaInstall()
+  const { toggleDrawer, drawerOpen } = useBusinessAssistant()
 
   const handleInstallClick = async () => {
     if (isIOS) {
@@ -78,6 +79,20 @@ export function AppHeader({ unreadCount = 0 }: { unreadCount?: number }) {
             <span className="sm:hidden">Directory</span>
           </Button>
         </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleDrawer}
+          className="h-8 gap-1.5 border-primary/30 bg-primary/5 px-2.5 text-xs font-semibold text-primary shadow-xs hover:bg-primary/15"
+          title="Open Business Assistant"
+          aria-label="Open Business Assistant"
+          aria-expanded={drawerOpen}
+          aria-controls="business-assistant-drawer"
+          data-testid="business-assistant-header-button"
+        >
+          <Bot className="h-3.5 w-3.5 text-primary" />
+          <span className="hidden sm:inline">Assistant</span>
+        </Button>
         {canInstall && (
           <Button
             variant="outline"
