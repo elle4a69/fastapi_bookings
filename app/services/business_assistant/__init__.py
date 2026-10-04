@@ -33,6 +33,8 @@ from .confirmation import (
     ConfirmationSignatureError,
     DynamicFactRejectedError,
     compute_rule_payload_hash,
+    compute_draft_payload_hash,
+    compute_campaign_payload_hash,
     generate_confirmation_token,
     validate_static_business_knowledge,
     verify_confirmation_token,
@@ -43,6 +45,7 @@ from .tool_registry import (
     PRODUCT_HELP_TOOLS,
     BOOKING_AVAILABILITY_TOOLS,
     BUSINESS_KNOWLEDGE_TOOLS,
+    CUSTOMER_OPERATIONS_TOOLS,
     ALL_BUSINESS_ASSISTANT_TOOLS,
 )
 
@@ -70,6 +73,7 @@ __all__ = [
     "PRODUCT_HELP_TOOLS",
     "BOOKING_AVAILABILITY_TOOLS",
     "BUSINESS_KNOWLEDGE_TOOLS",
+    "CUSTOMER_OPERATIONS_TOOLS",
     "ALL_BUSINESS_ASSISTANT_TOOLS",
     "ConfirmationError",
     "ConfirmationExpiredError",
@@ -78,6 +82,8 @@ __all__ = [
     "ConfirmationSignatureError",
     "DynamicFactRejectedError",
     "compute_rule_payload_hash",
+    "compute_draft_payload_hash",
+    "compute_campaign_payload_hash",
     "generate_confirmation_token",
     "validate_static_business_knowledge",
     "verify_confirmation_token",

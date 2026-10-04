@@ -122,6 +122,15 @@ The assistant accesses three modular server-authorised tool packs:
      token bound to exact version and payload hash.
    - `resolve_curator_question`: Resolves or dismisses a curator item within tenant
      scope.
+4. **Customer Operations Pack:**
+   - `search_customer_conversations`: Searches authorised customer conversations
+     within the tenant, automatically scoped to provider ID for staff with provider role.
+   - `get_customer_conversation_thread`: Inspects customer conversation thread,
+     recent messages, and client opt-in/opt-out status with masked PII preview.
+   - `prepare_customer_message_draft`: Prepares a response message draft with versioning,
+     idempotency, and confirmation token. Never executes live sending.
+   - `create_campaign_proposal`: Evaluates server-authoritative audience selection with
+     explainable inclusion/exclusion criteria, snapshotting recipients and issuing an approval token.
 
 ### Text API contract
 
@@ -149,6 +158,19 @@ Mounted at `/api/admin/business-assistant`:
 - `GET /knowledge/curator/questions` lists pending curator questions in the current tenant.
 - `POST /knowledge/curator/questions/{id}/resolve` marks a curator proposal as resolved,
   dismissed, or rejected.
+
+### Customer Operations & Campaign Proposals API contract
+
+- `GET /customer/conversations` searches customer conversations within tenant and provider boundary.
+- `GET /customer/conversations/{id}` retrieves thread messages and opt-in/opt-out status.
+- `POST /customer/conversations/{id}/draft` prepares a draft response with confirmation token.
+- `GET /customer/drafts` lists prepared response drafts in tenant scope.
+- `GET /customer/drafts/{id}` retrieves a specific response draft.
+- `POST /campaigns/audience-preview` evaluates and previews server-authoritative audience criteria.
+- `POST /campaigns/proposals` persists an explainable campaign proposal with confirmation token.
+- `GET /campaigns/proposals` lists campaign proposals in the active tenant.
+- `GET /campaigns/proposals/{id}` retrieves a campaign proposal by ID.
+- `POST /campaigns/proposals/{id}/approve` approves a campaign proposal using its confirmation token; live broadcasting remains strictly disabled.
 
 ### Realtime voice contract
 

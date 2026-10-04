@@ -486,3 +486,118 @@ class BusinessAssistantReadAdapters:
         if not 1 <= limit <= 100:
             raise ValueError("Ticket status limit must be between 1 and 100.")
         return [self.get_ticket_handoff_status(ticket.id) for ticket in self._repository.list_tickets(limit=limit)]
+
+    def search_customer_conversations(
+        self,
+        *,
+        query: Optional[str] = None,
+        status: Optional[str] = None,
+        provider_id: Optional[int] = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Search customer conversations scoped to the active tenant and provider."""
+        user = self._get_user()
+        user_role = (user.role or "").lower() if user else "unknown"
+        user_provider_id = user.provider_id if user else None
+
+        if user_role == "provider" and user_provider_id:
+            if provider_id is not None and provider_id != user_provider_id:
+                raise PermissionError("Providers may only inspect their own conversations.")
+            provider_id = user_provider_id
+
+        conversations = self._repository.search_customer_conversations(
+            query=query,
+            status=status,
+            provider_id=provider_id,
+            limit=limit,
+        )
+
+        results: list[dict[str, Any]] = []
+        for conv in conversations:
+            client = self._repository.get_client_for_conversation(conv)
+            opted_out = getattr(client, "opted_out", False) if client else False
+            sms_consent = getattr(client, "sms_consent", True) if client else True
+            accepts_marketing = getattr(client, "accepts_marketing", False) if client else False
+
+            results.append(
+                {
+                    "id": conv.id,
+                    "contact_name": conv.contact_name,
+                    "contact_identifier": _mask_contact(conv.contact_identifier),
+                    "status": conv.status,
+                    "channel_type": conv.channel_type.value if conv.channel_type else "sms",
+                    "provider_id": conv.provider_id,
+                    "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+                    "opt_in_status": {
+                        "opted_out": opted_out,
+                        "sms_consent": sms_consent,
+                        "accepts_marketing": accepts_marketing,
+                    },
+                }
+            )
+        return results
+
+    def get_customer_conversation_thread(
+        self,
+        conversation_id: int,
+        *,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Inspect a customer conversation thread, recent messages, and opt-in/opt-out status."""
+        user = self._get_user()
+        user_role = (user.role or "").lower() if user else "unknown"
+        user_provider_id = user.provider_id if user else None
+
+        effective_provider_id = user_provider_id if (user_role == "provider" and user_provider_id) else None
+        conv = self._repository.get_customer_conversation(conversation_id, provider_id=effective_provider_id)
+        if not conv:
+            raise LookupError("Customer conversation was not found in the authenticated scope.")
+
+        client = self._repository.get_client_for_conversation(conv)
+        opted_out = getattr(client, "opted_out", False) if client else False
+        sms_consent = getattr(client, "sms_consent", True) if client else True
+        accepts_marketing = getattr(client, "accepts_marketing", False) if client else False
+
+        messages = self._repository.get_customer_conversation_messages(conversation_id, limit=limit)
+
+        return {
+            "conversation_id": conv.id,
+            "contact_name": conv.contact_name,
+            "contact_identifier": _mask_contact(conv.contact_identifier),
+            "status": conv.status,
+            "channel_type": conv.channel_type.value if conv.channel_type else "sms",
+            "provider_id": conv.provider_id,
+            "opt_in_status": {
+                "opted_out": opted_out,
+                "sms_consent": sms_consent,
+                "accepts_marketing": accepts_marketing,
+                "client_active": getattr(client, "active", True) if client else True,
+            },
+            "messages": [
+                {
+                    "id": m.id,
+                    "direction": m.direction.value if hasattr(m.direction, "value") else str(m.direction),
+                    "source": m.source.value if hasattr(m.source, "value") else str(m.source),
+                    "content": m.content,
+                    "delivery_status": m.delivery_status.value if hasattr(m.delivery_status, "value") else str(m.delivery_status),
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ],
+        }
+
+
+def _mask_contact(value: str | None) -> str:
+    """Mask a customer phone number or handle for safe user preview."""
+    if not value:
+        return ""
+    val = value.strip()
+    if "@" in val:
+        parts = val.split("@", 1)
+        name_part = parts[0]
+        prefix = name_part[:1] if name_part else ""
+        return f"{prefix}***@{parts[1]}"
+    if len(val) <= 4:
+        return "***"
+    return f"{val[:4]}***{val[-3:]}"
+

@@ -250,3 +250,144 @@ class CuratorQuestionResolveRequest(BaseModel):
     note: Optional[str] = Field(default=None, max_length=500)
 
 
+class CustomerOptInStatusRead(BaseModel):
+    """Customer opt-in, SMS consent, and marketing acceptance record."""
+
+    opted_out: bool = False
+    sms_consent: bool = True
+    accepts_marketing: bool = False
+    client_active: Optional[bool] = True
+
+
+class CustomerConversationSummaryRead(BaseModel):
+    """Summary of an authorised customer conversation for search results."""
+
+    id: int
+    contact_name: Optional[str] = None
+    contact_identifier: str
+    status: str
+    channel_type: Optional[str] = None
+    provider_id: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    opt_in_status: CustomerOptInStatusRead
+
+
+class CustomerConversationMessageRead(BaseModel):
+    """Single message item within a customer conversation thread."""
+
+    id: int
+    direction: str
+    source: str
+    content: str
+    delivery_status: str
+    created_at: Optional[datetime] = None
+
+
+class CustomerConversationThreadRead(BaseModel):
+    """Authorised customer conversation thread with messages and consent status."""
+
+    conversation_id: int
+    contact_name: Optional[str] = None
+    contact_identifier: str
+    status: str
+    channel_type: Optional[str] = None
+    provider_id: Optional[int] = None
+    opt_in_status: CustomerOptInStatusRead
+    messages: list[CustomerConversationMessageRead] = Field(default_factory=list)
+
+
+class CustomerMessageDraftCreate(BaseModel):
+    """Input payload to prepare a customer response message draft."""
+
+    content: str = Field(min_length=1, max_length=10_000)
+    request_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+
+class CustomerMessageDraftRead(BaseModel):
+    """Persisted response draft with recipient preview and versioning."""
+
+    id: int
+    conversation_id: int
+    content: str
+    recipient_preview: str
+    status: str
+    version: int
+    payload_hash: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CustomerMessageDraftResponse(BaseModel):
+    """Response containing prepared message draft and confirmation token."""
+
+    draft: CustomerMessageDraftRead
+    confirmation_token: str
+    preview: dict = Field(default_factory=dict)
+
+
+class CampaignAudienceCriteriaInput(BaseModel):
+    """Configurable inclusion criteria for audience calculation."""
+
+    marketing_opt_in_only: bool = True
+    active_only: bool = True
+    exclude_pending_holds: bool = True
+    min_completed_bookings: int = 0
+    provider_id: Optional[int] = None
+
+
+class CampaignAudiencePreviewRead(BaseModel):
+    """Audience preview containing recipient count and explainable summary."""
+
+    recipient_count: int
+    summary: dict = Field(default_factory=dict)
+    sample_recipients: list[dict] = Field(default_factory=list)
+
+
+class CampaignProposalCreate(BaseModel):
+    """Input payload to create an audience-selected campaign proposal."""
+
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=10_000)
+    marketing_opt_in_only: bool = True
+    active_only: bool = True
+    exclude_pending_holds: bool = True
+    min_completed_bookings: int = 0
+    provider_id: Optional[int] = None
+    request_key: Optional[str] = Field(default=None, min_length=8, max_length=128)
+
+
+class CampaignProposalRead(BaseModel):
+    """Explainable campaign proposal with snapshot and approval status."""
+
+    id: int
+    title: str
+    content: str
+    recipient_count: int
+    status: str
+    version: int
+    payload_hash: Optional[str] = None
+    target_audience_criteria: dict = Field(default_factory=dict)
+    audience_snapshot: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CampaignProposalResponse(BaseModel):
+    """Result of creating a campaign proposal including confirmation token."""
+
+    proposal: CampaignProposalRead
+    confirmation_token: str
+    summary: dict = Field(default_factory=dict)
+
+
+class CampaignProposalApproveRequest(BaseModel):
+    """Explicit confirmation payload bound to proposal version and payload hash."""
+
+    confirmation_token: str = Field(min_length=16)
+
+
+

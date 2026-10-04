@@ -339,3 +339,69 @@ class SupportTicketEvent(Base):
     ticket = relationship("SupportTicket", back_populates="events")
     tenant = relationship("Tenant")
     actor_user = relationship("User")
+
+
+class BusinessAssistantMessageDraft(Base):
+    """A prepared response message draft for an authorised customer conversation.
+
+    Live sending remains disabled or requires explicit separate confirmed approval token.
+    Only drafts with recipient preview, versioning, and idempotency are prepared.
+    """
+
+    __tablename__ = "business_assistant_message_drafts"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'approved', 'cancelled')", name="ck_business_assistant_draft_status"),
+        UniqueConstraint("tenant_id", "user_id", "request_key", name="uq_business_assistant_draft_request_key"),
+        Index("ix_business_assistant_message_drafts_scope_status", "tenant_id", "status", "created_at"),
+        Index("ix_business_assistant_message_drafts_conversation", "tenant_id", "conversation_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    recipient_preview = Column(String(120), nullable=False)
+    status = Column(String(32), nullable=False, default="draft", index=True)
+    version = Column(Integer, nullable=False, default=1)
+    payload_hash = Column(String(64), nullable=True)
+    request_key = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+    tenant = relationship("Tenant")
+    user = relationship("User")
+    conversation = relationship("Conversation")
+
+
+class BusinessAssistantCampaignProposal(Base):
+    """An explainable audience selection and campaign proposal.
+
+    Records audience criteria, recipient snapshot, content, and approval status.
+    Bulk sending remains strictly disabled initially.
+    """
+
+    __tablename__ = "business_assistant_campaign_proposals"
+    __table_args__ = (
+        CheckConstraint("status IN ('proposed', 'approved', 'cancelled')", name="ck_business_assistant_campaign_status"),
+        UniqueConstraint("tenant_id", "user_id", "request_key", name="uq_business_assistant_campaign_request_key"),
+        Index("ix_business_assistant_campaign_proposals_scope_status", "tenant_id", "status", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    target_audience_criteria = Column(JSON, nullable=False, default=dict)
+    audience_snapshot = Column(JSON, nullable=False, default=dict)
+    recipient_count = Column(Integer, nullable=False, default=0)
+    status = Column(String(32), nullable=False, default="proposed", index=True)
+    version = Column(Integer, nullable=False, default=1)
+    payload_hash = Column(String(64), nullable=True)
+    request_key = Column(String(128), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+    tenant = relationship("Tenant")
+    user = relationship("User")

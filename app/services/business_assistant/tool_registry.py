@@ -268,10 +268,142 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
     },
 )
 
+CUSTOMER_OPERATIONS_TOOLS: tuple[dict[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "search_customer_conversations",
+            "description": "Search authorised customer conversations within the current tenant and provider scope.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Optional search term for contact name, identifier, or message snippet.",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["active", "archived", "paused", "all"],
+                        "description": "Filter by conversation status (default 'active').",
+                    },
+                    "provider_id": {
+                        "type": "integer",
+                        "description": "Optional provider ID to filter conversations. Enforced automatically if user is a provider.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of conversations to return (1-50, default 20).",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_customer_conversation_thread",
+            "description": "Inspect a customer conversation thread, recent messages, and client opt-in/opt-out status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "integer",
+                        "description": "ID of the customer conversation to inspect.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of recent messages to return (1-50, default 20).",
+                    },
+                },
+                "required": ["conversation_id"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prepare_customer_message_draft",
+            "description": "Prepare a response message draft for an authorised customer conversation without sending.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "integer",
+                        "description": "ID of the customer conversation to respond to.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Draft message response text.",
+                    },
+                    "request_key": {
+                        "type": "string",
+                        "description": "Optional idempotency key for draft creation.",
+                    },
+                },
+                "required": ["conversation_id", "content"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_campaign_proposal",
+            "description": "Create an audience-selected campaign proposal with explainable inclusion criteria and recipient preview.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Campaign title or campaign objective.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Campaign message text or template.",
+                    },
+                    "marketing_opt_in_only": {
+                        "type": "boolean",
+                        "description": "Whether to only include clients who accepted marketing (default true).",
+                    },
+                    "active_only": {
+                        "type": "boolean",
+                        "description": "Whether to only include active clients (default true).",
+                    },
+                    "exclude_pending_holds": {
+                        "type": "boolean",
+                        "description": "Whether to exclude clients with pending holds/bookings (default true).",
+                    },
+                    "min_completed_bookings": {
+                        "type": "integer",
+                        "description": "Minimum number of completed bookings required for inclusion (default 0).",
+                    },
+                    "provider_id": {
+                        "type": "integer",
+                        "description": "Optional provider ID filter for prior bookings.",
+                    },
+                    "request_key": {
+                        "type": "string",
+                        "description": "Optional idempotency key for campaign proposal creation.",
+                    },
+                },
+                "required": ["title", "content"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    },
+)
+
 ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *PRODUCT_HELP_TOOLS,
     *BOOKING_AVAILABILITY_TOOLS,
     *BUSINESS_KNOWLEDGE_TOOLS,
+    *CUSTOMER_OPERATIONS_TOOLS,
 )
 
 
@@ -309,6 +441,8 @@ class BusinessAssistantToolRegistry:
             active.extend(BOOKING_AVAILABILITY_TOOLS)
         if "business_knowledge" in self._packs:
             active.extend(BUSINESS_KNOWLEDGE_TOOLS)
+        if "customer_operations" in self._packs:
+            active.extend(CUSTOMER_OPERATIONS_TOOLS)
         return tuple(active)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -559,6 +693,145 @@ class BusinessAssistantToolRegistry:
                         "resolution_code": resolved.resolution_code,
                     },
                 }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "search_customer_conversations":
+            query = arguments.get("query")
+            if query is not None and not isinstance(query, str):
+                return {"status": "rejected", "reason": "query must be a string."}
+            status_arg = arguments.get("status")
+            if status_arg is not None and not isinstance(status_arg, str):
+                return {"status": "rejected", "reason": "status must be a string."}
+            provider_id = arguments.get("provider_id")
+            if provider_id is not None and not isinstance(provider_id, int):
+                return {"status": "rejected", "reason": "provider_id must be an integer."}
+            limit = arguments.get("limit", 20)
+            if not isinstance(limit, int) or limit < 1 or limit > 50:
+                return {"status": "rejected", "reason": "limit must be an integer between 1 and 50."}
+            try:
+                service = self._get_service()
+                convs = service.search_customer_conversations(
+                    query=query,
+                    status=status_arg,
+                    provider_id=provider_id,
+                    limit=limit,
+                )
+                return {"status": "ok", "conversations": convs}
+            except (ValueError, LookupError, PermissionError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "get_customer_conversation_thread":
+            conversation_id = arguments.get("conversation_id")
+            if conversation_id is None or not isinstance(conversation_id, int):
+                return {"status": "rejected", "reason": "conversation_id is required and must be an integer."}
+            limit = arguments.get("limit", 20)
+            if not isinstance(limit, int) or limit < 1 or limit > 50:
+                return {"status": "rejected", "reason": "limit must be an integer between 1 and 50."}
+            try:
+                service = self._get_service()
+                thread = service.get_customer_conversation_thread(
+                    conversation_id=conversation_id,
+                    limit=limit,
+                )
+                return {"status": "ok", "thread": thread}
+            except (LookupError, PermissionError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "prepare_customer_message_draft":
+            conversation_id = arguments.get("conversation_id")
+            if conversation_id is None or not isinstance(conversation_id, int):
+                return {"status": "rejected", "reason": "conversation_id is required and must be an integer."}
+            content = arguments.get("content")
+            if not content or not isinstance(content, str):
+                return {"status": "rejected", "reason": "content is required and must be a string."}
+            request_key = arguments.get("request_key")
+            if request_key is not None and not isinstance(request_key, str):
+                return {"status": "rejected", "reason": "request_key must be a string."}
+            try:
+                service = self._get_service()
+                draft, token, preview = service.prepare_customer_message_draft(
+                    conversation_id=conversation_id,
+                    content=content,
+                    request_key=request_key,
+                )
+                return {
+                    "status": "ok",
+                    "draft": {
+                        "id": draft.id,
+                        "conversation_id": draft.conversation_id,
+                        "content": draft.content,
+                        "recipient_preview": draft.recipient_preview,
+                        "status": draft.status,
+                        "version": draft.version,
+                        "payload_hash": draft.payload_hash,
+                    },
+                    "confirmation_token": token,
+                    "preview": preview,
+                }
+            except (LookupError, PermissionError, ValueError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name == "create_campaign_proposal":
+            title = arguments.get("title")
+            if not title or not isinstance(title, str):
+                return {"status": "rejected", "reason": "title is required and must be a string."}
+            content = arguments.get("content")
+            if not content or not isinstance(content, str):
+                return {"status": "rejected", "reason": "content is required and must be a string."}
+            marketing_opt_in_only = arguments.get("marketing_opt_in_only", True)
+            if not isinstance(marketing_opt_in_only, bool):
+                return {"status": "rejected", "reason": "marketing_opt_in_only must be a boolean."}
+            active_only = arguments.get("active_only", True)
+            if not isinstance(active_only, bool):
+                return {"status": "rejected", "reason": "active_only must be a boolean."}
+            exclude_pending_holds = arguments.get("exclude_pending_holds", True)
+            if not isinstance(exclude_pending_holds, bool):
+                return {"status": "rejected", "reason": "exclude_pending_holds must be a boolean."}
+            min_completed_bookings = arguments.get("min_completed_bookings", 0)
+            if not isinstance(min_completed_bookings, int):
+                return {"status": "rejected", "reason": "min_completed_bookings must be an integer."}
+            provider_id = arguments.get("provider_id")
+            if provider_id is not None and not isinstance(provider_id, int):
+                return {"status": "rejected", "reason": "provider_id must be an integer."}
+            request_key = arguments.get("request_key")
+            if request_key is not None and not isinstance(request_key, str):
+                return {"status": "rejected", "reason": "request_key must be a string."}
+            try:
+                service = self._get_service()
+                proposal, token, summary = service.create_campaign_proposal(
+                    title=title,
+                    content=content,
+                    marketing_opt_in_only=marketing_opt_in_only,
+                    active_only=active_only,
+                    exclude_pending_holds=exclude_pending_holds,
+                    min_completed_bookings=min_completed_bookings,
+                    provider_id=provider_id,
+                    request_key=request_key,
+                )
+                return {
+                    "status": "ok",
+                    "proposal": {
+                        "id": proposal.id,
+                        "title": proposal.title,
+                        "content": proposal.content,
+                        "recipient_count": proposal.recipient_count,
+                        "status": proposal.status,
+                        "version": proposal.version,
+                        "payload_hash": proposal.payload_hash,
+                        "target_audience_criteria": proposal.target_audience_criteria,
+                    },
+                    "confirmation_token": token,
+                    "summary": summary,
+                }
+            except (ValueError, LookupError, PermissionError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 

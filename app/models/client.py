@@ -38,6 +38,8 @@ class Client(Base):
     longitude = Column(Float, nullable=True)
     
     accepts_marketing = Column(Boolean, default=False, nullable=False)
+    opted_out = Column(Boolean, default=False, nullable=False)
+    sms_consent = Column(Boolean, default=True, nullable=False)
     terms_accepted_at = Column(DateTime(timezone=True), nullable=True)
     privacy_accepted_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)

@@ -246,3 +246,52 @@ def verify_confirmation_token(
         )
 
     return payload
+
+
+def compute_draft_payload_hash(
+    *,
+    tenant_id: int,
+    user_id: int,
+    conversation_id: int,
+    content: str,
+    version: int = 1,
+) -> str:
+    """Compute deterministic SHA-256 hash for message draft versioning and confirmation binding."""
+    canonical = json.dumps(
+        {
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "content": content.strip(),
+            "version": version,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def compute_campaign_payload_hash(
+    *,
+    tenant_id: int,
+    user_id: int,
+    title: str,
+    content: str,
+    recipient_count: int,
+    version: int = 1,
+) -> str:
+    """Compute deterministic SHA-256 hash for campaign proposal versioning and confirmation binding."""
+    canonical = json.dumps(
+        {
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "title": title.strip(),
+            "content": content.strip(),
+            "recipient_count": recipient_count,
+            "version": version,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+

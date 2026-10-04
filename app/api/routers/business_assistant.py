@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from ..deps import DatabaseId, get_current_owner, get_current_tenant, get_db
+from ..deps import DatabaseId, get_current_owner, get_current_staff, get_current_tenant, get_db
 from ...models.tenant import Tenant
 from ...models.user import User
 from ...schemas.business_assistant import (
@@ -21,6 +21,18 @@ from ...schemas.business_assistant import (
     BusinessAssistantSetupCountsRead,
     BusinessAssistantTextTurnCreate,
     BusinessAssistantTextTurnRead,
+    CampaignAudienceCriteriaInput,
+    CampaignAudiencePreviewRead,
+    CampaignProposalApproveRequest,
+    CampaignProposalCreate,
+    CampaignProposalRead,
+    CampaignProposalResponse,
+    CustomerConversationMessageRead,
+    CustomerConversationSummaryRead,
+    CustomerConversationThreadRead,
+    CustomerMessageDraftCreate,
+    CustomerMessageDraftRead,
+    CustomerMessageDraftResponse,
     SupportTicketCreate,
     SupportTicketCreateRead,
     SupportTicketEventRead,
@@ -566,4 +578,220 @@ def resolve_curator_question(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Curator question not found.") from exc
     return CuratorQuestionRead.model_validate(resolved)
+
+
+# ---------------------------------------------------------------------------
+# WP5: Customer Operations, Drafts, and Campaign Proposals
+# ---------------------------------------------------------------------------
+
+@router.get("/customer/conversations", response_model=list[CustomerConversationSummaryRead])
+def search_customer_conversations(
+    query: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    provider_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> list[CustomerConversationSummaryRead]:
+    """Search authorised customer conversations within tenant and provider boundary."""
+    service = _service(db, tenant, user)
+    try:
+        convs = service.search_customer_conversations(
+            query=query,
+            status=status,
+            provider_id=provider_id,
+            limit=limit,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return [CustomerConversationSummaryRead(**c) for c in convs]
+
+
+@router.get("/customer/conversations/{conversation_id}", response_model=CustomerConversationThreadRead)
+def get_customer_conversation_thread(
+    conversation_id: DatabaseId,
+    limit: int = Query(default=20, ge=1, le=50),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> CustomerConversationThreadRead:
+    """Inspect customer conversation thread, recent messages, and opt-in/opt-out status."""
+    service = _service(db, tenant, user)
+    try:
+        thread = service.get_customer_conversation_thread(conversation_id, limit=limit)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return CustomerConversationThreadRead(**thread)
+
+
+@router.post("/customer/conversations/{conversation_id}/draft", response_model=CustomerMessageDraftResponse)
+def prepare_customer_message_draft(
+    conversation_id: DatabaseId,
+    payload: CustomerMessageDraftCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> CustomerMessageDraftResponse:
+    """Prepare a response message draft without live delivery side effects."""
+    service = _service(db, tenant, user)
+    try:
+        draft, token, preview = service.prepare_customer_message_draft(
+            conversation_id=conversation_id,
+            content=payload.content,
+            request_key=payload.request_key,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return CustomerMessageDraftResponse(
+        draft=CustomerMessageDraftRead.model_validate(draft),
+        confirmation_token=token,
+        preview=preview,
+    )
+
+
+@router.get("/customer/drafts", response_model=list[CustomerMessageDraftRead])
+def list_customer_message_drafts(
+    conversation_id: Optional[int] = Query(default=None),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> list[CustomerMessageDraftRead]:
+    """List prepared response message drafts in the active tenant."""
+    service = _service(db, tenant, user)
+    drafts = service.list_customer_message_drafts(
+        conversation_id=conversation_id,
+        status=status,
+        limit=limit,
+    )
+    return [CustomerMessageDraftRead.model_validate(d) for d in drafts]
+
+
+@router.get("/customer/drafts/{draft_id}", response_model=CustomerMessageDraftRead)
+def get_customer_message_draft(
+    draft_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> CustomerMessageDraftRead:
+    """Retrieve a prepared response message draft by ID."""
+    service = _service(db, tenant, user)
+    try:
+        draft = service.get_customer_message_draft(draft_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return CustomerMessageDraftRead.model_validate(draft)
+
+
+@router.post("/campaigns/audience-preview", response_model=CampaignAudiencePreviewRead)
+def preview_campaign_audience(
+    criteria: CampaignAudienceCriteriaInput,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> CampaignAudiencePreviewRead:
+    """Calculate and preview server-authoritative campaign audience with explainable criteria."""
+    service = _service(db, tenant, user)
+    result = service.preview_campaign_audience(
+        marketing_opt_in_only=criteria.marketing_opt_in_only,
+        active_only=criteria.active_only,
+        exclude_pending_holds=criteria.exclude_pending_holds,
+        min_completed_bookings=criteria.min_completed_bookings,
+        provider_id=criteria.provider_id,
+    )
+    return CampaignAudiencePreviewRead(**result)
+
+
+@router.post("/campaigns/proposals", response_model=CampaignProposalResponse)
+def create_campaign_proposal(
+    payload: CampaignProposalCreate,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> CampaignProposalResponse:
+    """Create an explainable campaign proposal with exact recipient snapshot and confirmation token."""
+    service = _service(db, tenant, user)
+    try:
+        proposal, token, summary = service.create_campaign_proposal(
+            title=payload.title,
+            content=payload.content,
+            marketing_opt_in_only=payload.marketing_opt_in_only,
+            active_only=payload.active_only,
+            exclude_pending_holds=payload.exclude_pending_holds,
+            min_completed_bookings=payload.min_completed_bookings,
+            provider_id=payload.provider_id,
+            request_key=payload.request_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return CampaignProposalResponse(
+        proposal=CampaignProposalRead.model_validate(proposal),
+        confirmation_token=token,
+        summary=summary,
+    )
+
+
+@router.get("/campaigns/proposals", response_model=list[CampaignProposalRead])
+def list_campaign_proposals(
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> list[CampaignProposalRead]:
+    """List campaign proposals scoped to the authenticated tenant."""
+    service = _service(db, tenant, user)
+    proposals = service.list_campaign_proposals(status=status, limit=limit)
+    return [CampaignProposalRead.model_validate(p) for p in proposals]
+
+
+@router.get("/campaigns/proposals/{proposal_id}", response_model=CampaignProposalRead)
+def get_campaign_proposal(
+    proposal_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> CampaignProposalRead:
+    """Retrieve an explainable campaign proposal by ID."""
+    service = _service(db, tenant, user)
+    try:
+        proposal = service.get_campaign_proposal(proposal_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return CampaignProposalRead.model_validate(proposal)
+
+
+@router.post("/campaigns/proposals/{proposal_id}/approve", response_model=CampaignProposalRead)
+def approve_campaign_proposal(
+    proposal_id: DatabaseId,
+    payload: CampaignProposalApproveRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> CampaignProposalRead:
+    """Approve a campaign proposal via confirmation token. Live sending remains strictly disabled."""
+    service = _service(db, tenant, user)
+    try:
+        approved = service.approve_campaign_proposal(
+            proposal_id=proposal_id,
+            confirmation_token=payload.confirmation_token,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign proposal not found.") from exc
+    except ConfirmationExpiredError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation token has expired.") from exc
+    except ConfirmationScopeMismatchError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except (ConfirmationPayloadMismatchError, ConfirmationSignatureError, ConfirmationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return CampaignProposalRead.model_validate(approved)
+
 

@@ -9,14 +9,17 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...models.business_assistant import (
+    BusinessAssistantCampaignProposal,
     BusinessAssistantConversation,
     BusinessAssistantMemory,
     BusinessAssistantMessage,
+    BusinessAssistantMessageDraft,
     BusinessAssistantOnboardingProgress,
     SupportTicket,
     SupportTicketEvent,
 )
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
+from ...models.user import User
 from .confirmation import (
     ConfirmationError,
     ConfirmationExpiredError,
@@ -24,6 +27,8 @@ from .confirmation import (
     ConfirmationScopeMismatchError,
     ConfirmationSignatureError,
     DynamicFactRejectedError,
+    compute_campaign_payload_hash,
+    compute_draft_payload_hash,
     compute_rule_payload_hash,
     generate_confirmation_token,
     validate_static_business_knowledge,
@@ -723,4 +728,392 @@ class BusinessAssistantService:
         self._db.commit()
         self._db.refresh(resolved)
         return resolved
+
+    def _effective_provider_id(self, requested_provider_id: Optional[int] = None) -> Optional[int]:
+        user = self._db.query(User).filter(User.id == self._user_id, User.tenant_id == self._tenant_id).first()
+        user_role = (user.role or "").lower() if user else "unknown"
+        user_provider_id = user.provider_id if user else None
+
+        if user_role == "provider" and user_provider_id:
+            if requested_provider_id is not None and requested_provider_id != user_provider_id:
+                raise PermissionError("Providers may only inspect their own conversations.")
+            return user_provider_id
+        return requested_provider_id
+
+    def search_customer_conversations(
+        self,
+        *,
+        query: Optional[str] = None,
+        status: Optional[str] = None,
+        provider_id: Optional[int] = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Search customer conversations scoped to the active tenant and provider."""
+        effective_provider_id = self._effective_provider_id(provider_id)
+        conversations = self._repository.search_customer_conversations(
+            query=query,
+            status=status,
+            provider_id=effective_provider_id,
+            limit=limit,
+        )
+        results = []
+        for conv in conversations:
+            client = self._repository.get_client_for_conversation(conv)
+            opted_out = getattr(client, "opted_out", False) if client else False
+            sms_consent = getattr(client, "sms_consent", True) if client else True
+            accepts_marketing = getattr(client, "accepts_marketing", False) if client else False
+
+            results.append(
+                {
+                    "id": conv.id,
+                    "contact_name": conv.contact_name,
+                    "contact_identifier": _mask_recipient_identifier(conv.contact_identifier),
+                    "status": conv.status,
+                    "channel_type": conv.channel_type.value if conv.channel_type else "sms",
+                    "provider_id": conv.provider_id,
+                    "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+                    "opt_in_status": {
+                        "opted_out": opted_out,
+                        "sms_consent": sms_consent,
+                        "accepts_marketing": accepts_marketing,
+                    },
+                }
+            )
+        return results
+
+    def get_customer_conversation_thread(
+        self,
+        conversation_id: int,
+        *,
+        limit: int = 20,
+    ) -> dict:
+        """Inspect a customer conversation thread, messages, and opt-in/opt-out status."""
+        effective_provider_id = self._effective_provider_id(None)
+        conv = self._repository.get_customer_conversation(conversation_id, provider_id=effective_provider_id)
+        if not conv:
+            raise LookupError("Customer conversation was not found in the authenticated scope.")
+
+        client = self._repository.get_client_for_conversation(conv)
+        opted_out = getattr(client, "opted_out", False) if client else False
+        sms_consent = getattr(client, "sms_consent", True) if client else True
+        accepts_marketing = getattr(client, "accepts_marketing", False) if client else False
+
+        messages = self._repository.get_customer_conversation_messages(conversation_id, limit=limit)
+
+        return {
+            "conversation_id": conv.id,
+            "contact_name": conv.contact_name,
+            "contact_identifier": _mask_recipient_identifier(conv.contact_identifier),
+            "status": conv.status,
+            "channel_type": conv.channel_type.value if conv.channel_type else "sms",
+            "provider_id": conv.provider_id,
+            "opt_in_status": {
+                "opted_out": opted_out,
+                "sms_consent": sms_consent,
+                "accepts_marketing": accepts_marketing,
+                "client_active": getattr(client, "active", True) if client else True,
+            },
+            "messages": [
+                {
+                    "id": m.id,
+                    "direction": m.direction.value if hasattr(m.direction, "value") else str(m.direction),
+                    "source": m.source.value if hasattr(m.source, "value") else str(m.source),
+                    "content": m.content,
+                    "delivery_status": m.delivery_status.value if hasattr(m.delivery_status, "value") else str(m.delivery_status),
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ],
+        }
+
+    def prepare_customer_message_draft(
+        self,
+        *,
+        conversation_id: int,
+        content: str,
+        request_key: Optional[str] = None,
+    ) -> tuple[BusinessAssistantMessageDraft, str, dict]:
+        """Prepare a response message draft without executing live delivery."""
+        effective_provider_id = self._effective_provider_id(None)
+        conv = self._repository.get_customer_conversation(conversation_id, provider_id=effective_provider_id)
+        if not conv:
+            raise LookupError("Customer conversation was not found in the authenticated scope.")
+
+        clean_content = content.strip()
+        if not clean_content:
+            raise ValueError("Draft message content cannot be empty.")
+
+        client = self._repository.get_client_for_conversation(conv)
+        opted_out = getattr(client, "opted_out", False) if client else False
+        sms_consent = getattr(client, "sms_consent", True) if client else True
+
+        recipient_masked = _mask_recipient_identifier(conv.contact_identifier)
+
+        if request_key:
+            existing = self._repository.get_message_draft_by_request_key(request_key)
+            if existing:
+                token = generate_confirmation_token(
+                    tenant_id=self._tenant_id,
+                    user_id=self._user_id,
+                    action="approve_customer_message_draft",
+                    target_key=str(existing.id),
+                    version=existing.version,
+                    payload_hash=existing.payload_hash or "",
+                )
+                preview = {
+                    "conversation_id": conv.id,
+                    "recipient_preview": existing.recipient_preview,
+                    "content_length": len(existing.content),
+                    "recipient_opted_out": opted_out,
+                    "live_send_dispatched": False,
+                    "live_send_disabled": True,
+                }
+                return existing, token, preview
+
+        hash_val = compute_draft_payload_hash(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            conversation_id=conversation_id,
+            content=clean_content,
+            version=1,
+        )
+
+        draft = self._repository.create_message_draft(
+            conversation_id=conversation_id,
+            content=clean_content,
+            recipient_preview=recipient_masked,
+            request_key=request_key,
+            payload_hash=hash_val,
+        )
+
+        token = generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            action="approve_customer_message_draft",
+            target_key=str(draft.id),
+            version=draft.version,
+            payload_hash=hash_val,
+        )
+
+        preview = {
+            "conversation_id": conv.id,
+            "recipient_preview": recipient_masked,
+            "content_length": len(clean_content),
+            "recipient_opted_out": opted_out,
+            "live_send_dispatched": False,
+            "live_send_disabled": True,
+            "notice": "Draft prepared successfully. Live sending remains strictly disabled.",
+        }
+
+        self._db.commit()
+        self._db.refresh(draft)
+        return draft, token, preview
+
+    def get_customer_message_draft(self, draft_id: int) -> BusinessAssistantMessageDraft:
+        """Retrieve a message draft strictly within tenant boundary."""
+        draft = self._repository.get_message_draft(draft_id)
+        if not draft:
+            raise LookupError("Message draft was not found in the authenticated scope.")
+        return draft
+
+    def list_customer_message_drafts(
+        self,
+        *,
+        conversation_id: Optional[int] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantMessageDraft]:
+        """List message drafts scoped to the authenticated tenant."""
+        return self._repository.list_message_drafts(
+            conversation_id=conversation_id,
+            status=status,
+            limit=limit,
+        )
+
+    def preview_campaign_audience(
+        self,
+        *,
+        marketing_opt_in_only: bool = True,
+        active_only: bool = True,
+        exclude_pending_holds: bool = True,
+        min_completed_bookings: int = 0,
+        provider_id: Optional[int] = None,
+    ) -> dict:
+        """Preview server-authoritative campaign audience selection with explainable counts."""
+        eligible_clients, summary = self._repository.evaluate_campaign_audience(
+            marketing_opt_in_only=marketing_opt_in_only,
+            active_only=active_only,
+            exclude_pending_holds=exclude_pending_holds,
+            min_completed_bookings=min_completed_bookings,
+            provider_id=provider_id,
+        )
+        sample_recipients = [
+            {
+                "client_id": c.id,
+                "name": c.name or "Client",
+                "masked_phone": _mask_recipient_identifier(c.phone),
+                "masked_email": _mask_recipient_identifier(c.email),
+                "accepts_marketing": getattr(c, "accepts_marketing", False),
+            }
+            for c in eligible_clients[:10]
+        ]
+        return {
+            "recipient_count": len(eligible_clients),
+            "summary": summary,
+            "sample_recipients": sample_recipients,
+        }
+
+    def create_campaign_proposal(
+        self,
+        *,
+        title: str,
+        content: str,
+        marketing_opt_in_only: bool = True,
+        active_only: bool = True,
+        exclude_pending_holds: bool = True,
+        min_completed_bookings: int = 0,
+        provider_id: Optional[int] = None,
+        request_key: Optional[str] = None,
+    ) -> tuple[BusinessAssistantCampaignProposal, str, dict]:
+        """Create an explainable campaign proposal with exact recipient snapshot and confirmation token."""
+        clean_title = title.strip()
+        clean_content = content.strip()
+        if not clean_title:
+            raise ValueError("Campaign title cannot be empty.")
+        if not clean_content:
+            raise ValueError("Campaign content cannot be empty.")
+
+        eligible_clients, summary = self._repository.evaluate_campaign_audience(
+            marketing_opt_in_only=marketing_opt_in_only,
+            active_only=active_only,
+            exclude_pending_holds=exclude_pending_holds,
+            min_completed_bookings=min_completed_bookings,
+            provider_id=provider_id,
+        )
+
+        recipient_count = len(eligible_clients)
+
+        if request_key:
+            existing = self._repository.get_campaign_proposal_by_request_key(request_key)
+            if existing:
+                token = generate_confirmation_token(
+                    tenant_id=self._tenant_id,
+                    user_id=self._user_id,
+                    action="approve_campaign_proposal",
+                    target_key=str(existing.id),
+                    version=existing.version,
+                    payload_hash=existing.payload_hash or "",
+                )
+                return existing, token, existing.audience_snapshot
+
+        criteria = {
+            "marketing_opt_in_only": marketing_opt_in_only,
+            "active_only": active_only,
+            "exclude_pending_holds": exclude_pending_holds,
+            "min_completed_bookings": min_completed_bookings,
+            "provider_id": provider_id,
+        }
+
+        audience_snapshot = {
+            "summary": summary,
+            "sample_recipients": [
+                {
+                    "client_id": c.id,
+                    "name": c.name or "Client",
+                    "masked_identifier": _mask_recipient_identifier(c.phone or c.email),
+                }
+                for c in eligible_clients[:10]
+            ],
+            "total_evaluated_clients": summary["total_clients"],
+            "eligible_recipient_count": recipient_count,
+        }
+
+        hash_val = compute_campaign_payload_hash(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            title=clean_title,
+            content=clean_content,
+            recipient_count=recipient_count,
+            version=1,
+        )
+
+        proposal = self._repository.create_campaign_proposal(
+            title=clean_title,
+            content=clean_content,
+            target_audience_criteria=criteria,
+            audience_snapshot=audience_snapshot,
+            recipient_count=recipient_count,
+            request_key=request_key,
+            payload_hash=hash_val,
+        )
+
+        token = generate_confirmation_token(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            action="approve_campaign_proposal",
+            target_key=str(proposal.id),
+            version=proposal.version,
+            payload_hash=hash_val,
+        )
+
+        self._db.commit()
+        self._db.refresh(proposal)
+        return proposal, token, summary
+
+    def get_campaign_proposal(self, proposal_id: int) -> BusinessAssistantCampaignProposal:
+        """Retrieve a campaign proposal strictly within tenant boundary."""
+        proposal = self._repository.get_campaign_proposal(proposal_id)
+        if not proposal:
+            raise LookupError("Campaign proposal was not found in the authenticated scope.")
+        return proposal
+
+    def list_campaign_proposals(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantCampaignProposal]:
+        """List campaign proposals scoped to the authenticated tenant."""
+        return self._repository.list_campaign_proposals(status=status, limit=limit)
+
+    def approve_campaign_proposal(
+        self,
+        *,
+        proposal_id: int,
+        confirmation_token: str,
+    ) -> BusinessAssistantCampaignProposal:
+        """Approve a campaign proposal after validating confirmation token binding. Live send remains disabled."""
+        proposal = self.get_campaign_proposal(proposal_id)
+        verify_confirmation_token(
+            token=confirmation_token,
+            expected_tenant_id=self._tenant_id,
+            expected_user_id=self._user_id,
+            expected_action="approve_campaign_proposal",
+            expected_target_key=str(proposal.id),
+            expected_version=proposal.version,
+            expected_payload_hash=proposal.payload_hash or "",
+        )
+        updated = self._repository.update_campaign_proposal_status(
+            proposal=proposal,
+            status="approved",
+        )
+        self._db.commit()
+        self._db.refresh(updated)
+        return updated
+
+
+def _mask_recipient_identifier(value: Optional[str]) -> str:
+    """Mask a customer phone number or handle for safe user preview."""
+    if not value:
+        return ""
+    val = value.strip()
+    if "@" in val:
+        parts = val.split("@", 1)
+        name_part = parts[0]
+        prefix = name_part[:1] if name_part else ""
+        return f"{prefix}***@{parts[1]}"
+    if len(val) <= 4:
+        return "***"
+    return f"{val[:4]}***{val[-3:]}"
+
 

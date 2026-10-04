@@ -8,16 +8,22 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ...models.business_assistant import (
+    BusinessAssistantCampaignProposal,
     BusinessAssistantConversation,
     BusinessAssistantMemory,
     BusinessAssistantMessage,
+    BusinessAssistantMessageDraft,
     BusinessAssistantOnboardingProgress,
     BusinessAssistantToolRun,
     SupportTicket,
     SupportTicketDeduplicationClaim,
     SupportTicketEvent,
 )
+from ...models.booking import Booking
+from ...models.client import Client
+from ...models.conversation import Conversation, Message
 from ...models.curated_memory import CuratedMemory, KnowledgeProposal
+from ...core.state_machine import BookingStatus
 
 
 class BusinessAssistantRepository:
@@ -667,4 +673,378 @@ class BusinessAssistantRepository:
         self._db.add(curated)
         self._db.flush()
         return curated
+
+    def search_customer_conversations(
+        self,
+        *,
+        query: Optional[str] = None,
+        status: Optional[str] = None,
+        provider_id: Optional[int] = None,
+        limit: int = 20,
+    ) -> list[Conversation]:
+        """Search authorised customer conversations strictly within tenant and provider boundary."""
+        q = self._db.query(Conversation).filter(
+            Conversation.tenant_id == self._tenant_id,
+        )
+        if provider_id is not None:
+            q = q.filter(Conversation.provider_id == provider_id)
+        if status and status != "all":
+            q = q.filter(Conversation.status == status)
+        if query and query.strip():
+            term = f"%{query.strip()}%"
+            q = q.filter(
+                or_(
+                    Conversation.contact_name.ilike(term),
+                    Conversation.contact_identifier.ilike(term),
+                )
+            )
+        safe_limit = min(max(limit, 1), 50)
+        return (
+            q.order_by(
+                Conversation.updated_at.desc(),
+                Conversation.id.desc(),
+            )
+            .limit(safe_limit)
+            .all()
+        )
+
+    def get_customer_conversation(
+        self,
+        conversation_id: int,
+        *,
+        provider_id: Optional[int] = None,
+    ) -> Optional[Conversation]:
+        """Retrieve a customer conversation strictly within tenant and provider boundary."""
+        q = self._db.query(Conversation).filter(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == self._tenant_id,
+        )
+        if provider_id is not None:
+            q = q.filter(Conversation.provider_id == provider_id)
+        return q.first()
+
+    def get_customer_conversation_messages(
+        self,
+        conversation_id: int,
+        *,
+        limit: int = 20,
+    ) -> list[Message]:
+        """Fetch recent messages in a conversation in chronological order."""
+        safe_limit = min(max(limit, 1), 50)
+        recent = (
+            self._db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.tenant_id == self._tenant_id,
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(safe_limit)
+            .all()
+        )
+        return list(reversed(recent))
+
+    def get_client_for_conversation(
+        self,
+        conversation: Conversation,
+    ) -> Optional[Client]:
+        """Resolve associated Client record for opt-in/opt-out status checking."""
+        if not conversation:
+            return None
+        if isinstance(conversation.metadata_payload, dict):
+            client_id = conversation.metadata_payload.get("client_id")
+            if client_id and isinstance(client_id, int):
+                client = (
+                    self._db.query(Client)
+                    .filter(
+                        Client.id == client_id,
+                        Client.tenant_id == self._tenant_id,
+                    )
+                    .first()
+                )
+                if client:
+                    return client
+        contact = (conversation.contact_identifier or "").strip()
+        if contact:
+            return (
+                self._db.query(Client)
+                .filter(
+                    Client.tenant_id == self._tenant_id,
+                    or_(
+                        Client.phone == contact,
+                        Client.email == contact,
+                    ),
+                )
+                .first()
+            )
+        return None
+
+    def create_message_draft(
+        self,
+        *,
+        conversation_id: int,
+        content: str,
+        recipient_preview: str,
+        request_key: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+    ) -> BusinessAssistantMessageDraft:
+        """Persist a response draft without any live delivery side effects."""
+        draft = BusinessAssistantMessageDraft(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            conversation_id=conversation_id,
+            content=content.strip(),
+            recipient_preview=recipient_preview,
+            status="draft",
+            version=1,
+            payload_hash=payload_hash,
+            request_key=request_key,
+        )
+        self._db.add(draft)
+        self._db.flush()
+        return draft
+
+    def get_message_draft(self, draft_id: int) -> Optional[BusinessAssistantMessageDraft]:
+        """Fetch a prepared message draft strictly within tenant boundary."""
+        return (
+            self._db.query(BusinessAssistantMessageDraft)
+            .filter(
+                BusinessAssistantMessageDraft.id == draft_id,
+                BusinessAssistantMessageDraft.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def get_message_draft_by_request_key(
+        self,
+        request_key: str,
+    ) -> Optional[BusinessAssistantMessageDraft]:
+        """Find a drafted response by idempotency request key."""
+        return (
+            self._db.query(BusinessAssistantMessageDraft)
+            .filter(
+                BusinessAssistantMessageDraft.tenant_id == self._tenant_id,
+                BusinessAssistantMessageDraft.user_id == self._user_id,
+                BusinessAssistantMessageDraft.request_key == request_key,
+            )
+            .first()
+        )
+
+    def list_message_drafts(
+        self,
+        *,
+        conversation_id: Optional[int] = None,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantMessageDraft]:
+        """List message drafts scoped to the authenticated tenant."""
+        q = self._db.query(BusinessAssistantMessageDraft).filter(
+            BusinessAssistantMessageDraft.tenant_id == self._tenant_id,
+        )
+        if conversation_id is not None:
+            q = q.filter(BusinessAssistantMessageDraft.conversation_id == conversation_id)
+        if status:
+            q = q.filter(BusinessAssistantMessageDraft.status == status)
+        safe_limit = min(max(limit, 1), 100)
+        return (
+            q.order_by(
+                BusinessAssistantMessageDraft.created_at.desc(),
+                BusinessAssistantMessageDraft.id.desc(),
+            )
+            .limit(safe_limit)
+            .all()
+        )
+
+    def evaluate_campaign_audience(
+        self,
+        *,
+        marketing_opt_in_only: bool = True,
+        active_only: bool = True,
+        exclude_pending_holds: bool = True,
+        min_completed_bookings: int = 0,
+        provider_id: Optional[int] = None,
+    ) -> tuple[list[Client], dict]:
+        """Evaluate real clients against explainable criteria with strict opt-out/consent filters."""
+        all_clients = (
+            self._db.query(Client)
+            .filter(
+                Client.tenant_id == self._tenant_id,
+                Client.deleted_at.is_(None),
+            )
+            .all()
+        )
+        total_clients = len(all_clients)
+        excluded_opt_out = 0
+        excluded_inactive = 0
+        excluded_marketing_unconsented = 0
+        excluded_pending_holds = 0
+        excluded_booking_criteria = 0
+
+        pending_client_ids: set[int] = set()
+        if exclude_pending_holds:
+            pending_rows = (
+                self._db.query(Booking.client_id)
+                .filter(
+                    Booking.tenant_id == self._tenant_id,
+                    Booking.status == BookingStatus.PENDING,
+                )
+                .distinct()
+                .all()
+            )
+            pending_client_ids = {row[0] for row in pending_rows}
+
+        completed_booking_counts: dict[int, int] = {}
+        if min_completed_bookings > 0 or provider_id is not None:
+            bq = (
+                self._db.query(Booking.client_id)
+                .filter(
+                    Booking.tenant_id == self._tenant_id,
+                    Booking.status == BookingStatus.COMPLETED,
+                )
+            )
+            if provider_id is not None:
+                bq = bq.filter(Booking.provider_id == provider_id)
+            for row in bq.all():
+                cid = row[0]
+                completed_booking_counts[cid] = completed_booking_counts.get(cid, 0) + 1
+
+        eligible_clients: list[Client] = []
+        for client in all_clients:
+            # Strict respect of opt-out and SMS consent
+            if getattr(client, "opted_out", False) is True or getattr(client, "sms_consent", True) is False:
+                excluded_opt_out += 1
+                continue
+
+            if active_only and not getattr(client, "active", True):
+                excluded_inactive += 1
+                continue
+
+            if marketing_opt_in_only and not getattr(client, "accepts_marketing", False):
+                excluded_marketing_unconsented += 1
+                continue
+
+            if exclude_pending_holds and client.id in pending_client_ids:
+                excluded_pending_holds += 1
+                continue
+
+            if min_completed_bookings > 0 and completed_booking_counts.get(client.id, 0) < min_completed_bookings:
+                excluded_booking_criteria += 1
+                continue
+
+            if provider_id is not None and completed_booking_counts.get(client.id, 0) == 0:
+                excluded_booking_criteria += 1
+                continue
+
+            eligible_clients.append(client)
+
+        summary = {
+            "total_clients": total_clients,
+            "eligible_count": len(eligible_clients),
+            "excluded_opt_out": excluded_opt_out,
+            "excluded_inactive": excluded_inactive,
+            "excluded_marketing_unconsented": excluded_marketing_unconsented,
+            "excluded_pending_holds": excluded_pending_holds,
+            "excluded_booking_criteria": excluded_booking_criteria,
+            "criteria_applied": {
+                "marketing_opt_in_only": marketing_opt_in_only,
+                "active_only": active_only,
+                "exclude_pending_holds": exclude_pending_holds,
+                "min_completed_bookings": min_completed_bookings,
+                "provider_id": provider_id,
+            },
+        }
+        return eligible_clients, summary
+
+    def create_campaign_proposal(
+        self,
+        *,
+        title: str,
+        content: str,
+        target_audience_criteria: dict,
+        audience_snapshot: dict,
+        recipient_count: int,
+        request_key: Optional[str] = None,
+        payload_hash: Optional[str] = None,
+    ) -> BusinessAssistantCampaignProposal:
+        """Persist an explainable audience proposal without executing live messaging."""
+        proposal = BusinessAssistantCampaignProposal(
+            tenant_id=self._tenant_id,
+            user_id=self._user_id,
+            title=title.strip(),
+            content=content.strip(),
+            target_audience_criteria=target_audience_criteria,
+            audience_snapshot=audience_snapshot,
+            recipient_count=recipient_count,
+            status="proposed",
+            version=1,
+            payload_hash=payload_hash,
+            request_key=request_key,
+        )
+        self._db.add(proposal)
+        self._db.flush()
+        return proposal
+
+    def get_campaign_proposal(
+        self,
+        proposal_id: int,
+    ) -> Optional[BusinessAssistantCampaignProposal]:
+        """Fetch a campaign proposal strictly within tenant boundary."""
+        return (
+            self._db.query(BusinessAssistantCampaignProposal)
+            .filter(
+                BusinessAssistantCampaignProposal.id == proposal_id,
+                BusinessAssistantCampaignProposal.tenant_id == self._tenant_id,
+            )
+            .first()
+        )
+
+    def get_campaign_proposal_by_request_key(
+        self,
+        request_key: str,
+    ) -> Optional[BusinessAssistantCampaignProposal]:
+        """Find a campaign proposal by idempotency request key."""
+        return (
+            self._db.query(BusinessAssistantCampaignProposal)
+            .filter(
+                BusinessAssistantCampaignProposal.tenant_id == self._tenant_id,
+                BusinessAssistantCampaignProposal.user_id == self._user_id,
+                BusinessAssistantCampaignProposal.request_key == request_key,
+            )
+            .first()
+        )
+
+    def list_campaign_proposals(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[BusinessAssistantCampaignProposal]:
+        """List campaign proposals scoped to the authenticated tenant."""
+        q = self._db.query(BusinessAssistantCampaignProposal).filter(
+            BusinessAssistantCampaignProposal.tenant_id == self._tenant_id,
+        )
+        if status:
+            q = q.filter(BusinessAssistantCampaignProposal.status == status)
+        safe_limit = min(max(limit, 1), 100)
+        return (
+            q.order_by(
+                BusinessAssistantCampaignProposal.created_at.desc(),
+                BusinessAssistantCampaignProposal.id.desc(),
+            )
+            .limit(safe_limit)
+            .all()
+        )
+
+    def update_campaign_proposal_status(
+        self,
+        *,
+        proposal: BusinessAssistantCampaignProposal,
+        status: str,
+    ) -> BusinessAssistantCampaignProposal:
+        """Update campaign proposal lifecycle status within authenticated boundary."""
+        if proposal.tenant_id != self._tenant_id:
+            raise ValueError("Campaign proposal is outside the authenticated scope.")
+        proposal.status = status
+        proposal.updated_at = datetime.now(timezone.utc)
+        self._db.flush()
+        return proposal
 
