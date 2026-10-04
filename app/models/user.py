@@ -6,7 +6,7 @@ separate ``Client`` model.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
@@ -20,6 +20,13 @@ class User(Base):
     login = Column(String, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="owner", nullable=False)
+    email = Column(String, index=True, nullable=True)
+    google_sub = Column(String, index=True, nullable=True)
+    chatwoot_user_id = Column(Integer, index=True, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     provider_id = Column(Integer, ForeignKey("providers.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

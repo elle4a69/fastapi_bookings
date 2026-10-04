@@ -6,7 +6,7 @@ user's ID and role, while public tokens encode only the tenant subdomain.
 """
 
 from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -34,6 +34,11 @@ class AdminAuthRequest(BaseModel):
     password: str
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+    company: Optional[str] = None
+
+
 class PublicAuthRequest(BaseModel):
     company: str  # Kept for backward compatibility but validated against active tenant
     key: str
@@ -45,7 +50,7 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/admin/auth", response_model=TokenResponse, tags=["auth"])
-def admin_login(
+async def admin_login(
     body: AdminAuthRequest,
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db)
@@ -70,8 +75,150 @@ def admin_login(
         "sub": str(user.id),
         "role": user.role,
         "provider_id": user.provider_id,
+        "tenant_id": user.tenant_id,
     })
-    return {"ok": True, "data": {"access_token": token, "token_type": "bearer"}}
+
+    chatwoot_sso_url = None
+    if tenant.chatwoot_account_id:
+        try:
+            from ...services.auth.chatwoot_sso import sync_user_to_chatwoot_platform, generate_chatwoot_sso_url
+            chatwoot_uid = await sync_user_to_chatwoot_platform(user, tenant.chatwoot_account_id)
+            if chatwoot_uid:
+                if user.chatwoot_user_id != chatwoot_uid:
+                    user.chatwoot_user_id = chatwoot_uid
+                    db.commit()
+                chatwoot_sso_url = await generate_chatwoot_sso_url(chatwoot_uid)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Chatwoot SSO link generation skipped: %s", exc)
+
+    return {
+        "ok": True,
+        "data": {
+            "access_token": token,
+            "token_type": "bearer",
+            "chatwoot_sso_url": chatwoot_sso_url,
+        }
+    }
+
+
+@router.post("/admin/auth/google", response_model=TokenResponse, tags=["auth"])
+async def google_login(
+    body: GoogleAuthRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db)
+):
+    """Authenticate an admin or staff user via Google OAuth2/OIDC ID token."""
+    if body.company and body.company.lower() != tenant.subdomain.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Requested company '{body.company}' does not match the active tenant subdomain '{tenant.subdomain}'."
+        )
+
+    from ...services.auth.google_oidc import verify_google_id_token
+    from ...services.auth.chatwoot_sso import sync_user_to_chatwoot_platform, generate_chatwoot_sso_url
+
+    try:
+        claims = verify_google_id_token(body.id_token)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid Google ID token: {exc}"
+        )
+
+    google_sub = claims.get("sub")
+    email = claims.get("email")
+    if not google_sub or not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google token missing sub or email"
+        )
+
+    user = (
+        db.query(User)
+        .filter(
+            User.tenant_id == tenant.id,
+            (User.google_sub == google_sub) | (User.email == email) | (User.login == email)
+        )
+        .first()
+    )
+
+    if not user:
+        user_count = db.query(User).filter(User.tenant_id == tenant.id).count()
+        role = "owner" if user_count == 0 else "admin"
+        name_parts = (claims.get("name") or "").split(" ", 1)
+        first_name = claims.get("given_name") or (name_parts[0] if name_parts else "")
+        last_name = claims.get("family_name") or (name_parts[1] if len(name_parts) > 1 else "")
+        user = User(
+            tenant_id=tenant.id,
+            login=email,
+            email=email,
+            google_sub=google_sub,
+            password_hash="[SSO_MANAGED]",
+            role=role,
+            first_name=first_name,
+            last_name=last_name,
+            avatar_url=claims.get("picture"),
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        dirty = False
+        if not user.google_sub:
+            user.google_sub = google_sub
+            dirty = True
+        if not user.email:
+            user.email = email
+            dirty = True
+        if claims.get("picture") and user.avatar_url != claims.get("picture"):
+            user.avatar_url = claims.get("picture")
+            dirty = True
+        if dirty:
+            db.commit()
+            db.refresh(user)
+
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated")
+
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "provider_id": user.provider_id,
+        "tenant_id": user.tenant_id,
+    })
+
+    chatwoot_sso_url = None
+    if tenant.chatwoot_account_id:
+        try:
+            chatwoot_uid = await sync_user_to_chatwoot_platform(user, tenant.chatwoot_account_id)
+            if chatwoot_uid:
+                if user.chatwoot_user_id != chatwoot_uid:
+                    user.chatwoot_user_id = chatwoot_uid
+                    db.commit()
+                chatwoot_sso_url = await generate_chatwoot_sso_url(chatwoot_uid)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Chatwoot SSO link generation skipped: %s", exc)
+
+    return {
+        "ok": True,
+        "data": {
+            "access_token": token,
+            "token_type": "bearer",
+            "chatwoot_sso_url": chatwoot_sso_url,
+            "user": {
+                "id": user.id,
+                "login": user.login,
+                "email": user.email,
+                "role": user.role,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "avatar_url": user.avatar_url,
+            }
+        }
+    }
 
 
 @router.post("/public/auth/token", response_model=TokenResponse, tags=["auth"])

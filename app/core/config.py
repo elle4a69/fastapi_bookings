@@ -86,6 +86,10 @@ class Settings(BaseSettings):
         "local-public-key-change-me",
         description="API key used by the public widget to obtain a token",
     )
+    GOOGLE_CLIENT_ID: Optional[str] = Field(
+        None,
+        description="Google OAuth2 Client ID for SSO",
+    )
 
     # Frontend
     FRONTEND_ORIGINS: str = Field(

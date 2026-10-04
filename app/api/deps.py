@@ -129,7 +129,12 @@ async def get_current_user(
         user_id = int(payload["sub"])
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    
+
+    # Enforce tenant isolation from token claim
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id is not None and token_tenant_id != tenant.id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not valid for active tenant")
+
     # Query user within active tenant scope
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant.id).first()
     if not user:
