@@ -126,6 +126,7 @@ export default function LoginPage() {
     apiClient
       .get<{ ok: boolean; data: PublicAuthConfig }>("/api/public/auth/config")
       .then((res) => {
+        if (isMounted && res?.ok && res.data) {
           const effectiveClientId = res.data.google_client_id || (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ""
           setAuthConfig({ ...res.data, google_client_id: effectiveClientId })
           if (effectiveClientId) {
