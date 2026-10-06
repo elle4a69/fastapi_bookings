@@ -126,9 +126,9 @@ export default function LoginPage() {
     apiClient
       .get<{ ok: boolean; data: PublicAuthConfig }>("/api/public/auth/config")
       .then((res) => {
-        if (isMounted && res?.ok && res.data) {
-          setAuthConfig(res.data)
-          if (res.data.google_client_id) {
+          const effectiveClientId = res.data.google_client_id || (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ""
+          setAuthConfig({ ...res.data, google_client_id: effectiveClientId })
+          if (effectiveClientId) {
             // Dynamically load Google Identity Services if client ID is configured
             if (!document.getElementById("google-gsi-client")) {
               const script = document.createElement("script")
@@ -141,7 +141,7 @@ export default function LoginPage() {
                 if (window.google?.accounts?.id) {
                   // @ts-expect-error Google GSI global
                   window.google.accounts.id.initialize({
-                    client_id: res.data.google_client_id,
+                    client_id: effectiveClientId,
                     callback: (response: { credential?: string }) => {
                       if (response?.credential) {
                         handleGoogleLogin(response.credential)

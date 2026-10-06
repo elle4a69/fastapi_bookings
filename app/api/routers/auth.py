@@ -248,12 +248,14 @@ def public_login(
 @router.get("/public/auth/config", tags=["auth"])
 def get_public_auth_config():
     """Return public authentication configuration for frontend clients."""
+    from ...core.config import Settings
+    current_settings = Settings()
     return {
         "ok": True,
         "data": {
-            "google_client_id": settings.GOOGLE_CLIENT_ID or "",
+            "google_client_id": current_settings.GOOGLE_CLIENT_ID or "",
             "google_sso_enabled": True,
-            "chatwoot_enabled": bool(settings.CHATWOOT_BASE_URL),
+            "chatwoot_enabled": bool(current_settings.CHATWOOT_BASE_URL),
         },
     }
 
