@@ -245,6 +245,19 @@ def public_login(
     return {"ok": True, "data": {"access_token": token, "token_type": "bearer"}}
 
 
+@router.get("/public/auth/config", tags=["auth"])
+def get_public_auth_config():
+    """Return public authentication configuration for frontend clients."""
+    return {
+        "ok": True,
+        "data": {
+            "google_client_id": settings.GOOGLE_CLIENT_ID or "",
+            "google_sso_enabled": True,
+            "chatwoot_enabled": bool(settings.CHATWOOT_BASE_URL),
+        },
+    }
+
+
 @router.get("/admin/auth/me", tags=["auth"])
 @router.get("/admin/me", tags=["auth"])
 def get_auth_me(
@@ -257,12 +270,48 @@ def get_auth_me(
         "data": {
             "id": current_user.id,
             "login": current_user.login,
+            "email": current_user.email,
             "role": current_user.role,
             "provider_id": current_user.provider_id,
             "tenant_id": current_user.tenant_id,
             "company": tenant.subdomain,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "avatar_url": current_user.avatar_url,
+            "chatwoot_user_id": current_user.chatwoot_user_id,
         },
     }
+
+
+@router.get("/admin/auth/chatwoot-sso", tags=["auth"])
+async def get_chatwoot_sso_link(
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+):
+    """Generate a single-use SSO link for the current authenticated user into Chatwoot."""
+    if not tenant.chatwoot_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chatwoot is not connected for this tenant."
+        )
+    from ...services.auth.chatwoot_sso import sync_user_to_chatwoot_platform, generate_chatwoot_sso_url
+    chatwoot_uid = await sync_user_to_chatwoot_platform(current_user, tenant.chatwoot_account_id)
+    if not chatwoot_uid:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to synchronize user to Chatwoot platform."
+        )
+    if current_user.chatwoot_user_id != chatwoot_uid:
+        current_user.chatwoot_user_id = chatwoot_uid
+        db.commit()
+    url = await generate_chatwoot_sso_url(chatwoot_uid)
+    if not url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate Chatwoot SSO link."
+        )
+    return {"ok": True, "data": {"chatwoot_sso_url": url}}
 
 
 @router.post("/admin/users", response_model=UserResponse, tags=["auth"])

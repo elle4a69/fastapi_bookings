@@ -49,6 +49,11 @@ export function getAdminAccessToken(): string | null {
     return null;
   }
 
+  // If currently on /login, or if user explicitly signed out, do not auto-bypass so login screen displays
+  if (window.location.pathname === '/login' || localStorage.getItem('disable_local_auth_bypass') === 'true') {
+    return null;
+  }
+
   // The backend only accepts this token when LOCAL_AUTH_BYPASS=true. This is
   // intentionally restricted to browser sessions served from localhost.
   if (isLocalDevelopmentHost()) {
@@ -66,10 +71,12 @@ export function getAdminAccessToken(): string | null {
 
 export function setAdminAccessToken(token: string): void {
   localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token);
+  localStorage.removeItem('disable_local_auth_bypass');
 }
 
 export function clearAdminAccessToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+  localStorage.setItem('disable_local_auth_bypass', 'true');
 }
 
 const CLIENT_TOKEN_STORAGE_KEY = 'client_portal_token';

@@ -10,6 +10,11 @@ export interface AuthUser {
   provider_id: number | null
   company?: string
   tenant_id?: number
+  email?: string
+  first_name?: string
+  last_name?: string
+  avatar_url?: string
+  chatwoot_sso_url?: string | null
 }
 
 interface AuthContextValue {
@@ -20,6 +25,7 @@ interface AuthContextValue {
   isManager: boolean
   isProvider: boolean
   isLoading: boolean
+  chatwootSsoUrl: string | null
   refreshUser: () => Promise<void>
 }
 
@@ -96,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isProvider = role === 'provider'
   const provider_id = user?.provider_id ?? null
 
+  const chatwootSsoUrl = user?.chatwoot_sso_url || (typeof window !== 'undefined' ? localStorage.getItem('chatwoot_sso_url') : null)
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -105,9 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isManager,
       isProvider,
       isLoading,
+      chatwootSsoUrl,
       refreshUser: fetchCurrentUser,
     }),
-    [user, role, provider_id, isOwner, isManager, isProvider, isLoading, fetchCurrentUser]
+    [user, role, provider_id, isOwner, isManager, isProvider, isLoading, chatwootSsoUrl, fetchCurrentUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -125,6 +134,7 @@ export function useAuth(): AuthContextValue {
       isManager: false,
       isProvider: false,
       isLoading: false,
+      chatwootSsoUrl: null,
       refreshUser: async () => {},
     }
   }
