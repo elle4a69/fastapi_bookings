@@ -20,7 +20,9 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `app/db/` | Database Engine & Sessions | `__init__.py`, `database.py`, `async_session.py` | `.\.venv\Scripts\python.exe -c "import sys; sy...` | **Compliant (Rule 10)** | [README.md](app/db/README.md) |
 | `app/models/` | SQLAlchemy ORM Data Models | `__init__.py`, `tenant.py`, `tenant_website.py` | `.\.venv\Scripts\python.exe -m py_compile app/...` | **Compliant (Rule 10)** | [README.md](app/models/README.md) |
 | `app/services/assistant/` | Assistant Runtime Services | `__init__.py`, `runtime_context.py`, `runtime_service.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](app/services/assistant/README.md) |
+| `app/services/auth/` | Application Business Services | `__init__.py`, `google_oidc.py`, `chatwoot_sso.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/auth/README.md) |
 | `app/services/booking/` | Core Booking Engine | `__init__.py`, `operational_window.py`, `availability_service.py` | `py -3.11 -m pytest tests/test_dynamic_itinera...` | **Compliant (Rule 10)** | [README.md](app/services/booking/README.md) |
+| `app/services/business_assistant/gpt_live/` | Business Assistant Foundation | `session_config.json`, `runtime.py`, `router.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/gpt_live/README.md) |
 | `app/services/business_assistant/` | Business Assistant Foundation | `business_assistant.py`, `repository.py`, `runtime.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/README.md) |
 | `app/services/channel/` | Communication Channel Transports | `conversation.py`, `channel.py`, `__init__.py` | `.\.venv\Scripts\python -m pytest -q tests/tes...` | **Compliant (Rule 10)** | [README.md](app/services/channel/README.md) |
 | `app/services/curation/` | Semantic Memory Curation | `knowledge_policy.py`, `memory_curator.py`, `retrieval.py` | `.\.venv\Scripts\python.exe -m py_compile app/...` | **Compliant (Rule 10)** | [README.md](app/services/curation/README.md) |
@@ -39,6 +41,7 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
 | `frontend/src/pages/admin/catalog/` | Frontend Admin Catalog & Services | `services.tsx`, `providers.tsx`, `locations.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/catalog/README.md) |
 | `frontend/src/pages/admin/finance/` | Frontend Admin Finance & Billing | `invoices.tsx`, `payments.tsx`, `promotions.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/finance/README.md) |
+| `frontend/src/pages/admin/gpt-live/` | Frontend Administration Views | `index.tsx`, `use-gpt-live.ts`, `protocol.ts` | `npm test -- --test-name-pattern="GPT-Live"` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/gpt-live/README.md) |
 | `frontend/src/pages/admin/` | Frontend Administration Views | `navigation.ts`, `relationships-matrix.tsx`, `relationships.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/README.md) |
 | `frontend/src/pages/admin/schedule/` | Frontend Admin Schedule Calendar | `workdays.tsx`, `exceptions.tsx`, `weekly-schedule-editor.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/schedule/README.md) |
 | `frontend/src/pages/admin/sms/` | Frontend Admin SMS Workspace | `sms-assistant.tsx`, `assistant-thread-panel.tsx`, `assistant-messages-page.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/sms/README.md) |
@@ -53,6 +56,12 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 ## 3. Subsystem Domain Breakdowns
 
 ### 3.1 Application Business Services
+
+#### [Authentication, Google OIDC & Chatwoot SSO Service](app/services/auth/README.md) (`app/services/auth`)
+The `app/services/auth` module acts as the central identity broker and Single Sign-On (SSO) gateway for FastAPI Bookings. It owns: - Cryptographic verification of third-party Identity Provider tokens (Google OAuth2 / OpenID Connect). - Secure user sy...
+- **Key Files**: `__init__.py`, `google_oidc.py`, `chatwoot_sso.py`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_auth_contract.py -v`
+- **Known Debt/Issues**: 2 item(s) logged
 
 #### [Services Module](app/services/README.md) (`app/services`)
 This module contains the core business logic and external service integrations for the FastAPI Bookings engine. It serves as the middleware connecting our application's API endpoints to external SaaS providers, managing operations like tenant synchro...
@@ -94,6 +103,12 @@ The SMS Assistant module owns: - Inbound carrier webhook intake with cryptograph
 
 ### 3.6 Business Assistant Foundation
 
+#### [GPT-Live Business Assistant](app/services/business_assistant/gpt_live/README.md) (`app/services/business_assistant/gpt_live`)
+This isolated module creates authenticated GPT-Live WebRTC sessions for an existing Business Assistant conversation. It owns the server-side OpenAI request boundary and the immutable handoff configuration. It deliberately does not expose API keys, pr...
+- **Key Files**: `session_config.json`, `runtime.py`, `router.py`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_gpt_live.py -q`
+- **Known Debt/Issues**: 1 item(s) logged
+
 #### [Business Assistant Foundation](app/services/business_assistant/README.md) (`app/services/business_assistant`)
 This package owns tenant- and user-scoped persistence operations, bounded text generation, and server-authorised tool execution for internal Business Assistant conversations. It supports conversational onboarding, live product help, tenant settings d...
 - **Key Files**: `business_assistant.py`, `repository.py`, `runtime.py`, `service.py`, `confirmation.py`, `tickets.py`, `idempotency.py`, `product_context.py`, `tool_registry.py`, `website_sanitiser.py`, `realtime.py`, `coding_worker.py`
@@ -122,7 +137,7 @@ The **Channel-Neutral Messaging Module** introduces an omnichannel domain model 
 The `app.services.booking` module is the authoritative domain engine for: - **5-Segment Operational Window Engine**: Calculating exact operational boundaries for in-call and out-call appointments:   `[Inbound Operational Travel] -> [Pre-Buffer] -> [C...
 - **Key Files**: `__init__.py`, `operational_window.py`, `availability_service.py`, `slot_allocation_service.py`, `itinerary_service.py`
 - **Verification**: `py -3.11 -m pytest tests/test_dynamic_itinerary_phase4.py -v`
-- **Known Debt/Issues**: 2 item(s) logged
+- **Known Debt/Issues**: 3 item(s) logged
 
 ### 3.10 Core Configuration & Telemetry
 
@@ -182,7 +197,7 @@ The Assistant Studio owns: - **Zero-Mock Platform Compliance (AGENTS.md Rule 3)*
 
 #### [Business Assistant Frontend](frontend/src/pages/admin/business-assistant/README.md) (`frontend/src/pages/admin/business-assistant`)
 This module delivers both a full-page Business Assistant management view and a persistent, application-wide floating drawer accessible across all authenticated admin routes....
-- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-realtime-voice.ts`, `realtime-protocol.ts`, `ticket-status.tsx`, `use-business-assistant-realtime-voice.ts`, `realtime-voice-protocol.ts`, `drawer.tsx`, `assistant-context.tsx`
+- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-gpt-live.ts`, `caption-timeline.tsx`, `ticket-status.tsx`, `use-realtime-voice.ts`, `drawer.tsx`, `assistant-context.tsx`, `boundary.ts`
 - **Verification**: `npm test`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -220,8 +235,14 @@ The Admin Schedule module owns: - Weekly recurring working hours template config
 
 ### 3.21 Frontend Administration Views
 
+#### [GPT-Live Admin Page](frontend/src/pages/admin/gpt-live/README.md) (`frontend/src/pages/admin/gpt-live`)
+This module starts and closes the native GPT-Live Business Assistant voice experience. Its shared browser WebRTC hook and caption renderer are used by the direct admin page and the Business Assistant drawer/full-page voice controls. It does not hold ...
+- **Key Files**: `index.tsx`, `use-gpt-live.ts`, `protocol.ts`, `caption-timeline.tsx`, `gpt-live.ts`, `timeline.tsx`
+- **Verification**: `npm test -- --test-name-pattern="GPT-Live"`
+- **Known Debt/Issues**: 1 item(s) logged
+
 #### [Admin Management Portal & App Store](frontend/src/pages/admin/README.md) (`frontend/src/pages/admin`)
-The `frontend/src/pages/admin/` directory implements the staff and administrative console for **FastAPI Bookings**. It serves business owners, operators, dispatchers, and practitioners. Key responsibilities include: - Operational scheduling, calendar...
+The `frontend/src/pages/admin/` directory implements the staff and administrative console for **FastAPI Bookings**. It serves business owners, operators, dispatchers, and practitioners. Key responsibilities include:...
 - **Key Files**: `navigation.ts`, `relationships-matrix.tsx`, `relationships.tsx`, `relationships-tree.tsx`, `tenant-modules-context.tsx`, `modules.tsx`, `admin-layout.tsx`, `add-ons.tsx`, `categories.tsx`, `locations.tsx`, `packages.tsx`, `products.tsx`
 - **Verification**: `npm run build`
 - **Known Debt/Issues**: 2 item(s) logged
@@ -335,4 +356,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-04 18:49:39Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-07 12:13:32Z by `scripts/index_living_docs.py`.*
