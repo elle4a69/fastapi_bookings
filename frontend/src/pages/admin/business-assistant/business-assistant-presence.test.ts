@@ -30,11 +30,19 @@ const supportButtonSource = readFileSync(
   'utf8',
 )
 const voiceHookSource = readFileSync(
-  fileURLToPath(new URL('./use-realtime-voice.ts', import.meta.url)),
+  fileURLToPath(new URL('../gpt-live/use-gpt-live.ts', import.meta.url)),
   'utf8',
 )
 const ticketStatusSource = readFileSync(
   fileURLToPath(new URL('./ticket-status.tsx', import.meta.url)),
+  'utf8',
+)
+const minimizedMicSource = readFileSync(
+  fileURLToPath(new URL('./minimized-voice-controller.tsx', import.meta.url)),
+  'utf8',
+)
+const contextSource = readFileSync(
+  fileURLToPath(new URL('./business-assistant-context.tsx', import.meta.url)),
   'utf8',
 )
 
@@ -135,18 +143,14 @@ test('realtime protocol parses tool execution calls and formats outputs', () => 
   assert.equal((formattedOutput.item as { type: string }).type, 'function_call_output')
 })
 
-test('voice session hook degrades gracefully to text on mic denial and upstream error', () => {
-  // Graceful degradation on microphone denial
-  assert.match(voiceHookSource, /NotAllowedError/)
-  assert.match(
-    voiceHookSource,
-    /Microphone access was declined\. You can continue in text\./,
-  )
-
-  // Proper teardown on disconnect or error
-  assert.match(voiceHookSource, /stopVoice\(\)/)
-  assert.match(voiceHookSource, /microphoneStream\.getTracks\(\)\.forEach\(/)
-  assert.match(voiceHookSource, /peerConnectionRef\.current\?\.close\(\)/)
+test('Business Assistant voice uses GPT-Live lifecycle, not the legacy realtime session update', () => {
+  assert.match(voiceHookSource, /createDataChannel\('oai-events'\)/)
+  assert.match(voiceHookSource, /event\.type === 'session\.started'/)
+  assert.match(voiceHookSource, /type: 'session\.close'/)
+  assert.match(voiceHookSource, /event\.type === 'session\.closed'/)
+  assert.match(voiceHookSource, /finalisation is incomplete/)
+  assert.match(voiceHookSource, /\/api\/admin\/gpt-live\/conversations/)
+  assert.doesNotMatch(voiceHookSource, /session\.update/)
 })
 
 test('ticket status component renders user-safe status badges, timeline, and sanitised notice', () => {
@@ -162,4 +166,30 @@ test('ticket status component renders user-safe status badges, timeline, and san
     ticketStatusSource,
     /Do not include customer passwords, API secrets, or sensitive customer PII\./,
   )
+})
+
+test('minimized voice controller provides floating mic indicator with expand and end-call controls', () => {
+  assert.match(layoutSource, /<MinimizedVoiceController \/>/)
+  assert.match(minimizedMicSource, /data-testid="business-assistant-minimized-mic"/)
+  assert.match(minimizedMicSource, /drawerOpen \|\| voiceState === 'idle'/)
+  assert.match(minimizedMicSource, /onClick=\{openDrawer\}/)
+  assert.match(minimizedMicSource, /onClick=\{stopVoice\}/)
+  assert.match(minimizedMicSource, /Volume2/)
+  assert.match(minimizedMicSource, /PhoneOff/)
+})
+
+test('app header Assistant button reflects active voice state and provides accessible controls', () => {
+  assert.match(headerSource, /voiceState === 'live'/)
+  assert.match(headerSource, /voiceState === 'connecting'/)
+  assert.match(headerSource, /Voice Live/)
+  assert.match(headerSource, /data-testid="business-assistant-header-button"/)
+})
+
+test('business assistant context strictly isolates multi-tenant and logout scope boundaries', () => {
+  assert.match(contextSource, /AuthContext/)
+  assert.match(contextSource, /previousUserKeyRef/)
+  assert.match(contextSource, /stopVoice\(\)/)
+  assert.match(contextSource, /setConversations\(\[\]\)/)
+  assert.match(contextSource, /setMessages\(\[\]\)/)
+  assert.match(contextSource, /setVoiceCaptions\(\[\]\)/)
 })

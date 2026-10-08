@@ -3,6 +3,7 @@ import {
   Compass,
   LoaderCircle,
   Mic,
+  MicOff,
   PhoneOff,
   RotateCcw,
   Send,
@@ -11,6 +12,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { GPTLiveCaptionTimeline } from '../gpt-live/caption-timeline'
 
 import {
   useBusinessAssistant,
@@ -102,8 +104,15 @@ export function ConversationView({
     error,
     turnError,
     voiceState,
+    voiceCaptions,
     startVoice,
     stopVoice,
+    isMuted,
+    toggleMute,
+    audioDevices,
+    activeAudioDeviceId,
+    switchAudioDevice,
+    transport,
     sendTurn,
     pageContext,
     includePageContext,
@@ -151,29 +160,86 @@ export function ConversationView({
 
       {voiceState !== 'idle' && (
         <div
-          className="flex items-center justify-between border-b border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary"
+          className="flex flex-col border-b border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary gap-1.5"
           role="status"
         >
-          <div className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4 animate-pulse" aria-hidden="true" />
-            <span>
-              {voiceState === 'connecting'
-                ? 'Connecting your microphone and encrypted voice session…'
-                : 'Voice is live. You can speak naturally or interrupt at any time.'}
-            </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-4 w-4 animate-pulse" aria-hidden="true" />
+              <span>
+                {voiceState === 'connecting'
+                  ? 'Connecting encrypted voice session…'
+                  : voiceState === 'finalising'
+                    ? 'Finalising the voice session…'
+                  : isMuted
+                    ? 'Microphone muted. Assistant is listening on remote channel.'
+                    : 'Voice is live. You can speak naturally or interrupt at any time.'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="hidden sm:inline-block rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                {transport === 'livekit_gpt_live' ? 'LiveKit' : 'Direct'}
+              </span>
+              {voiceState === 'live' && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-primary hover:bg-primary/20"
+                  onClick={() => void toggleMute()}
+                  title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                  aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                  data-testid="voice-mute-button"
+                >
+                  {isMuted ? (
+                    <>
+                      <MicOff className="mr-1 h-3.5 w-3.5 text-destructive" aria-hidden="true" />
+                      Unmute
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                      Mute
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-primary hover:bg-primary/20"
+                onClick={stopVoice}
+                disabled={voiceState === 'finalising'}
+                data-testid="voice-end-call-button"
+              >
+                <PhoneOff className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                End call
+              </Button>
+            </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-primary hover:bg-primary/20"
-            onClick={stopVoice}
-          >
-            <PhoneOff className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            End call
-          </Button>
+          {audioDevices.length > 1 && voiceState === 'live' && (
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1 border-t border-primary/10">
+              <span>Mic device:</span>
+              <select
+                value={activeAudioDeviceId || ''}
+                onChange={(e) => void switchAudioDevice(e.target.value)}
+                className="h-6 rounded border bg-background px-1.5 text-[11px] text-foreground"
+                data-testid="voice-device-select"
+                aria-label="Select audio input device"
+              >
+                {audioDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
+
+      {voiceState !== 'idle' && <GPTLiveCaptionTimeline captions={voiceCaptions} className="m-3" />}
 
       {error && (
         <div
@@ -255,6 +321,7 @@ export function ConversationView({
                 variant="destructive"
                 size="icon-sm"
                 onClick={stopVoice}
+                disabled={voiceState === 'finalising'}
                 title="End voice session"
                 aria-label="End voice session"
               >

@@ -8,18 +8,22 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
   apiClient,
   toUserFacingApiError,
   type UserFacingApiError,
 } from '@/lib/api'
+import { AuthContext } from '@/context/auth-context'
 
 import {
-  useRealtimeVoice,
-  type RealtimeVoiceState,
-} from './use-realtime-voice'
+  useGPTLive,
+  type GPTLiveVoiceState,
+} from '../gpt-live/use-gpt-live'
+import { useLiveKitVoice } from './use-livekit-voice'
+import { type GPTLiveCaption } from '../gpt-live/protocol'
+import type { RpcExecutionReceipt } from './rpc'
 
 export type Conversation = {
   id: number
@@ -79,9 +83,18 @@ export type BusinessAssistantContextType = {
   setError: (err: string | null) => void
   turnError: UserFacingApiError | null
   setTurnError: (err: UserFacingApiError | null) => void
-  voiceState: RealtimeVoiceState
-  startVoice: () => Promise<void>
+  voiceState: GPTLiveVoiceState
+  voiceCaptions: GPTLiveCaption[]
+  startVoice: (requestedConversationId?: number) => Promise<void>
   stopVoice: () => void
+  isMuted: boolean
+  toggleMute: () => Promise<void>
+  audioDevices: MediaDeviceInfo[]
+  activeAudioDeviceId: string | null
+  switchAudioDevice: (deviceId: string) => Promise<void>
+  transport: 'livekit_gpt_live' | 'direct_gpt_live'
+  setTransport: (transport: 'livekit_gpt_live' | 'direct_gpt_live') => void
+  lastRpcReceipt?: RpcExecutionReceipt | null
   createConversation: () => Promise<number | null>
   selectConversation: (id: number) => Promise<void>
   sendTurn: (overrideContent?: string) => Promise<void>
@@ -95,6 +108,7 @@ const BusinessAssistantContext = createContext<BusinessAssistantContextType | nu
 
 export function BusinessAssistantProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const pageContext = useMemo(() => resolvePageContext(location.pathname), [location.pathname])
 
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -108,30 +122,73 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
   const [error, setError] = useState<string | null>(null)
   const [turnError, setTurnError] = useState<UserFacingApiError | null>(null)
   const [includePageContext, setIncludePageContext] = useState(false)
+  const [voiceCaptions, setVoiceCaptions] = useState<GPTLiveCaption[]>([])
+  const [lastRpcReceipt, setLastRpcReceipt] = useState<RpcExecutionReceipt | null>(null)
 
   const openDrawer = useCallback(() => setDrawerOpen(true), [])
   const closeDrawer = useCallback(() => setDrawerOpen(false), [])
   const toggleDrawer = useCallback(() => setDrawerOpen((prev) => !prev), [])
 
-  const { voiceState, startVoice, stopVoice } = useRealtimeVoice({
+  const [transport, setTransport] = useState<'livekit_gpt_live' | 'direct_gpt_live'>('livekit_gpt_live')
+
+  const livekitVoice = useLiveKitVoice({
     conversationId: activeConversationId,
-    onTurnPersisted: (turn) => {
-      setMessages((current) => {
-        const next = [
-          ...current.filter(
-            (m) => m.id !== turn.user_message.id && m.id !== turn.assistant_message.id,
-          ),
-          turn.user_message,
-          turn.assistant_message,
-        ]
-        return next.sort((left, right) => {
-          const compared = left.created_at.localeCompare(right.created_at)
-          return compared || left.id - right.id
-        })
-      })
-    },
+    onCaptionsChange: setVoiceCaptions,
+    onError: setError,
+    onNavigate: (path) => navigate(path),
+    onRpcReceipt: (receipt) => setLastRpcReceipt(receipt),
+  })
+
+  const directVoice = useGPTLive({
+    conversationId: activeConversationId,
+    onCaptionsChange: setVoiceCaptions,
     onError: setError,
   })
+
+  useEffect(() => {
+    let active = true
+    apiClient
+      .get<{ transport?: string }>('/api/admin/business-assistant/voice/transport')
+      .then((res) => {
+        if (active && res?.transport === 'direct_gpt_live') {
+          setTransport('direct_gpt_live')
+        }
+      })
+      .catch(() => {
+        // Fallback or offline uses default
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const voiceState = transport === 'livekit_gpt_live' ? livekitVoice.voiceState : directVoice.voiceState
+  const startVoice = transport === 'livekit_gpt_live' ? livekitVoice.startVoice : directVoice.startVoice
+  const stopVoice = useCallback(() => {
+    livekitVoice.stopVoice()
+    directVoice.stopVoice()
+  }, [livekitVoice, directVoice])
+
+  // Multi-tenant and logout scope isolation: clear all state and stop voice on tenant/user change
+  const authContext = useContext(AuthContext)
+  const currentTenantUserKey = authContext?.user
+    ? `${authContext.user.tenant_id ?? 0}:${authContext.user.id}`
+    : null
+  const previousUserKeyRef = useRef<string | null>(currentTenantUserKey)
+
+  useEffect(() => {
+    if (previousUserKeyRef.current !== currentTenantUserKey) {
+      previousUserKeyRef.current = currentTenantUserKey
+      stopVoice()
+      setDrawerOpen(false)
+      setActiveConversationId(null)
+      setConversations([])
+      setMessages([])
+      setVoiceCaptions([])
+      setError(null)
+      setTurnError(null)
+    }
+  }, [currentTenantUserKey, stopVoice])
 
   const loadMessages = useCallback(async (conversationId: number) => {
     try {
@@ -281,8 +338,17 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       turnError,
       setTurnError,
       voiceState,
+      voiceCaptions,
       startVoice,
       stopVoice,
+      isMuted: livekitVoice.isMuted,
+      toggleMute: livekitVoice.toggleMute,
+      audioDevices: livekitVoice.audioDevices,
+      activeAudioDeviceId: livekitVoice.activeAudioDeviceId,
+      switchAudioDevice: livekitVoice.switchAudioDevice,
+      transport,
+      setTransport,
+      lastRpcReceipt,
       createConversation,
       selectConversation,
       sendTurn,
@@ -305,8 +371,17 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       error,
       turnError,
       voiceState,
+      voiceCaptions,
       startVoice,
       stopVoice,
+      livekitVoice.isMuted,
+      livekitVoice.toggleMute,
+      livekitVoice.audioDevices,
+      livekitVoice.activeAudioDeviceId,
+      livekitVoice.switchAudioDevice,
+      transport,
+      setTransport,
+      lastRpcReceipt,
       createConversation,
       selectConversation,
       sendTurn,

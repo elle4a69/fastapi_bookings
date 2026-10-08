@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
   Bot,
   CheckCircle2,
@@ -26,8 +26,10 @@ import {
 } from '@/lib/api'
 
 import {
-  useRealtimeVoice,
-} from './use-realtime-voice'
+  useGPTLive,
+} from '../gpt-live/use-gpt-live'
+import { GPTLiveCaptionTimeline } from '../gpt-live/caption-timeline'
+import { type GPTLiveCaption } from '../gpt-live/protocol'
 import {
   type SupportTicket,
   type TicketCreateResponse,
@@ -99,32 +101,27 @@ export default function BusinessAssistantPage() {
   const [creatingTicket, setCreatingTicket] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [onboarding, setOnboarding] = useState<OnboardingResponse | null>(null)
+  const [voiceCaptions, setVoiceCaptions] = useState<GPTLiveCaption[]>([])
 
-  const { voiceState, startVoice, stopVoice } = useRealtimeVoice({
+  const { voiceState, startVoice, stopVoice } = useGPTLive({
     conversationId: activeConversationId,
-    onTurnPersisted: (turn) => {
-      setMessages((current) => {
-        const next = [
-          ...current.filter(
-            (message) =>
-              message.id !== turn.user_message.id &&
-              message.id !== turn.assistant_message.id,
-          ),
-          turn.user_message,
-          turn.assistant_message,
-        ]
-        return next.sort((left, right) => {
-          const compared = left.created_at.localeCompare(right.created_at)
-          return compared || left.id - right.id
-        })
-      })
-    },
+    onCaptionsChange: setVoiceCaptions,
     onError: setError,
   })
 
+  const stopVoiceRef = useRef(stopVoice)
+  const previousConversationIdRef = useRef<number | null>(activeConversationId)
+
   useEffect(() => {
-    stopVoice()
-  }, [activeConversationId, stopVoice])
+    stopVoiceRef.current = stopVoice
+  }, [stopVoice])
+
+  useEffect(() => {
+    if (previousConversationIdRef.current !== activeConversationId) {
+      stopVoiceRef.current()
+      previousConversationIdRef.current = activeConversationId
+    }
+  }, [activeConversationId])
 
   const loadMessages = async (conversationId: number) => {
     const history = await apiClient.get<ConversationMessage[]>(
@@ -369,14 +366,19 @@ export default function BusinessAssistantPage() {
               type="button"
               variant="outline"
               onClick={stopVoice}
+              disabled={voiceState === 'finalising'}
               data-testid="business-assistant-voice-stop"
             >
-              {voiceState === 'connecting' ? (
+              {voiceState === 'connecting' || voiceState === 'finalising' ? (
                 <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (
                 <PhoneOff className="mr-2 h-4 w-4" aria-hidden="true" />
               )}
-              {voiceState === 'connecting' ? 'Connecting voice…' : 'End voice'}
+              {voiceState === 'connecting'
+                ? 'Connecting voice…'
+                : voiceState === 'finalising'
+                  ? 'Finalising voice…'
+                  : 'End voice'}
             </Button>
           )}
           <Button type="button" onClick={() => void createConversation()}>
@@ -486,9 +488,13 @@ export default function BusinessAssistantPage() {
           <Volume2 className="h-4 w-4" aria-hidden="true" />
           {voiceState === 'connecting'
             ? 'Connecting your microphone and private voice session…'
+            : voiceState === 'finalising'
+              ? 'Finalising the voice session…'
             : 'Voice is live. You can interrupt naturally or end the call at any time.'}
         </div>
       )}
+
+      {voiceState !== 'idle' && <GPTLiveCaptionTimeline captions={voiceCaptions} />}
 
       {error && (
         <div
