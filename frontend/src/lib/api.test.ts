@@ -88,6 +88,10 @@ test('recognizes only permitted tenant hostnames', { concurrency: false }, async
     ['127.0.0.1', null],
     ['api.example.com', null],
     ['tenant.run.app', null],
+    ['recycling-screensavers-nothing-tablet.trycloudflare.com', null],
+    ['another-preview.trycloudflare.com', null],
+    ['PREVIEW.TRYCLOUDFLARE.COM.', null],
+    ['tenant.trycloudflare.com.example.com', 'tenant'],
   ] as const) {
     installBrowser(hostname);
     const { getActiveTenantFromHost } = await loadApi();
@@ -111,6 +115,39 @@ test('uses the local authentication bypass only on localhost', { concurrency: fa
   installBrowser('tenant.localhost', '/', 'ordinary-token');
   const tenantApi = await loadApi();
   assert.equal(tenantApi.getAdminAccessToken(), 'ordinary-token');
+});
+
+test('quick tunnels use the existing demo tenant with a real stored token, not local bypass', { concurrency: false }, async () => {
+  const environment = (globalThis as unknown as {
+    process: { env: Record<string, string | undefined> };
+  }).process.env;
+  const originalNodeEnvironment = environment.NODE_ENV;
+  environment.NODE_ENV = 'production';
+
+  try {
+    installBrowser('recycling-screensavers-nothing-tablet.trycloudflare.com', '/admin', 'ordinary-token');
+    const api = await loadApi();
+    const headers = api.getAuthenticatedAdminHeaders();
+
+    assert.equal(api.getActiveTenantFromHost(), null);
+    assert.equal(headers.get('X-Tenant'), 'simplydemo');
+    assert.equal(headers.get('X-Token'), 'ordinary-token');
+    assert.equal(api.getAdminAccessToken(), 'ordinary-token');
+
+    installBrowser('another-preview.trycloudflare.com', '/admin');
+    const unauthenticatedApi = await loadApi();
+    const unauthenticatedHeaders = unauthenticatedApi.getAuthenticatedAdminHeaders();
+
+    assert.equal(unauthenticatedHeaders.get('X-Tenant'), 'simplydemo');
+    assert.equal(unauthenticatedHeaders.get('X-Token'), null);
+    assert.equal(unauthenticatedApi.getAdminAccessToken(), null);
+  } finally {
+    if (originalNodeEnvironment === undefined) {
+      delete environment.NODE_ENV;
+    } else {
+      environment.NODE_ENV = originalNodeEnvironment;
+    }
+  }
 });
 
 test('accepts only safe admin return paths', { concurrency: false }, async () => {

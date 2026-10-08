@@ -17,6 +17,8 @@ interface ApiClientOptions extends RequestInit {
 /**
  * Resolve the tenant solely from the hostname serving this application.
  * Only tenant.localhost and tenant.<base-domain> are tenant contexts.
+ * Cloud platform routing names are not tenant slugs; quick tunnels use the
+ * existing development tenant fallback without enabling local auth bypass.
  */
 export function getActiveTenantFromHost(): string | null {
   if (typeof window === 'undefined') {
@@ -31,6 +33,7 @@ export function getActiveTenantFromHost(): string | null {
 
   if (
     hostname.endsWith('.run.app') ||
+    hostname.endsWith('.trycloudflare.com') ||
     (!isTenantLocalhost && !isTenantDomain) ||
     !tenant ||
     ['www', 'api', 'localhost', '127', '0'].includes(tenant) ||
