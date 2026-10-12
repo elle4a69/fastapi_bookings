@@ -36,8 +36,11 @@ export const TelemetryTab: React.FC = () => {
     fetchDiagnostics()
   }, [state.appMode])
 
+  const otlpEndpoint = state.telemetrySettings?.otlp_endpoint || 'http://localhost:4318'
+  const signozBaseUrl = (state.telemetrySettings?.signoz_url || 'http://localhost:3301').replace(/\/$/, '')
+
   const telemetryStatus = diagnostics?.subsystems?.telemetry?.status || 
-    'Not connected (No active telemetry collector on http://localhost:4318)'
+    `Not connected (No active telemetry collector on ${otlpEndpoint})`
   const isTelemetryConnected = diagnostics?.subsystems?.telemetry?.connected === true
 
   return (
@@ -47,7 +50,7 @@ export const TelemetryTab: React.FC = () => {
         <div className="flex items-center gap-1.5 text-[var(--warning)] font-medium text-[11px]">
           <ShieldCheck className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">
-            Diagnostics Provider: {isTelemetryConnected ? 'Connected (http://localhost:4318)' : telemetryStatus}
+            Diagnostics Provider: {isTelemetryConnected ? `Connected (${otlpEndpoint})` : telemetryStatus}
           </span>
         </div>
         {state.appMode === 'live' && (
@@ -162,7 +165,7 @@ export const TelemetryTab: React.FC = () => {
                   <Clock className="w-3 h-3" /> {inc.timestamp} ({inc.durationMs}ms)
                 </span>
                 <a
-                  href={`http://localhost:3301/trace/${inc.traceId}`}
+                  href={`${signozBaseUrl}/trace/${inc.traceId}`}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`View trace ${inc.traceId} in SigNoz`}

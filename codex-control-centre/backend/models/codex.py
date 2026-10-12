@@ -88,3 +88,19 @@ class SubAgent(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     thread = relationship("Thread", back_populates="subagents")
+
+class WorkspaceBoundary(Base):
+    __tablename__ = "workspace_boundaries"
+
+    id = Column(String, primary_key=True)
+    path = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=True)
+    is_default = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

@@ -12,7 +12,10 @@ import type {
   CreateWorktreePayload,
   WorktreeResponse,
   SubAgentResponse,
-  DeepDiagnosticsResponse
+  DeepDiagnosticsResponse,
+  WorkspaceBoundary,
+  TelemetrySettings,
+  TelemetryTestResult
 } from '../types/workbench'
 
 export class CodexApi {
@@ -51,6 +54,32 @@ export class CodexApi {
   async getProjectFiles(projectId: string, subpath?: string): Promise<any[]> {
     const params = subpath ? { subpath } : undefined
     return this.client.get<any[]>(`/codex/projects/${projectId}/files`, params)
+  }
+
+  // Workspace Boundaries Management
+  async listBoundaries(): Promise<WorkspaceBoundary[]> {
+    return this.client.get<WorkspaceBoundary[]>('/codex/settings/boundaries')
+  }
+
+  async addBoundary(payload: { path: string; name?: string }): Promise<WorkspaceBoundary> {
+    return this.client.post<WorkspaceBoundary>('/codex/settings/boundaries', payload)
+  }
+
+  async deleteBoundary(idOrPath: string): Promise<{ status: string; message: string }> {
+    return this.client.delete<{ status: string; message: string }>(`/codex/settings/boundaries/${encodeURIComponent(idOrPath)}`)
+  }
+
+  // Telemetry Settings Management
+  async getTelemetrySettings(): Promise<TelemetrySettings> {
+    return this.client.get<TelemetrySettings>('/codex/settings/telemetry')
+  }
+
+  async updateTelemetrySettings(payload: { signoz_url: string; otlp_endpoint: string; enabled: boolean }): Promise<TelemetrySettings> {
+    return this.client.put<TelemetrySettings>('/codex/settings/telemetry', payload)
+  }
+
+  async testTelemetryEndpoint(endpoint: string): Promise<TelemetryTestResult> {
+    return this.client.post<TelemetryTestResult>('/codex/settings/telemetry/test', { endpoint })
   }
 
   // Threads Management
@@ -134,6 +163,13 @@ export class CodexApi {
     return this.client.post<SubAgentResponse>(`/codex/governance/subagents/${id}/stop`)
   }
 
+  async createThreadEventTicket(projectId: string, threadId: string): Promise<{ ticket: string }> {
+    return this.client.post<{ ticket: string }>('/codex/events/ticket', {
+      project_id: projectId,
+      thread_id: threadId,
+    })
+  }
+
   // EventSource SSE Stream Connection
   connectThreadEvents(
     projectId: string,
@@ -146,16 +182,10 @@ export class CodexApi {
       return () => {}
     }
 
-    const baseUrl = this.client.getBaseUrl()
-    const token = this.client.getToken()
     const encodedProj = encodeURIComponent(projectId)
     const encodedThread = encodeURIComponent(threadId)
-    let url = `${baseUrl}/codex/events/${encodedProj}/${encodedThread}?token=${encodeURIComponent(token)}`
-    if (lastEventId) {
-      url += `&last_event_id=${encodeURIComponent(lastEventId)}`
-    }
-
-    const es = new EventSource(url)
+    let eventSource: EventSource | null = null
+    let closed = false
 
     const handleRawEvent = (event: MessageEvent, eventType?: string) => {
       try {
@@ -194,8 +224,6 @@ export class CodexApi {
       }
     }
 
-    es.onmessage = (event) => handleRawEvent(event)
-
     const eventNames = [
       'turn_started',
       'turn_completed',
@@ -220,16 +248,37 @@ export class CodexApi {
       'failure'
     ]
 
-    eventNames.forEach(name => {
-      es.addEventListener(name, (event: any) => handleRawEvent(event, name))
-    })
-
-    es.onerror = (err) => {
-      onError?.(err)
+    const openEventSource = async () => {
+      try {
+        // EventSource cannot send Authorization headers. A scoped, one-time
+        // ticket keeps the long-lived URL free of the bearer credential.
+        const { ticket } = await this.createThreadEventTicket(projectId, threadId)
+        if (closed) return
+        const params = new URLSearchParams({ sse_ticket: ticket })
+        if (lastEventId) params.set('last_event_id', lastEventId)
+        const url = `${this.client.getBaseUrl()}/codex/events/${encodedProj}/${encodedThread}?${params.toString()}`
+        const es = new EventSource(url, { withCredentials: true })
+        eventSource = es
+        es.onmessage = (event) => handleRawEvent(event)
+        eventNames.forEach(name => {
+          es.addEventListener(name, (event: Event) => handleRawEvent(event as MessageEvent, name))
+        })
+        es.onerror = (err) => {
+          es.close()
+          if (eventSource === es) eventSource = null
+          onError?.(err)
+        }
+      } catch (err) {
+        onError?.(err)
+      }
     }
 
+    void openEventSource()
+
     return () => {
-      es.close()
+      closed = true
+      eventSource?.close()
+      eventSource = null
     }
   }
 }

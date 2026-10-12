@@ -4,34 +4,23 @@ Codex Control Centre is the main coordination, telemetry, and governance hub for
 
 ---
 
-## Table of Contents
-- [Architecture & Overview](#architecture--overview)
-- [Codex App-Server Integration Architecture](#codex-app-server-integration-architecture)
-  - [JSON-RPC 2.0 Protocol & Handshake](#json-rpc-20-protocol--handshake)
-  - [Worktree Sandboxing & Isolation](#worktree-sandboxing--isolation)
-  - [Real-Time SSE Event Streaming](#real-time-sse-event-streaming)
-  - [Interactive Approval Gates & Cascade Cancellation](#interactive-approval-gates--cascade-cancellation)
-- [Prerequisites & Setup](#prerequisites--setup)
-- [API Route Reference](#api-route-reference)
-  - [Liveness & Diagnostics](#liveness--diagnostics)
-  - [Events & SSE Streaming](#events--sse-streaming)
-  - [Threads & Turns](#threads--turns)
-  - [Governance & Approvals](#governance--approvals)
-  - [Worktrees Management](#worktrees-management)
-- [Security Features](#security-features)
-  - [Loopback Binding & CORS Protection](#loopback-binding--cors-protection)
-  - [Bearer Token Authentication](#bearer-token-authentication)
-  - [Tool Risk Tiering & Evaluation](#tool-risk-tiering--evaluation)
-  - [Sub-Agent Concurrency Limits & Cascade Cancellation](#sub-agent-concurrency-limits--cascade-cancellation)
-  - [Safe Worktree Deletion & Traversal Prevention](#safe-worktree-deletion--traversal-prevention)
-- [Development & Verification Commands](#development--verification-commands)
-  - [Master Quality Gates Verification](#master-quality-gates-verification)
-- [Database & Migrations](#database--migrations)
-- [Configuration Reference](#configuration-reference)
+## 1. Purpose & Scope
+
+Codex Control Centre provides an enterprise-grade supervisory control plane and developer workbench for OpenAI Codex App-Server (`codex app-server`).
+- **Core Ownership**:
+  - Direct stdio JSON-RPC 2.0 communication with `codex app-server` worker subprocesses.
+  - Multi-tenant thread and turn lifecycle management with resilient start, steer, and interrupt operations.
+  - Real-time Server-Sent Events (SSE) streaming with event buffering, single-use ticket dispatch, and optimistic turn reconciliation.
+  - Human-in-the-loop tool execution approval gates with risk-tier evaluation (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+  - Git worktree sandboxing ensuring all tool calls and edits occur in isolated worktrees (`worktrees/wt-<thread_id>`).
+  - Telemetry pipeline exporting spans, metrics, and logs to SigNoz / OpenTelemetry collectors.
+- **Explicit Non-Goals**:
+  - Does not replace primary booking application database models or business domains.
+  - Does not expose raw shell execution or bypass governance evaluation on mutating tools.
 
 ---
 
-## Architecture & Overview
+## 2. Architecture & Key Files
 
 ```
                   +-----------------------------------+
@@ -61,231 +50,174 @@ Codex Control Centre is the main coordination, telemetry, and governance hub for
                                                   +-----------------------+
 ```
 
----
-
-## Codex App-Server Integration Architecture
-
-Codex Control Centre interfaces directly with the native OpenAI Codex App-Server (`codex app-server`) over bidirectional JSON-RPC 2.0 via standard input/output (`stdio`).
-
-### JSON-RPC 2.0 Protocol & Handshake
-1. **Discovery & Initialization**: Upon process launch, the supervisor performs a strict lifecycle handshake:
-   - Supervisor sends `initialize` request with client identification and capabilities (`{"clientInfo": {"name": "CodexControlCentre", "version": "1.0.0"}, "capabilities": {"streaming": true, "approvals": true}}`).
-   - Codex App-Server returns server metadata, user agent, and supported feature capabilities.
-   - Supervisor acknowledges with an `initialized` notification to unblock the worker for turn execution.
-2. **Binary Resolution**: On Windows systems, `resolve_codex_binary` resolves PATH entries, transparently bypassing `.cmd`/`.bat` shell wrappers and locating the native compiled binary (`codex.exe`) within Node/NVM paths.
-
-### Worktree Sandboxing & Isolation
-- Each conversation thread runs in a sandboxed git worktree directory (`worktrees/wt-<threadId>`).
-- When a turn is initiated (`POST /codex/turns/start`), the backend:
-  1. Creates or verifies the isolated git worktree via `ensure_thread_worktree`.
-  2. Sets the worker process working directory (`cwd`) strictly to the worktree path.
-  3. Dispatches `turn/start` with both `workspaceRoot` and `cwd` pointing exclusively to `worktrees/wt-<threadId>`.
-
-### Real-Time SSE Event Streaming
-Codex App-Server notifications are translated in real-time by `Protocol.normalize_notification` into standardized `EventEnvelope` structures and published to the thread-scoped `EventBroker`:
-- `turn/reasoningDelta` $\to$ `reasoning` (streaming chain-of-thought tokens)
-- `turn/messageDelta` $\to$ `agent_message` (assistant response text)
-- `turn/commandExecution` $\to$ `command` (command execution status, exit code, stdout/stderr)
-- `turn/fileModified` $\to$ `file_change` (diffs, additions, deletions, modified paths)
-- `turn/completed` $\to$ `turn_completed` (turn completion summary and timestamp)
-
-Frontend clients consume these events through the Server-Sent Events (SSE) endpoint (`GET /codex/events/{project_id}/{thread_id}`), which supports automatic backlog replay via the `Last-Event-ID` header.
-
-### Interactive Approval Gates & Cascade Cancellation
-- When Codex App-Server requests tool execution (`turn/toolApprovalRequested`):
-  - **LOW Risk**: Read-only tools/commands (`git status`, `cat`) are auto-approved immediately.
-  - **HIGH / CRITICAL Risk**: Potentially destructive commands (`git reset --hard`, `npm install`, shell scripts) pause execution and persist a pending `ToolApproval` record in SQLite.
-  - Operators review and approve or decline via `POST /codex/approvals/respond`, which dispatches the JSON-RPC response `{"jsonrpc": "2.0", "id": "<req_id>", "result": {"approved": true/false}}` to unblock worker execution.
-- **Cascade Cancellation**: Invoking `POST /codex/turns/interrupt` issues `turn/interrupt` to the worker and automatically cascades cancellation to all pending tool approvals and active subagents for that thread.
+### Directory Layout & Key Files
+- `backend/`:
+  - `main.py`: FastAPI application factory, CORS policies, routers, exception handlers.
+  - `config.py`: Application settings, environment overrides, CLI flags, loopback binding.
+  - `database.py`: SQLAlchemy engine, session management with SQLite foreign key pragmas.
+  - `routers/`:
+    - `turns.py`: Turn execution lifecycle (`/start`, `/steer`, `/interrupt`), resilient turn ID resolution.
+    - `events.py`: SSE endpoints (`/codex/events/{project_id}/{thread_id}`), single-use tickets, broker bridge.
+    - `governance.py`: Approvals, risk tiering, subagent registration, concurrency enforcement.
+    - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
+    - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
+  - `services/`:
+    - `worker.py`: Subprocess management, stdio JSON-RPC protocol dispatch, event routing.
+    - `worker_manager.py`: Thread-to-worker process pool, graceful restart and teardown.
+    - `protocol.py`: JSON-RPC message normalization (`agent_message`, `reasoning`, `turn_completed`, `turn_failed`).
+    - `event_service.py`: In-memory thread-scoped SSE event broker with historical replay.
+    - `sse_tickets.py`: Short-lived single-use authorization ticket store.
+    - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
+- `frontend/`:
+  - `src/components/composer/Composer.tsx`: Prompt input, model selector (`gpt-5.6-sol`, `o3-mini`), reasoning controls.
+  - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys.
+  - `src/store/useWorkbenchStore.ts`: Global state, SSE reducer, optimistic turn adoption, turn interruption.
+  - `src/api/codexApi.ts`: REST and SSE client wrappers.
+  - `src/types/workbench.ts`: TypeScript contracts and DTO interfaces.
 
 ---
 
-## Prerequisites & Setup
+## 3. Setup, Configuration & Dependencies
 
+### Prerequisites
 - **Python**: 3.11+
 - **Node.js**: 20+
 - **Git**: 2.30+
+- **Codex CLI**: Native executable (`codex.exe`) authenticated via OpenAI account.
 
-### 1. Install Backend Dependencies
+### Installation
 ```bash
+# Backend dependencies
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-```
 
-### 2. Install Frontend Dependencies
-```bash
+# Database migrations
+alembic upgrade head
+
+# Frontend dependencies
 cd frontend
 npm install
 cd ..
 ```
 
-### 3. Initialize Database
-```bash
-alembic upgrade head
-```
-
----
-
-## API Route Reference
-
-All `/codex/*` endpoints require Bearer Token Authentication (`Authorization: Bearer <TOKEN>`) unless stated otherwise.
-
-### Liveness & Diagnostics
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/health` | Public | Public liveness probe returning `status: "healthy"` and UTC timestamp. |
-| `GET` | `/` | Public | Root welcoming banner endpoint. |
-| `GET` | `/codex/diagnostics/readiness` | Bearer | Readiness probe checking database, event broker, worker, worktree storage, and telemetry. |
-| `GET` | `/codex/diagnostics/deep` | Bearer | Deep multi-subsystem diagnostic audit probe. |
-| `GET` | `/codex/diagnostics/telemetry` | Bearer | Truthful probe verifying SigNoz / OTLP telemetry collector connectivity. |
-
-### Events & SSE Streaming
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/codex/events/{project_id}/{thread_id}` | Bearer | Server-Sent Events (SSE) stream supporting reconnection and backlog replay with `Last-Event-ID` header. |
-| `POST` | `/codex/events/publish` | Bearer | Publishes a typed `EventEnvelope` to the thread-scoped in-memory event broker. |
-
-### Threads & Turns
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/codex/threads` | Bearer | Creates a new conversation thread under a project. |
-| `GET` | `/codex/threads` | Bearer | Lists all threads across projects. |
-| `GET` | `/codex/threads/{thread_id}` | Bearer | Retrieves detailed thread metadata by ID. |
-| `PATCH` | `/codex/threads/{thread_id}` | Bearer | Updates thread metadata (`title`, `is_pinned`, `is_archived`, `status`). |
-| `DELETE` | `/codex/threads/{thread_id}` | Bearer | Cascades deletion to turns, approvals, and subagents for the specified thread. |
-| `POST` | `/codex/turns/start` | Bearer | Initializes a new active turn and notifies the worker process. |
-| `POST` | `/codex/turns/steer` | Bearer | Sends dynamic steering instructions to an active turn. |
-| `POST` | `/codex/turns/interrupt` | Bearer | Interrupts a running turn execution. |
-| `POST` | `/codex/approvals/respond` | Bearer | Dispatches user approval decision (`approved: true/false`) to the worker. |
-
-### Governance & Approvals
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/codex/governance/evaluate` | Bearer | Evaluates command or tool risk tier against governance profiles (`managed`, `strict`, `permissive`). |
-| `GET` | `/codex/governance/approvals/pending` | Bearer | Lists pending approval requests, optionally filtered by `?thread_id=`. |
-| `POST` | `/codex/governance/approvals` | Bearer | Creates a new tool approval gate (`HIGH` or `CRITICAL` risk). |
-| `POST` | `/codex/governance/approvals/{approval_id}/resolve` | Bearer | Resolves an approval gate (`approved: true/false`) and emits `approval.resolved` event. |
-| `GET` | `/codex/governance/subagents/{thread_id}` | Bearer | Lists all subagents active or registered under a thread. |
-| `POST` | `/codex/governance/subagents/register` | Bearer | Registers a subagent with active concurrency enforcement (max 6). |
-| `POST` | `/codex/governance/subagents/{subagent_id}/progress` | Bearer | Updates subagent progress percentage and telemetry action. |
-| `POST` | `/codex/governance/subagents/{subagent_id}/steer` | Bearer | Sends steering instruction to an active subagent. |
-| `POST` | `/codex/governance/subagents/{subagent_id}/stop` | Bearer | Stops a specific subagent. |
-| `POST` | `/codex/governance/threads/{thread_id}/terminate-subagents` | Bearer | Cascades cancellation to all active child subagents when parent thread terminates. |
-
-### Worktrees Management
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/codex/worktrees/create` | Bearer | Creates an isolated git worktree branch under the designated workspace directory. |
-| `GET` | `/codex/worktrees?repo_path=` | Bearer | Lists all active git worktrees registered for a repository. |
-| `DELETE` | `/codex/worktrees/{worktree_name}` | Bearer | Deletes a worktree. Requires `?force=true` if worktree contains uncommitted/dirty changes. |
-
----
-
-## Security Features
-
-### Loopback Binding & CORS Protection
-- Backend binds strictly to `127.0.0.1` by default.
-- Strict CORS middleware allowlists only authorized local frontend origins (`http://127.0.0.1:5180`, `http://localhost:5180`, `http://127.0.0.1:5173`, `http://localhost:5173`). Wildcard `*` origins are prohibited.
-
-### Bearer Token Authentication
-- All mutating and internal routes enforce token authentication via the `verify_auth` FastAPI dependency.
-- Token secret is securely loaded via environment variables (`TOKEN_SECRET`) with `local_secret` as default for local development.
-
-### Tool Risk Tiering & Evaluation
-The governance subsystem categorizes commands into four deterministic risk tiers:
-- **`LOW`**: Read-only operations (`git status`, `cat`, `grep`, `ls`). Auto-approved in managed profile.
-- **`MEDIUM`**: Workspace file mutations (`git add`, `touch`, `mkdir`). Auto-approved in managed profile; requires approval in strict profile.
-- **`HIGH`**: Destructive commands (`rm -rf`, `git reset --hard`, `npm install`, `pip install`, shell execution). Strictly requires human approval.
-- **`CRITICAL`**: Repository history changes or secret access (`git push`, `git branch -D`, `cat .env`, outbound POST requests). Strictly requires human approval.
-
-### Sub-Agent Concurrency Limits & Cascade Cancellation
-- Enforces a maximum concurrency ceiling of **6 active subagents** per thread to prevent resource exhaustion.
-- Thread cancellation automatically cascades cancellation to all active child subagents (`status: 'cancelled'`) and notifies subscribers via SSE.
-
-### Safe Worktree Deletion & Traversal Prevention
-- Worktree paths are validated against directory traversal patterns (`../`, path separators).
-- Primary repository roots and arbitrary filesystem directories are protected from deletion.
-- Uncommitted modifications in worktrees prevent accidental deletion unless explicitly confirmed with `force=True`.
-
----
-
-## Development & Verification Commands
-
-### Master Quality Gates Verification
-Execute all 9 backend and frontend quality gates via the unified PowerShell runner:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\test_all.ps1
-```
-
-### Run Full Backend Test Suite
-```bash
-python -m pytest tests/ -v
-```
-
-### Run Codex App-Server End-to-End Integration Suite
-```bash
-python -m pytest tests/test_codex_app_server.py -v
-```
-
-### Run End-to-End Smoke Test Suite
-```bash
-python -m pytest tests/test_e2e_smoke.py -v
-```
-
-### Run Python Linting & Typechecking
-```bash
-python -m ruff check backend tests
-python -m mypy backend
-```
-
-### Build Frontend
-```bash
-cd frontend
-npm run build
-```
-
-### Start Development Backend
-```bash
-uvicorn backend.main:app --host 127.0.0.1 --port 8100 --reload
-```
-
-### Start Frontend Dev Server
-```bash
-cd frontend
-npm run dev
-```
-
----
-
-## Database & Migrations
-
-Codex Control Centre uses SQLite with Alembic for migrations and foreign key constraints enabled via SQLite pragmas.
-
-```bash
-# Run latest database migrations
-alembic upgrade head
-
-# Create a new migration revision
-alembic revision -m "add_new_feature_table"
-```
-
----
-
-## Configuration Reference
-
+### Configuration Reference
 Set these variables in `.env` or system environment:
 
 | Variable | Default Value | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./codex.db` | SQLAlchemy database connection string. |
 | `HOST` | `127.0.0.1` | Host address to bind the API server. |
-| `PORT` | `8100` | Port for the API server. |
+| `PORT` | `4500` | Port for the API server. |
 | `TOKEN_SECRET` | `local_secret` | Bearer token secret for authentication. |
-| `SIGNOZ_URL` | `http://localhost:3301` | SigNoz telemetry collector URL. |
-| `OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry OTLP endpoint. |
+| `SIGNOZ_URL` | `http://localhost:3301` | SigNoz telemetry collector URL (can also be dynamically managed in UI). |
+| `OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry OTLP endpoint (can also be dynamically managed in UI). |
+| `ALLOWED_BOUNDARIES` | `["<codex_dir>"]` | Comma-separated or JSON list of initial allowed workspace base boundaries. |
 | `WORKTREES_DIR` | `<root>/worktrees` | Directory path for isolated git worktrees. |
 | `CODEX_BIN_PATH` | `codex` | Path to Codex App-Server executable (automatically resolves to native `codex.exe`). |
 | `CODEX_APP_SERVER_ARGS` | `["app-server"]` | Command line arguments passed when launching the Codex App-Server subprocess. |
 | `CODEX_TRANSPORT` | `stdio` | Transport protocol used for communication with the worker process (`stdio`). |
 | `CODEX_WORKER_TIMEOUT_SECONDS` | `60` | Default timeout in seconds for JSON-RPC requests sent to the worker process. |
-| `CODEX_API_KEY` | `None` | Optional API key injected into the worker subprocess environment (`CODEX_API_KEY`). |
+
+---
+
+## 4. Core Workflows & Contracts
+
+### 1. Dynamic Workspace Boundaries & Project Registration
+1. **Dynamic Multi-Folder Boundaries**: Allowed root boundaries (`WorkspaceBoundary`) are persisted in SQLite and managed via REST endpoints:
+   - `GET /codex/settings/boundaries`: List active allowed directory paths.
+   - `POST /codex/settings/boundaries`: Add a new allowed base directory boundary with strict on-disk existence validation.
+   - `DELETE /codex/settings/boundaries/{id_or_path}`: Safely remove a boundary (protected: cannot remove the sole remaining boundary).
+2. **Project Registration Enforcement**:
+   - When registering a project via `POST /codex/projects`, the backend resolves the path and confirms it resides within at least one active allowed boundary.
+   - If outside all boundaries, an explicit HTTP 400 error is returned with the list of active boundaries and instructions for adding the folder.
+   - In the frontend "Register Project" modal, active boundaries are displayed in real time. If a user enters a path outside existing boundaries, a highlighted warning appears with an instant 1-click button to "+ Add to Allowed Boundaries".
+3. **Safe Worktree Isolation for Large Repos**:
+   - For massive monorepos (e.g. `F:\Projects\fastapi_bookings`), worktrees are strictly confined to `<repo_root>/worktrees/wt-<threadId>`.
+   - A `.gitignore` with `*\n!.gitignore\n` is automatically provisioned inside `worktrees/` to prevent runaway scans, git status thrashing, or repo resets.
+   - Non-git fallback strictly copies top-level files only, omitting `node_modules`, `.venv`, `.git`, and cache directories.
+
+### 2. Dynamic Telemetry Configuration & Live Connectivity Testing
+1. **Telemetry Settings REST Endpoints**:
+   - `GET /codex/settings/telemetry`: Returns current `signoz_url`, `otlp_endpoint`, enabled state, and live reachability probe result.
+   - `PUT /codex/settings/telemetry`: Persists settings to `SystemSetting` and updates runtime config without restarts.
+   - `POST /codex/settings/telemetry/test`: Probes endpoint reachability and returns truthful round-trip latency in milliseconds.
+2. **Dynamic UI Integration**:
+   - Settings Modal includes a dedicated "Telemetry & SigNoz" tab with live connection testing, latency feedback, and enable/disable toggling.
+   - The Telemetry tab in the Inspector dynamically routes SigNoz trace links to the configured SigNoz URL.
+
+### 3. Turn Lifecycle & Optimistic Reconciliation
+1. **User Submits Instruction**: `Composer` sends user prompt with selected model (`gpt-5.6-sol`) and reasoning effort via `POST /codex/turns/start`.
+2. **Optimistic Store Entry**: The frontend generates an optimistic turn and renders a pending timeline node.
+3. **Turn Started Event**: Backend assigns integer turn ID (`turn_id`) and emits `turn_started`. The frontend reconciles the optimistic turn ID with the API turn ID without creating duplicate turn cards.
+4. **Streaming Deltas**: As Codex generates tokens, stdio `item/agentMessage/delta` and `turn/reasoningDelta` notifications are translated to `agent_message` and `reasoning` SSE events and streamed to the UI.
+5. **Completion or Failure**: When Codex emits `turn/completed`, any upstream error is extracted and displayed as a structured `FailureItem` with retry options.
+
+### 4. Operator Interruption & Cascade Cancellation
+1. **Stop Request**: Operator clicks "Stop" button in UI $\to$ `POST /codex/turns/interrupt` with `thread_id` and `turn_id`.
+2. **Resilient Resolution**: Backend matches the active turn or falls back to the latest in-progress turn, returning HTTP 200 `{"status": "interrupted"}` without spurious 404s.
+3. **Worker Interrupt**: Supervisor dispatches JSON-RPC `turn/interrupt` to Codex App-Server.
+4. **Cascade**: All pending tool approvals and child subagents for the thread are marked cancelled.
+5. **Timeline Update**: Interruption event is emitted and appended with a guaranteed-unique composite React key.
+
+### 5. Tool Approval Gating
+1. **Tool Invocation**: Worker requests tool execution via `turn/toolApprovalRequested`.
+2. **Risk Classification**:
+   - `LOW`: Auto-approved (e.g. `git status`, `cat`).
+   - `HIGH` / `CRITICAL`: Enqueued as pending `ToolApproval` record and rendered as interactive approval gate in UI.
+3. **Operator Resolution**: Operator approves or declines $\to$ backend dispatches JSON-RPC response to worker.
+
+---
+
+## 5. Data Safety & Isolation
+
+- **Dynamic Boundary Confinement**: Projects and worktrees cannot escape beyond user-approved workspace boundaries.
+- **Worktree Sandboxing**: Every thread executes inside an isolated git worktree (`worktrees/wt-<threadId>`).
+- **Path Traversal Protection**: All boundary paths, worktree paths, and subpaths are validated against directory traversal patterns (`../`, symlink escapes).
+- **Destructive Deletion Guard**: Deleting a worktree requires explicit `?force=true` if uncommitted modifications exist. Root directories and active branches cannot be deleted.
+- **Local Loopback Security**: Backend strictly binds to `127.0.0.1`. CORS is locked down to authorized local origins with credentials enabled.
+- **Secret Scrubbing**: API tokens, private keys, and sensitive environment variables are masked in telemetry and logs.
+- **Mobile-First Responsive Layout**: All modals and toolbars support touch screens down to 320px viewport reflow with minimum 44px tap targets.
+
+---
+
+## 6. Known Issues, Edge Cases & Outstanding Work
+
+- **ChatGPT Account Model Compatibility**: When Codex CLI is authenticated via a ChatGPT subscription account (rather than direct OpenAI API platform key), legacy models like `gpt-4o` and `gpt-6.1-sol` are rejected by the upstream CLI. Default model is locked to `gpt-5.6-sol`.
+- **Hanging External MCP Servers**: External MCP plugins configured in `~/.codex/config.toml` that fail to respond (e.g. `mcp-skillset`, `main-context-document`) can delay initial worker startup. Backend passes flags to disable failing MCPs during worker launch.
+- **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
+
+---
+
+## 7. Verification & Testing Commands
+
+### Backend Verification
+```bash
+# Run full backend test suite (146 tests)
+$env:PYTHONPATH="."
+python -m pytest tests/ -v
+
+# Run Boundaries and Settings integration suite
+python -m pytest tests/test_boundaries_and_settings.py -v
+
+# Run Codex App-Server integration suite
+python -m pytest tests/test_codex_app_server.py -v
+
+# Run End-to-End smoke suite
+python -m pytest tests/test_e2e_smoke.py -v
+```
+
+### Frontend Verification
+```bash
+cd frontend
+
+# Run TypeScript compilation and Vite build
+npm run build
+
+# Run Vitest test suite (27 tests)
+npm test
+```
+
+### Living Documentation Compliance
+```bash
+python ../scripts/verify_living_docs.py --path README.md
+```

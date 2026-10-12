@@ -8,7 +8,9 @@ import type {
   ReasoningEffort,
   PermissionProfile,
   TimelineItem,
-  SSEEventEnvelope
+  SSEEventEnvelope,
+  WorkspaceBoundary,
+  TelemetrySettings
 } from '../types/workbench'
 import {
   FIXTURE_PROJECTS,
@@ -58,6 +60,8 @@ export interface ServerState {
   subAgents: SubAgent[]
   diffFiles: DiffFile[]
   telemetryIncidents: TelemetryIncident[]
+  boundaries: WorkspaceBoundary[]
+  telemetrySettings: TelemetrySettings | null
   // Per-thread streaming and race-condition tracking (CCC-003, CCC-004)
   streamingTurnIdByThread: Record<string, string | null>
   processedEventIdsByThread: Record<string, string[]>
@@ -98,6 +102,19 @@ export const initialServerState: ServerState = {
   subAgents: isDemo ? FIXTURE_SUBAGENTS : [],
   diffFiles: isDemo ? FIXTURE_DIFFS : [],
   telemetryIncidents: isDemo ? FIXTURE_INCIDENTS : [],
+  boundaries: isDemo ? [
+    { id: 'bound_fastapi', path: 'F:\\Projects\\fastapi_bookings', name: 'FastAPI Bookings', is_default: true },
+    { id: 'bound_kok', path: 'E:\\Projects\\King of Kings', name: 'King of Kings', is_default: false },
+    { id: 'bound_codex', path: 'F:\\Projects\\fastapi_bookings\\codex-control-centre', name: 'Codex Control Centre', is_default: false }
+  ] : [],
+  telemetrySettings: isDemo ? {
+    signoz_url: 'http://localhost:3301',
+    otlp_endpoint: 'http://localhost:4318',
+    enabled: true,
+    connected: true,
+    status: 'Connected',
+    latency_ms: 1.2
+  } : null,
   streamingTurnIdByThread: {},
   processedEventIdsByThread: {},
   interruptedTurnIdsByThread: {},
@@ -194,28 +211,42 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
 
       const existingTurn = targetThread.turns.find(t => t.id === turnId)
       if (!existingTurn) {
-        const initialItems: TimelineItem[] = []
-        if (payload.prompt) {
-          initialItems.push({
-            id: `usr_${Date.now()}`,
-            turnId,
-            type: 'user_instruction',
-            timestamp: eventTime,
-            content: payload.prompt,
-            authorName: 'Operator'
-          })
-        }
-        targetThread.turns = [
-          ...targetThread.turns,
-          {
-            id: turnId,
-            threadId,
-            turnNumber: targetThread.turns.length + 1,
-            status: 'in_progress',
-            startedAt: eventTime,
-            items: initialItems
+        // Reconcile and adopt any in-progress optimistic turn created before backend responded
+        const optimisticTurn = targetThread.turns.find(t => t.status === 'in_progress' && (t.id.startsWith('turn_') || isNaN(Number(t.id))))
+        if (optimisticTurn) {
+          targetThread.turns = targetThread.turns.map(t =>
+            t.id === optimisticTurn.id
+              ? {
+                  ...t,
+                  id: turnId,
+                  items: t.items.map(i => ({ ...i, turnId }))
+                }
+              : t
+          )
+        } else {
+          const initialItems: TimelineItem[] = []
+          if (payload.prompt) {
+            initialItems.push({
+              id: `usr_${Date.now()}`,
+              turnId,
+              type: 'user_instruction',
+              timestamp: eventTime,
+              content: payload.prompt,
+              authorName: 'Operator'
+            })
           }
-        ]
+          targetThread.turns = [
+            ...targetThread.turns,
+            {
+              id: turnId,
+              threadId,
+              turnNumber: targetThread.turns.length + 1,
+              status: 'in_progress',
+              startedAt: eventTime,
+              items: initialItems
+            }
+          ]
+        }
       } else {
         targetThread.turns = targetThread.turns.map(t =>
           t.id === turnId ? { ...t, status: 'in_progress' } : t
@@ -228,32 +259,44 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'agent_message': {
       const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? ''))
       const itemId = String(payload.item_id || payload.id || `msg_${Date.now()}`)
-      const content = payload.content || ''
       const isStreaming = payload.is_streaming ?? false
+      const incomingChunk = payload.chunk || payload.delta || payload.text || payload.content || ''
 
       targetThread.turns = targetThread.turns.map(turn => {
-        if (turn.id !== turnId) return turn
-        const existingItemIndex = turn.items.findIndex(i => i.id === itemId)
+        if (turn.id !== turnId && turn.status !== 'in_progress') return turn
+
+        // Filter out initial temporary streaming placeholders once real message arrives
+        const baseItems = turn.items.filter(i => !i.id.startsWith('stream_'))
+        const existingItemIndex = baseItems.findIndex(i => i.id === itemId)
+
         if (existingItemIndex >= 0) {
-          const updatedItems = [...turn.items]
+          const prev = baseItems[existingItemIndex]
+          const existingText = ('content' in prev ? (prev.content as string) : '') || ''
+          const nextText = isStreaming
+            ? (payload.content && payload.content !== incomingChunk ? payload.content : (existingText + incomingChunk))
+            : (payload.content || payload.text || existingText || incomingChunk)
+
+          const updatedItems = [...baseItems]
           updatedItems[existingItemIndex] = {
-            ...updatedItems[existingItemIndex],
+            ...prev,
             type: 'agent_message',
-            content,
+            content: nextText,
             isStreaming
           }
-          return { ...turn, items: updatedItems }
+          return { ...turn, id: turnId || turn.id, items: updatedItems }
         }
+
         return {
           ...turn,
+          id: turnId || turn.id,
           items: [
-            ...turn.items,
+            ...baseItems,
             {
               id: itemId,
-              turnId,
+              turnId: turnId || turn.id,
               type: 'agent_message',
               timestamp: eventTime,
-              content,
+              content: incomingChunk,
               isStreaming
             }
           ]
@@ -495,21 +538,46 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'turn/complete': {
       const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || '')
       const isInterrupted = (nextInterruptedTurns[threadId] || []).includes(turnId)
+      const isFailed = payload.status === 'failed' || Boolean(payload.error)
 
       // CCC-003: Stale completion event must NOT overwrite an interrupted or stopped turn
       if (!isInterrupted) {
         targetThread.turns = targetThread.turns.map(turn => {
-          if (turnId && turn.id !== turnId) return turn
+          if (turnId && turn.id !== turnId && turn.status !== 'in_progress') return turn
           return {
             ...turn,
-            status: 'completed',
+            status: isFailed ? 'failed' : 'completed',
             completedAt: eventTime,
             items: turn.items.map(i => ({ ...i, isStreaming: false }))
           }
         })
-        if (payload.summary) {
+
+        if (isFailed) {
+          const failSummary = payload.error || payload.summary || payload.details || 'Turn failed during execution'
+          targetThread.status = 'failed'
+          targetThread.turns = targetThread.turns.map(turn => {
+            if (turnId && turn.id !== turnId && turn.status !== 'failed') return turn
+            const hasFailureItem = turn.items.some(i => i.type === 'failure')
+            if (hasFailureItem) return turn
+            const failureItem: TimelineItem = {
+              id: `fail_${Date.now()}_${turn.id}_${Math.random().toString(36).slice(2, 6)}`,
+              turnId: turn.id,
+              type: 'failure',
+              timestamp: eventTime,
+              errorCategory: payload.error_category || 'internal',
+              summary: failSummary,
+              details: payload.details || payload.error,
+              canRetry: payload.can_retry ?? true,
+              suggestedAction: 'retry'
+            }
+            return {
+              ...turn,
+              items: [...turn.items, failureItem]
+            }
+          })
+        } else if (payload.summary) {
           const summaryItem: TimelineItem = {
-            id: `summary_${Date.now()}`,
+            id: `summary_${Date.now()}_${turnId}`,
             turnId: turnId || 'turn_0',
             type: 'completion_summary',
             timestamp: eventTime,
@@ -520,7 +588,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
             summary: payload.summary
           }
           targetThread.turns = targetThread.turns.map(t =>
-            t.id === turnId ? { ...t, items: [...t.items, summaryItem] } : t
+            (t.id === turnId || t.status === 'completed') ? { ...t, items: [...t.items, summaryItem] } : t
           )
         }
       }
@@ -544,8 +612,9 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
       targetThread.status = 'interrupted'
       targetThread.turns = targetThread.turns.map(turn => {
         if (turnId && turn.id !== turnId && turn.status !== 'in_progress') return turn
+        const hasInterruptItem = turn.items.some(i => i.type === 'interruption')
         const interruptItem: TimelineItem = {
-          id: `int_${Date.now()}`,
+          id: `int_${Date.now()}_${turn.id}_${Math.random().toString(36).slice(2, 6)}`,
           turnId: turn.id,
           type: 'interruption',
           timestamp: eventTime,
@@ -555,7 +624,9 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         return {
           ...turn,
           status: 'interrupted',
-          items: [...turn.items.map(i => ({ ...i, isStreaming: false })), interruptItem]
+          items: hasInterruptItem
+            ? turn.items.map(i => ({ ...i, isStreaming: false }))
+            : [...turn.items.map(i => ({ ...i, isStreaming: false })), interruptItem]
         }
       })
       nextStreamingTurns[threadId] = null
@@ -567,21 +638,24 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
       targetThread.status = 'failed'
       targetThread.turns = targetThread.turns.map(turn => {
         if (turnId && turn.id !== turnId && turn.status !== 'in_progress') return turn
+        const hasFailureItem = turn.items.some(i => i.type === 'failure')
         const failureItem: TimelineItem = {
-          id: `fail_${Date.now()}`,
+          id: `fail_${Date.now()}_${turn.id}_${Math.random().toString(36).slice(2, 6)}`,
           turnId: turn.id,
           type: 'failure',
           timestamp: eventTime,
           errorCategory: payload.error_category || 'internal',
-          summary: payload.summary || 'Task failed during execution',
-          details: payload.details,
+          summary: payload.summary || payload.error || 'Task failed during execution',
+          details: payload.details || payload.error,
           canRetry: payload.can_retry ?? true,
           suggestedAction: 'retry'
         }
         return {
           ...turn,
           status: 'failed',
-          items: [...turn.items.map(i => ({ ...i, isStreaming: false })), failureItem]
+          items: hasFailureItem
+            ? turn.items.map(i => ({ ...i, isStreaming: false }))
+            : [...turn.items.map(i => ({ ...i, isStreaming: false })), failureItem]
         }
       })
       nextStreamingTurns[threadId] = null
@@ -764,10 +838,18 @@ export function useWorkbenchStore() {
             codexApi.listThreads().catch(err => {
               console.warn('Failed to list threads:', err)
               return []
+            }),
+            codexApi.listBoundaries().catch(err => {
+              console.warn('Failed to list boundaries:', err)
+              return []
+            }),
+            codexApi.getTelemetrySettings().catch(err => {
+              console.warn('Failed to get telemetry settings:', err)
+              return null
             })
           ])
         })
-        .then(([projectsData, threadsData]) => {
+        .then(([projectsData, threadsData, boundariesData, telemetryData]) => {
           const mappedThreads: Thread[] = Array.isArray(threadsData) ? threadsData.map(t => {
             const existing = state.threads.find(et => et.id === t.id)
             return {
@@ -839,7 +921,9 @@ export function useWorkbenchStore() {
             threads: mappedThreads,
             projects: mappedProjects.length > 0 ? mappedProjects : prev.projects,
             activeProjectId: chosenProjectId || prev.activeProjectId,
-            activeThreadId: chosenThreadId
+            activeThreadId: chosenThreadId,
+            boundaries: Array.isArray(boundariesData) && boundariesData.length > 0 ? boundariesData : prev.boundaries,
+            telemetrySettings: telemetryData || prev.telemetrySettings
           }))
         })
         .catch(err => {
@@ -1065,6 +1149,98 @@ export function useWorkbenchStore() {
     return newProject
   }
 
+  const fetchBoundaries = async () => {
+    if (state.appMode === 'live') {
+      try {
+        const boundaries = await codexApi.listBoundaries()
+        updateState({ boundaries })
+      } catch (err) {
+        console.warn('Failed to fetch boundaries:', err)
+      }
+    }
+  }
+
+  const addBoundary = async (path: string, name?: string) => {
+    if (state.appMode === 'live') {
+      const created = await codexApi.addBoundary({ path, name })
+      updateState(prev => {
+        const exists = prev.boundaries.some(b => b.id === created.id || b.path.toLowerCase() === created.path.toLowerCase())
+        return {
+          boundaries: exists
+            ? prev.boundaries.map(b => (b.id === created.id || b.path.toLowerCase() === created.path.toLowerCase()) ? created : b)
+            : [...prev.boundaries, created],
+          liveAnnouncements: [`Added workspace boundary: ${created.name}`]
+        }
+      })
+      return created
+    } else {
+      const newBoundary: WorkspaceBoundary = {
+        id: `bound_${Date.now()}`,
+        path: path.trim(),
+        name: name?.trim() || path.trim().split(/[\\/]/).pop() || 'Workspace Boundary',
+        is_default: false
+      }
+      updateState(prev => ({
+        boundaries: [...prev.boundaries, newBoundary],
+        liveAnnouncements: [`Added workspace boundary: ${newBoundary.name}`]
+      }))
+      return newBoundary
+    }
+  }
+
+  const removeBoundary = async (idOrPath: string) => {
+    if (state.appMode === 'live') {
+      await codexApi.deleteBoundary(idOrPath)
+      await fetchBoundaries()
+    } else {
+      updateState(prev => ({
+        boundaries: prev.boundaries.filter(b => b.id !== idOrPath && b.path !== idOrPath)
+      }))
+    }
+  }
+
+  const fetchTelemetrySettings = async () => {
+    if (state.appMode === 'live') {
+      try {
+        const settings = await codexApi.getTelemetrySettings()
+        updateState({ telemetrySettings: settings })
+      } catch (err) {
+        console.warn('Failed to fetch telemetry settings:', err)
+      }
+    }
+  }
+
+  const updateTelemetrySettings = async (payload: { signoz_url: string; otlp_endpoint: string; enabled: boolean }) => {
+    if (state.appMode === 'live') {
+      const updated = await codexApi.updateTelemetrySettings(payload)
+      updateState({ telemetrySettings: updated })
+      return updated
+    } else {
+      const mockUpdated: TelemetrySettings = {
+        ...payload,
+        connected: payload.enabled,
+        status: payload.enabled ? 'Connected' : 'Disabled',
+        latency_ms: 1.0
+      }
+      updateState({ telemetrySettings: mockUpdated })
+      return mockUpdated
+    }
+  }
+
+  const testTelemetry = async (endpoint: string) => {
+    if (state.appMode === 'live') {
+      return await codexApi.testTelemetryEndpoint(endpoint)
+    } else {
+      return {
+        connected: true,
+        status: 'Connected (Simulated)',
+        status_code: 200,
+        latency_ms: 2.4,
+        url: endpoint
+      }
+    }
+  }
+
   const deleteThread = async (threadId: string) => {
     const threadToDelete = state.threads.find(t => t.id === threadId)
     if (!threadToDelete) return
@@ -1285,7 +1461,10 @@ export function useWorkbenchStore() {
     }
   }
 
-  const sendUserMessage = async (text: string) => {
+  const sendUserMessage = async (
+    text: string,
+    options?: { model?: string; reasoningEffort?: ReasoningEffort }
+  ) => {
     const threadId = state.activeThreadId
     if (!threadId || !text.trim()) return
 
@@ -1337,23 +1516,75 @@ export function useWorkbenchStore() {
 
     if (state.appMode === 'live') {
       try {
-        const turnRes = await codexApi.startTurn({ thread_id: threadId, prompt: text })
+        const turnRes = await codexApi.startTurn({
+          thread_id: threadId,
+          prompt: text,
+          model: options?.model,
+          reasoning_effort: options?.reasoningEffort,
+        })
         if (turnRes?.turn_id) {
           const apiTurnId = String(turnRes.turn_id)
           updateState(prev => ({
             streamingTurnIdByThread: {
               ...prev.streamingTurnIdByThread,
               [threadId]: apiTurnId
-            }
+            },
+            threads: prev.threads.map(t => {
+              if (t.id !== threadId) return t
+              return {
+                ...t,
+                turns: t.turns.map(turn => {
+                  if (turn.id === newTurnId) {
+                    return {
+                      ...turn,
+                      id: apiTurnId,
+                      items: turn.items.map(item => ({ ...item, turnId: apiTurnId }))
+                    }
+                  }
+                  return turn
+                })
+              }
+            })
           }))
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to start turn on backend:', err)
+        const errMsg = err?.message || 'Failed to start turn on backend'
         updateState(prev => ({
           streamingTurnIdByThread: {
             ...prev.streamingTurnIdByThread,
             [threadId]: null
-          }
+          },
+          threads: prev.threads.map(t => {
+            if (t.id !== threadId) return t
+            return {
+              ...t,
+              status: 'failed',
+              turns: t.turns.map(turn => {
+                if (turn.id === newTurnId) {
+                  return {
+                    ...turn,
+                    status: 'failed',
+                    items: [
+                      ...turn.items.map(i => ({ ...i, isStreaming: false })),
+                      {
+                        id: `fail_${Date.now()}_${turn.id}`,
+                        turnId: turn.id,
+                        type: 'failure',
+                        timestamp: new Date().toLocaleTimeString(),
+                        errorCategory: 'internal',
+                        summary: errMsg,
+                        details: String(err),
+                        canRetry: true,
+                        suggestedAction: 'retry'
+                      }
+                    ]
+                  }
+                }
+                return turn
+              })
+            }
+          })
         }))
       }
     } else {
@@ -1403,7 +1634,9 @@ export function useWorkbenchStore() {
     const threadId = state.activeThreadId
     if (!threadId) return
 
-    const activeTurnId = state.streamingTurnIdByThread[threadId]
+    const activeThreadObj = state.threads.find(t => t.id === threadId)
+    const inProgressTurn = activeThreadObj?.turns.find(t => t.status === 'in_progress')
+    const activeTurnId = state.streamingTurnIdByThread[threadId] || inProgressTurn?.id
 
     updateState(prev => {
       const interruptedList = prev.interruptedTurnIdsByThread[threadId] || []
@@ -1427,8 +1660,9 @@ export function useWorkbenchStore() {
             status: 'interrupted',
             turns: t.turns.map(turn => {
               if (turn.status === 'in_progress') {
+                const hasInterruptItem = turn.items.some(i => i.type === 'interruption')
                 const interruptItem: TimelineItem = {
-                  id: `int_${Date.now()}`,
+                  id: `int_${Date.now()}_${turn.id}_${Math.random().toString(36).slice(2, 6)}`,
                   turnId: turn.id,
                   type: 'interruption',
                   timestamp: new Date().toLocaleTimeString(),
@@ -1438,7 +1672,9 @@ export function useWorkbenchStore() {
                 return {
                   ...turn,
                   status: 'interrupted',
-                  items: [...turn.items.map(i => ({ ...i, isStreaming: false })), interruptItem]
+                  items: hasInterruptItem
+                    ? turn.items.map(i => ({ ...i, isStreaming: false }))
+                    : [...turn.items.map(i => ({ ...i, isStreaming: false })), interruptItem]
                 }
               }
               return turn
@@ -1449,11 +1685,17 @@ export function useWorkbenchStore() {
       }
     })
 
-    if (state.appMode === 'live' && activeTurnId) {
+    if (state.appMode === 'live') {
       try {
+        let numericTurnId = 0
+        if (activeTurnId && !activeTurnId.startsWith('turn_') && !isNaN(parseInt(activeTurnId, 10))) {
+          numericTurnId = parseInt(activeTurnId, 10)
+        } else if (inProgressTurn?.id && !inProgressTurn.id.startsWith('turn_') && !isNaN(parseInt(inProgressTurn.id, 10))) {
+          numericTurnId = parseInt(inProgressTurn.id, 10)
+        }
         await codexApi.interruptTurn({
           thread_id: threadId,
-          turn_id: parseInt(activeTurnId, 10) || 1
+          turn_id: numericTurnId
         })
       } catch (err) {
         console.error('Failed to interrupt turn on backend:', err)
@@ -1575,6 +1817,12 @@ export function useWorkbenchStore() {
     setSidebarWidth,
     setInspectorWidth,
     retryConnection,
-    setAppMode
+    setAppMode,
+    fetchBoundaries,
+    addBoundary,
+    removeBoundary,
+    fetchTelemetrySettings,
+    updateTelemetrySettings,
+    testTelemetry
   }
 }

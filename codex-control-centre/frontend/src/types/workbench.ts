@@ -409,6 +409,8 @@ export interface UpdateThreadPayload {
 export interface TurnStartPayload {
   thread_id: string
   prompt: string
+  model?: string
+  reasoning_effort?: string
 }
 
 export interface TurnSteerPayload {
@@ -467,5 +469,32 @@ export interface SubAgentResponse {
 export interface DeepDiagnosticsResponse {
   status: string
   [key: string]: any
+}
+
+export interface WorkspaceBoundary {
+  id: string
+  path: string
+  name: string
+  is_default: boolean
+  created_at?: string
+}
+
+export interface TelemetrySettings {
+  signoz_url: string
+  otlp_endpoint: string
+  enabled: boolean
+  otel_sdk_disabled?: boolean
+  connected?: boolean
+  status?: string
+  latency_ms?: number
+}
+
+export interface TelemetryTestResult {
+  connected: boolean
+  status: string
+  status_code?: number
+  latency_ms: number
+  url: string
+  error?: string
 }
 

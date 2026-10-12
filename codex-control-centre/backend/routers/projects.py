@@ -116,6 +116,9 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
             detail=f"Repository path does not exist or is not a directory: {payload.repo_path}",
         )
 
+    from backend.services.boundary_service import validate_path_in_boundaries
+    validate_path_in_boundaries(path_obj, db)
+
     resolved_repo_path = str(path_obj)
     project_id = payload.id.strip() if payload.id and payload.id.strip() else f"proj_{uuid.uuid4().hex[:8]}"
     default_branch = payload.default_branch.strip() if payload.default_branch and payload.default_branch.strip() else "main"

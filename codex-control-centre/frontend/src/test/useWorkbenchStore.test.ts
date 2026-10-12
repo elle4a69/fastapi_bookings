@@ -503,7 +503,7 @@ describe('useWorkbenchStore & State Architecture (WP-07)', () => {
   // -------------------------------------------------------------
   it('configures ApiClient with default base URL, bearer token, and timeout', async () => {
     const client = new ApiClient()
-    expect(client.getBaseUrl()).toBe('http://127.0.0.1:8100')
+    expect(client.getBaseUrl()).toBe('http://127.0.0.1:4500')
     expect(client.getToken()).toBe('local_secret')
 
     const codexApi = new CodexApi(client)
@@ -526,14 +526,14 @@ describe('useWorkbenchStore & State Architecture (WP-07)', () => {
     })
     globalThis.fetch = mockFetch
 
-    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:8100', token: 'custom_secret' })
+    const client = new ApiClient({ baseUrl: 'http://127.0.0.1:4500', token: 'custom_secret' })
     const api = new CodexApi(client)
 
     const health = await api.getHealth()
     expect(health.status).toBe('healthy')
     expect(mockFetch).toHaveBeenCalledTimes(1)
     const [calledUrl, calledInit] = mockFetch.mock.calls[0]
-    expect(calledUrl).toBe('http://127.0.0.1:8100/health')
+    expect(calledUrl).toBe('http://127.0.0.1:4500/health')
     expect(calledInit.headers['Authorization']).toBe('Bearer custom_secret')
   })
 
@@ -681,5 +681,140 @@ describe('useWorkbenchStore & State Architecture (WP-07)', () => {
     expect(diag.status).toBe('healthy')
     expect(diag.subsystems.telemetry.connected).toBe(false)
     expect(diag.subsystems.worker.pid).toBe(1234)
+  })
+
+  // -------------------------------------------------------------
+  // Test 14: Dynamic Workspace Boundaries API (List, Add, Delete)
+  // -------------------------------------------------------------
+  it('WP-08 Slice G: manages workspace boundaries via API client', async () => {
+    let capturedMethod = ''
+    let capturedUrl = ''
+    let capturedBody: any = null
+
+    const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      capturedUrl = url
+      capturedMethod = init?.method || 'GET'
+      capturedBody = init?.body ? JSON.parse(init.body as string) : null
+
+      if (capturedMethod === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => [
+            { id: 'bound_fastapi', path: 'F:\\Projects\\fastapi_bookings', name: 'FastAPI Bookings', is_default: true }
+          ]
+        })
+      }
+      if (capturedMethod === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: 'bound_kok',
+            path: capturedBody.path,
+            name: capturedBody.name || 'King of Kings',
+            is_default: false
+          })
+        })
+      }
+      if (capturedMethod === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'success', message: 'Boundary removed' })
+        })
+      }
+      return Promise.reject(new Error('Unknown method'))
+    })
+    globalThis.fetch = mockFetch
+
+    const api = new CodexApi()
+
+    // 1. List boundaries
+    const boundaries = await api.listBoundaries()
+    expect(boundaries).toHaveLength(1)
+    expect(boundaries[0].path).toBe('F:\\Projects\\fastapi_bookings')
+
+    // 2. Add boundary
+    const added = await api.addBoundary({ path: 'E:\\Projects\\King of Kings', name: 'King of Kings' })
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody.path).toBe('E:\\Projects\\King of Kings')
+    expect(added.id).toBe('bound_kok')
+
+    // 3. Delete boundary
+    const delRes = await api.deleteBoundary('bound_kok')
+    expect(capturedMethod).toBe('DELETE')
+    expect(delRes.status).toBe('success')
+  })
+
+  // -------------------------------------------------------------
+  // Test 15: Telemetry Configuration & Endpoint Reachability Test
+  // -------------------------------------------------------------
+  it('WP-08 Slice H: gets, updates, and tests telemetry settings', async () => {
+    let capturedUrl = ''
+    let capturedBody: any = null
+
+    const mockFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      capturedUrl = url
+      capturedBody = init?.body ? JSON.parse(init.body as string) : null
+
+      if (url.includes('/telemetry/test')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            connected: true,
+            status: 'Connected',
+            latency_ms: 3.5,
+            url: capturedBody.endpoint
+          })
+        })
+      }
+      if (init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            signoz_url: capturedBody.signoz_url,
+            otlp_endpoint: capturedBody.otlp_endpoint,
+            enabled: capturedBody.enabled,
+            status: 'Saved'
+          })
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          signoz_url: 'http://localhost:3301',
+          otlp_endpoint: 'http://localhost:4318',
+          enabled: true,
+          connected: true,
+          status: 'Connected',
+          latency_ms: 2.1
+        })
+      })
+    })
+    globalThis.fetch = mockFetch
+
+    const api = new CodexApi()
+
+    // 1. Get telemetry settings
+    const settings = await api.getTelemetrySettings()
+    expect(settings.signoz_url).toBe('http://localhost:3301')
+    expect(settings.connected).toBe(true)
+
+    // 2. Update telemetry settings
+    const updated = await api.updateTelemetrySettings({
+      signoz_url: 'http://localhost:8080',
+      otlp_endpoint: 'http://localhost:4318',
+      enabled: true
+    })
+    expect(updated.signoz_url).toBe('http://localhost:8080')
+
+    // 3. Test telemetry connectivity
+    const testResult = await api.testTelemetryEndpoint('http://localhost:4318')
+    expect(testResult.connected).toBe(true)
+    expect(testResult.latency_ms).toBe(3.5)
   })
 })

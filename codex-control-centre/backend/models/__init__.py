@@ -1,4 +1,4 @@
-from backend.models.codex import Project, Thread, Turn, Item, ToolApproval, SubAgent
+from backend.models.codex import Project, Thread, Turn, Item, ToolApproval, SubAgent, WorkspaceBoundary, SystemSetting
 
 __all__ = [
     "Project",
@@ -7,4 +7,6 @@ __all__ = [
     "Item",
     "ToolApproval",
     "SubAgent",
+    "WorkspaceBoundary",
+    "SystemSetting",
 ]
