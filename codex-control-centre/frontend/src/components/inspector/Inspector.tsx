@@ -32,20 +32,20 @@ export const Inspector: React.FC = () => {
 
   return (
     <>
-      {/* Mobile backdrop for small viewport inspector drawer */}
+      {/* Mobile & Tablet backdrop for overlay drawer / sheet */}
       <div 
-        className="fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity" 
+        className="fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity backdrop-blur-xs" 
         onClick={() => setInspectorOpen(false)} 
         aria-hidden="true" 
       />
 
       <aside
         style={{ width: `${state.inspectorWidth}px` }}
-        className="fixed md:relative inset-y-0 right-0 z-40 flex flex-col h-full bg-[var(--surface-primary)] border-l border-[var(--border)] max-w-[90vw] sm:max-w-md shadow-2xl md:shadow-none flex-shrink-0 overflow-hidden"
+        className="fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto flex flex-col h-full bg-[var(--surface-primary)] border-l border-[var(--border)] w-full max-w-[92vw] sm:max-w-md lg:max-w-none shadow-2xl lg:shadow-none flex-shrink-0 overflow-hidden"
         aria-label="Inspector Panel"
       >
         {/* Header with Tab Navigation */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] bg-[var(--surface-primary)] flex-shrink-0">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--border)] bg-[var(--surface-primary)] flex-shrink-0 min-h-[48px]">
           <h2 className="flex items-center gap-1.5 font-semibold text-xs text-[var(--text-primary)] m-0">
             <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--accent)]" />
             <span>Inspector</span>
@@ -53,10 +53,10 @@ export const Inspector: React.FC = () => {
 
           <button
             onClick={() => setInspectorOpen(false)}
-            className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-colors cursor-pointer"
             aria-label="Close Inspector"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -67,8 +67,8 @@ export const Inspector: React.FC = () => {
       >
         {/* Tab Bar */}
         <div className="px-2 pt-1 border-b border-[var(--border)] bg-[var(--surface-secondary)]/30 flex-shrink-0">
-          <TabsList className="h-8 gap-0.5 overflow-x-auto">
-            <TabsTrigger value="changes" className="text-[11px] px-2 h-7 gap-1">
+          <TabsList className="h-9 gap-1 overflow-x-auto max-w-full">
+            <TabsTrigger value="changes" className="text-xs px-2.5 min-h-[34px] gap-1 flex-shrink-0">
               <FileDiff className="w-3 h-3" />
               <span>Changes</span>
               {state.diffFiles.length > 0 && (

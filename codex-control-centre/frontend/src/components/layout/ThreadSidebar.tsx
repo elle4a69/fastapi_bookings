@@ -42,10 +42,10 @@ export const ThreadSidebar: React.FC = () => {
 
   if (!state.isSidebarOpen) {
     return (
-      <div className="h-full border-r border-[var(--border)] bg-[var(--surface-primary)] flex items-center justify-center p-1">
+      <div className="hidden md:flex h-full border-r border-[var(--border)] bg-[var(--surface-primary)] items-center justify-center p-1">
         <button
           onClick={() => setSidebarOpen(true)}
-          className="p-1.5 rounded-md hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          className="p-1.5 rounded-md hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer min-h-[44px] min-w-[36px] flex items-center justify-center"
           aria-label="Expand Thread Sidebar"
         >
           <ChevronRight className="w-4 h-4" />
@@ -93,92 +93,84 @@ export const ThreadSidebar: React.FC = () => {
   const otherThreads = filteredThreads.filter(t => !needsApprovalThreads.includes(t) && !pinnedThreads.includes(t) && !activeThreads.includes(t))
 
   return (
-    <>
-      {/* Mobile backdrop for small viewport drawer */}
-      <div 
-        className="fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity" 
-        onClick={() => setSidebarOpen(false)} 
-        aria-hidden="true" 
-      />
+    <nav
+      style={{ width: `${state.sidebarWidth}px` }}
+      className="flex flex-col h-full bg-[var(--surface-primary)] border-r border-[var(--border)] w-64 sm:w-72 max-w-[calc(92vw-3.5rem)] md:max-w-none flex-shrink-0 overflow-hidden"
+      aria-label="Threads Navigation"
+    >
+      {/* Header */}
+      <div className="p-3 border-b border-[var(--border)] flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-1.5 min-w-0 font-semibold text-xs text-[var(--text-primary)] m-0">
+            <FolderGit2 className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
+            <span className="truncate">
+              {activeProject?.name || 'Project Threads'}
+            </span>
+          </h2>
 
-      <nav
-        style={{ width: `${state.sidebarWidth}px` }}
-        className="fixed md:relative inset-y-0 left-0 z-40 flex flex-col h-full bg-[var(--surface-primary)] border-r border-[var(--border)] max-w-[85vw] sm:max-w-xs shadow-2xl md:shadow-none flex-shrink-0 overflow-hidden"
-        aria-label="Threads Navigation"
-      >
-        {/* Header */}
-        <div className="p-3 border-b border-[var(--border)] flex flex-col gap-2.5">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-1.5 min-w-0 font-semibold text-xs text-[var(--text-primary)] m-0">
-              <FolderGit2 className="w-4 h-4 text-[var(--accent)] flex-shrink-0" />
-              <span className="truncate">
-                {activeProject?.name || 'Project Threads'}
-              </span>
-            </h2>
-
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 px-2 text-xs gap-1 font-medium text-[var(--accent)]"
-                onClick={() => setIsNewThreadOpen(true)}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New
-              </Button>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                aria-label="Collapse sidebar"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Search & Filter bar */}
-          <div className="flex items-center gap-1.5">
-            <div className="relative flex-1">
-              <label htmlFor="thread-search-input" className="sr-only">
-                Search threads and branches
-              </label>
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
-              <Input
-                id="thread-search-input"
-                value={state.threadSearchQuery}
-                onChange={(e) => setThreadSearchQuery(e.target.value)}
-                placeholder="Search threads, branches..."
-                className="h-7 pl-8 text-xs bg-[var(--surface-secondary)] border-transparent focus:border-[var(--border)] focus:bg-[var(--surface-primary)]"
-              />
-            </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="h-7 w-7 p-0 text-[var(--text-secondary)]"
-                  aria-label="Filter threads by status"
-                >
-                  <Filter className="w-3.5 h-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44 text-xs">
-                <DropdownMenuRadioGroup
-                  value={state.threadStatusFilter}
-                  onValueChange={(val) => setThreadStatusFilter(val)}
-                >
-                  <DropdownMenuRadioItem value="all">All Threads</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="active">Active Only</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="needs_approval">Needs Approval</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="pinned">Pinned</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="failed">Failed / Interrupted</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="archived">Archived</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="min-h-[44px] px-2.5 text-xs gap-1 font-medium text-[var(--accent)]"
+              onClick={() => setIsNewThreadOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New
+            </Button>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] cursor-pointer"
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           </div>
         </div>
+
+        {/* Search & Filter bar */}
+        <div className="flex items-center gap-1.5">
+          <div className="relative flex-1">
+            <label htmlFor="thread-search-input" className="sr-only">
+              Search threads and branches
+            </label>
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
+            <Input
+              id="thread-search-input"
+              value={state.threadSearchQuery}
+              onChange={(e) => setThreadSearchQuery(e.target.value)}
+              placeholder="Search threads, branches..."
+              className="h-8 pl-8 text-xs bg-[var(--surface-secondary)] border-transparent focus:border-[var(--border)] focus:bg-[var(--surface-primary)]"
+            />
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="min-h-[44px] min-w-[44px] p-0 text-[var(--text-secondary)] flex items-center justify-center cursor-pointer"
+                aria-label="Filter threads by status"
+              >
+                <Filter className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44 text-xs">
+              <DropdownMenuRadioGroup
+                value={state.threadStatusFilter}
+                onValueChange={(val) => setThreadStatusFilter(val)}
+              >
+                <DropdownMenuRadioItem value="all">All Threads</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="active">Active Only</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="needs_approval">Needs Approval</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="pinned">Pinned</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="failed">Failed / Interrupted</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="archived">Archived</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
         {/* Thread list grouped */}
         <ScrollArea className="flex-1 px-2 py-2">
@@ -341,6 +333,5 @@ export const ThreadSidebar: React.FC = () => {
           </DialogContent>
         </Dialog>
       </nav>
-    </>
   )
 }

@@ -49,7 +49,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
   }
 
   return (
-    <div className="border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3.5 shadow-xs text-xs space-y-2.5">
+    <div className="border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3 sm:p-3.5 shadow-xs text-xs space-y-2.5 w-full max-w-full overflow-hidden break-words">
       {/* Top line: Role & Status */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -60,7 +60,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
             <h4 className="font-semibold text-xs text-[var(--text-primary)] truncate">
               {agent.role}
             </h4>
-            <span className="text-[10px] font-mono text-[var(--text-subtle)]">
+            <span className="text-[10px] font-mono text-[var(--text-subtle)] truncate block">
               {agent.model} · {agent.scope.replace('_', ' ')}
             </span>
           </div>
@@ -72,28 +72,28 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
       </div>
 
       {/* Objective */}
-      <div className="p-2 rounded bg-[var(--surface-secondary)]/50 text-xs text-[var(--text-primary)] leading-relaxed">
+      <div className="p-2 rounded bg-[var(--surface-secondary)]/50 text-xs text-[var(--text-primary)] leading-relaxed break-words">
         <span className="font-semibold text-[10px] text-[var(--text-subtle)] uppercase block mb-0.5">Objective</span>
         {agent.objective}
       </div>
 
       {/* Progress & Result */}
       <div className="text-xs text-[var(--text-secondary)] space-y-1">
-        <div className="flex items-center gap-1.5">
-          <Clock className="w-3 h-3 text-[var(--text-subtle)]" />
-          <span><strong>Progress:</strong> {agent.progressSummary}</span>
+        <div className="flex items-center gap-1.5 break-words">
+          <Clock className="w-3 h-3 text-[var(--text-subtle)] flex-shrink-0" />
+          <span className="break-words"><strong>Progress:</strong> {agent.progressSummary}</span>
         </div>
 
         {agent.resultSummary && (
-          <div className="flex items-center gap-1.5 text-[var(--success)] font-medium">
-            <CheckCircle2 className="w-3 h-3" />
-            <span><strong>Result:</strong> {agent.resultSummary}</span>
+          <div className="flex items-center gap-1.5 text-[var(--success)] font-medium break-words">
+            <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+            <span className="break-words"><strong>Result:</strong> {agent.resultSummary}</span>
           </div>
         )}
       </div>
 
       {/* Metadata stats & Actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-[11px]">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)] text-[11px]">
         <div className="flex items-center gap-3 text-[var(--text-subtle)] font-mono">
           {agent.filesChangedCount !== undefined && (
             <span className="flex items-center gap-1">
@@ -113,7 +113,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[10px] text-[var(--danger)] hover:bg-[var(--danger-subtle)]"
+                className="min-h-[36px] px-2 text-[10px] text-[var(--danger)] hover:bg-[var(--danger-subtle)] cursor-pointer"
                 onClick={() => stopSubAgent(agent.id)}
                 aria-label={`Stop subagent ${agent.role}`}
               >
@@ -123,7 +123,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-6 px-2 text-[10px]"
+                className="min-h-[36px] px-2 text-[10px] cursor-pointer"
                 onClick={() => setIsSteeringOpen(!isSteeringOpen)}
                 aria-label={`Toggle steering input for ${agent.role}`}
               >
@@ -136,7 +136,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
             <Button
               size="sm"
               variant="secondary"
-              className="h-6 px-2 text-[10px] gap-1"
+              className="min-h-[36px] px-2 text-[10px] gap-1 cursor-pointer"
               onClick={() => selectThread(agent.childThreadId!)}
             >
               Open Thread <ArrowRight className="w-2.5 h-2.5" />

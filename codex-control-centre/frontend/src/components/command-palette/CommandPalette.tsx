@@ -193,13 +193,13 @@ export const CommandPalette: React.FC = () => {
 
   return (
     <Dialog open={state.isCommandPaletteOpen} onOpenChange={setCommandPaletteOpen}>
-      <DialogContent className="max-w-xl p-0 overflow-hidden border-[var(--border-strong)] bg-[var(--surface-primary)] shadow-2xl">
+      <DialogContent className="w-full max-w-[96vw] sm:max-w-xl max-h-[85vh] p-0 overflow-hidden border-[var(--border-strong)] bg-[var(--surface-primary)] shadow-2xl rounded-xl flex flex-col">
         <DialogTitle className="sr-only">Command Palette</DialogTitle>
-        <div className="flex items-center px-3.5 py-2.5 border-b border-[var(--border)] gap-2">
+        <div className="flex items-center px-3 sm:px-3.5 py-2 border-b border-[var(--border)] gap-2 min-h-[48px]">
           <label htmlFor="command-palette-search-input" className="sr-only">
             Type a command, search threads, or switch project
           </label>
-          <Search className="w-4 h-4 text-[var(--text-subtle)]" aria-hidden="true" />
+          <Search className="w-4 h-4 text-[var(--text-subtle)] flex-shrink-0" aria-hidden="true" />
           <Input
             id="command-palette-search-input"
             value={query}
@@ -210,7 +210,7 @@ export const CommandPalette: React.FC = () => {
             onKeyDown={handleKeyDown}
             placeholder="Type a command, search threads, switch project..."
             aria-label="Type a command, search threads, switch project"
-            className="border-0 shadow-none focus-visible:ring-0 text-sm h-8 bg-transparent px-1 placeholder:text-[var(--text-subtle)]"
+            className="border-0 shadow-none focus-visible:ring-0 text-sm h-9 bg-transparent px-1 placeholder:text-[var(--text-subtle)]"
             autoFocus
           />
           <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono font-medium text-[var(--text-subtle)] bg-[var(--surface-secondary)] border border-[var(--border)] rounded">
@@ -218,7 +218,7 @@ export const CommandPalette: React.FC = () => {
           </kbd>
         </div>
 
-        <div className="max-h-[360px] overflow-y-auto p-1.5" role="listbox" aria-label="Available commands">
+        <div className="max-h-[360px] sm:max-h-[420px] overflow-y-auto p-1.5" role="listbox" aria-label="Available commands">
           {filteredCommands.length === 0 ? (
             <div className="p-8 text-center text-xs text-[var(--text-subtle)]">
               No matching commands or threads.
@@ -233,14 +233,14 @@ export const CommandPalette: React.FC = () => {
                   onMouseEnter={() => setSelectedIndex(index)}
                   aria-label={`${cmd.group}: ${cmd.title}`}
                   className={cn(
-                    'w-full flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+                    'w-full flex items-center justify-between p-2.5 min-h-[44px] rounded-lg cursor-pointer transition-colors text-xs text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
                     index === selectedIndex
                       ? 'bg-[var(--surface-hover)] text-[var(--text-primary)]'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--surface-secondary)]'
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="p-1 rounded bg-[var(--surface-secondary)] flex-shrink-0" aria-hidden="true">
+                    <div className="p-1.5 rounded-md bg-[var(--surface-secondary)] flex-shrink-0" aria-hidden="true">
                       {cmd.icon}
                     </div>
                     <div className="min-w-0 truncate">

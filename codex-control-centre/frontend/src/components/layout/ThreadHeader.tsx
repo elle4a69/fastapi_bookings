@@ -50,16 +50,16 @@ export const ThreadHeader: React.FC = () => {
 
   if (!activeThread) {
     return (
-      <header className="h-12 border-b border-[var(--border)] bg-[var(--surface-primary)] px-4 flex items-center justify-between text-xs text-[var(--text-subtle)]">
-        <div className="flex items-center gap-2">
+      <header className="min-h-[48px] border-b border-[var(--border)] bg-[var(--surface-primary)] px-2 sm:px-4 flex items-center justify-between text-xs text-[var(--text-subtle)] w-full max-w-full overflow-hidden flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <button
             onClick={() => setSidebarOpen(!state.isSidebarOpen)}
-            className="p-1 rounded md:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md md:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] flex-shrink-0 cursor-pointer"
             aria-label="Toggle navigation sidebar"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           </button>
-          <h1 className="text-xs font-medium text-[var(--text-subtle)] m-0">
+          <h1 className="text-xs font-medium text-[var(--text-subtle)] truncate m-0">
             {state.appMode === 'live' && state.projects.length === 0 ? 'No projects connected — Register a project or switch to Demo Mode' : 'No active thread selected'}
           </h1>
         </div>
@@ -80,8 +80,8 @@ export const ThreadHeader: React.FC = () => {
         return (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="success" className="h-5 px-1.5 text-[10px] gap-1 cursor-pointer">
-                <Sparkles className="w-2.5 h-2.5" /> Compacted
+              <Badge variant="success" className="h-6 px-1.5 text-[10px] gap-1 cursor-pointer flex items-center">
+                <Sparkles className="w-2.5 h-2.5" /> <span className="hidden sm:inline">Compacted</span>
               </Badge>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -94,8 +94,8 @@ export const ThreadHeader: React.FC = () => {
         return (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="warning" className="h-5 px-1.5 text-[10px] gap-1 cursor-pointer">
-                <Sparkles className="w-2.5 h-2.5" /> 82% Context
+              <Badge variant="warning" className="h-6 px-1.5 text-[10px] gap-1 cursor-pointer flex items-center">
+                <Sparkles className="w-2.5 h-2.5" /> <span className="hidden sm:inline">82% Context</span><span className="sm:hidden">82%</span>
               </Badge>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -108,8 +108,8 @@ export const ThreadHeader: React.FC = () => {
         return (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] gap-1 text-[var(--text-subtle)] cursor-pointer">
-                <Sparkles className="w-2.5 h-2.5" /> 27% Token Budget
+              <Badge variant="secondary" className="h-6 px-1.5 text-[10px] gap-1 text-[var(--text-subtle)] cursor-pointer flex items-center">
+                <Sparkles className="w-2.5 h-2.5" /> <span className="hidden sm:inline">27% Token Budget</span><span className="sm:hidden">27%</span>
               </Badge>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -125,28 +125,28 @@ export const ThreadHeader: React.FC = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <header className="h-13 border-b border-[var(--border)] bg-[var(--surface-primary)] px-4 flex items-center justify-between gap-3 flex-shrink-0 z-10">
+      <header className="min-h-[48px] sm:h-13 border-b border-[var(--border)] bg-[var(--surface-primary)] px-2 sm:px-4 flex items-center justify-between gap-1.5 sm:gap-3 flex-shrink-0 z-10 w-full max-w-full overflow-hidden">
         {/* Left: Mobile Toggle, Breadcrumbs & Title */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-hidden">
           {/* Mobile sidebar drawer trigger */}
           <button
             onClick={() => setSidebarOpen(!state.isSidebarOpen)}
-            className="p-1 rounded md:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] flex-shrink-0"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md md:hidden text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] flex-shrink-0 cursor-pointer"
             aria-label="Toggle navigation sidebar"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           </button>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--text-secondary)] flex-shrink-0">
-            <span className="font-medium">{activeProject?.name}</span>
-            <ChevronRight className="w-3 h-3 text-[var(--text-subtle)]" />
-            <span className="text-[var(--text-subtle)]">{activeThread.module}</span>
-            <ChevronRight className="w-3 h-3 text-[var(--text-subtle)]" />
+          <div className="hidden sm:flex items-center gap-1 text-xs text-[var(--text-secondary)] flex-shrink-0">
+            <span className="font-medium truncate max-w-[100px] md:max-w-[140px]">{activeProject?.name}</span>
+            <ChevronRight className="w-3 h-3 text-[var(--text-subtle)] flex-shrink-0" />
+            <span className="text-[var(--text-subtle)] truncate max-w-[80px] md:max-w-[110px]">{activeThread.module}</span>
+            <ChevronRight className="w-3 h-3 text-[var(--text-subtle)] flex-shrink-0" />
           </div>
 
           {/* Editable Title */}
           {isEditingTitle ? (
-            <div className="flex items-center gap-1 flex-1 max-w-md">
+            <div className="flex items-center gap-1 flex-1 min-w-0 max-w-xs sm:max-w-md">
               <input
                 type="text"
                 aria-label="Edit thread title"
@@ -156,20 +156,20 @@ export const ThreadHeader: React.FC = () => {
                   if (e.key === 'Enter') handleSaveTitle()
                   if (e.key === 'Escape') setIsEditingTitle(false)
                 }}
-                className="h-6 px-1.5 text-xs font-semibold bg-[var(--surface-secondary)] text-[var(--text-primary)] rounded border border-[var(--accent)] outline-none w-full focus:ring-2 focus:ring-[var(--accent)]"
+                className="h-8 px-2 text-xs font-semibold bg-[var(--surface-secondary)] text-[var(--text-primary)] rounded border border-[var(--accent)] outline-none w-full focus:ring-2 focus:ring-[var(--accent)]"
                 autoFocus
               />
               <button
                 onClick={handleSaveTitle}
-                className="p-1 text-[var(--success)] hover:bg-[var(--surface-hover)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="min-h-[44px] min-w-[36px] flex items-center justify-center p-1 text-[var(--success)] hover:bg-[var(--surface-hover)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--accent)] cursor-pointer"
                 aria-label="Save Title"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h1 className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-sm sm:max-w-md m-0">
+            <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+              <h1 className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-[120px] sm:max-w-xs md:max-w-md m-0">
                 {activeThread.title}
               </h1>
               <button
@@ -177,10 +177,10 @@ export const ThreadHeader: React.FC = () => {
                   setEditedTitle(activeThread.title)
                   setIsEditingTitle(true)
                 }}
-                className="p-0.5 text-[var(--text-subtle)] hover:text-[var(--text-primary)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="min-h-[44px] min-w-[32px] flex items-center justify-center p-1 text-[var(--text-subtle)] hover:text-[var(--text-primary)] rounded focus:outline-none focus:ring-2 focus:ring-[var(--accent)] flex-shrink-0 cursor-pointer"
                 aria-label="Edit Thread Title"
               >
-                <Edit2 className="w-3 h-3" />
+                <Edit2 className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
@@ -271,7 +271,7 @@ export const ThreadHeader: React.FC = () => {
               <button
                 onClick={() => setInspectorOpen(!state.isInspectorOpen)}
                 className={cn(
-                  'p-1.5 rounded-md border transition-colors cursor-pointer',
+                  'min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md border transition-colors cursor-pointer',
                   state.isInspectorOpen
                     ? 'bg-[var(--surface-hover)] border-[var(--border-strong)] text-[var(--text-primary)]'
                     : 'bg-transparent border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -288,7 +288,7 @@ export const ThreadHeader: React.FC = () => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="p-1.5 rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] cursor-pointer"
                 aria-label="Thread options"
               >
                 <MoreVertical className="w-4 h-4" />

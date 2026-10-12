@@ -38,7 +38,7 @@ export const CommandExecutionItem: React.FC<Props> = ({ item }) => {
     : outputLines
 
   return (
-    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs shadow-xs">
+    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs shadow-xs w-full max-w-full">
       {/* Header bar */}
       <button
         type="button"
@@ -127,8 +127,8 @@ export const CommandExecutionItem: React.FC<Props> = ({ item }) => {
           {/* Terminal Output */}
           <div
             className={cn(
-              'p-3 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto text-[var(--text-primary)] select-text',
-              isWrapped ? 'whitespace-pre-wrap' : 'whitespace-pre overflow-x-auto'
+              'p-2.5 sm:p-3 font-mono text-[11px] leading-relaxed max-h-72 overflow-y-auto text-[var(--text-primary)] select-text max-w-full',
+              isWrapped ? 'whitespace-pre-wrap break-words overflow-x-hidden' : 'whitespace-pre overflow-x-auto'
             )}
           >
             {filteredLines.map((line, idx) => (

@@ -28,7 +28,7 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
           elements.push(
             <pre
               key={`code-${idx}`}
-              className="p-3 my-2 rounded-md bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs text-[var(--text-primary)] overflow-x-auto"
+              className="p-2.5 sm:p-3 my-2 rounded-md bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs text-[var(--text-primary)] overflow-x-auto max-w-full break-words"
             >
               <code>{codeBlockContent.join('\n')}</code>
             </pre>
@@ -47,12 +47,12 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
       }
 
       if (line.startsWith('# ')) {
-        elements.push(<h2 key={idx} className="text-sm font-bold text-[var(--text-primary)] mt-3 mb-1">{line.slice(2)}</h2>)
+        elements.push(<h2 key={idx} className="text-sm font-bold text-[var(--text-primary)] mt-3 mb-1 break-words">{line.slice(2)}</h2>)
       } else if (line.startsWith('## ')) {
-        elements.push(<h3 key={idx} className="text-xs font-bold text-[var(--text-primary)] mt-2.5 mb-1">{line.slice(3)}</h3>)
+        elements.push(<h3 key={idx} className="text-xs font-bold text-[var(--text-primary)] mt-2.5 mb-1 break-words">{line.slice(3)}</h3>)
       } else if (line.startsWith('- ')) {
         elements.push(
-          <li key={idx} className="ml-4 list-disc text-xs text-[var(--text-primary)] my-0.5 leading-relaxed">
+          <li key={idx} className="ml-4 list-disc text-xs text-[var(--text-primary)] my-0.5 leading-relaxed break-words">
             {renderInline(line.slice(2))}
           </li>
         )
@@ -60,7 +60,7 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
         elements.push(<div key={idx} className="h-2" />)
       } else {
         elements.push(
-          <p key={idx} className="text-xs text-[var(--text-primary)] leading-relaxed my-1">
+          <p key={idx} className="text-xs text-[var(--text-primary)] leading-relaxed my-1 break-words">
             {renderInline(line)}
           </p>
         )
@@ -71,7 +71,7 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
       elements.push(
         <pre
           key="code-unfinished"
-          className="p-3 my-2 rounded-md bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs text-[var(--text-primary)] overflow-x-auto"
+          className="p-2.5 sm:p-3 my-2 rounded-md bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs text-[var(--text-primary)] overflow-x-auto max-w-full break-words"
         >
           <code>{codeBlockContent.join('\n')}</code>
         </pre>
@@ -88,21 +88,21 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
         return (
           <code
             key={i}
-            className="px-1.5 py-0.5 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-[11px] text-[var(--accent)]"
+            className="px-1.5 py-0.5 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-[11px] text-[var(--accent)] break-words"
           >
             {part.slice(1, -1)}
           </code>
         )
       }
       if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-semibold text-[var(--text-primary)]">{part.slice(2, -2)}</strong>
+        return <strong key={i} className="font-semibold text-[var(--text-primary)] break-words">{part.slice(2, -2)}</strong>
       }
       return part
     })
   }
 
   return (
-    <div className="flex items-start gap-3 my-3 p-4 rounded-lg bg-[var(--surface-primary)] border border-[var(--border)] max-w-4xl mx-auto shadow-xs group">
+    <div className="flex items-start gap-2.5 sm:gap-3 my-2 sm:my-3 p-3 sm:p-4 rounded-lg bg-[var(--surface-primary)] border border-[var(--border)] max-w-4xl mx-auto shadow-xs group w-full max-w-full overflow-hidden break-words">
       <div className="w-8 h-8 rounded-full bg-[var(--accent-subtle)] border border-[var(--accent)] text-[var(--accent)] flex items-center justify-center flex-shrink-0 font-medium text-xs">
         <Bot className="w-4 h-4" />
       </div>

@@ -43,12 +43,20 @@ export const ThreadRow: React.FC<ThreadRowProps> = ({ thread, isActive }) => {
     compactThread, 
     renameThread, 
     deleteThread,
-    setInspectorTab 
+    setInspectorTab,
+    setSidebarOpen
   } = useWorkbenchStore()
 
   const [isRenameOpen, setIsRenameOpen] = useState(false)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [renamedTitle, setRenamedTitle] = useState(thread.title)
+
+  const handleSelectThread = () => {
+    selectThread(thread.id)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
+  }
 
   const getStatusIcon = () => {
     if (thread.approvalCount > 0) {
@@ -88,10 +96,10 @@ export const ThreadRow: React.FC<ThreadRowProps> = ({ thread, isActive }) => {
         {/* Main interactive thread select button */}
         <button
           type="button"
-          onClick={() => selectThread(thread.id)}
+          onClick={handleSelectThread}
           aria-label={`Select thread: ${thread.title}`}
           aria-current={isActive ? 'true' : undefined}
-          className="flex-1 min-w-0 p-2.5 flex flex-col text-left focus:outline-none rounded-l-lg"
+          className="flex-1 min-w-0 p-2.5 min-h-[44px] flex flex-col text-left focus:outline-none rounded-l-lg cursor-pointer"
         >
           {/* Top line: Status icon & Title */}
           <div className="flex items-start gap-1.5 w-full">
@@ -131,7 +139,7 @@ export const ThreadRow: React.FC<ThreadRowProps> = ({ thread, isActive }) => {
         </button>
 
         {/* Action controls outside the main row button (no nested interactive controls) */}
-        <div className="flex items-center pr-2 flex-shrink-0">
+        <div className="flex items-center pr-1.5 flex-shrink-0">
           {thread.isPinned && (
             <Pin className="w-3 h-3 text-[var(--accent)] fill-current rotate-45 mr-1" aria-hidden="true" />
           )}
@@ -141,7 +149,7 @@ export const ThreadRow: React.FC<ThreadRowProps> = ({ thread, isActive }) => {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded text-[var(--text-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-opacity"
+                className="opacity-70 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 min-h-[44px] min-w-[36px] flex items-center justify-center p-1 rounded text-[var(--text-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-opacity cursor-pointer"
                 aria-label={`Actions for thread: ${thread.title}`}
               >
                 <MoreVertical className="w-3.5 h-3.5" />

@@ -23,15 +23,15 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
   }
 
   return (
-    <div className="my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-4 shadow-xs text-xs">
+    <div className="my-2 sm:my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3 sm:p-4 shadow-xs text-xs w-full max-w-full overflow-hidden break-words">
       <div className="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 text-[var(--accent)]" aria-hidden="true" />
-          <h3 className="font-semibold text-xs text-[var(--text-primary)] m-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <HelpCircle className="w-4 h-4 text-[var(--accent)] flex-shrink-0" aria-hidden="true" />
+          <h3 className="font-semibold text-xs text-[var(--text-primary)] truncate m-0">
             Input Required: {item.question}
           </h3>
         </div>
-        <Badge variant={isSubmitted ? 'success' : 'warning'}>
+        <Badge variant={isSubmitted ? 'success' : 'warning'} className="flex-shrink-0">
           {isSubmitted ? 'Submitted' : 'Awaiting Response'}
         </Badge>
       </div>
@@ -52,7 +52,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
                   aria-describedby={field.description ? `desc-${field.id}` : undefined}
                   value={formData[field.id] || ''}
                   onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="w-full h-8 rounded border border-[var(--border)] bg-[var(--surface-secondary)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  className="w-full min-h-[44px] rounded border border-[var(--border)] bg-[var(--surface-secondary)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >
                   <option value="">Select an option...</option>
                   {field.options?.map((opt, i) => (
@@ -66,7 +66,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
                   value={formData[field.id] || ''}
                   onChange={(e) => handleChange(field.id, e.target.value)}
                   placeholder={field.description || `Enter ${field.label}`}
-                  className="h-8 text-xs"
+                  className="min-h-[44px] text-xs"
                 />
               )}
               {field.description && (
@@ -78,7 +78,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
           ))}
 
           <div className="flex justify-end pt-2">
-            <Button size="sm" type="submit" className="text-xs">
+            <Button size="sm" type="submit" className="min-h-[44px] px-4 text-xs">
               <Send className="w-3.5 h-3.5 mr-1" />
               Submit Response
             </Button>

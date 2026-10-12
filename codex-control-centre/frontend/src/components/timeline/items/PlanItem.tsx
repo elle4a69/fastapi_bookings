@@ -27,14 +27,14 @@ export const PlanItem: React.FC<Props> = ({ item }) => {
   }
 
   return (
-    <div className="my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3.5 shadow-xs text-xs">
-      <div className="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2">
-          <ListChecks className="w-4 h-4 text-[var(--accent)]" aria-hidden="true" />
-          <h3 className="font-semibold text-xs text-[var(--text-primary)] m-0">{item.title}</h3>
+    <div className="my-2 sm:my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3 sm:p-3.5 shadow-xs text-xs w-full max-w-full overflow-hidden break-words">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pb-2 mb-2.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <ListChecks className="w-4 h-4 text-[var(--accent)] flex-shrink-0" aria-hidden="true" />
+          <h3 className="font-semibold text-xs text-[var(--text-primary)] truncate m-0">{item.title}</h3>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[10px] text-[var(--text-secondary)] font-mono">
             {completedCount} / {totalCount} done ({progressPercent}%)
           </span>

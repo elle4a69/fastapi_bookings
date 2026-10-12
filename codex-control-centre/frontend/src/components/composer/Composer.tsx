@@ -30,7 +30,7 @@ export const Composer: React.FC = () => {
   } = useWorkbenchStore()
 
   const [message, setMessage] = useState('')
-  const [selectedModel, setSelectedModel] = useState(activeThread?.model || 'gpt-4o')
+  const [selectedModel, setSelectedModel] = useState(activeThread?.model || 'gpt-5.6-sol')
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(activeThread?.reasoningEffort || 'medium')
   const [permission, setPermission] = useState<PermissionProfile>(activeThread?.permissionProfile || 'workspace_write')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -40,7 +40,7 @@ export const Composer: React.FC = () => {
     if (activeThread) {
       const savedDraft = localStorage.getItem(`draft_${activeThread.id}`) || ''
       setMessage(savedDraft)
-      setSelectedModel(activeThread.model || 'gpt-4o')
+      setSelectedModel(activeThread.model || 'gpt-5.6-sol')
       setReasoningEffort(activeThread.reasoningEffort || 'medium')
       setPermission(activeThread.permissionProfile || 'workspace_write')
     }
@@ -74,7 +74,7 @@ export const Composer: React.FC = () => {
       handleSteer()
       return
     }
-    sendUserMessage(message.trim())
+    sendUserMessage(message.trim(), { model: selectedModel, reasoningEffort })
     setMessage('')
     if (activeThread) {
       localStorage.removeItem(`draft_${activeThread.id}`)
@@ -92,7 +92,7 @@ export const Composer: React.FC = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="p-3 bg-[var(--surface-primary)] border-t border-[var(--border)] max-w-4xl mx-auto w-full">
+      <div className="p-2 sm:p-3 bg-[var(--surface-primary)] border-t border-[var(--border)] max-w-4xl mx-auto w-full">
         <div className="border border-[var(--border)] rounded-xl bg-[var(--surface-primary)] shadow-xs focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
           {/* Main Textarea */}
           <textarea
@@ -108,29 +108,31 @@ export const Composer: React.FC = () => {
                 : 'Give instruction to Codex... (Cmd+Enter to send, Shift+Enter for new line)'
             }
             rows={2}
-            className="w-full resize-none bg-transparent p-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:outline-none leading-relaxed"
+            className="w-full resize-none bg-transparent p-2.5 sm:p-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:outline-none leading-relaxed"
           />
 
           {/* Bottom Toolbar & Action Bar */}
-          <div className="flex items-center justify-between px-3 py-2 border-t border-[var(--border)]/60 bg-[var(--surface-secondary)]/30 rounded-b-xl gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 py-2 sm:px-3 sm:py-2 border-t border-[var(--border)]/60 bg-[var(--surface-secondary)]/30 rounded-b-xl gap-2">
             {/* Left Controls: Model, Reasoning, Permissions */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Model Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
                     aria-label="Select Model"
                   >
-                    <Cpu className="w-3 h-3 text-[var(--accent)]" />
+                    <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" />
                     <span>{selectedModel}</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 text-xs">
+                <DropdownMenuContent align="start" className="w-52 text-xs">
                   <DropdownMenuRadioGroup value={selectedModel} onValueChange={setSelectedModel}>
-                    <DropdownMenuRadioItem value="gpt-4o">gpt-4o (Default)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-5.6-sol">gpt-5.6-sol (Default)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-5.5">gpt-5.5 (Fast)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-5.6-terra">gpt-5.6-terra (Balanced)</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="o3-mini">o3-mini (Reasoning)</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="o1">o1 (Deep Synthesis)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-4o">gpt-4o (API Tier)</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -139,10 +141,10 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
                     aria-label="Select Reasoning Effort"
                   >
-                    <Brain className="w-3 h-3 text-[var(--accent)]" />
+                    <Brain className="w-3.5 h-3.5 text-[var(--accent)]" />
                     <span className="capitalize">{reasoningEffort} effort</span>
                   </button>
                 </DropdownMenuTrigger>
@@ -162,10 +164,10 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="hidden sm:flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
                     aria-label="Select Permissions"
                   >
-                    <Shield className="w-3 h-3 text-[var(--accent)]" />
+                    <Shield className="w-3.5 h-3.5 text-[var(--accent)]" />
                     <span className="capitalize">{permission.replace('_', ' ')}</span>
                   </button>
                 </DropdownMenuTrigger>
@@ -183,16 +185,16 @@ export const Composer: React.FC = () => {
             </div>
 
             {/* Right Action: Morphing Button (Send / Stop / Resume / Steer) */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
               {state.isStreaming ? (
                 <>
                   <Button
                     size="sm"
                     variant="danger"
                     onClick={stopActiveTurn}
-                    className="h-7 px-3 text-xs gap-1 font-medium shadow-xs"
+                    className="min-h-[44px] px-3.5 text-xs gap-1.5 font-medium shadow-xs flex-1 sm:flex-initial"
                   >
-                    <Square className="w-3 h-3 fill-current" />
+                    <Square className="w-3.5 h-3.5 fill-current" />
                     Stop Turn
                   </Button>
 
@@ -201,22 +203,22 @@ export const Composer: React.FC = () => {
                       size="sm"
                       variant="default"
                       onClick={handleSend}
-                      className="h-7 px-3 text-xs gap-1 font-medium bg-[var(--accent)] text-[var(--accent-foreground)]"
+                      className="min-h-[44px] px-3.5 text-xs gap-1.5 font-medium bg-[var(--accent)] text-[var(--accent-foreground)] flex-1 sm:flex-initial"
                     >
-                      <Compass className="w-3 h-3" />
+                      <Compass className="w-3.5 h-3.5" />
                       Steer Work
                     </Button>
                   )}
                 </>
               ) : isThreadInterrupted ? (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => sendUserMessage('Resume previous task and verify remaining checklist items.')}
-                    className="h-7 px-3 text-xs gap-1 font-medium text-[var(--accent)]"
+                    onClick={() => sendUserMessage('Resume previous task and verify remaining checklist items.', { model: selectedModel, reasoningEffort })}
+                    className="min-h-[44px] px-3 text-xs gap-1.5 font-medium text-[var(--accent)] flex-1 sm:flex-initial"
                   >
-                    <Play className="w-3 h-3 fill-current" />
+                    <Play className="w-3.5 h-3.5 fill-current" />
                     Resume
                   </Button>
 
@@ -225,9 +227,9 @@ export const Composer: React.FC = () => {
                     variant="default"
                     onClick={handleSend}
                     disabled={!message.trim()}
-                    className="h-7 px-3 text-xs gap-1 font-medium"
+                    className="min-h-[44px] px-4 text-xs gap-1.5 font-medium flex-1 sm:flex-initial"
                   >
-                    <Send className="w-3 h-3" />
+                    <Send className="w-3.5 h-3.5" />
                     Send
                   </Button>
                 </div>
@@ -237,9 +239,9 @@ export const Composer: React.FC = () => {
                   variant="default"
                   onClick={handleSend}
                   disabled={!message.trim()}
-                  className="h-7 px-3 text-xs gap-1 font-medium"
+                  className="min-h-[44px] px-4 text-xs gap-1.5 font-medium w-full sm:w-auto justify-center"
                 >
-                  <Send className="w-3 h-3" />
+                  <Send className="w-3.5 h-3.5" />
                   <span>Send</span>
                   <kbd className="hidden sm:inline text-[9px] font-mono opacity-70 bg-black/20 px-1 py-0.5 rounded ml-0.5">
                     ⌘↵

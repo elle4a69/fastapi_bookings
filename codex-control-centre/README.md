@@ -69,8 +69,13 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `sse_tickets.py`: Short-lived single-use authorization ticket store.
     - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
 - `frontend/`:
-  - `src/components/composer/Composer.tsx`: Prompt input, model selector (`gpt-5.6-sol`, `o3-mini`), reasoning controls.
-  - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys.
+  - `src/App.tsx`: Root responsive 3-pane workbench container with mobile off-canvas drawer navigation and tablet/mobile overlay backdrops.
+  - `src/components/layout/ProjectRail.tsx`: Project switcher, theme toggle, and settings triggers with touch-first tap targets.
+  - `src/components/layout/ThreadSidebar.tsx`: Thread search, thread creation, pinned and archived thread lists.
+  - `src/components/layout/ThreadHeader.tsx`: Responsive header with mobile hamburger trigger, truncated breadcrumbs, compaction gauge, and inspector toggle.
+  - `src/components/inspector/Inspector.tsx`: Adaptive panel (in-flow on desktop >1024px, slide-over overlay on tablet 768px-1023px, full-width sheet on mobile <768px).
+  - `src/components/composer/Composer.tsx`: Prompt input, model selector (`gpt-5.6-sol`, `o3-mini`), reasoning controls, responsive wrapping toolbar with 44px tap targets.
+  - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys and mobile horizontal containment.
   - `src/store/useWorkbenchStore.ts`: Global state, SSE reducer, optimistic turn adoption, turn interruption.
   - `src/api/codexApi.ts`: REST and SSE client wrappers.
   - `src/types/workbench.ts`: TypeScript contracts and DTO interfaces.
@@ -166,6 +171,16 @@ Set these variables in `.env` or system environment:
    - `HIGH` / `CRITICAL`: Enqueued as pending `ToolApproval` record and rendered as interactive approval gate in UI.
 3. **Operator Resolution**: Operator approves or declines $\to$ backend dispatches JSON-RPC response to worker.
 
+### 6. Responsive Viewport Architecture & WCAG 2.2 AA Reflow Compliance
+1. **Desktop Viewport (> 1024px)**: Full 3-pane workbench displaying Project Rail + Thread Sidebar, Central Timeline/Composer column, and in-flow Inspector panel with flexible horizontal layout.
+2. **Tablet Viewport (768px - 1023px)**: Two-pane layout with persistent navigation rail and sidebar. The Inspector operates as a slide-over overlay drawer with a backdrop (`bg-black/60 z-40 lg:hidden backdrop-blur-xs`), preserving conversational focus.
+3. **Mobile Viewport (< 768px down to 320px WCAG Reflow)**:
+   - **Full-Width Single Pane**: Main chat stream and timeline occupy 100% of the screen width (`w-screen max-w-full overflow-x-hidden`).
+   - **Combined Off-Canvas Drawer**: Project Rail and Thread Sidebar translate off-canvas (`-translate-x-full md:translate-x-0`). Tapping the 44px hamburger icon slides the drawer into view with a tap-to-dismiss backdrop. Selecting any thread automatically closes the drawer on mobile.
+   - **Adaptive Inspector Sheet**: Inspector slides out as a top-layer sheet (`max-w-[92vw] sm:max-w-md`) with 44px close triggers and scrollable tab strips.
+   - **Responsive Composer Toolbar**: Bottom controls reflow dynamically into wrapped flex rows (`flex-col sm:flex-row`), ensuring Model, Reasoning, and Permission selectors do not clip or induce horizontal scrolling.
+   - **WCAG 2.2 AA Touch Target Size (SC 2.5.8)**: All interactive buttons, dropdown triggers, and modal actions enforce minimum 44x44px hit areas (`min-h-[44px]`).
+
 ---
 
 ## 5. Data Safety & Isolation
@@ -176,7 +191,7 @@ Set these variables in `.env` or system environment:
 - **Destructive Deletion Guard**: Deleting a worktree requires explicit `?force=true` if uncommitted modifications exist. Root directories and active branches cannot be deleted.
 - **Local Loopback Security**: Backend strictly binds to `127.0.0.1`. CORS is locked down to authorized local origins with credentials enabled.
 - **Secret Scrubbing**: API tokens, private keys, and sensitive environment variables are masked in telemetry and logs.
-- **Mobile-First Responsive Layout**: All modals and toolbars support touch screens down to 320px viewport reflow with minimum 44px tap targets.
+- **WCAG 2.2 AA Accessibility & Reflow Isolation**: Touch target sizing (min 44px) and zero horizontal overflow (`w-screen max-w-full overflow-x-hidden`) prevent responsive layout clipping down to 320px viewports.
 
 ---
 
@@ -192,7 +207,7 @@ Set these variables in `.env` or system environment:
 
 ### Backend Verification
 ```bash
-# Run full backend test suite (146 tests)
+# Run full backend test suite (147 tests)
 $env:PYTHONPATH="."
 python -m pytest tests/ -v
 
@@ -213,7 +228,7 @@ cd frontend
 # Run TypeScript compilation and Vite build
 npm run build
 
-# Run Vitest test suite (27 tests)
+# Run Vitest test suite including WCAG 2.2 AA accessibility and mobile reflow (33 tests across 2 suites)
 npm test
 ```
 

@@ -13,8 +13,8 @@ export const FileChangeItem: React.FC<Props> = ({ item }) => {
   const { setDiffStudioOpen, selectDiffFile } = useWorkbenchStore()
 
   return (
-    <div className="my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3.5 shadow-xs text-xs">
-      <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-[var(--border)]">
+    <div className="my-2 sm:my-3 max-w-4xl mx-auto border border-[var(--border)] rounded-lg bg-[var(--surface-primary)] p-3 sm:p-3.5 shadow-xs text-xs w-full max-w-full overflow-hidden break-words">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pb-2 mb-2 border-b border-[var(--border)]">
         <div className="flex items-center gap-2 min-w-0">
           <FileDiff className="w-4 h-4 text-[var(--accent)] flex-shrink-0" aria-hidden="true" />
           <h3 className="font-semibold text-xs text-[var(--text-primary)] truncate m-0">
@@ -22,7 +22,7 @@ export const FileChangeItem: React.FC<Props> = ({ item }) => {
           </h3>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[11px] font-mono text-[var(--success)] font-medium">
             +{item.totalAdditions}
           </span>
@@ -33,12 +33,13 @@ export const FileChangeItem: React.FC<Props> = ({ item }) => {
           <Button
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[11px] gap-1 text-[var(--accent)] border-[var(--accent)]/30 hover:bg-[var(--accent-subtle)]"
+            className="min-h-[36px] px-2.5 text-[11px] gap-1 text-[var(--accent)] border-[var(--accent)]/30 hover:bg-[var(--accent-subtle)] cursor-pointer"
             onClick={() => setDiffStudioOpen(true)}
             aria-label="Open Diff Review Studio"
           >
-            <FileCode2 className="w-3 h-3" />
-            Open Diff Review
+            <FileCode2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Open Diff Review</span>
+            <span className="sm:hidden">Diffs</span>
           </Button>
         </div>
       </div>

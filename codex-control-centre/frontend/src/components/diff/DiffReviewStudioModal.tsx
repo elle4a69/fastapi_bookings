@@ -67,44 +67,48 @@ export const DiffReviewStudioModal: React.FC = () => {
 
   return (
     <Dialog open={state.isDiffStudioOpen} onOpenChange={setDiffStudioOpen}>
-      <DialogContent className="max-w-7xl h-[92vh] p-0 overflow-hidden flex flex-col bg-[var(--surface-primary)] border-[var(--border-strong)] shadow-2xl rounded-xl">
+      <DialogContent className="w-full max-w-[96vw] md:max-w-7xl h-[94vh] p-0 overflow-hidden flex flex-col bg-[var(--surface-primary)] border-[var(--border-strong)] shadow-2xl rounded-xl">
         <DialogTitle className="sr-only">Engineering Diff Review Studio</DialogTitle>
         <DialogDescription className="sr-only">
           Reviewing {state.diffFiles.length} modified files before branch merge
         </DialogDescription>
         
         {/* Top Review Studio Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-primary)] flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)] flex items-center justify-center" aria-hidden="true">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-[var(--border)] bg-[var(--surface-primary)] flex-shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-[var(--accent-subtle)] text-[var(--accent)] flex items-center justify-center flex-shrink-0" aria-hidden="true">
               <FileCode2 className="w-4 h-4" />
             </div>
-            <div>
-              <h2 className="font-semibold text-xs text-[var(--text-primary)] m-0">
+            <div className="min-w-0">
+              <h2 className="font-semibold text-xs text-[var(--text-primary)] truncate max-w-[140px] sm:max-w-none m-0">
                 Engineering Diff Review Studio
               </h2>
-              <div className="text-[10px] text-[var(--text-subtle)]">
+              <div className="text-[10px] text-[var(--text-subtle)] truncate">
                 Reviewing {state.diffFiles.length} modified files before branch merge
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handlePrev} aria-label="Previous file diff">
-                <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Prev File
+              <Button size="sm" variant="ghost" className="min-h-[36px] px-2 text-xs" onClick={handlePrev} aria-label="Previous file diff">
+                <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                <span className="hidden sm:inline">Prev File</span>
+                <span className="sm:hidden">Prev</span>
               </Button>
-              <span className="text-[11px] font-mono text-[var(--text-subtle)]">
-                {state.selectedDiffFileIndex + 1} / {state.diffFiles.length}
+              <span className="text-[11px] font-mono text-[var(--text-subtle)] px-1">
+                {state.selectedDiffFileIndex + 1}/{state.diffFiles.length}
               </span>
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleNext} aria-label="Next file diff">
-                Next File <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              <Button size="sm" variant="ghost" className="min-h-[36px] px-2 text-xs" onClick={handleNext} aria-label="Next file diff">
+                <span className="hidden sm:inline">Next File</span>
+                <span className="sm:hidden">Next</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-1" />
               </Button>
             </div>
 
             <button
               onClick={() => setDiffStudioOpen(false)}
-              className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ml-2"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ml-1 cursor-pointer"
               aria-label="Close Diff Studio"
             >
               <X className="w-4 h-4" />
@@ -198,18 +202,18 @@ export const DiffReviewStudioModal: React.FC = () => {
             {/* Bottom Actions */}
             <div className="space-y-2 pt-3 border-t border-[var(--border)]">
               <Button
-                className="w-full h-9 text-xs gap-1.5 bg-[var(--success)] text-white hover:opacity-90 font-semibold"
+                className="w-full min-h-[44px] text-xs gap-1.5 bg-[var(--success)] text-white hover:opacity-90 font-semibold cursor-pointer"
                 onClick={() => handleApplyVerdict('Changes Approved for Apply')}
               >
                 <Check className="w-4 h-4" />
                 Approve All Changes
               </Button>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs"
+                  className="min-h-[44px] text-xs cursor-pointer"
                   onClick={() => handleApplyVerdict('Correction Requested from Codex')}
                 >
                   Request Correction
@@ -218,7 +222,7 @@ export const DiffReviewStudioModal: React.FC = () => {
                 <Button
                   variant="dangerOutline"
                   size="sm"
-                  className="text-xs"
+                  className="min-h-[44px] text-xs cursor-pointer"
                   onClick={() => handleApplyVerdict('Changes Declined')}
                 >
                   Decline

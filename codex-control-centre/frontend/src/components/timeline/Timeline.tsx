@@ -126,35 +126,36 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
   }
 
   // Render individual timeline item with fallback for unknown types
-  const renderItem = (item: TimelineItem) => {
+  const renderItem = (item: TimelineItem, index: number) => {
+    const itemKey = `${item.id || 'item'}_${index}`
     switch (item.type) {
       case 'user_instruction':
-        return <UserInstructionItem key={item.id} item={item} />
+        return <UserInstructionItem key={itemKey} item={item} />
       case 'agent_message':
-        return <AgentMessageItem key={item.id} item={item} />
+        return <AgentMessageItem key={itemKey} item={item} />
       case 'reasoning_summary':
-        return <ReasoningSummaryItem key={item.id} item={item} />
+        return <ReasoningSummaryItem key={itemKey} item={item} />
       case 'plan':
-        return <PlanItem key={item.id} item={item} />
+        return <PlanItem key={itemKey} item={item} />
       case 'command_execution':
-        return <CommandExecutionItem key={item.id} item={item} />
+        return <CommandExecutionItem key={itemKey} item={item} />
       case 'file_read':
-        return <FileReadItem key={item.id} item={item} />
+        return <FileReadItem key={itemKey} item={item} />
       case 'file_change':
-        return <FileChangeItem key={item.id} item={item} />
+        return <FileChangeItem key={itemKey} item={item} />
       case 'tool_call':
-        return <ToolCallItem key={item.id} item={item} />
+        return <ToolCallItem key={itemKey} item={item} />
       case 'web_research':
-        return <WebResearchItem key={item.id} item={item} />
+        return <WebResearchItem key={itemKey} item={item} />
       case 'test_run':
-        return <TestRunItem key={item.id} item={item} />
+        return <TestRunItem key={itemKey} item={item} />
       case 'approval_request':
-        return <ApprovalCard key={item.id} item={item} />
+        return <ApprovalCard key={itemKey} item={item} />
       case 'user_input_request':
-        return <UserInputFormItem key={item.id} item={item} />
+        return <UserInputFormItem key={itemKey} item={item} />
       case 'sub_agent_activity':
         return (
-          <div key={item.id} className="my-2 max-w-4xl mx-auto">
+          <div key={itemKey} className="my-2 max-w-4xl mx-auto">
             <SubAgentCard
               agent={{
                 id: item.agentId,
@@ -162,7 +163,7 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
                 role: item.role,
                 objective: item.objective,
                 status: item.status,
-                model: 'gpt-4o',
+                model: 'gpt-5.6-sol',
                 reasoningEffort: 'medium',
                 scope: 'workspace_write',
                 startedAt: 'Just now',
@@ -176,18 +177,18 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
           </div>
         )
       case 'compaction_notice':
-        return <CompactionNoticeItem key={item.id} item={item} />
+        return <CompactionNoticeItem key={itemKey} item={item} />
       case 'warning':
-        return <WarningItem key={item.id} item={item} />
+        return <WarningItem key={itemKey} item={item} />
       case 'failure':
-        return <FailureItem key={item.id} item={item} />
+        return <FailureItem key={itemKey} item={item} />
       case 'interruption':
-        return <InterruptionItem key={item.id} item={item} />
+        return <InterruptionItem key={itemKey} item={item} />
       case 'completion_summary':
-        return <CompletionSummaryItem key={item.id} item={item} />
+        return <CompletionSummaryItem key={itemKey} item={item} />
       default:
         return (
-          <div key={(item as any).id} className="my-2 p-3 max-w-4xl mx-auto rounded bg-[var(--surface-secondary)] border border-[var(--border)] text-xs text-[var(--text-subtle)] font-mono">
+          <div key={itemKey} className="my-2 p-3 max-w-4xl mx-auto rounded bg-[var(--surface-secondary)] border border-[var(--border)] text-xs text-[var(--text-subtle)] font-mono">
             Generic Event: {(item as any).type}
           </div>
         )
@@ -195,17 +196,17 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
   }
 
   return (
-    <div className="relative flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg-app)]">
+    <div className="relative flex-1 flex flex-col h-full w-full max-w-full overflow-hidden bg-[var(--bg-app)]">
       {/* Scrollable Timeline */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth"
+        className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 sm:py-4 scroll-smooth w-full max-w-full overflow-x-hidden"
         role="feed"
         aria-label="Thread Conversation and Activity Timeline"
       >
-        <div className="max-w-4xl mx-auto w-full pb-6">
-          {allItems.map(renderItem)}
+        <div className="max-w-4xl mx-auto w-full pb-6 space-y-3 min-w-0 overflow-x-hidden">
+          {allItems.map((item, index) => renderItem(item, index))}
         </div>
       </div>
 

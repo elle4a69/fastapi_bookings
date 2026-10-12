@@ -10,7 +10,7 @@ export const WebResearchItem: React.FC<Props> = ({ item }) => {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs">
+    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs w-full max-w-full break-words">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-3 py-2 flex items-center justify-between gap-2 bg-[var(--surface-secondary)]/40 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer select-none text-left"
@@ -35,9 +35,9 @@ export const WebResearchItem: React.FC<Props> = ({ item }) => {
       {isExpanded && (
         <div className="p-3 border-t border-[var(--border)] space-y-2 bg-[var(--surface-secondary)]/20">
           {item.citations.map((cite, idx) => (
-            <div key={idx} className="p-2 rounded bg-[var(--surface-primary)] border border-[var(--border)]">
+            <div key={idx} className="p-2 rounded bg-[var(--surface-primary)] border border-[var(--border)] break-words">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-xs text-[var(--text-primary)] truncate">
+                <span className="font-semibold text-xs text-[var(--text-primary)] truncate min-w-0">
                   {cite.title}
                 </span>
                 <a
@@ -45,12 +45,12 @@ export const WebResearchItem: React.FC<Props> = ({ item }) => {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Open source link: ${cite.title || cite.url}`}
-                  className="text-[10px] text-[var(--accent)] hover:underline flex items-center gap-1 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--accent)] hover:underline focus:outline-none focus:ring-1 focus:ring-[var(--accent)] flex-shrink-0"
                 >
-                  <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
                 </a>
               </div>
-              <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2">
+              <p className="text-[11px] text-[var(--text-secondary)] mt-1 line-clamp-2 break-words">
                 {cite.snippet}
               </p>
             </div>

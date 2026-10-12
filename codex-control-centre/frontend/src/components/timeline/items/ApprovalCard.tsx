@@ -57,7 +57,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
   return (
     <div
       className={cn(
-        'my-4 max-w-4xl mx-auto rounded-lg border p-4 shadow-sm transition-all',
+        'my-3 sm:my-4 max-w-4xl mx-auto rounded-lg border p-3 sm:p-4 shadow-sm transition-all w-full max-w-full overflow-hidden break-words',
         isPending
           ? item.risk === 'high' || item.risk === 'critical'
             ? 'bg-[var(--danger-subtle)]/30 border-[var(--danger)]'
@@ -68,15 +68,15 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
       aria-label={`Approval Request: ${item.title}`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-2 min-w-0">
           {getCategoryIcon(item.category)}
-          <h3 className="font-semibold text-xs text-[var(--text-primary)]">
+          <h3 className="font-semibold text-xs text-[var(--text-primary)] truncate">
             Action Approval Required: {item.title}
           </h3>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {getRiskBadge(item.risk)}
           {!isPending && (
             <Badge variant={item.status === 'approved' ? 'success' : 'danger'} className="capitalize">
@@ -90,11 +90,11 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
       <div className="py-3 space-y-2.5 text-xs">
         <div>
           <span className="font-semibold text-[var(--text-primary)]">Potential Consequence: </span>
-          <span className="text-[var(--text-secondary)] leading-relaxed">{item.consequence}</span>
+          <span className="text-[var(--text-secondary)] leading-relaxed break-words">{item.consequence}</span>
         </div>
 
         {item.command && (
-          <div className="p-2 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs">
+          <div className="p-2 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs overflow-x-auto max-w-full break-words">
             <div className="text-[10px] text-[var(--text-subtle)] mb-0.5">Command to execute:</div>
             <div className="text-[var(--text-primary)]">$ {item.command}</div>
             {item.workingDirectory && (
@@ -104,7 +104,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
         )}
 
         {item.targetPath && (
-          <div className="p-2 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs">
+          <div className="p-2 rounded bg-[var(--code-bg)] border border-[var(--code-border)] font-mono text-xs overflow-x-auto max-w-full break-words">
             <div className="text-[10px] text-[var(--text-subtle)] mb-0.5">Target path:</div>
             <div className="text-[var(--text-primary)]">{item.targetPath}</div>
           </div>
@@ -112,7 +112,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
 
         <div>
           <span className="font-semibold text-[var(--text-primary)]">Agent Rationale: </span>
-          <span className="text-[var(--text-secondary)]">{item.reason}</span>
+          <span className="text-[var(--text-secondary)] break-words">{item.reason}</span>
         </div>
 
         {/* Optional Feedback Input when Pending */}
@@ -122,7 +122,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
               <button
                 type="button"
                 onClick={() => setShowFeedback(true)}
-                className="text-[10px] text-[var(--accent)] hover:underline font-medium"
+                className="text-[10px] text-[var(--accent)] hover:underline font-medium cursor-pointer min-h-[36px] flex items-center"
               >
                 + Add operator feedback / guidance note
               </button>
@@ -140,7 +140,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
                   placeholder="Optional constraint or reason for decision..."
-                  className="w-full h-7 rounded border border-[var(--border)] bg-[var(--surface-primary)] px-2 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  className="w-full h-8 rounded border border-[var(--border)] bg-[var(--surface-primary)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                 />
               </div>
             )}
@@ -150,21 +150,21 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
 
       {/* Actions */}
       {isPending ? (
-        <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-[var(--border)]">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2 pt-2.5 border-t border-[var(--border)]">
           <Button
             size="sm"
             variant="outline"
-            className="text-xs text-[var(--danger)] border-[var(--danger)]/40 hover:bg-[var(--danger-subtle)]"
+            className="min-h-[44px] w-full sm:w-auto text-xs text-[var(--danger)] border-[var(--danger)]/40 hover:bg-[var(--danger-subtle)] justify-center"
             onClick={() => declineRequest(item.approvalId, undefined, feedback || undefined)}
           >
-            <X className="w-3.5 h-3.5 mr-1" />
+            <X className="w-4 h-4 mr-1" />
             Decline
           </Button>
 
           <Button
             size="sm"
             variant="secondary"
-            className="text-xs"
+            className="min-h-[44px] w-full sm:w-auto text-xs justify-center"
             onClick={() => approveRequest(item.approvalId, 'session', undefined, feedback || undefined)}
           >
             Approve for Session
@@ -173,10 +173,10 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
           <Button
             size="sm"
             variant={item.risk === 'high' ? 'danger' : 'default'}
-            className="text-xs"
+            className="min-h-[44px] w-full sm:w-auto text-xs justify-center font-medium"
             onClick={() => approveRequest(item.approvalId, 'once', undefined, feedback || undefined)}
           >
-            <Check className="w-3.5 h-3.5 mr-1" />
+            <Check className="w-4 h-4 mr-1" />
             Approve Once
           </Button>
         </div>

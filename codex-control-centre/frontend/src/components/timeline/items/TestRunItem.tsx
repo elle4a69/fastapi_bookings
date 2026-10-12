@@ -15,7 +15,7 @@ export const TestRunItem: React.FC<Props> = ({ item }) => {
   const durationSec = (item.totalDurationMs / 1000).toFixed(2)
 
   return (
-    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs shadow-xs">
+    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs shadow-xs w-full max-w-full break-words">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-3 py-2 flex items-center justify-between gap-2 bg-[var(--surface-secondary)]/40 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer select-none text-left"
@@ -53,7 +53,7 @@ export const TestRunItem: React.FC<Props> = ({ item }) => {
           {item.suites.map((suite, idx) => (
             <div key={idx} className="p-2.5 rounded bg-[var(--surface-primary)] border border-[var(--border)]">
               <div className="flex items-center justify-between font-mono text-xs">
-                <span className="font-semibold text-[var(--text-primary)] truncate">{suite.name}</span>
+                <span className="font-semibold text-[var(--text-primary)] truncate max-w-[200px] sm:max-w-none">{suite.name}</span>
                 <span className="text-[10px] text-[var(--text-subtle)]">{(suite.durationMs / 1000).toFixed(2)}s</span>
               </div>
 
@@ -74,7 +74,7 @@ export const TestRunItem: React.FC<Props> = ({ item }) => {
                     <div key={fIdx}>
                       <div className="font-semibold">{f.testName}</div>
                       <div className="text-[11px] text-[var(--text-secondary)]">{f.message}</div>
-                      {f.trace && <pre className="text-[10px] text-[var(--text-subtle)] mt-1 whitespace-pre-wrap">{f.trace}</pre>}
+                      {f.trace && <pre className="text-[10px] text-[var(--text-subtle)] mt-1 whitespace-pre-wrap break-words overflow-x-auto max-w-full">{f.trace}</pre>}
                     </div>
                   ))}
                 </div>

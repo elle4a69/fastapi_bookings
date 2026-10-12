@@ -175,12 +175,12 @@ describe('WCAG 2.2 AA Accessibility Audit Suite (WP-09)', () => {
       expect(cssFile).toContain('transition-duration: 0.01ms !important')
     })
 
-    it('verifies responsive slide-over drawer backdrops exist for small viewports (<= 768px)', () => {
-      const sidebarFile = fs.readFileSync(path.resolve(__dirname, '../components/layout/ThreadSidebar.tsx'), 'utf8')
-      expect(sidebarFile).toContain('fixed inset-0 bg-black/50 z-30 md:hidden')
+    it('verifies responsive slide-over drawer backdrops exist for small viewports (<= 768px on mobile, < 1024px on tablet)', () => {
+      const appFile = fs.readFileSync(path.resolve(__dirname, '../App.tsx'), 'utf8')
+      expect(appFile).toContain('fixed inset-0 bg-black/60 z-40 md:hidden')
 
       const inspectorFile = fs.readFileSync(path.resolve(__dirname, '../components/inspector/Inspector.tsx'), 'utf8')
-      expect(inspectorFile).toContain('fixed inset-0 bg-black/50 z-30 md:hidden')
+      expect(inspectorFile).toContain('fixed inset-0 bg-black/60 z-40 lg:hidden')
     })
   })
 
@@ -190,6 +190,59 @@ describe('WCAG 2.2 AA Accessibility Audit Suite (WP-09)', () => {
       expect(appFile).toContain('role="status"')
       expect(appFile).toContain('aria-live="polite"')
       expect(appFile).toContain('aria-atomic="true"')
+    })
+  })
+
+  describe('Rule 8: WCAG 2.2 AA Mobile Reflow & Touch Target Verification (320px Standard)', () => {
+    it('verifies root and timeline containers prevent horizontal scroll on 320px reflow', () => {
+      const appFile = fs.readFileSync(path.resolve(__dirname, '../App.tsx'), 'utf8')
+      expect(appFile).toContain('w-screen max-w-full overflow-x-hidden')
+
+      const timelineFile = fs.readFileSync(path.resolve(__dirname, '../components/timeline/Timeline.tsx'), 'utf8')
+      expect(timelineFile).toContain('max-w-full overflow-x-hidden')
+    })
+
+    it('verifies mobile navigation drawer container handles off-canvas translation and sizing', () => {
+      const appFile = fs.readFileSync(path.resolve(__dirname, '../App.tsx'), 'utf8')
+      expect(appFile).toContain('fixed inset-y-0 left-0 flex md:relative md:inset-auto md:z-20 md:translate-x-0')
+      expect(appFile).toContain("-translate-x-full md:translate-x-0")
+
+      const sidebarFile = fs.readFileSync(path.resolve(__dirname, '../components/layout/ThreadSidebar.tsx'), 'utf8')
+      expect(sidebarFile).toContain('w-64 sm:w-72 max-w-[calc(92vw-3.5rem)] md:max-w-none')
+    })
+
+    it('verifies adaptive overlay positioning for Inspector on mobile/tablet', () => {
+      const inspectorFile = fs.readFileSync(path.resolve(__dirname, '../components/inspector/Inspector.tsx'), 'utf8')
+      expect(inspectorFile).toContain('fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto')
+      expect(inspectorFile).toContain('max-w-[92vw] sm:max-w-md lg:max-w-none')
+    })
+
+    it('verifies minimum 44px touch targets across interactive controls (WCAG 2.2 SC 2.5.8)', () => {
+      const headerFile = fs.readFileSync(path.resolve(__dirname, '../components/layout/ThreadHeader.tsx'), 'utf8')
+      expect(headerFile).toContain('min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md md:hidden') // Hamburger trigger
+      expect(headerFile).toContain('min-h-[44px] min-w-[44px]') // Inspector toggle / menu
+
+      const composerFile = fs.readFileSync(path.resolve(__dirname, '../components/composer/Composer.tsx'), 'utf8')
+      expect(composerFile).toContain('min-h-[44px]') // Controls and buttons
+
+      const threadRowFile = fs.readFileSync(path.resolve(__dirname, '../components/layout/ThreadRow.tsx'), 'utf8')
+      expect(threadRowFile).toContain('min-h-[44px]') // Select thread button & actions trigger
+
+      const inspectorFile = fs.readFileSync(path.resolve(__dirname, '../components/inspector/Inspector.tsx'), 'utf8')
+      expect(inspectorFile).toContain('min-h-[44px] min-w-[44px]') // Close inspector button
+    })
+
+    it('verifies modals use adaptive viewport widths for small screens', () => {
+      const diffFile = fs.readFileSync(path.resolve(__dirname, '../components/diff/DiffReviewStudioModal.tsx'), 'utf8')
+      expect(diffFile).toContain('max-w-[96vw]')
+
+      const commandFile = fs.readFileSync(path.resolve(__dirname, '../components/command-palette/CommandPalette.tsx'), 'utf8')
+      expect(commandFile).toContain('max-w-[96vw]')
+    })
+
+    it('verifies text truncation prevents layout breakage in header navigation', () => {
+      const headerFile = fs.readFileSync(path.resolve(__dirname, '../components/layout/ThreadHeader.tsx'), 'utf8')
+      expect(headerFile).toContain('truncate')
     })
   })
 })

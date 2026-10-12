@@ -12,7 +12,7 @@ export const ReasoningSummaryItem: React.FC<Props> = ({ item }) => {
   const formattedDuration = (item.elapsedMs / 1000).toFixed(1)
 
   return (
-    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-secondary)]/40 overflow-hidden text-xs">
+    <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-secondary)]/40 overflow-hidden text-xs w-full max-w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full px-3 py-2 flex items-center justify-between gap-2 text-left hover:bg-[var(--surface-hover)] transition-colors cursor-pointer select-none"
@@ -20,7 +20,7 @@ export const ReasoningSummaryItem: React.FC<Props> = ({ item }) => {
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <Brain className="w-3.5 h-3.5 text-[var(--accent)] flex-shrink-0" />
-          <span className="font-medium text-[var(--text-secondary)]">Thought for {formattedDuration}s</span>
+          <span className="font-medium text-[var(--text-secondary)] flex-shrink-0">Thought for {formattedDuration}s</span>
           <span className="text-[var(--text-subtle)] truncate text-[11px]">— {item.summary}</span>
         </div>
 
@@ -32,7 +32,7 @@ export const ReasoningSummaryItem: React.FC<Props> = ({ item }) => {
       </button>
 
       {isExpanded && (
-        <div className="p-3 border-t border-[var(--border)] bg-[var(--surface-primary)] text-xs font-mono text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
+        <div className="p-2.5 sm:p-3 border-t border-[var(--border)] bg-[var(--surface-primary)] text-xs font-mono text-[var(--text-secondary)] whitespace-pre-wrap break-words overflow-x-auto max-w-full leading-relaxed">
           {item.rawTrace || item.summary}
         </div>
       )}
