@@ -36,6 +36,8 @@ import {
   Globe,
 } from "lucide-react"
 import { toast } from "sonner"
+import { BusinessSettingsAdapter } from "@/pages/admin/business-assistant/adapters/business-settings-adapter"
+import { formAdapterRegistry } from "@/pages/admin/business-assistant/adapters/registry"
 
 interface BusinessProfile {
   name: string
@@ -248,6 +250,56 @@ export default function BusinessSettings() {
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
     }
   }, [])
+
+  // Mount and register BusinessSettingsAdapter with formAdapterRegistry
+  useEffect(() => {
+    const adapter = new BusinessSettingsAdapter({
+      initialSubtab: 'business_profile',
+      initialValues: {
+        business_name: profile?.name,
+        name: profile?.name,
+        support_email: profile?.email,
+        email: profile?.email,
+        business_email: profile?.email,
+        support_phone: profile?.phone,
+        phone: profile?.phone,
+        business_phone: profile?.phone,
+        business_address: profile?.address,
+        address: profile?.address,
+      },
+      onStageChange: (field, value) => {
+        const strVal = value === null || value === undefined ? '' : String(value)
+        if (field === 'business_name' || field === 'name') {
+          setProfile((prev) => (prev ? { ...prev, name: strVal } : { name: strVal, email: '', phone: '', address: '' }))
+        } else if (field === 'support_email' || field === 'email' || field === 'business_email') {
+          setProfile((prev) => (prev ? { ...prev, email: strVal } : { name: '', email: strVal, phone: '', address: '' }))
+        } else if (field === 'support_phone' || field === 'phone' || field === 'business_phone') {
+          setProfile((prev) => (prev ? { ...prev, phone: strVal } : { name: '', email: '', phone: strVal, address: '' }))
+        } else if (field === 'business_address' || field === 'address') {
+          setProfile((prev) => (prev ? { ...prev, address: strVal } : { name: '', email: '', phone: '', address: strVal }))
+        }
+      },
+      saveHandler: async (payload) => {
+        if (payload.profile) {
+          const updatedProfile: BusinessProfile = {
+            name: (payload.profile.business_name as string) || (payload.profile.name as string) || profile?.name || '',
+            email: (payload.profile.support_email as string) || (payload.profile.email as string) || profile?.email || '',
+            phone: (payload.profile.support_phone as string) || (payload.profile.phone as string) || profile?.phone || '',
+            address: (payload.profile.business_address as string) || (payload.profile.address as string) || profile?.address || '',
+          }
+          await executeSaveProfile(updatedProfile)
+        }
+        return { id: 'business_profile', revision: 1 }
+      },
+    })
+
+    const unregister = formAdapterRegistry.registerAdapter(adapter)
+    formAdapterRegistry.setActiveAdapter('business_settings')
+
+    return () => {
+      unregister()
+    }
+  }, [profile?.name, profile?.email, profile?.phone, profile?.address])
 
   const handleSaveSuccess = () => {
     activeSaveCountRef.current = Math.max(0, activeSaveCountRef.current - 1)
@@ -614,6 +666,8 @@ export default function BusinessSettings() {
           </Label>
           <Input
             id="name"
+            name="business_name"
+            data-field-name="business_name"
             value={profile.name}
             onChange={(e) => {
               const updated = { ...profile, name: e.target.value }
@@ -634,6 +688,8 @@ export default function BusinessSettings() {
             </Label>
             <Input
               id="email"
+              name="business_email"
+              data-field-name="business_email"
               type="email"
               value={profile.email}
               onChange={(e) => {
@@ -654,6 +710,8 @@ export default function BusinessSettings() {
             </Label>
             <Input
               id="phone"
+              name="business_phone"
+              data-field-name="business_phone"
               value={profile.phone}
               onChange={(e) => {
                 const updated = { ...profile, phone: e.target.value }

@@ -22,8 +22,26 @@ import {
   type GPTLiveVoiceState,
 } from '../gpt-live/use-gpt-live'
 import { useLiveKitVoice } from './use-livekit-voice'
+import { useXAIGrokVoice } from './use-xai-grok-voice'
 import { type GPTLiveCaption } from '../gpt-live/protocol'
 import type { RpcExecutionReceipt } from './rpc'
+import { formAdapterRegistry } from './adapters/registry'
+import {
+  type AgentActivityLog,
+  type AgentActivityType,
+  type AgentActivityStatus,
+  createAgentActivityLog,
+  loadPersistedAgentActivityLogs,
+  savePersistedAgentActivityLogs,
+  clearPersistedAgentActivityLogs,
+  MAX_PERSISTED_AGENT_ACTIVITY_LOGS,
+} from './realtime-protocol'
+
+export type {
+  AgentActivityLog,
+  AgentActivityType,
+  AgentActivityStatus,
+}
 
 export type Conversation = {
   id: number
@@ -66,6 +84,24 @@ function requestKey(): string {
   )
 }
 
+export type VoiceTransportMode =
+  | 'xai_grok_voice'
+  | 'direct_gpt_live'
+  | 'local_livekit'
+  | 'cloud_livekit'
+  | 'livekit_gpt_live'
+
+export type VoiceTransportDetails = {
+  transport: VoiceTransportMode
+  available_transports: string[]
+  agent_name: string
+  active_target?: string | null
+  cloud_livekit_url?: string | null
+  cloud_livekit_api_key_masked?: string | null
+  cloud_livekit_api_secret_masked?: string | null
+  cloud_configured: boolean
+}
+
 export type BusinessAssistantContextType = {
   drawerOpen: boolean
   openDrawer: () => void
@@ -92,9 +128,29 @@ export type BusinessAssistantContextType = {
   audioDevices: MediaDeviceInfo[]
   activeAudioDeviceId: string | null
   switchAudioDevice: (deviceId: string) => Promise<void>
-  transport: 'livekit_gpt_live' | 'direct_gpt_live'
-  setTransport: (transport: 'livekit_gpt_live' | 'direct_gpt_live') => void
+  transport: VoiceTransportMode
+  setTransport: (transport: VoiceTransportMode) => Promise<void>
+  transportDetails: VoiceTransportDetails | null
+  updateTransportConfig: (params: {
+    transport: VoiceTransportMode
+    cloud_livekit_url?: string
+    cloud_livekit_api_key?: string
+    cloud_livekit_api_secret?: string
+  }) => Promise<void>
   lastRpcReceipt?: RpcExecutionReceipt | null
+  diagnosticMode: boolean
+  setDiagnosticMode: (enabled: boolean) => Promise<void>
+  postClientSnapshot: (payload: {
+    client_status?: string
+    webrtc_state?: string
+    last_error?: string | null
+    metadata_json?: Record<string, unknown>
+    route?: string
+    form_adapter?: string | null
+    executor_lease?: string | null
+    manual_takeover?: boolean
+    staged_fields?: Record<string, unknown> | null
+  }) => Promise<void>
   createConversation: () => Promise<number | null>
   selectConversation: (id: number) => Promise<void>
   sendTurn: (overrideContent?: string) => Promise<void>
@@ -102,6 +158,9 @@ export type BusinessAssistantContextType = {
   pageContext: PageContextInfo
   includePageContext: boolean
   setIncludePageContext: (include: boolean) => void
+  activityLogs: AgentActivityLog[]
+  clearActivityLogs: () => void
+  addActivityLog: (log: AgentActivityLog | Omit<AgentActivityLog, 'id' | 'timestamp'>) => void
 }
 
 const BusinessAssistantContext = createContext<BusinessAssistantContextType | null>(null)
@@ -124,71 +183,52 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
   const [includePageContext, setIncludePageContext] = useState(false)
   const [voiceCaptions, setVoiceCaptions] = useState<GPTLiveCaption[]>([])
   const [lastRpcReceipt, setLastRpcReceipt] = useState<RpcExecutionReceipt | null>(null)
+  const [activityLogs, setActivityLogs] = useState<AgentActivityLog[]>(() => loadPersistedAgentActivityLogs())
+
+  const clearActivityLogs = useCallback(() => {
+    setActivityLogs([])
+    clearPersistedAgentActivityLogs()
+  }, [])
+
+  const addActivityLog = useCallback(
+    (logInput: AgentActivityLog | Omit<AgentActivityLog, 'id' | 'timestamp'>) => {
+      const fullLog: AgentActivityLog =
+        'id' in logInput && logInput.id && 'timestamp' in logInput && logInput.timestamp
+          ? (logInput as AgentActivityLog)
+          : createAgentActivityLog(logInput.type, logInput.title, {
+              details: logInput.details,
+              payload: logInput.payload,
+              status: logInput.status,
+              agentLabel: logInput.agentLabel,
+              modelName: logInput.modelName,
+              id: 'id' in logInput ? (logInput.id as string) : undefined,
+              timestamp: 'timestamp' in logInput ? (logInput.timestamp as string) : undefined,
+            })
+      setActivityLogs((prev) => {
+        if (prev.some((item) => item.id === fullLog.id)) return prev
+        const seen = new Set<string>()
+        const sanitizedPrev: AgentActivityLog[] = []
+        for (const item of prev) {
+          if (item?.id && !seen.has(item.id)) {
+            seen.add(item.id)
+            sanitizedPrev.push(item)
+          }
+        }
+        const next = [...sanitizedPrev.slice(-(MAX_PERSISTED_AGENT_ACTIVITY_LOGS - 1)), fullLog]
+        savePersistedAgentActivityLogs(next)
+        return next
+      })
+    },
+    [],
+  )
 
   const openDrawer = useCallback(() => setDrawerOpen(true), [])
   const closeDrawer = useCallback(() => setDrawerOpen(false), [])
   const toggleDrawer = useCallback(() => setDrawerOpen((prev) => !prev), [])
 
-  const [transport, setTransport] = useState<'livekit_gpt_live' | 'direct_gpt_live'>('livekit_gpt_live')
-
-  const livekitVoice = useLiveKitVoice({
-    conversationId: activeConversationId,
-    onCaptionsChange: setVoiceCaptions,
-    onError: setError,
-    onNavigate: (path) => navigate(path),
-    onRpcReceipt: (receipt) => setLastRpcReceipt(receipt),
-  })
-
-  const directVoice = useGPTLive({
-    conversationId: activeConversationId,
-    onCaptionsChange: setVoiceCaptions,
-    onError: setError,
-  })
-
-  useEffect(() => {
-    let active = true
-    apiClient
-      .get<{ transport?: string }>('/api/admin/business-assistant/voice/transport')
-      .then((res) => {
-        if (active && res?.transport === 'direct_gpt_live') {
-          setTransport('direct_gpt_live')
-        }
-      })
-      .catch(() => {
-        // Fallback or offline uses default
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const voiceState = transport === 'livekit_gpt_live' ? livekitVoice.voiceState : directVoice.voiceState
-  const startVoice = transport === 'livekit_gpt_live' ? livekitVoice.startVoice : directVoice.startVoice
-  const stopVoice = useCallback(() => {
-    livekitVoice.stopVoice()
-    directVoice.stopVoice()
-  }, [livekitVoice, directVoice])
-
-  // Multi-tenant and logout scope isolation: clear all state and stop voice on tenant/user change
-  const authContext = useContext(AuthContext)
-  const currentTenantUserKey = authContext?.user
-    ? `${authContext.user.tenant_id ?? 0}:${authContext.user.id}`
-    : null
-  const previousUserKeyRef = useRef<string | null>(currentTenantUserKey)
-
-  useEffect(() => {
-    if (previousUserKeyRef.current !== currentTenantUserKey) {
-      previousUserKeyRef.current = currentTenantUserKey
-      stopVoice()
-      setDrawerOpen(false)
-      setActiveConversationId(null)
-      setConversations([])
-      setMessages([])
-      setVoiceCaptions([])
-      setError(null)
-      setTurnError(null)
-    }
-  }, [currentTenantUserKey, stopVoice])
+  const [transport, setTransportState] = useState<VoiceTransportMode>('direct_gpt_live')
+  const [transportDetails, setTransportDetails] = useState<VoiceTransportDetails | null>(null)
+  const [diagnosticMode, setDiagnosticModeState] = useState(false)
 
   const loadMessages = useCallback(async (conversationId: number) => {
     try {
@@ -200,6 +240,306 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       setError(caught instanceof Error ? caught.message : 'Unable to load conversation messages.')
     }
   }, [])
+
+  const setDiagnosticMode = useCallback(async (enabled: boolean) => {
+    try {
+      const res = await apiClient.patch<{ enabled: boolean }>(
+        '/api/admin/business-assistant/diagnostic-mode',
+        { enabled },
+      )
+      setDiagnosticModeState(Boolean(res.enabled))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update diagnostic mode')
+    }
+  }, [])
+
+  const postClientSnapshot = useCallback(
+    async (snapshotPayload: {
+      client_status?: string
+      webrtc_state?: string
+      last_error?: string | null
+      metadata_json?: Record<string, unknown>
+      route?: string
+      form_adapter?: string | null
+      executor_lease?: string | null
+      manual_takeover?: boolean
+      staged_fields?: Record<string, unknown> | null
+    }) => {
+      if (!activeConversationId) return
+      const err = snapshotPayload.last_error
+      if (err) {
+        const lower = err.toLowerCase()
+        if (
+          lower.includes('inactivity') ||
+          lower.includes('timed out') ||
+          lower.includes('code 1000') ||
+          lower.includes('code 1001') ||
+          lower.includes('code 1005') ||
+          lower.includes('unexpected closure with code 1006') ||
+          lower.includes('closed unexpectedly with code 1006') ||
+          lower.includes('unavailable while closing') ||
+          lower.includes('disconnected while closing') ||
+          lower.includes('disconnected before session.closed')
+        ) {
+          return
+        }
+      }
+      try {
+        await apiClient.post(
+          `/api/admin/business-assistant/conversations/${activeConversationId}/client-state`,
+          snapshotPayload,
+        )
+      } catch {
+        // Non-blocking best-effort snapshot
+      } finally {
+        void loadMessages(activeConversationId)
+      }
+    },
+    [activeConversationId, loadMessages],
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleToolComplete = () => {
+      if (activeConversationId) {
+        void loadMessages(activeConversationId)
+      }
+    }
+    window.addEventListener('assistant-rpc:action', handleToolComplete)
+    window.addEventListener('assistant-tool:complete', handleToolComplete)
+    return () => {
+      window.removeEventListener('assistant-rpc:action', handleToolComplete)
+      window.removeEventListener('assistant-tool:complete', handleToolComplete)
+    }
+  }, [activeConversationId, loadMessages])
+
+  useEffect(() => {
+    let active = true
+    apiClient
+      .get<{ enabled: boolean }>('/api/admin/business-assistant/diagnostic-mode')
+      .then((res) => {
+        if (active && res) {
+          setDiagnosticModeState(Boolean(res.enabled))
+        }
+      })
+      .catch(() => {
+        // Fallback or offline uses default
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Accumulate streaming voice transcripts into messages without splitting words onto separate lines
+  const handleVoiceCaptionsChange = useCallback(
+    (captions: GPTLiveCaption[]) => {
+      setVoiceCaptions(captions)
+      if (captions.length === 0) return
+
+      setMessages((prev) => {
+        const baseMessages = prev.filter((m) => m.id > 0)
+        const voiceDrafts = prev.filter((m) => m.id < 0 && m.channel === 'realtime_voice')
+
+        const updatedVoiceMessages: ConversationMessage[] = captions.map((caption, idx) => {
+          const role = caption.speaker === 'user' ? 'user' : 'business_assistant'
+          const existing = voiceDrafts[idx]
+          const id = existing ? existing.id : -(idx + 1)
+          return {
+            id,
+            conversation_id: activeConversationId ?? 0,
+            role,
+            content: caption.text,
+            in_reply_to_message_id: null,
+            created_at: existing ? existing.created_at : new Date().toISOString(),
+            channel: 'realtime_voice',
+          }
+        })
+
+        return [...baseMessages, ...updatedVoiceMessages]
+      })
+    },
+    [activeConversationId],
+  )
+
+  const livekitVoice = useLiveKitVoice({
+    conversationId: activeConversationId,
+    onCaptionsChange: handleVoiceCaptionsChange,
+    onError: (msg) => {
+      setError(msg)
+      if (activeConversationId) {
+        void postClientSnapshot({
+          client_status: 'error',
+          webrtc_state: 'local_livekit',
+          last_error: msg,
+        })
+      }
+    },
+    onNavigate: (path) => navigate(path),
+    onRpcReceipt: (receipt) => {
+      setLastRpcReceipt(receipt)
+      if (activeConversationId) {
+        void loadMessages(activeConversationId)
+      }
+    },
+    onActivityLog: addActivityLog,
+  })
+
+  const directVoice = useGPTLive({
+    conversationId: activeConversationId,
+    onCaptionsChange: handleVoiceCaptionsChange,
+    onError: (msg) => {
+      setError(msg)
+      if (activeConversationId) {
+        void postClientSnapshot({
+          client_status: 'error',
+          webrtc_state: 'direct_gpt_live',
+          last_error: msg,
+        })
+      }
+    },
+    onNavigate: (path) => navigate(path),
+    onRpcReceipt: (receipt) => {
+      setLastRpcReceipt(receipt)
+      if (activeConversationId) {
+        void loadMessages(activeConversationId)
+      }
+    },
+    onToolCallComplete: () => {
+      if (activeConversationId) {
+        void loadMessages(activeConversationId)
+      }
+    },
+    onActivityLog: addActivityLog,
+  })
+
+  const xaiVoice = useXAIGrokVoice({
+    conversationId: activeConversationId,
+    onCaptionsChange: handleVoiceCaptionsChange,
+    onError: (msg) => {
+      setError(msg)
+      if (activeConversationId) {
+        void postClientSnapshot({
+          client_status: 'error',
+          webrtc_state: 'xai_grok_voice',
+          last_error: msg,
+        })
+      }
+    },
+    onNavigate: (path) => navigate(path),
+    onRpcReceipt: (receipt) => {
+      setLastRpcReceipt(receipt)
+      if (activeConversationId) {
+        void loadMessages(activeConversationId)
+      }
+    },
+    onActivityLog: addActivityLog,
+  })
+
+  const isXai = transport === 'xai_grok_voice'
+  const isDirect = transport === 'direct_gpt_live'
+  const activeVoice = isXai ? xaiVoice : isDirect ? directVoice : livekitVoice
+
+  const voiceState = activeVoice.voiceState
+  const stopVoice = useCallback(() => {
+    xaiVoice.stopVoice()
+    livekitVoice.stopVoice()
+    directVoice.stopVoice()
+  }, [xaiVoice, livekitVoice, directVoice])
+  const isMuted = activeVoice.isMuted
+  const toggleMute = activeVoice.toggleMute
+
+  const setTransport = useCallback(
+    async (newTransport: VoiceTransportMode) => {
+      stopVoice()
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('business-assistant-transport', newTransport)
+      }
+      setTransportState(newTransport)
+      try {
+        const res = await apiClient.patch<VoiceTransportDetails>(
+          '/api/admin/business-assistant/voice/transport',
+          { transport: newTransport },
+        )
+        setTransportState(res.transport)
+        setTransportDetails(res)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to switch transport')
+      }
+    },
+    [stopVoice],
+  )
+
+  const updateTransportConfig = useCallback(
+    async (params: {
+      transport: VoiceTransportMode
+      cloud_livekit_url?: string
+      cloud_livekit_api_key?: string
+      cloud_livekit_api_secret?: string
+    }) => {
+      stopVoice()
+      try {
+        const res = await apiClient.patch<VoiceTransportDetails>(
+          '/api/admin/business-assistant/voice/transport',
+          params,
+        )
+        setTransportState(res.transport)
+        setTransportDetails(res)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update transport configuration')
+      }
+    },
+    [stopVoice],
+  )
+
+  useEffect(() => {
+    let active = true
+    const savedTransport =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('business-assistant-transport')
+        : null
+
+    apiClient
+      .get<VoiceTransportDetails>('/api/admin/business-assistant/voice/transport')
+      .then((res) => {
+        if (active && res) {
+          setTransportDetails(res)
+          if (
+            savedTransport &&
+            ['xai_grok_voice', 'direct_gpt_live', 'local_livekit', 'cloud_livekit'].includes(
+              savedTransport,
+            )
+          ) {
+            setTransportState(savedTransport as VoiceTransportMode)
+          } else if (res.transport) {
+            setTransportState(res.transport)
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback or offline uses default
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeConversationId) return
+    const adapter =
+      formAdapterRegistry.getAdapterForRoute(location.pathname) ||
+      formAdapterRegistry.getActiveAdapter()
+    const formAdapterId =
+      adapter?.form_id ||
+      (location.pathname.startsWith('/admin/settings/business')
+        ? 'business_settings'
+        : undefined)
+
+    void postClientSnapshot({
+      client_status: 'ready',
+      route: location.pathname,
+      form_adapter: formAdapterId,
+    })
+  }, [activeConversationId, location.pathname, postClientSnapshot])
 
   const refreshConversations = useCallback(async () => {
     setLoading(true)
@@ -225,6 +565,32 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       setLoading(false)
     }
   }, [activeConversationId, loadMessages])
+
+  // Multi-tenant and logout scope isolation: clear all state and stop voice on tenant/user change
+  const authContext = useContext(AuthContext)
+  const currentTenantUserKey = authContext?.user
+    ? `${authContext.user.tenant_id ?? 0}:${authContext.user.id}`
+    : null
+  const previousUserKeyRef = useRef<string | null>(currentTenantUserKey)
+
+  useEffect(() => {
+    if (previousUserKeyRef.current !== currentTenantUserKey) {
+      previousUserKeyRef.current = currentTenantUserKey
+      stopVoice()
+      setDrawerOpen(false)
+      setActiveConversationId(null)
+      setConversations([])
+      setMessages([])
+      setVoiceCaptions([])
+      setActivityLogs([])
+      clearPersistedAgentActivityLogs()
+      setError(null)
+      setTurnError(null)
+      if (currentTenantUserKey) {
+        void refreshConversations()
+      }
+    }
+  }, [currentTenantUserKey, stopVoice, refreshConversations])
 
   const initialLoadedRef = useRef(false)
   useEffect(() => {
@@ -261,6 +627,26 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
     }
   }, [])
 
+  const startVoice = useCallback(
+    async (requestedConversationId?: number) => {
+      let targetConversationId =
+        requestedConversationId ?? activeConversationId ?? (conversations.length > 0 ? conversations[0].id : null)
+      if (!targetConversationId) {
+        targetConversationId = await createConversation()
+        if (!targetConversationId) {
+          setError('Unable to start voice session: failed to create conversation.')
+          return
+        }
+      }
+      if (targetConversationId !== activeConversationId) {
+        setActiveConversationId(targetConversationId)
+        void loadMessages(targetConversationId)
+      }
+      await activeVoice.startVoice(targetConversationId)
+    },
+    [activeConversationId, conversations, createConversation, loadMessages, activeVoice, setError],
+  )
+
   const sendTurn = useCallback(
     async (overrideContent?: string) => {
       let targetConversationId = activeConversationId
@@ -281,6 +667,16 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       setSending(true)
       setTurnError(null)
 
+      addActivityLog({
+        type: 'USER_INPUT',
+        title: 'User Text Turn',
+        details: content,
+        payload: { content, conversation_id: targetConversationId, request_key: nextRequestKey },
+        status: 'info',
+        agentLabel: 'User / Client Input',
+        modelName: 'client',
+      })
+
       try {
         const result = await apiClient.post<TextTurnResponse>(
           `/api/admin/business-assistant/conversations/${targetConversationId}/messages`,
@@ -290,12 +686,30 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
           const withoutCurrent = current.filter((m) => m.id !== result.user_message.id)
           return [...withoutCurrent, result.user_message, result.assistant_message]
         })
+        addActivityLog({
+          type: 'REASONING_OUT',
+          title: 'Assistant Response',
+          details: result.assistant_message.content,
+          payload: result,
+          status: 'success',
+          agentLabel: 'GPT-4o (Text Assistant)',
+          modelName: 'gpt-4o',
+        })
         if (!overrideContent) {
           setDraft('')
         }
         setPendingRequestKey(null)
         setTurnError(null)
       } catch (caught) {
+        addActivityLog({
+          type: 'ERROR',
+          title: 'Text Turn Failed',
+          details: caught instanceof Error ? caught.message : 'The message could not be submitted.',
+          payload: caught,
+          status: 'error',
+          agentLabel: 'GPT-4o (Text Assistant)',
+          modelName: 'gpt-4o',
+        })
         setTurnError(toUserFacingApiError(caught, 'The message could not be submitted.'))
         try {
           await loadMessages(targetConversationId)
@@ -308,6 +722,7 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
     },
     [
       activeConversationId,
+      addActivityLog,
       createConversation,
       draft,
       includePageContext,
@@ -341,14 +756,19 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       voiceCaptions,
       startVoice,
       stopVoice,
-      isMuted: livekitVoice.isMuted,
-      toggleMute: livekitVoice.toggleMute,
+      isMuted,
+      toggleMute,
       audioDevices: livekitVoice.audioDevices,
       activeAudioDeviceId: livekitVoice.activeAudioDeviceId,
       switchAudioDevice: livekitVoice.switchAudioDevice,
       transport,
       setTransport,
+      transportDetails,
+      updateTransportConfig,
       lastRpcReceipt,
+      diagnosticMode,
+      setDiagnosticMode,
+      postClientSnapshot,
       createConversation,
       selectConversation,
       sendTurn,
@@ -356,6 +776,9 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       pageContext,
       includePageContext,
       setIncludePageContext,
+      activityLogs,
+      clearActivityLogs,
+      addActivityLog,
     }),
     [
       drawerOpen,
@@ -374,20 +797,28 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       voiceCaptions,
       startVoice,
       stopVoice,
-      livekitVoice.isMuted,
-      livekitVoice.toggleMute,
+      isMuted,
+      toggleMute,
       livekitVoice.audioDevices,
       livekitVoice.activeAudioDeviceId,
       livekitVoice.switchAudioDevice,
       transport,
       setTransport,
+      transportDetails,
+      updateTransportConfig,
       lastRpcReceipt,
+      diagnosticMode,
+      setDiagnosticMode,
+      postClientSnapshot,
       createConversation,
       selectConversation,
       sendTurn,
       refreshConversations,
       pageContext,
       includePageContext,
+      activityLogs,
+      clearActivityLogs,
+      addActivityLog,
     ],
   )
 
@@ -404,4 +835,8 @@ export function useBusinessAssistant() {
     throw new Error('useBusinessAssistant must be used within a BusinessAssistantProvider')
   }
   return context
+}
+
+export function useBusinessAssistantOptional(): BusinessAssistantContextType | null {
+  return useContext(BusinessAssistantContext)
 }

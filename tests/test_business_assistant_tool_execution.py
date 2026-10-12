@@ -120,11 +120,27 @@ def test_read_system_settings_safe_and_scrubbed(db_session):
     assert "secret" not in settings_data
     assert "api_key" not in settings_data
 
-    # Read specific safe key
+    # Read specific safe keys and aliases
     tz_res = registry.execute("read_system_settings", {"setting_key": "timezone"})
     assert tz_res["status"] == "ok"
     assert tz_res["key"] == "timezone"
     assert tz_res["value"] == "Australia/Sydney"
+
+    name_res = registry.execute("read_system_settings", {"setting_key": "business_name"})
+    assert name_res["status"] == "ok"
+    assert name_res["value"] == tenant.name
+
+    curr_res = registry.execute("read_system_settings", {"setting_key": "currency"})
+    assert curr_res["status"] == "ok"
+    assert curr_res["value"] in ("AUD", "USD")
+
+    phone_res = registry.execute("read_system_settings", {"setting_key": "phone"})
+    assert phone_res["status"] == "ok"
+    assert phone_res["value"] == (tenant.phone or "")
+
+    email_res = registry.execute("read_system_settings", {"setting_key": "contact_email"})
+    assert email_res["status"] == "ok"
+    assert email_res["value"] == (tenant.email or "")
 
     # Reject non-allowlisted / secret keys
     reject_res = registry.execute("read_system_settings", {"setting_key": "chatwoot_account_id"})

@@ -671,9 +671,18 @@ class OnboardingToolPack:
             target_step = OnboardingPlanService.get_step_by_id(plan, step_id)
         else:
             for s in plan.steps:
-                if s.form_id == form_id:
+                if s.form_id == form_id or s.step_id == form_id:
                     target_step = s
                     break
+            if not target_step:
+                for s in plan.steps:
+                    if (s.form_id and form_id.lower() in s.form_id.lower()) or (s.step_id and form_id.lower() in s.step_id.lower()):
+                        target_step = s
+                        break
+            if not target_step and plan.current_step_id:
+                target_step = OnboardingPlanService.get_step_by_id(plan, plan.current_step_id)
+            if not target_step and plan.steps:
+                target_step = plan.steps[0]
 
         errors: Dict[str, List[str]] = {}
         if target_step:
@@ -701,6 +710,10 @@ class OnboardingToolPack:
         self._dispatch_rpc("validate_form", {"form_id": form_id, "valid": len(errors) == 0})
 
         if errors:
+            err_details = []
+            for field_name, field_errs in errors.items():
+                err_details.append(f"{field_name}: {'; '.join(field_errs)}")
+            err_summary = "; ".join(err_details)
             return {
                 "status": "error",
                 "action": "validate_form",
@@ -708,7 +721,7 @@ class OnboardingToolPack:
                 "valid": False,
                 "errors": errors,
                 "receipt_state": "failed",
-                "message": f"Form validation failed with {len(errors)} error(s).",
+                "message": f"Form validation failed for '{form_id}': {err_summary}",
             }
 
         return {

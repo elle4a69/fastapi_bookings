@@ -2260,10 +2260,14 @@ class BusinessAssistantService:
                 .first()
             )
         snap = client_snapshot_rec.snapshot if (client_snapshot_rec and isinstance(client_snapshot_rec.snapshot, dict)) else {}
+        curr_route = snap.get("route") or "/admin"
+        form_adapter_val = snap.get("form_adapter")
+        if not form_adapter_val and curr_route in ("/admin/settings/business", "/admin/settings", "/admin/onboarding"):
+            form_adapter_val = "business_settings"
         step_4 = {
-            "current_route": snap.get("route") or "/admin",
-            "form_adapter_registered": bool(snap.get("form_adapter")),
-            "form_adapter": snap.get("form_adapter"),
+            "current_route": curr_route,
+            "form_adapter_registered": bool(form_adapter_val),
+            "form_adapter": form_adapter_val,
             "executor_lease": snap.get("executor_lease"),
             "manual_takeover": bool(snap.get("manual_takeover", False)),
             "staged_fields_count": len(snap.get("staged_fields", {})) if isinstance(snap.get("staged_fields"), dict) else 0,

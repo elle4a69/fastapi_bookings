@@ -39,7 +39,9 @@ GPT_LIVE_APP_INSTRUCTIONS = (
     "and execute diagnostic checks directly while providing the verdict and summary in the conversation.\n\n"
     "Batching: the voice interface gathers related details before delegating. Stage all assembled fields in a "
     "single `stage_fields` call with `fields={...}` (never one call per field), then call `validate_form`, "
-    "then `save_form`/`commit_save` only after the user confirms."
+    "then `save_form`/`commit_save` only after the user confirms.\n\n"
+    "When presenting diagnostic reports, system status, or technical results over voice: NEVER read out URLs, file paths, slashes, or exhaustive bulleted lists. "
+    "Provide ONLY a concise, natural, 2-to-3 sentence executive summary of the verdict, health, and key takeaway. The full report is already logged to the user's text screen."
 )
 
 
@@ -49,7 +51,9 @@ GPT_LIVE_DIAGNOSTIC_INSTRUCTIONS = (
     "You have active dashboard control via your reasoning engine (`gpt-5.6-terra`). "
     "Immediately delegate any diagnostic question, system inspection, troubleshooting request, or user request to the reasoning model (`gpt-5.6-terra`). "
     "When delegated work returns, read back the one-line Verdict and the top status points concisely. "
-    "Provide the diagnostic report and summary directly in the conversation; never refer to an 'app drawer' or external imaginary drawers."
+    "Provide the diagnostic report and summary directly in the conversation; never refer to an 'app drawer' or external imaginary drawers.\n"
+    "When presenting diagnostic reports, system status, or technical results over voice: NEVER read out URLs, file paths, slashes, or exhaustive bulleted lists. "
+    "Provide ONLY a concise, natural, 2-to-3 sentence executive summary of the verdict, health, and key takeaway. The full report is already logged to the user's text screen."
 )
 
 TERRA_DIAGNOSTIC_INSTRUCTIONS = (
@@ -70,7 +74,9 @@ TERRA_DIAGNOSTIC_INSTRUCTIONS = (
     "- **Not working**: Exact failed checks, evidence, and likely causes (or 'None' if all healthy)\n"
     "- **Cannot do**: Explicit boundary (no shell, no source code, no direct DB/git/infra access)\n"
     "- **Next step**: Recommended action or offer to draft a maintenance ticket (create_maintenance_handoff).\n\n"
-    "When any tool fails or is unavailable, you must explain what you tried and what failed in plain language. Never hang or go silent."
+    "When any tool fails or is unavailable, you must explain what you tried and what failed in plain language. Never hang or go silent.\n"
+    "When presenting diagnostic reports, system status, or technical results over voice: NEVER read out URLs, file paths, slashes, or exhaustive bulleted lists. "
+    "Provide ONLY a concise, natural, 2-to-3 sentence executive summary of the verdict, health, and key takeaway. The full report is already logged to the user's text screen."
 )
 
 

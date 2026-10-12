@@ -8,7 +8,7 @@ external-action capability.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, time, timezone
 from typing import Any, Optional
 
@@ -28,9 +28,19 @@ from ..repository import BusinessAssistantRepository
 SAFE_TENANT_SETTING_FIELDS: frozenset[str] = frozenset(
     {
         "name",
+        "business_name",
         "subdomain",
         "timezone",
         "country",
+        "currency",
+        "email",
+        "contact_email",
+        "business_email",
+        "phone",
+        "contact_phone",
+        "business_phone",
+        "address",
+        "business_address",
         "subscription_tier",
         "addon_quota",
         "enabled_modules",
@@ -124,6 +134,8 @@ class WebsiteStateInfo:
     has_pending_draft: bool
     sections_count: int
     recent_proposals: list[dict[str, Any]]
+    sections_outline: dict[str, Any] = field(default_factory=dict)
+    pending_proposals: list[dict[str, Any]] = field(default_factory=list)
 
     def tool_result(self) -> dict[str, Any]:
         return asdict(self)
@@ -275,10 +287,12 @@ class BusinessAssistantReadAdapters:
     def read_system_settings(self, *, setting_key: Optional[str] = None) -> dict[str, Any]:
         """Read allowlisted tenant settings and operational rules without leaking secrets."""
         tenant = self._get_tenant()
+        currency = "AUD" if (not tenant.country or str(tenant.country).upper() in ("AU", "AUS", "AUSTRALIA")) else "USD"
+
         safe_settings = SystemSettingsRead(
             name=tenant.name,
             subdomain=tenant.subdomain,
-            timezone=tenant.timezone,
+            timezone=tenant.timezone or "Australia/Sydney",
             country=tenant.country,
             subscription_tier=tenant.subscription_tier,
             addon_quota=tenant.addon_quota,
@@ -291,16 +305,30 @@ class BusinessAssistantReadAdapters:
             assistant_policy=tenant.assistant_policy,
         ).tool_result()
 
+        # Augment with recognized business profile & localization aliases
+        safe_settings["business_name"] = tenant.name
+        safe_settings["currency"] = currency
+        safe_settings["email"] = tenant.email or ""
+        safe_settings["contact_email"] = tenant.email or ""
+        safe_settings["business_email"] = tenant.email or ""
+        safe_settings["phone"] = tenant.phone or ""
+        safe_settings["contact_phone"] = tenant.phone or ""
+        safe_settings["business_phone"] = tenant.phone or ""
+        safe_settings["address"] = tenant.address or ""
+        safe_settings["business_address"] = tenant.address or ""
+
         if setting_key is not None:
-            if setting_key not in SAFE_TENANT_SETTING_FIELDS:
+            clean_key = setting_key.strip().lower()
+            if clean_key not in SAFE_TENANT_SETTING_FIELDS:
                 return {
                     "status": "rejected",
                     "reason": f"Setting key '{setting_key}' is not accessible or not recognized.",
                 }
+            val = safe_settings.get(clean_key, safe_settings.get(setting_key))
             return {
                 "status": "ok",
                 "key": setting_key,
-                "value": safe_settings.get(setting_key),
+                "value": val,
             }
 
         return {"status": "ok", "settings": safe_settings}
@@ -672,6 +700,44 @@ class BusinessAssistantReadAdapters:
 
         sections_count = len(website.sections_data) if website and isinstance(website.sections_data, dict) else 0
 
+        sections_data = website.sections_data if (website and isinstance(website.sections_data, dict)) else {}
+        sections_outline: dict[str, Any] = {}
+        for sec in ("hero", "about", "services", "gallery", "booking", "testimonials", "contact", "footer"):
+            if sec in sections_data and isinstance(sections_data[sec], dict):
+                sec_val = sections_data[sec]
+                outline_entry = {
+                    "enabled": bool(sec_val.get("enabled", True)),
+                    "headline": str(sec_val.get("headline", "") or ""),
+                    "subhead": str(sec_val.get("subhead", "") or ""),
+                }
+                if sec in ("services", "gallery", "testimonials"):
+                    items = sec_val.get("items", [])
+                    outline_entry["items_count"] = len(items) if isinstance(items, list) else 0
+                if sec == "contact":
+                    outline_entry["address"] = str(sec_val.get("address", "") or "")
+                    outline_entry["phone"] = str(sec_val.get("phone", "") or "")
+                    outline_entry["email"] = str(sec_val.get("email", "") or "")
+                    outline_entry["hours"] = str(sec_val.get("hours", "") or "")
+                sections_outline[sec] = outline_entry
+            elif website:
+                sections_outline[sec] = {
+                    "enabled": False,
+                    "headline": "",
+                    "subhead": "",
+                }
+
+        pending_proposals: list[dict[str, Any]] = []
+        all_proposals = proposals if include_history else self._repository.list_website_proposals(limit=10)
+        for p in all_proposals:
+            if p.status in ("draft", "preview"):
+                pending_proposals.append({
+                    "id": p.id,
+                    "version": p.version,
+                    "title": p.title,
+                    "status": p.status,
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                })
+
         return WebsiteStateInfo(
             tenant_id=self._tenant_id,
             is_published=website.is_published if website else False,
@@ -689,6 +755,8 @@ class BusinessAssistantReadAdapters:
             has_pending_draft=bool(latest_proposal and latest_proposal.status in ("draft", "preview")),
             sections_count=sections_count,
             recent_proposals=history,
+            sections_outline=sections_outline,
+            pending_proposals=pending_proposals,
         )
 
 

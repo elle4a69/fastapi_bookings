@@ -27,6 +27,11 @@ export function normalizeRoute(rawRoute: string): string {
   // Remove any search params or hashes for route allowlist comparison
   const pathOnly = trimmed.split('?')[0].split('#')[0]
 
+  // Check exact path match in ROUTE_ALIASES first
+  if (ROUTE_ALIASES[pathOnly]) {
+    return ROUTE_ALIASES[pathOnly]
+  }
+
   // Strip leading/trailing whitespace and lower-case alias lookup
   const cleanKey = pathOnly.toLowerCase().replace(/^\/+/, '').replace(/\/+$/, '')
   if (ROUTE_ALIASES[cleanKey]) {
@@ -284,20 +289,34 @@ export function populateInputFieldInDom(field: string, value: unknown): { succes
   }
 
   const cleanField = field.trim()
-  const candidateSelectors = [
-    `input[name="${cleanField}"]`,
-    `textarea[name="${cleanField}"]`,
-    `select[name="${cleanField}"]`,
-    `[data-field-name="${cleanField}"] input`,
-    `[data-field-name="${cleanField}"] textarea`,
-    `[data-field-name="${cleanField}"] select`,
-    `[data-field-name="${cleanField}"]`,
-    `[data-testid="input-${cleanField}"]`,
-    `#${cleanField}`,
-    `[name="${cleanField}"]`,
-    `#field-${cleanField}`,
-    `[id="${cleanField}"]`,
-  ]
+  const aliasKeys: string[] = [cleanField]
+  if (cleanField === 'business_name') aliasKeys.push('name', 'businessName', 'company_name', 'business-name')
+  else if (cleanField === 'name') aliasKeys.push('business_name', 'display_name')
+  else if (cleanField === 'business_email' || cleanField === 'support_email') aliasKeys.push('email', 'contact_email', 'businessEmail')
+  else if (cleanField === 'email') aliasKeys.push('business_email', 'support_email', 'contact_email')
+  else if (cleanField === 'business_phone' || cleanField === 'support_phone') aliasKeys.push('phone', 'contact_phone', 'businessPhone')
+  else if (cleanField === 'phone') aliasKeys.push('business_phone', 'support_phone', 'contact_phone')
+  else if (cleanField === 'business_address') aliasKeys.push('address', 'businessAddress')
+  else if (cleanField === 'address') aliasKeys.push('business_address', 'address_line1', 'street')
+  else if (cleanField === 'display_name') aliasKeys.push('name', 'solo_provider_name')
+
+  const candidateSelectors: string[] = []
+  for (const k of aliasKeys) {
+    candidateSelectors.push(
+      `input[name="${k}"]`,
+      `textarea[name="${k}"]`,
+      `select[name="${k}"]`,
+      `[data-field-name="${k}"] input`,
+      `[data-field-name="${k}"] textarea`,
+      `[data-field-name="${k}"] select`,
+      `[data-field-name="${k}"]`,
+      `[data-testid="input-${k}"]`,
+      `#${k}`,
+      `[name="${k}"]`,
+      `#field-${k}`,
+      `[id="${k}"]`,
+    )
+  }
 
   let element: HTMLElement | null = null
 
@@ -332,6 +351,10 @@ export function populateInputFieldInDom(field: string, value: unknown): { succes
         element.dispatchEvent(new Event('input', { bubbles: true }))
         element.dispatchEvent(new Event('change', { bubbles: true }))
       } else {
+        const tracker = (element as any)._valueTracker
+        if (tracker) {
+          tracker.setValue(element.value !== stringVal ? element.value : '')
+        }
         const propDesc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
         if (propDesc && propDesc.set) {
           propDesc.set.call(element, stringVal)
@@ -342,6 +365,10 @@ export function populateInputFieldInDom(field: string, value: unknown): { succes
         element.dispatchEvent(new Event('change', { bubbles: true }))
       }
     } else if (element instanceof HTMLTextAreaElement) {
+      const tracker = (element as any)._valueTracker
+      if (tracker) {
+        tracker.setValue(element.value !== stringVal ? element.value : '')
+      }
       const propDesc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
       if (propDesc && propDesc.set) {
         propDesc.set.call(element, stringVal)
@@ -1110,6 +1137,22 @@ export async function executeRpcAction(
 
       tracker.transitionTo('fields_staged')
 
+      let formattedError: string | undefined
+      if (!isValid) {
+        if (valErrors) {
+          if (Array.isArray(valErrors)) {
+            formattedError = `Form validation failed: ${valErrors.join('; ')}`
+          } else {
+            const errParts = Object.entries(valErrors).map(
+              ([fld, errs]) => `${fld}: ${Array.isArray(errs) ? errs.join(', ') : errs}`
+            )
+            formattedError = `Form validation failed: ${errParts.join('; ')}`
+          }
+        } else {
+          formattedError = 'Form validation failed: required fields are missing or invalid.'
+        }
+      }
+
       return {
         action_id: actionId,
         action: 'validate_form',
@@ -1123,7 +1166,8 @@ export async function executeRpcAction(
         validation_valid: isValid,
         validation_errors: valErrors,
         error_code: isValid ? undefined : 'validation_failed',
-        error: isValid ? undefined : 'Form validation failed.',
+        error: formattedError,
+        details: valErrors ? { validation_errors: valErrors } : undefined,
       }
     }
 
