@@ -164,21 +164,103 @@ def test_realtime_session_config_returns_instructions_and_all_tool_schemas(clien
     assert response.status_code == 200
     data = response.json()
     assert "instructions" in data
-    assert "You are the internal Business Assistant" in data["instructions"]
+    assert "Tool selection rules" in data["instructions"]
+    assert "navigate_route and nothing else" in data["instructions"]
+    assert "(GPT-4o)" not in data["instructions"]
     assert "tools" in data
-    assert len(data["tools"]) == 24
+    from app.services.business_assistant.tool_registry import VOICE_BUSINESS_ASSISTANT_TOOLS
+    assert len(data["tools"]) == len(VOICE_BUSINESS_ASSISTANT_TOOLS)
 
     tool_names = {tool["name"] for tool in data["tools"]}
-    assert "read_product_help" in tool_names
+    assert "navigate_route" in tool_names
+    assert "highlight_field" in tool_names
+    assert "stage_fields" in tool_names
+    assert "validate_form" in tool_names
+    assert "commit_save" in tool_names
+    assert "diagnostic_report" in tool_names
+    assert "activate_business_rule" in tool_names
     assert "list_services" in tool_names
     assert "list_providers" in tool_names
     assert "check_slot_availability" in tool_names
-    assert "get_business_rule" in tool_names
-    assert "create_support_ticket" in tool_names
-    assert "inspect_website_state" in tool_names
+    assert "read_system_settings" in tool_names
+
+    # Excluded duplicate and unneeded tools in voice
+    for excluded in ("navigate_show", "save_form", "prepare_fields", "fill_form", "read_status", "confirm_business_rule"):
+        assert excluded not in tool_names
 
     for tool in data["tools"]:
         assert tool["type"] == "function"
         assert isinstance(tool["name"], str) and tool["name"]
         assert isinstance(tool["description"], str)
         assert isinstance(tool["parameters"], dict)
+
+
+def test_realtime_tools_safeguards_against_cascades_and_loops(client, db_session):
+    tenant, user = _owner(db_session, "safeguards")
+    headers = _headers(tenant, user)
+    conversation_id = _conversation(client, headers)
+
+    # 1. navigate_route executes and returns terminal status and directive
+    nav_res = client.post(
+        f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
+        headers=headers,
+        json={"name": "navigate_route", "arguments": {"route": "/admin/clients"}},
+    )
+    assert nav_res.status_code == 200
+    nav_data = nav_res.json()
+    assert nav_data["status"] == "ok"
+    assert nav_data["result"]["terminal"] is True
+    assert "conclude" in nav_data["result"]["directive"].lower() or "completed" in nav_data["result"]["directive"].lower()
+
+    # 2. First diagnostic_report succeeds
+    diag_res1 = client.post(
+        f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
+        headers=headers,
+        json={"name": "diagnostic_report", "arguments": {}},
+    )
+    assert diag_res1.status_code == 200
+    assert diag_res1.json()["status"] == "ok"
+
+    # 3. Immediate second diagnostic_report within 15s is throttled
+    diag_res2 = client.post(
+        f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
+        headers=headers,
+        json={"name": "diagnostic_report", "arguments": {}},
+    )
+    assert diag_res2.status_code == 200
+    diag2_data = diag_res2.json()
+    assert diag2_data["result"]["throttled"] is True
+    assert diag2_data["result"]["verdict"] == "Cached"
+
+    # 4. Rapid-fire barrage of calls triggers burst protection rate limit (max 4 calls per 3s)
+    # Note: We already made 3 calls above in this second, so the next 2 calls should hit the burst limit
+    burst_res = None
+    for _ in range(3):
+        burst_res = client.post(
+            f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
+            headers=headers,
+            json={"name": "read_product_help", "arguments": {"topic": "general"}},
+        )
+    assert burst_res.status_code == 200
+    assert burst_res.json()["status"] == "rejected"
+    assert "rate limit exceeded" in burst_res.json()["reason"].lower()
+
+
+def test_onboarding_tools_allow_rapid_burst_sequence(client, db_session):
+    """Verify onboarding tools (stage_fields, validate_form, commit_save, etc.) are permitted
+    in rapid succession without being blocked by general 4-call burst limits."""
+    tenant, user = _owner(db_session, "burst_onboarding")
+    headers = _headers(tenant, user)
+    conversation_id = _conversation(client, headers)
+
+    # Execute 6 rapid onboarding status calls in immediate succession
+    for _ in range(6):
+        res = client.post(
+            f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
+            headers=headers,
+            json={"name": "get_onboarding_status", "arguments": {"include_facts": True}},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "ok"
+        assert "rate limit exceeded" not in (data.get("reason") or "").lower()

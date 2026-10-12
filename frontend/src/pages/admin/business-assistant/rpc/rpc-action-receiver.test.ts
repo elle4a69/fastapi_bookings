@@ -9,6 +9,7 @@ import {
   normalizeRoute,
   normalizeSection,
   executeRpcAction,
+  LeaseTokenManager,
 } from './action-catalogue.ts'
 import { createAssistantRpcHandler, registerAssistantRpcMethods } from './rpc-receiver.ts'
 import { validateAssistantRpcSender } from './sender-validation.ts'
@@ -108,7 +109,11 @@ test('normalizeRoute resolves canonical routes and friendly aliases', () => {
   assert.equal(normalizeRoute('website_editor'), '/admin/website')
   assert.equal(normalizeRoute('media'), '/admin/media')
   assert.equal(normalizeRoute('services'), '/admin/catalog/services')
+  assert.equal(normalizeRoute('catalog'), '/admin/catalog/services')
+  assert.equal(normalizeRoute('/admin/catalog'), '/admin/catalog/services')
   assert.equal(normalizeRoute('onboarding'), '/admin/settings/business')
+  assert.equal(normalizeRoute('settings'), '/admin/settings/business')
+  assert.equal(normalizeRoute('/admin/settings'), '/admin/settings/business')
   assert.equal(normalizeRoute('bookings'), '/admin/bookings')
   assert.equal(normalizeRoute('/admin/website?tab=sections'), '/admin/website')
 })
@@ -117,7 +122,11 @@ test('isRouteAllowlisted strictly allows approved admin routes and rejects unsaf
   assert.equal(isRouteAllowlisted('/admin/website'), true)
   assert.equal(isRouteAllowlisted('/admin/media'), true)
   assert.equal(isRouteAllowlisted('/admin/catalog/services'), true)
+  assert.equal(isRouteAllowlisted('/admin/catalog'), true)
   assert.equal(isRouteAllowlisted('/admin/settings/business'), true)
+  assert.equal(isRouteAllowlisted('/admin/settings'), true)
+  assert.equal(isRouteAllowlisted('catalog'), true)
+  assert.equal(isRouteAllowlisted('settings'), true)
   assert.equal(isRouteAllowlisted('website'), true)
   assert.equal(isRouteAllowlisted('services'), true)
 
@@ -167,6 +176,66 @@ test('executeRpcAction route_navigation dispatches navigation and returns receip
   assert.equal(rejectedReceipt.status, 'rejected')
   assert.match(rejectedReceipt.error ?? '', /not in the allowlisted/i)
 })
+
+test('executeRpcAction navigate_route from xai-grok-voice inherits active tab lease and navigates to aliased /admin/services', async () => {
+  const leaseMgr = new LeaseTokenManager()
+  leaseMgr.acquireLease('active_tab_lease_token_123', 60000)
+
+  let navigatedPath: string | null = null
+  const context: RpcReceiverContext = {
+    onNavigate: (path) => {
+      navigatedPath = path
+    },
+  }
+
+  // Caller is xai-grok-voice, payload has no lease_token (comes directly from LLM tool call)
+  const receipt = await executeRpcAction(
+    'navigate_route',
+    { route: '/admin/services' },
+    {
+      actionId: 'act_grok_nav_1',
+      callerIdentity: 'xai-grok-voice',
+      context,
+      leaseManager: leaseMgr,
+    },
+  )
+
+  assert.equal(receipt.status, 'success')
+  assert.equal(receipt.action, 'route_navigation')
+  assert.equal(receipt.resulting_page, '/admin/catalog/services')
+  assert.equal(navigatedPath, '/admin/catalog/services')
+})
+
+test('executeRpcAction navigate_route handles target_route parameter name and subtab', async () => {
+  let navigatedPath: string | null = null
+  let navigatedSubtab: string | null = null
+
+  const context: RpcReceiverContext = {
+    onNavigate: (path) => {
+      navigatedPath = path
+    },
+    onNavigateSubtab: (subtab) => {
+      navigatedSubtab = subtab
+      return { success: true, active_subtab: subtab }
+    },
+  }
+
+  const receipt = await executeRpcAction(
+    'navigate_route',
+    { target_route: '/admin/settings/business', subtab: 'hours' },
+    {
+      actionId: 'act_grok_nav_2',
+      callerIdentity: 'xai-grok-voice',
+      context,
+    },
+  )
+
+  assert.equal(receipt.status, 'success')
+  assert.equal(receipt.resulting_page, '/admin/settings/business')
+  assert.equal(navigatedPath, '/admin/settings/business')
+  assert.equal(navigatedSubtab, 'hours')
+})
+
 
 // ── 3. PREVIEW TOGGLE TESTS ─────────────────────────────────────────────
 
@@ -385,3 +454,69 @@ test('registerAssistantRpcMethods registers all methods on Room and provides cle
   assert.equal(unregistered.length, 6)
   assert.equal(Object.keys(registered).length, 0)
 })
+
+test('allowlists /admin/resident-agent and /admin/coding-studio routes and aliases', () => {
+  assert.equal(isRouteAllowlisted('/admin/resident-agent'), true)
+  assert.equal(isRouteAllowlisted('/admin/coding-studio'), true)
+  assert.equal(isRouteAllowlisted('resident-agent'), true)
+  assert.equal(isRouteAllowlisted('coding-studio'), true)
+  assert.equal(normalizeRoute('resident-agent'), '/admin/resident-agent')
+  assert.equal(normalizeRoute('coding_studio'), '/admin/coding-studio')
+})
+
+test('executeRpcAction handles create_maintenance_handoff and create_support_ticket gracefully', async () => {
+  const receipt1 = await executeRpcAction(
+    'create_maintenance_handoff',
+    {
+      title: 'Database connection latency spike',
+      description: 'Investigate DB timeout',
+      category: 'support',
+    },
+    { callerIdentity: 'test_assistant' },
+  )
+
+  assert.equal(receipt1.status, 'success')
+  assert.equal(receipt1.receipt_state, 'saved')
+  assert.equal(receipt1.action, 'create_maintenance_handoff')
+  assert.equal(receipt1.caller_identity, 'test_assistant')
+
+  const receipt2 = await executeRpcAction(
+    'create_support_ticket',
+    {
+      title: 'UI component misalignment in calendar',
+      priority: 'normal',
+    },
+    { callerIdentity: 'test_assistant' },
+  )
+
+  assert.equal(receipt2.status, 'success')
+  assert.equal(receipt2.receipt_state, 'saved')
+  assert.equal(receipt2.action, 'create_support_ticket')
+})
+
+test('executeRpcAction handles diagnostic_report and run_diagnostic_check without unsupported_action error', async () => {
+  const receipt1 = await executeRpcAction(
+    'diagnostic_report',
+    {},
+    { callerIdentity: 'test_assistant' },
+  )
+
+  assert.equal(receipt1.status, 'success')
+  assert.equal(receipt1.receipt_state, 'saved')
+  assert.equal(receipt1.action, 'diagnostic_report')
+  assert.notEqual(receipt1.error_code, 'unsupported_action')
+  assert.ok(receipt1.applied_fields)
+
+  const receipt2 = await executeRpcAction(
+    'run_diagnostic_check',
+    {},
+    { callerIdentity: 'test_assistant' },
+  )
+
+  assert.equal(receipt2.status, 'success')
+  assert.equal(receipt2.receipt_state, 'saved')
+  assert.equal(receipt2.action, 'diagnostic_report')
+  assert.notEqual(receipt2.error_code, 'unsupported_action')
+})
+
+

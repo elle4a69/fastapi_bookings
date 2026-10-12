@@ -145,9 +145,9 @@ class Settings(BaseSettings):
         description="Maximum provider request duration for one internal text turn.",
     )
     BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS: int = Field(
-        3,
+        10,
         ge=0,
-        le=6,
+        le=20,
         description="Maximum server-authorised read-tool rounds in one internal text turn.",
     )
     BUSINESS_ASSISTANT_REALTIME_MODEL: str = Field(
@@ -200,12 +200,42 @@ class Settings(BaseSettings):
     OUTBOX_RETRY_MAX_SECONDS: float = Field(300.0, ge=1.0, description="Maximum outbox retry delay")
     OUTBOX_RETRY_JITTER_RATIO: float = Field(0.2, ge=0.0, le=1.0, description="Bounded outbox retry jitter")
 
+    # LiveKit Voice Assistant Settings
+    LIVEKIT_URL: str = Field("ws://127.0.0.1:7880", description="LiveKit server WebSocket URL")
+    LIVEKIT_API_KEY: str = Field("devkey", description="LiveKit server API key")
+    LIVEKIT_API_SECRET: str = Field("secret", description="LiveKit server API secret")
+    LIVEKIT_LOCAL_URL: str = Field("ws://127.0.0.1:7880", description="LiveKit local server WebSocket URL")
+    LIVEKIT_LOCAL_API_KEY: str = Field("devkey", description="LiveKit local API key")
+    LIVEKIT_LOCAL_API_SECRET: str = Field("secret", description="LiveKit local API secret")
+    LIVEKIT_CLOUD_URL: Optional[str] = Field(None, description="LiveKit Cloud project WebSocket URL")
+    LIVEKIT_CLOUD_API_KEY: Optional[str] = Field(None, description="LiveKit Cloud API key")
+    LIVEKIT_CLOUD_API_SECRET: Optional[str] = Field(None, description="LiveKit Cloud API secret")
+    LIVEKIT_DEFAULT_AGENT_NAME: str = Field("bookings-business-assistant", description="LiveKit named dispatch agent name")
+    VOICE_ASSISTANT_TRANSPORT: str = Field("direct_gpt_live", description="Default voice assistant transport: 'direct_gpt_live', 'local_livekit', or 'cloud_livekit'")
+
+    # xAI Grok Voice Realtime Settings
+    XAI_API_KEY: str = Field("", description="xAI API key for Grok voice and realtime")
+    XAI_REALTIME_AGENT_ID: str = Field(
+        "agent_YosGQC2yvTXwpdi7",
+        description="xAI Realtime agent ID for WebSocket voice assistant",
+    )
+    XAI_REALTIME_URL: str = Field(
+        "wss://api.x.ai/v1/realtime",
+        description="xAI Realtime WebSocket base URL",
+    )
+
     # OpenTelemetry / observability
     OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
         "http://localhost:4318", description="OTLP exporter base endpoint URL"
     )
     OTEL_SDK_DISABLED: bool = Field(
         False, description="Set to True to disable OTel SDK"
+    )
+    OTEL_ALLOW_PII: bool = Field(
+        False, description="Allow PII in telemetry exports. Defaults strictly to False."
+    )
+    LIVEKIT_RECORD_BY_DEFAULT: bool = Field(
+        False, description="Enable recording in LiveKit rooms. Defaults strictly to False."
     )
 
     # Neo4j & Graph Knowledge Settings

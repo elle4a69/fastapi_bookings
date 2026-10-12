@@ -1,6 +1,6 @@
 # Business Assistant Frontend (`frontend/src/pages/admin/business-assistant`)
 
-The Business Assistant frontend module provides the administrative conversational dialogue interface, application-wide slide-out presence, user-safe support ticket management, visible in-app onboarding automation, and real-time WebRTC voice session capabilities for business owners and operators within **FastAPI Bookings**.
+The Business Assistant frontend module provides the administrative conversational dialogue interface, application-wide presence, user-safe support ticket management, visible in-app onboarding automation, and real-time voice session capabilities (supporting both OpenAI GPT-Live and xAI Grok Voice) for business owners and operators within **FastAPI Bookings**.
 
 ---
 
@@ -14,10 +14,15 @@ Key capabilities owned by this module:
 - **Navigation Persistence**: Conversation state and active sessions survive route transitions between admin modules without resetting or losing drafts.
 - **Accessibility & Focus Discipline**: Standard ARIA landmarks (`role="dialog"`, `aria-label="Business Assistant"`, `aria-modal="true"`), keyboard dismissal via `Escape`, and automated focus save and restoration.
 - **Non-Obstructive Layer Discipline**: Operates on a controlled `z-40` layer, guaranteeing that critical confirmation dialogs (`z-50`), destructive warning modals, and security notifications remain unobstructed.
-- **Interactive Conversation View**: Chronological message stream, markdown text rendering, retryable error presentation, and draft composition.
-- **LiveKit & GPT-Live WebRTC Voice**: Direct browser-to-server WebRTC voice sessions with SDP negotiation, remote audio rendering, DataChannel caption deltas, and token refresh lifecycle (`use-livekit-voice.ts`, `minimized-voice-controller.tsx`).
+- **Native LiveKit Agent Popup (`AgentPopup_01`)**: Embedded LiveKit `AgentPopup_01` block (`frontend/src/components/agents-ui/agent-popup.tsx`) with floating circular trigger bubble, expanding session popup, auto-scrolling transcript timeline, typing input ("Type something..."), animated 3-bar audio visualizer with device dropdown, camera toggle, screen share toggle, and transcript toggle.
+- **Dual Realtime Voice Engines**:
+  - **OpenAI GPT-Live (`direct_gpt_live`)**: Direct browser-to-server WebRTC audio stream with server-held SDP exchange.
+  - **xAI Grok Voice (`xai_grok_voice`)**: Direct WebSocket audio transport powered by `grok-voice-think-fast-2.0` (`use-xai-grok-voice.ts`), processing 16-bit PCM 24kHz audio, client-side tool execution, and activity telemetry.
+  - Configurable via `VoiceEngineSelector` inside `AssistantSettingsDialog`.
+- **Canonical 16-Tool Voice Schema Alignment**: Complete frontend support for the 16 canonical voice tools (`VOICE_BUSINESS_ASSISTANT_TOOLS`), executing UI automation RPCs and backend tools seamlessly while strictly omitting non-voice duplicate aliases.
+- **Single-Tab Active Executor Lease Token Forwarding**: Ensures UI automation RPCs triggered by voice models (`xai-grok-voice`, `direct-gpt-live`) automatically inherit the active tab's lease token, preventing lease validation errors while preserving multi-tab isolation.
+- **Route Normalization & Aliases**: Client-side navigation (`normalizeRoute`) resolving aliases (e.g. `/admin/services` -> `/admin/catalog/services`) and enforcing strict security allowlists (`isRouteAllowlisted`).
 - **Visible Form Automation & Form Adapters**: Concrete form adapters for Business Settings (`business-settings-adapter.ts`) and Catalog Services (`catalog-services-adapter.ts`), managed through an extensible `OnboardingFormAdapter` registry (`adapters/registry.ts`).
-- **Single-Tab Active Executor Coordination**: Leased active executor coordinator (`rpc/executor-coordinator.ts`, `rpc/useActiveExecutor.ts`) ensuring only one designated browser tab executes mutating form automations per session, eliminating multi-tab race conditions.
 - **Manual Takeover & Control Epoch**: Immediate user takeover banner ("I'll do this part" / `ManualTakeoverControl.tsx`) with monotonic epoch invalidation rejecting stale background commands upon any human typing or interaction.
 - **Visual Non-Intercepting Pointer Overlay**: Smooth highlight and pulsing pointer overlay (`FieldPointerOverlay.tsx`, `useFieldHighlight.ts`) with `pointer-events: none` to guide users without interfering with native inputs.
 - **User-Safe Support Tickets**: Ticket status tracking cards (`awaiting_engineering`, `in_progress`, `completed`, `cancelled`), category/severity classification, sanitized submissions, and append-only event timeline inspection.
@@ -34,10 +39,12 @@ frontend/src/pages/admin/business-assistant/
 ├── index.tsx                             # Full-page Business Assistant management, history drawer, and onboarding
 ├── conversation.tsx                      # Modular conversational message stream and input bar
 ├── assistant-drawer.tsx                  # Application-wide responsive slide-out drawer
-├── business-assistant-context.tsx        # React context managing persistent conversation and drawer state
+├── business-assistant-context.tsx        # React context managing persistent conversation, voice state, and drawer
 ├── context-boundary.ts                   # Strict route and module context extraction boundary
 ├── use-livekit-voice.ts                  # LiveKit WebRTC agent hook for voice sessions & RPC dispatch
+├── use-xai-grok-voice.ts                 # xAI Grok Voice WebSocket hook (PCM audio, tool parsing, lease forwarding)
 ├── minimized-voice-controller.tsx        # Compact floating voice call controls and audio indicator
+├── realtime-protocol.ts                  # Realtime tool parsing, output formatting, and agent activity schemas
 ├── adapters/                             # Concrete Onboarding Form Adapters
 │   ├── index.ts                          # Adapter exports
 │   ├── registry.ts                       # OnboardingFormAdapter registry and lookup
@@ -46,41 +53,34 @@ frontend/src/pages/admin/business-assistant/
 │   └── adapters.test.ts                  # Unit test coverage for adapters and registry
 ├── components/                           # In-App Assistant UI Primitives
 │   ├── index.ts                          # Component exports
+│   ├── AssistantSettingsDialog.tsx       # Modal dialog for Voice Transport and Diagnostic Mode administration
+│   ├── DiagnosticModeToggle.tsx          # Real-time diagnostic mode toggle connected to BusinessAssistantContext
 │   ├── FieldPointerOverlay.tsx           # Non-intercepting visual field highlight and pointer
+│   ├── LiveAgentActivityConsole.tsx      # Real-time streaming activity console for agent thoughts & tool runs
 │   ├── ManualTakeoverControl.tsx         # Monotonic takeover banner and control epoch advancement
 │   ├── OnboardingStatusDock.tsx          # Real-time onboarding status dock and progress tracking
 │   ├── useFieldHighlight.ts              # Hook for smooth scrolling and highlighting form fields
+│   ├── VoiceEngineSelector.tsx           # Dual realtime engine selector (xAI Grok & OpenAI GPT-Live)
+│   ├── VoiceTransportSwitcher.tsx        # Dynamic transport switcher between Direct WebRTC, Local, and Cloud LiveKit
 │   └── takeover-pointer.test.ts          # Unit tests for takeover and pointer overlay
 ├── rpc/                                  # Typed LiveKit RPC Subsystem & Active Executor
 │   ├── index.ts                          # RPC subsystem exports
 │   ├── types.ts                          # RPC action models, payloads, and execution receipt schemas
-│   ├── action-catalogue.ts               # Allowlisted routes, actions, and validation schemas
+│   ├── action-catalogue.ts               # Allowlisted routes, aliases, lease validation, and execution schemas
 │   ├── executor-coordinator.ts           # Single-tab lease coordinator and epoch manager
 │   ├── useActiveExecutor.ts              # React hook managing executor lease and takeover listeners
 │   ├── rpc-receiver.ts                   # RPC handler dispatching to form adapters with receipts
 │   ├── sender-validation.ts              # Strict identity verification for RPC message senders
 │   ├── executor-coordinator.test.ts      # Unit tests for lease lifecycle and epoch monotonicity
 │   ├── onboarding-protocol.test.ts       # Protocol and schema validation tests
-│   └── rpc-action-receiver.test.ts       # Unit tests for RPC dispatch and adapter execution
+│   └── rpc-action-receiver.test.ts       # Unit tests for RPC dispatch, route normalization, and lease forwarding
 ├── ticket-status.tsx                     # User-safe ticket status display cards and event timeline
 ├── business-assistant-presence.test.ts   # Regression tests for drawer, context boundary, voice, and tickets
 ├── business-assistant-page.test.ts       # Full-page layout and history drawer structure tests
 ├── livekit-voice-ui.test.ts              # Unit tests for LiveKit voice UI and controller
+├── gpt-live-voice-integration.test.ts    # Integration tests for xAI Grok voice and active executor leasing
 └── README.md                             # Living documentation (AGENTS.md Rule 10)
 ```
-
-### Key Files:
-- [index.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/index.tsx): Full-page management interface displaying active conversation, history switcher, onboarding progress, and support tickets.
-- [conversation.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/conversation.tsx): Interactive conversation component supporting text turns, voice call actions, and context attachment.
-- [assistant-drawer.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/assistant-drawer.tsx): Persistent slide-out drawer providing seamless chat, history, and ticket tabs across admin views.
-- [business-assistant-context.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/business-assistant-context.tsx): Provider holding thread selection, message history, voice status, and drawer visibility across in-app navigations.
-- [context-boundary.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/context-boundary.ts): Pure function resolving only `current_path` and `module_name` while preventing DOM or secret leakage.
-- [adapters/registry.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/adapters/registry.ts): Registry managing form adapters for visible form automation, field staging, and validation.
-- [adapters/business-settings-adapter.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/adapters/business-settings-adapter.ts): Concrete adapter staging business settings (`name`, `abn`, `phone`, `timezone`, `currency`) while guarding against premature autosave debounces.
-- [adapters/catalog-services-adapter.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/adapters/catalog-services-adapter.ts): Concrete adapter automating service catalog creation and updates (`name`, `duration_minutes`, `price`, `is_active`).
-- [rpc/executor-coordinator.ts](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/rpc/executor-coordinator.ts): Single-tab active executor coordinator enforcing exclusive automation lease and monotonic control epochs.
-- [components/FieldPointerOverlay.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/components/FieldPointerOverlay.tsx): Visual overlay with smooth scrolling and animated focus ring without blocking clicks.
-- [components/ManualTakeoverControl.tsx](file:///f:/Projects/fastapi_bookings/frontend/src/pages/admin/business-assistant/components/ManualTakeoverControl.tsx): Compact floating banner allowing instant manual user takeover and cancelling automated actions.
 
 ---
 
@@ -90,28 +90,23 @@ frontend/src/pages/admin/business-assistant/
 - **React 19 & TypeScript**: Strongly typed component hierarchies, custom hooks, and state context.
 - **Lucide React**: Icons for bot, microphone, phone hangup, tickets, history, and status alerts.
 - **LiveKit Client (`livekit-client`)**: Native browser WebRTC client handling audio tracks, RPC registration, and DataChannel messaging.
+- **Web Audio API**: Browser `AudioContext`, `ScriptProcessorNode`, and `MediaStream` for 16-bit PCM 24kHz audio capture and playback in `use-xai-grok-voice.ts`.
 - **API Client (`apiClient` / `authenticatedAdminFetch`)**: Central HTTP client injecting bearer authentication and `X-Tenant` headers.
 
 ### Environment & Permissions
-- Microphone permission (`getUserMedia`) required for real-time voice mode.
-- Communicates with authenticated text/ticket endpoints mounted at `/api/admin/business-assistant`, voice router at `/api/admin/business-assistant/voice`, and onboarding router at `/api/business-assistant/onboarding`:
-  - `GET /api/admin/business-assistant/conversations`
-  - `POST /api/admin/business-assistant/conversations`
-  - `GET /api/admin/business-assistant/conversations/{id}/messages`
-  - `POST /api/admin/business-assistant/conversations/{id}/messages`
-  - `POST /api/admin/business-assistant/voice/conversations/{id}/session`
-  - `POST /api/admin/business-assistant/voice/conversations/{id}/token/refresh`
-  - `GET /api/admin/business-assistant/tickets`
-  - `POST /api/admin/business-assistant/tickets`
-  - `GET /api/admin/business-assistant/tickets/{id}/events`
-  - `GET /api/business-assistant/onboarding/plan`
-  - `POST /api/business-assistant/onboarding/takeover`
+- Microphone permission (`getUserMedia`) required for real-time voice modes.
+- Communicates with authenticated backend endpoints:
+  - Text & tickets: `/api/admin/business-assistant/*`
+  - OpenAI Realtime voice: `/api/admin/business-assistant/conversations/{id}/realtime`
+  - xAI Grok token & relay: `GET /api/admin/business-assistant/realtime/xai-token` and WebSocket relay `/api/admin/business-assistant/voice/realtime/xai-ws`
+  - LiveKit voice: `/api/admin/business-assistant/voice/conversations/{id}/session`
+  - Onboarding plan & takeover: `/api/business-assistant/onboarding/*`
 
 ---
 
 ## 4. Core Workflows & Contracts
 
-### 4.1 Application-Wide Drawer Lifecycle
+### 4.1 Application-Wide Drawer & Popup Lifecycle
 1. **Triggering**: Click either the floating support action button or the persistent header Assistant button.
 2. **Focus Management**: On opening, focus moves into the drawer's primary interactive control; closing restores focus to the invoking button.
 3. **Keyboard Dismissal**: Pressing `Escape` closes the drawer immediately.
@@ -127,37 +122,67 @@ frontend/src/pages/admin/business-assistant/
 2. **Turn Submission**: Sends `{ content, request_key }` to `POST /conversations/{id}/messages`.
 3. **Turn Persistence**: Displays verified user and assistant turns; preserves drafts upon network or upstream failures.
 
-### 4.4 LiveKit & GPT-Live Voice Exchange
+### 4.4 LiveKit & Direct GPT-Live WebRTC Voice
 1. **Microphone Access**: Requests browser audio stream via `getUserMedia({ audio: true })`.
 2. **Session Token Issuance**: Posts to `/api/admin/business-assistant/voice/conversations/{id}/session` to obtain a scoped room token and participant identity.
 3. **Room Connection & RPC**: Connects to the LiveKit room, binds remote audio tracks to an HTML `<audio>` element, and registers RPC receivers via `registerAssistantRpcMethods(room, context)`.
 4. **Captions**: Displays received transcript deltas on the DataChannel grouped by session intervals.
 5. **Teardown**: Cleans up audio tracks and RPC handlers upon call hangup or unmount.
 
-### 4.5 Support Ticket Management
-1. **Listing**: Loads tickets via `GET /tickets` displaying status badges (`awaiting_engineering`, etc.).
-2. **Creation**: Submits sanitized problem summary and description with unique `request_key`.
-3. **Timeline**: Expands ticket to fetch append-only lifecycle events via `GET /tickets/{id}/events`.
+### 4.5 xAI Grok Voice Transport & WebSocket Relay
+1. **Token Retrieval**: Fetches connection parameters from `GET /api/admin/business-assistant/realtime/xai-token` (providing agent ID, connection URL, API key, and local relay URL).
+2. **WebSocket Audio Pipeline**: `useXAIGrokVoice` opens WebSocket connection, captures microphone stream, converts audio to 16-bit PCM at 24kHz using `floatTo16BitPCM`, and streams Base64 audio chunks to the server.
+3. **Incoming Audio & Captions**: Decodes incoming PCM audio via `base64ToFloat32Array` for scheduled playback through `AudioContext`, simultaneously appending streaming captions to the transcript timeline.
+4. **Realtime Tool Parsing & Execution**: When Grok produces function calls, `parseRealtimeToolCalls` extracts tool requests:
+   - UI automation tools (`navigate_route`, `highlight_field`, `stage_fields`) are executed immediately via `executeRpcAction`.
+   - Backend tools (`list_services`, `list_providers`, `check_slot_availability`, `diagnostic_report`) are executed against `POST /conversations/{id}/realtime/tools`.
+5. **Tool Output Response**: Formats structured tool receipts with `formatRealtimeToolOutput` and sends `conversation.item.create` + `response.create` events back over the WebSocket.
 
-### 4.6 Visible Form Automation & Autosave Staging Guard
-1. **Adapter Registration**: When a target view mounts (e.g., Business Settings or Catalog Services), it registers an `OnboardingFormAdapter` instance with the central registry (`adapters/registry.ts`).
-2. **Field Staging**: When an RPC `set_fields` action arrives, the adapter stages values into component state and sets a 600ms autosave staging guard.
+### 4.6 Canonical 16-Tool Voice Schema Alignment (`VOICE_BUSINESS_ASSISTANT_TOOLS`)
+The frontend voice infrastructure enforces exact alignment with the canonical 16-tool voice schema:
+- **Navigation**: `navigate_route` is the sole authorized navigation tool for page switching.
+- **UI Guidance**: `highlight_field` applies non-intercepting focus rings without page jumps.
+- **Form Automation**: `stage_fields`, `validate_form`, `request_save_authorization`, `commit_save`, `ask_clarification`, `pause_takeover`.
+- **System Reads**: `list_services`, `list_providers`, `check_slot_availability`, `get_onboarding_status`, `read_system_settings`, `diagnostic_report`.
+- **Rule Management**: `draft_business_rule`, `activate_business_rule`.
+- Duplicate aliases (`save_form`, `prepare_fields`, `fill_form`, `navigate_show`, `read_status`, `read_context`) are omitted to prevent tool selection errors during voice sessions.
+
+### 4.7 Single-Tab Active Executor Lease Token Forwarding
+1. **Single Leased Tab**: Across multiple open browser tabs in a tenant session, only one tab acquires the `active_executor_lease` (`executorCoordinator.claimActiveExecutor()`).
+2. **Lease Token Forwarding for Voice**: When a voice caller (`xai-grok-voice`, `direct-gpt-live`, `realtime-voice`) executes UI automation tools, LLMs do not supply a client lease token.
+3. The RPC executor (`action-catalogue.ts`) detects trusted voice caller identities and automatically forwards the active tab's lease token (`leaseMgr.getActiveLease().token`).
+4. This ensures voice commands dispatched within the active tab pass lease validation seamlessly, while background tabs remain blocked from executing conflicting automations.
+
+### 4.8 Route Normalization & Alias Architecture
+1. Dispatched navigation commands pass through `normalizeRoute(rawRoute)`:
+   - Resolves aliases to canonical paths:
+     - `services`, `catalog`, `/admin/services`, `/admin/catalog` -> `/admin/catalog/services`
+     - `website`, `website_editor` -> `/admin/website`
+     - `media` -> `/admin/media`
+     - `onboarding`, `settings`, `/admin/settings` -> `/admin/settings/business`
+     - `bookings` -> `/admin/bookings`
+   - Strips search parameters and hash fragments before comparison.
+2. Route safety is verified by `isRouteAllowlisted(targetPath)`: strictly rejects dangerous protocols (`javascript:`, `http:`, `https:`, `//`) and directory traversal (`..`).
+
+### 4.9 Visible Form Automation & Autosave Staging Guard
+1. **Adapter Registration**: When a target view mounts (e.g. Business Settings or Catalog Services), it registers an `OnboardingFormAdapter` instance with the central registry (`adapters/registry.ts`).
+2. **Field Staging**: When an RPC `stage_fields` or `fill_fields` action arrives, the adapter stages values into component state and sets a 600ms autosave staging guard.
 3. **Receipt Distinction**: The adapter generates a structured receipt distinguishing `fields_staged` (`saved=False`, `persisted_entity_id=None`) from committed persistence (`saved=True`).
 
-### 4.7 Leased Active-Executor Coordination & Multi-Tab Isolation
-1. **Single Leased Tab**: Across multiple open browser tabs in a tenant session, only one tab acquires the `active_executor_lease` stored in `localStorage` or `sessionStorage`.
-2. **Heartbeat & Expiration**: The active tab maintains the lease with periodic heartbeats; if stale (>15 seconds), secondary tabs may claim it.
-3. **Targeted Dispatch**: Automated mutating RPC commands are executed solely by the leased tab; other tabs observe or ignore mutating RPCs.
-
-### 4.8 Monotonic Control Epoch & Manual Takeover Priority
+### 4.10 Monotonic Control Epoch & Manual Takeover Priority
 1. **Epoch Tracking**: A monotonic `control_epoch` integer is maintained across the session.
 2. **Takeover Invalidation**: When the user clicks "I'll do this part" or types into any field, `advanceControlEpoch()` increments the epoch and emits a takeover signal.
 3. **Rejection of Stale Commands**: Any in-flight or queued automated action bearing an epoch lower than the current epoch is immediately rejected with HTTP 409 / `STALE_CONTROL_EPOCH`.
 
-### 4.9 Visual Pointer Overlay & Field Highlighting
+### 4.11 Visual Pointer Overlay & Field Highlighting
 1. **Highlight Request**: An RPC `highlight_field` or adapter step triggers `useFieldHighlight`.
 2. **Smooth Scroll**: The viewport smoothly scrolls to the target element if outside the visible area.
 3. **Non-Intercepting Ring**: `FieldPointerOverlay` renders a pulsating accent ring around the target element with `pointer-events: none`, preserving full native user interaction.
+
+### 4.12 Support Ticket Management
+1. **Listing**: Loads tickets via `GET /tickets` displaying status badges (`awaiting_engineering`, etc.).
+2. **Creation**: Submits sanitized problem summary and description with unique `request_key`.
+3. **Timeline**: Expands ticket to fetch append-only lifecycle events via `GET /tickets/{id}/events`.
 
 ---
 
@@ -176,6 +201,9 @@ frontend/src/pages/admin/business-assistant/
 
 - **Microphone Denied**: If a user declines microphone permissions, the interface provides a user-friendly notice and seamlessly preserves full text capability.
 - **Multi-Tab Lease Contention**: If an inactive tab has focus, the active executor dock alerts the user and offers a one-click "Claim Automation Control" button.
+- **Voice Assistant Navigation & Lease Token Inheritance**: Voice sessions running in the active executor tab (`xai-grok-voice`, `direct-gpt-live`, `realtime-voice`) automatically inherit the active tab lease token during tool execution, enabling client-side UI navigation (`navigate_route`) across all allowlisted admin routes and aliases (such as `/admin/services` -> `/admin/catalog/services`).
+- **Turn Tool Quotas & Reset Lifecycle**: Voice engines (`use-xai-grok-voice.ts`, `use-gpt-live.ts`) enforce a 10-round turn quota (`MAX_CONSECUTIVE_TOOL_CALLS = 10`) providing ample capacity for sequential onboarding actions (`get_onboarding_status` -> `stage_fields` -> `validate_form` -> `commit_save`). Turn tool counters reset reliably across all boundary events (`input_audio_buffer.speech_started`, `conversation.item.created`, `input_audio_transcription.completed`, and non-tool `response.done` spoken completions).
+- **Authoritative Burst Rate Protection**: Backend tool execution in `BusinessAssistantService` applies distinct burst thresholds: general utility tools enforce a 4-call per 3-second limit to prevent cascades, while allowlisted onboarding tools (`ONBOARDING_TOOL_NAMES`) permit up to 10 calls per 3 seconds.
 - **Awaiting Engineering State**: Support tickets remain in `awaiting_engineering` until approved or claimed by a verified engineering worker.
 
 ---
@@ -185,15 +213,20 @@ frontend/src/pages/admin/business-assistant/
 To verify the business assistant module:
 
 ```powershell
-# 1. Run all unit and regression tests (131 tests including adapters, rpc, takeover, and voice)
+# 1. Run all unit and regression tests (including adapters, rpc, takeover, and voice)
 npm test
 
-# 2. Run TypeScript compilation check
+# 2. Run focused voice and active executor lease tests
+npm test -- frontend/src/pages/admin/business-assistant/gpt-live-voice-integration.test.ts
+npm test -- frontend/src/pages/admin/business-assistant/rpc/rpc-action-receiver.test.ts
+npm test -- frontend/src/pages/admin/business-assistant/livekit-voice-ui.test.ts
+
+# 3. Run TypeScript compilation check
 npx tsc -b
 
-# 3. Run frontend production build
+# 4. Run frontend production build
 npm run build
 
-# 4. Verify living documentation compliance (Rule 10)
+# 5. Verify living documentation compliance (Rule 10)
 python scripts/verify_living_docs.py --path frontend/src/pages/admin/business-assistant/README.md
 ```

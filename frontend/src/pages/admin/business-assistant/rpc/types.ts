@@ -21,7 +21,13 @@ export type OnboardingActionType =
   | 'highlight_field'
   | 'read_form_state'
 
-export type RpcActionType = WebsiteRpcActionType | OnboardingActionType
+export type MaintenanceActionType =
+  | 'create_maintenance_handoff'
+  | 'create_support_ticket'
+  | 'diagnostic_report'
+  | 'run_diagnostic_check'
+
+export type RpcActionType = WebsiteRpcActionType | OnboardingActionType | MaintenanceActionType
 
 // ── 2. EXECUTION RECEIPT STATES & TRANSITIONS ────────────────────────────
 
@@ -256,6 +262,7 @@ export interface RpcExecutionReceipt {
   // Form Staging, Validation & Save results
   form_id?: string
   staged_fields?: string[]
+  applied_fields?: Record<string, unknown>
   field_count?: number
   validation_valid?: boolean
   validation_errors?: Record<string, string[]> | string[]
@@ -291,6 +298,7 @@ export interface RpcReceiverContext {
   expectedAgentIdentity?: string | null
   expectedAgentName?: string | null
   allowedAgentIdentities?: string[]
+  conversationId?: number
 
   // Website action hooks
   onNavigate?: (path: string) => void
@@ -401,6 +409,8 @@ export const ALLOWED_ROUTES: readonly string[] = [
   '/admin/settings/webhooks',
   '/admin/settings/plugins',
   '/admin/business-assistant',
+  '/admin/resident-agent',
+  '/admin/coding-studio',
   '/admin/gpt-live',
   '/admin/assistant-studio',
   '/admin/telemetry',
@@ -409,32 +419,121 @@ export const ALLOWED_ROUTES: readonly string[] = [
   '/admin/notifications/messages',
   '/admin/notifications/templates',
   '/admin/notifications/reminders',
+  '/admin/catalog',
+  '/admin/settings',
+  '/admin/schedule',
+  '/admin/finance',
+  '/admin/notifications',
+  '/admin/compliance',
+  '/admin/configuration',
 ] as const
 
 export const ROUTE_ALIASES: Record<string, string> = {
   website: '/admin/website',
   'website-editor': '/admin/website',
   website_editor: '/admin/website',
+  'admin/website': '/admin/website',
   media: '/admin/media',
   'media-library': '/admin/media',
   media_library: '/admin/media',
+  'admin/media': '/admin/media',
   services: '/admin/catalog/services',
+  'admin/services': '/admin/catalog/services',
+  'catalog/services': '/admin/catalog/services',
+  catalog: '/admin/catalog/services',
+  'admin/catalog': '/admin/catalog/services',
   onboarding: '/admin/settings/business',
   business_settings: '/admin/settings/business',
   'business-settings': '/admin/settings/business',
+  'admin/settings/business': '/admin/settings/business',
   settings: '/admin/settings/business',
+  'admin/settings': '/admin/settings/business',
+  schedule: '/admin/schedule/workdays',
+  'admin/schedule': '/admin/schedule/workdays',
+  'admin/workdays': '/admin/schedule/workdays',
+  'admin/exceptions': '/admin/schedule/exceptions',
+  workdays: '/admin/schedule/workdays',
+  exceptions: '/admin/schedule/exceptions',
+  finance: '/admin/finance/invoices',
+  'admin/finance': '/admin/finance/invoices',
+  'admin/invoices': '/admin/finance/invoices',
+  'admin/payments': '/admin/finance/payments',
+  'admin/tax-rates': '/admin/finance/tax-rates',
+  'admin/processors': '/admin/finance/processors',
+  'admin/promotions': '/admin/finance/promotions',
+  invoices: '/admin/finance/invoices',
+  payments: '/admin/finance/payments',
+  notifications: '/admin/notifications/messages',
+  'admin/notifications': '/admin/notifications/messages',
+  'admin/messages': '/admin/notifications/messages',
+  'admin/templates': '/admin/notifications/templates',
+  'admin/reminders': '/admin/notifications/reminders',
+  messages: '/admin/notifications/messages',
+  templates: '/admin/notifications/templates',
+  reminders: '/admin/notifications/reminders',
+  compliance: '/admin/compliance/gdpr',
+  'admin/compliance': '/admin/compliance/gdpr',
+  'admin/gdpr': '/admin/compliance/gdpr',
+  gdpr: '/admin/compliance/gdpr',
+  configuration: '/admin/configuration/additional-fields',
+  'admin/configuration': '/admin/configuration/additional-fields',
+  'admin/additional-fields': '/admin/configuration/additional-fields',
   providers: '/admin/catalog/providers',
+  'admin/providers': '/admin/catalog/providers',
   categories: '/admin/catalog/categories',
+  'admin/categories': '/admin/catalog/categories',
   locations: '/admin/catalog/locations',
+  'admin/locations': '/admin/catalog/locations',
   scheduling: '/admin/catalog/scheduling',
+  'admin/scheduling': '/admin/catalog/scheduling',
+  products: '/admin/catalog/products',
+  'admin/products': '/admin/catalog/products',
+  packages: '/admin/catalog/packages',
+  'admin/packages': '/admin/catalog/packages',
+  'add-ons': '/admin/catalog/add-ons',
+  'admin/add-ons': '/admin/catalog/add-ons',
   bookings: '/admin/bookings',
+  'admin/bookings': '/admin/bookings',
   calendar: '/admin/calendar',
+  'admin/calendar': '/admin/calendar',
   clients: '/admin/clients',
+  'admin/clients': '/admin/clients',
+  customers: '/admin/clients',
   reviews: '/admin/reviews',
+  'admin/reviews': '/admin/reviews',
   assistant: '/admin/business-assistant',
   'business-assistant': '/admin/business-assistant',
   business_assistant: '/admin/business-assistant',
+  'admin/business-assistant': '/admin/business-assistant',
+  'resident-agent': '/admin/resident-agent',
+  resident_agent: '/admin/resident-agent',
+  'admin/resident-agent': '/admin/resident-agent',
+  'coding-studio': '/admin/coding-studio',
+  coding_studio: '/admin/coding-studio',
+  'admin/coding-studio': '/admin/coding-studio',
+  'assistant-studio': '/admin/assistant-studio',
+  assistant_studio: '/admin/assistant-studio',
+  'admin/assistant-studio': '/admin/assistant-studio',
+  'gpt-live': '/admin/gpt-live',
+  gpt_live: '/admin/gpt-live',
+  'admin/gpt-live': '/admin/gpt-live',
   dashboard: '/admin/dashboard',
+  'admin/dashboard': '/admin/dashboard',
+  telemetry: '/admin/telemetry',
+  'admin/telemetry': '/admin/telemetry',
+  audit: '/admin/audit',
+  'admin/audit': '/admin/audit',
+  system: '/admin/system',
+  'admin/system': '/admin/system',
+  modules: '/admin/settings/modules',
+  'admin/settings/modules': '/admin/settings/modules',
+  'admin/modules': '/admin/settings/modules',
+  webhooks: '/admin/settings/webhooks',
+  'admin/settings/webhooks': '/admin/settings/webhooks',
+  'admin/webhooks': '/admin/settings/webhooks',
+  plugins: '/admin/settings/plugins',
+  'admin/settings/plugins': '/admin/settings/plugins',
+  'admin/plugins': '/admin/settings/plugins',
 }
 
 export const ALLOWED_SECTIONS: readonly string[] = [

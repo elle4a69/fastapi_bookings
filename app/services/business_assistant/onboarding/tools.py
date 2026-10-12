@@ -45,6 +45,26 @@ from app.services.business_assistant.onboarding.website_generator import (
 
 logger = logging.getLogger("business_assistant.onboarding.tools")
 
+ONBOARDING_TOOL_NAMES: frozenset[str] = frozenset({
+    "stage_fields",
+    "highlight_field",
+    "validate_form",
+    "request_save_authorization",
+    "commit_save",
+    "navigate_route",
+    "get_onboarding_status",
+    "ask_clarification",
+    "generate_website_draft",
+    "read_context",
+    "plan_step",
+    "prepare_fields",
+    "navigate_show",
+    "fill_form",
+    "save_form",
+    "read_status",
+    "pause_takeover",
+})
+
 # ───────────────────────────────────────────────────────────────────────────
 # OpenAI / LiveKit Tool Definitions for LLM Function Calling
 # ───────────────────────────────────────────────────────────────────────────
@@ -54,7 +74,7 @@ ONBOARDING_AGENT_TOOLS: tuple[dict[str, Any], ...] = (
         "type": "function",
         "function": {
             "name": "stage_fields",
-            "description": "Stage candidate values into the active form and onboarding step without saving them to the database.",
+            "description": "Stage candidate field values into the visible form without saving. Use a single call with all fields together.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -158,7 +178,7 @@ ONBOARDING_AGENT_TOOLS: tuple[dict[str, Any], ...] = (
         "type": "function",
         "function": {
             "name": "commit_save",
-            "description": "Perform an authoritative database save for the validated onboarding step, strictly guarded by DelegationSaveGuard.",
+            "description": "Commit validated form fields to the database after the user has confirmed. Do not call until validation has passed and the user has agreed to save.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -189,13 +209,13 @@ ONBOARDING_AGENT_TOOLS: tuple[dict[str, Any], ...] = (
         "type": "function",
         "function": {
             "name": "navigate_route",
-            "description": "Instruct the frontend to switch to an authorized admin page and subtab.",
+            "description": "Navigate the admin UI to a specific page or subtab. Use this and only this tool whenever the user asks to go to, open, switch to, view, or navigate to any page or section. Do not use any other tool for navigation.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "route": {
                         "type": "string",
-                        "description": "Target application route (e.g. '/admin/settings', '/admin/catalog/services', '/admin/website').",
+                        "description": "Target application route (e.g. '/admin/clients', '/admin/bookings', '/admin/calendar', '/admin/settings/business', '/admin/catalog/services', '/admin/website').",
                     },
                     "subtab": {
                         "type": "string",
@@ -518,9 +538,10 @@ class OnboardingToolPack:
 
     def stage_fields(
         self,
-        step_id: str,
-        fields: Dict[str, Any],
+        step_id: Optional[str] = None,
+        fields: Optional[Dict[str, Any]] = None,
         utterance: Optional[str] = None,
+        form_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Normalize candidate values and stage them into the target step."""
         plan = self._get_plan()
@@ -530,9 +551,31 @@ class OnboardingToolPack:
         if self.lease_token:
             OnboardingPlanService.validate_lease(plan, self.lease_token)
 
+        if not step_id and form_id:
+            for s in plan.steps:
+                if s.form_id == form_id and s.status != "saved":
+                    step_id = s.step_id
+                    break
+            if not step_id:
+                for s in plan.steps:
+                    if s.form_id == form_id:
+                        step_id = s.step_id
+                        break
+        if not step_id:
+            step_id = plan.current_step_id or "step_1_identity"
+
         step = OnboardingPlanService.get_step_by_id(plan, step_id)
         if not step:
+            for s in plan.steps:
+                if s.form_id == step_id:
+                    step = s
+                    step_id = s.step_id
+                    break
+        if not step:
             raise OnboardingError(f"Step '{step_id}' not found in onboarding plan.", code="STEP_NOT_FOUND")
+
+        if fields is None:
+            fields = {}
 
         can_stage, refusal = DelegationSaveGuard.can_stage(plan, step, actor="agent", mode=self.mode)
         if not can_stage:
@@ -686,6 +729,11 @@ class OnboardingToolPack:
     ) -> Dict[str, Any]:
         """Prompt owner for confirmation and issue single-use authorization nonce."""
         plan = self._get_plan()
+        if not step_id:
+            for s in plan.steps:
+                if s.domain == domain:
+                    step_id = s.step_id
+                    break
         target_step_id = step_id or f"step_{domain}"
         nonce = DelegationSaveGuard.generate_save_nonce(
             tenant_id=self.tenant_id,
@@ -724,6 +772,12 @@ class OnboardingToolPack:
             OnboardingPlanService.validate_lease(plan, self.lease_token)
 
         step = OnboardingPlanService.get_step_by_id(plan, step_id)
+        if not step:
+            for s in plan.steps:
+                if s.form_id == step_id:
+                    step = s
+                    step_id = s.step_id
+                    break
         if not step:
             raise OnboardingError(f"Step '{step_id}' not found.", code="STEP_NOT_FOUND")
 
@@ -806,6 +860,8 @@ class OnboardingToolPack:
             "subtab": subtab,
             "receipt_state": "waiting_for_ui",
             "rpc_receipt": rpc_receipt,
+            "terminal": True,
+            "directive": "Navigation completed. Confirm the new page to the user and conclude your turn. Do not execute further tools.",
             "message": f"Navigating to {route}" + (f" (subtab: {subtab})" if subtab else ""),
         }
 
@@ -1020,12 +1076,27 @@ class OnboardingToolPack:
 
     def save_form(
         self,
-        step_id: str,
+        step_id: Optional[str] = None,
+        form_id: Optional[str] = None,
         nonce: Optional[str] = None,
         is_publish: bool = False,
         is_edit_mode: bool = False,
     ) -> Dict[str, Any]:
         """Alias for commit_save: authoritatively commit step to database guarded by DelegationSaveGuard."""
+        if not step_id and form_id:
+            plan = self._get_plan()
+            for s in plan.steps:
+                if s.form_id == form_id and s.status != "saved":
+                    step_id = s.step_id
+                    break
+            if not step_id:
+                for s in plan.steps:
+                    if s.form_id == form_id:
+                        step_id = s.step_id
+                        break
+        if not step_id:
+            plan = self._get_plan()
+            step_id = plan.current_step_id or "step_1_identity"
         return self.commit_save(step_id=step_id, nonce=nonce, is_publish=is_publish, is_edit_mode=is_edit_mode)
 
     def read_status(self, include_facts: bool = True) -> Dict[str, Any]:

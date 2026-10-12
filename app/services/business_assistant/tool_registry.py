@@ -219,13 +219,36 @@ BUSINESS_KNOWLEDGE_TOOLS: tuple[dict[str, Any], ...] = (
         "type": "function",
         "function": {
             "name": "activate_business_rule",
-            "description": "Activate a previously drafted business rule using an authoritative confirmation token bound to its exact version and payload hash.",
+            "description": "Activate a previously drafted business rule using the exact confirmation token. Do not use for navigation or routing.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "memory_key": {
                         "type": "string",
                         "description": "Key of the business rule to activate.",
+                    },
+                    "confirmation_token": {
+                        "type": "string",
+                        "description": "Authoritative confirmation token received when drafting the rule.",
+                    },
+                },
+                "required": ["memory_key", "confirmation_token"],
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "confirm_business_rule",
+            "description": "Confirm and activate a previously drafted business rule using an authoritative confirmation token (alias for activate_business_rule).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "memory_key": {
+                        "type": "string",
+                        "description": "Key or ID of the business rule to confirm and activate.",
                     },
                     "confirmation_token": {
                         "type": "string",
@@ -456,6 +479,59 @@ SUPPORT_ENGINEERING_TOOLS: tuple[dict[str, Any], ...] = (
     {
         "type": "function",
         "function": {
+            "name": "create_maintenance_handoff",
+            "description": "Create a sanitised internal technical support ticket for the separate maintenance agent (alias for create_support_ticket).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {
+                        "type": "string",
+                        "enum": ["support", "bug", "feature", "access", "security", "upgrade"],
+                        "description": "Ticket category (defaults to 'support').",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Clear, concise title describing the issue (1-240 characters).",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Detailed explanation of the issue with all customer PII and secrets omitted.",
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["low", "normal", "high", "critical"],
+                        "description": "Ticket severity (default 'normal').",
+                    },
+                    "observed_behaviour": {
+                        "type": "string",
+                        "description": "Optional observed behaviour or error details.",
+                    },
+                    "affected_product_area": {
+                        "type": "string",
+                        "description": "Optional application area affected.",
+                    },
+                    "user_impact": {
+                        "type": "string",
+                        "description": "Optional summary of customer or business impact.",
+                    },
+                    "acceptance_criteria": {
+                        "type": "string",
+                        "description": "Optional desired outcome or acceptance criteria.",
+                    },
+                    "request_key": {
+                        "type": "string",
+                        "description": "Optional idempotency key.",
+                    },
+                },
+                "required": ["title", "description"],
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_ticket_status",
             "description": "Inspect user-safe status and lifecycle events for an existing support ticket.",
             "parameters": {
@@ -528,6 +604,15 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
     {
         "type": "function",
         "function": {
+            "name": "ensure_initial_website_draft",
+            "description": "Ensure the tenant has a private starter website generated only from current business, service, booking and durable media records. It never overwrites an existing draft or live site, and never publishes.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "strict": False,
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "inspect_website_state",
             "description": "Inspect the active tenant's public website configuration, published status, active version, and pending draft proposals.",
             "parameters": {
@@ -547,7 +632,7 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
         "type": "function",
         "function": {
             "name": "propose_website_edit",
-            "description": "Propose bounded content, layout, template, or theme edits for the tenant website. Edits remain safely in draft state and cannot publish automatically.",
+            "description": "Propose bounded website copy, section order, or approved Media/service image changes for the tenant website. Edits remain in a reviewable draft and cannot publish automatically. Never invent testimonials, qualifications, prices, availability, contact details or other business facts.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -558,6 +643,10 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
                     "content_payload": {
                         "type": "object",
                         "description": "Dictionary containing proposed section modifications (hero, about, services, booking, testimonials, contact, footer) or template/theme settings.",
+                    },
+                    "target_section": {
+                        "type": "string",
+                        "description": "Optional specific section being modified (hero, about, services, gallery, contact, booking, testimonials, footer).",
                     },
                     "expected_version": {
                         "type": "integer",
@@ -585,6 +674,10 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
                     "proposal_id": {
                         "type": "integer",
                         "description": "ID of the website proposal to preview.",
+                    },
+                    "target_section": {
+                        "type": "string",
+                        "description": "Optional specific section to highlight in the live preview (e.g. hero, about, services, gallery, contact).",
                     },
                 },
                 "required": ["proposal_id"],
@@ -641,6 +734,29 @@ WEBSITE_BUILDER_TOOLS: tuple[dict[str, Any], ...] = (
     },
 )
 
+DIAGNOSTIC_TOOLS: tuple[dict[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "diagnostic_report",
+            "description": "Run an internal system diagnostic report. Call ONLY when the user explicitly asks for a diagnostic, system health check, or troubleshooting report. Never use for navigation or general status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "include_tool_log": {
+                        "type": "boolean",
+                        "description": "Whether to include detailed recent tool call logs (default True).",
+                    },
+                },
+                "additionalProperties": False,
+            },
+            "strict": False,
+        },
+    },
+)
+
+from .onboarding.tools import ONBOARDING_AGENT_TOOLS, ONBOARDING_TOOL_NAMES
+
 ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *PRODUCT_HELP_TOOLS,
     *BOOKING_AVAILABILITY_TOOLS,
@@ -648,6 +764,44 @@ ALL_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = (
     *CUSTOMER_OPERATIONS_TOOLS,
     *SUPPORT_ENGINEERING_TOOLS,
     *WEBSITE_BUILDER_TOOLS,
+    *DIAGNOSTIC_TOOLS,
+    *ONBOARDING_AGENT_TOOLS,
+)
+
+# Canonical deduplicated tool set for voice conversations (~16 tools).
+# Excludes redundant aliases and unneeded voice tools (navigate_show, save_form,
+# prepare_fields, fill_form, read_status, read_context, read_onboarding_progress,
+# confirm_business_rule, create_maintenance_handoff, etc.) which remain in
+# ALL_BUSINESS_ASSISTANT_TOOLS for text chat.
+_CANONICAL_VOICE_TOOL_NAMES: tuple[str, ...] = (
+    # Navigation & UI
+    "navigate_route",
+    "highlight_field",
+    # Form / Onboarding Writes
+    "stage_fields",
+    "validate_form",
+    "request_save_authorization",
+    "commit_save",
+    "ask_clarification",
+    "pause_takeover",
+    # Essential Reads
+    "list_services",
+    "list_providers",
+    "check_slot_availability",
+    "get_onboarding_status",
+    "read_system_settings",
+    "diagnostic_report",
+    # Rule Writes
+    "draft_business_rule",
+    "activate_business_rule",
+)
+
+_ALL_TOOLS_BY_NAME: dict[str, dict[str, Any]] = {
+    tool["function"]["name"]: tool for tool in ALL_BUSINESS_ASSISTANT_TOOLS
+}
+
+VOICE_BUSINESS_ASSISTANT_TOOLS: tuple[dict[str, Any], ...] = tuple(
+    _ALL_TOOLS_BY_NAME[name] for name in _CANONICAL_VOICE_TOOL_NAMES
 )
 
 ALL_TOOL_PACKS: tuple[str, ...] = (
@@ -657,7 +811,10 @@ ALL_TOOL_PACKS: tuple[str, ...] = (
     "customer_operations",
     "support_engineering",
     "website_builder",
+    "diagnostic",
+    "onboarding",
 )
+
 
 
 
@@ -671,10 +828,65 @@ class BusinessAssistantToolRegistry:
         *,
         service: Optional[Any] = None,
         packs: tuple[str, ...] = ("product_help", "booking_availability"),
+        rpc_dispatcher: Optional[Any] = None,
     ) -> None:
         self._adapters = adapters
         self._service = service
         self._packs = packs
+        self._rpc_dispatcher = rpc_dispatcher
+
+    @staticmethod
+    def _compute_proposal_diff_summary(
+        target_section: str,
+        content_payload: dict[str, Any],
+        current_website: Any,
+        base_sections: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Compute structured before/after diff summary for a proposed edit."""
+        changes: list[dict[str, Any]] = []
+        if target_section != "general":
+            current_sec = base_sections.get(target_section, {}) if isinstance(base_sections.get(target_section), dict) else {}
+            proposed_sec = (
+                content_payload.get("sections_data", {}).get(target_section)
+                if isinstance(content_payload.get("sections_data"), dict) and target_section in content_payload["sections_data"]
+                else content_payload.get(target_section, {})
+            )
+            if not isinstance(proposed_sec, dict):
+                proposed_sec = {}
+                for k in ("headline", "subhead", "enabled", "body", "bg_image_url", "image_url", "address", "phone", "email", "hours"):
+                    if k in content_payload:
+                        proposed_sec[k] = content_payload[k]
+
+            for key, after_val in proposed_sec.items():
+                before_val = current_sec.get(key)
+                if before_val != after_val:
+                    changes.append({
+                        "field": key,
+                        "before": before_val,
+                        "after": after_val,
+                    })
+        else:
+            for key in ("template_id", "theme_id", "custom_colors", "seo_title", "seo_description"):
+                if key in content_payload:
+                    before_val = getattr(current_website, key, None) if current_website else None
+                    after_val = content_payload[key]
+                    if before_val != after_val:
+                        changes.append({
+                            "field": key,
+                            "before": before_val,
+                            "after": after_val,
+                        })
+
+        summary_text = (
+            f"Modifications to {target_section}: {len(changes)} fields changed"
+            if changes
+            else f"Proposed modifications to {target_section}"
+        )
+        return {
+            "target_section": target_section,
+            "changes": changes,
+            "summary": summary_text,
+        }
 
     def _get_service(self) -> Any:
         if self._service is not None:
@@ -702,6 +914,10 @@ class BusinessAssistantToolRegistry:
             active.extend(SUPPORT_ENGINEERING_TOOLS)
         if "website_builder" in self._packs:
             active.extend(WEBSITE_BUILDER_TOOLS)
+        if "diagnostic" in self._packs:
+            active.extend(DIAGNOSTIC_TOOLS)
+        if "onboarding" in self._packs:
+            active.extend(ONBOARDING_AGENT_TOOLS)
         return tuple(active)
 
     def execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -901,11 +1117,19 @@ class BusinessAssistantToolRegistry:
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
-        if name == "activate_business_rule":
-            memory_key = arguments.get("memory_key")
+        if name in ("activate_business_rule", "confirm_business_rule"):
+            memory_key = arguments.get("memory_key") or arguments.get("rule_id") or arguments.get("draft_id")
             confirmation_token = arguments.get("confirmation_token")
-            if not memory_key or not isinstance(memory_key, str):
-                return {"status": "rejected", "reason": "memory_key is required and must be a string."}
+            # Defensive recovery: if the model mistakenly passed navigation parameters to activate_business_rule
+            if str(memory_key) in ("navigate_route", "route_navigation") or (
+                isinstance(confirmation_token, str) and confirmation_token.startswith("/admin")
+            ):
+                target_route = confirmation_token if isinstance(confirmation_token, str) and confirmation_token.startswith("/admin") else str(memory_key)
+                return self.execute("navigate_route", {"route": target_route})
+
+            if not memory_key or not isinstance(memory_key, (str, int)):
+                return {"status": "rejected", "reason": "memory_key is required."}
+            memory_key = str(memory_key)
             if not confirmation_token or not isinstance(confirmation_token, str):
                 return {"status": "rejected", "reason": "confirmation_token is required and must be a string."}
             try:
@@ -1094,8 +1318,8 @@ class BusinessAssistantToolRegistry:
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
-        if name == "create_support_ticket":
-            category = arguments.get("category")
+        if name in ("create_support_ticket", "create_maintenance_handoff"):
+            category = arguments.get("category", "support" if name == "create_maintenance_handoff" else None)
             if not category or not isinstance(category, str):
                 return {"status": "rejected", "reason": "category is required and must be a string."}
             title = arguments.get("title")
@@ -1213,6 +1437,45 @@ class BusinessAssistantToolRegistry:
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
+        if name == "ensure_initial_website_draft":
+            if arguments:
+                return {"status": "rejected", "reason": "This action does not accept arguments."}
+            try:
+                service = self._get_service()
+                website, created = service.ensure_initial_website_draft()
+                meta = website.sections_data.get("draft_meta", {}) if isinstance(website.sections_data, dict) else {}
+
+                rpc_dispatched = []
+                if self._rpc_dispatcher:
+                    try:
+                        r1 = self._rpc_dispatcher("route_navigation", {"path": "/admin/website"})
+                        if r1:
+                            rpc_dispatched.append(r1)
+                        r2 = self._rpc_dispatcher("preview_toggle", {"state": "open"})
+                        if r2:
+                            rpc_dispatched.append(r2)
+                    except Exception as rpc_err:
+                        pass
+
+                res = {
+                    "status": "ok",
+                    "created": created,
+                    "website": {
+                        "is_published": website.is_published,
+                        "sections_count": len(website.sections_data or {}),
+                        "missing_essential_facts": meta.get("missing_essential_facts", []),
+                        "preferred_media_sources": meta.get("preferred_media_sources", []),
+                    },
+                    "instructions": "The site is a private starting draft. Show its preview and ask one short question only if essential facts are missing.",
+                }
+                if rpc_dispatched:
+                    res["rpc_dispatched"] = rpc_dispatched
+                return res
+            except (LookupError, ValueError) as exc:
+                return {"status": "rejected", "reason": str(exc)}
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
         if name == "inspect_website_state":
             include_history = arguments.get("include_history", False)
             if not isinstance(include_history, bool):
@@ -1236,8 +1499,39 @@ class BusinessAssistantToolRegistry:
             request_key = arguments.get("request_key")
             if request_key is not None and not isinstance(request_key, str):
                 return {"status": "rejected", "reason": "request_key must be a string if provided."}
+            target_section = arguments.get("target_section")
+            if target_section is not None and not isinstance(target_section, str):
+                return {"status": "rejected", "reason": "target_section must be a string if provided."}
+
             try:
                 service = self._get_service()
+
+                # Infer target_section if not explicitly provided
+                if not target_section:
+                    if "target_section" in content_payload and isinstance(content_payload["target_section"], str):
+                        target_section = content_payload["target_section"]
+                    elif "section" in content_payload and isinstance(content_payload["section"], str):
+                        target_section = content_payload["section"]
+                    elif "sections_data" in content_payload and isinstance(content_payload["sections_data"], dict) and content_payload["sections_data"]:
+                        target_section = list(content_payload["sections_data"].keys())[0]
+                    else:
+                        for s in ("hero", "about", "services", "gallery", "booking", "testimonials", "contact", "footer"):
+                            if s in content_payload:
+                                target_section = s
+                                break
+                if not target_section:
+                    target_section = "general"
+
+                current_website = service._repository.get_tenant_website()
+                base_sections = current_website.sections_data if (current_website and isinstance(current_website.sections_data, dict)) else {}
+
+                diff_summary = self._compute_proposal_diff_summary(
+                    target_section=target_section,
+                    content_payload=content_payload,
+                    current_website=current_website,
+                    base_sections=base_sections,
+                )
+
                 proposal = service.propose_website_edit(
                     title=title,
                     content_payload=content_payload,
@@ -1251,9 +1545,14 @@ class BusinessAssistantToolRegistry:
                         "title": proposal.title,
                         "version": proposal.version,
                         "status": proposal.status,
+                        "target_section": target_section,
+                        "diff_summary": diff_summary,
                         "payload_hash": proposal.payload_hash,
                         "created_at": proposal.created_at.isoformat() if proposal.created_at else None,
                     },
+                    "proposal_id": proposal.id,
+                    "target_section": target_section,
+                    "diff_summary": diff_summary,
                     "instructions": "Proposal created in 'draft' status. Preview or request publication approval to proceed.",
                 }
             except Exception as exc:
@@ -1263,16 +1562,55 @@ class BusinessAssistantToolRegistry:
             proposal_id = arguments.get("proposal_id")
             if proposal_id is None or not isinstance(proposal_id, int):
                 return {"status": "rejected", "reason": "proposal_id is required and must be an integer."}
+            target_section = arguments.get("target_section")
+            if target_section is not None and not isinstance(target_section, str):
+                return {"status": "rejected", "reason": "target_section must be a string if provided."}
             try:
                 service = self._get_service()
                 proposal, preview = service.preview_website_edit(proposal_id)
-                return {
+
+                if not target_section:
+                    payload = proposal.content_payload if isinstance(proposal.content_payload, dict) else {}
+                    if "target_section" in payload and isinstance(payload["target_section"], str):
+                        target_section = payload["target_section"]
+                    elif "section" in payload and isinstance(payload["section"], str):
+                        target_section = payload["section"]
+                    elif "sections_data" in payload and isinstance(payload["sections_data"], dict) and payload["sections_data"]:
+                        target_section = list(payload["sections_data"].keys())[0]
+                    else:
+                        for s in ("hero", "about", "services", "gallery", "booking", "testimonials", "contact", "footer"):
+                            if s in payload:
+                                target_section = s
+                                break
+                if not target_section:
+                    target_section = "hero"
+
+                rpc_dispatched = []
+                if self._rpc_dispatcher:
+                    try:
+                        r1 = self._rpc_dispatcher("preview_toggle", {"state": "open"})
+                        if r1:
+                            rpc_dispatched.append(r1)
+                        r2 = self._rpc_dispatcher("section_highlight", {"section": target_section})
+                        if r2:
+                            rpc_dispatched.append(r2)
+                        r3 = self._rpc_dispatcher("change_review_drawer", {"state": "open", "proposal_id": proposal.id})
+                        if r3:
+                            rpc_dispatched.append(r3)
+                    except Exception as rpc_err:
+                        pass
+
+                res = {
                     "status": "ok",
                     "proposal_id": proposal.id,
                     "version": proposal.version,
                     "proposal_status": proposal.status,
+                    "target_section": target_section,
                     "preview": preview,
                 }
+                if rpc_dispatched:
+                    res["rpc_dispatched"] = rpc_dispatched
+                return res
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
@@ -1324,7 +1662,50 @@ class BusinessAssistantToolRegistry:
             except Exception as exc:
                 return {"status": "rejected", "reason": str(exc)}
 
+        if name in ("diagnostic_report", "run_diagnostic_check"):
+            # Defensive recovery: if the model mistakenly called diagnostic_report for navigation
+            if isinstance(arguments, dict) and any(k in arguments for k in ("route", "path", "page", "target")):
+                target = arguments.get("route") or arguments.get("path") or arguments.get("target") or arguments.get("page")
+                if target and isinstance(target, str):
+                    target_route = target if target.startswith("/admin") else f"/admin/{target.lstrip('/')}"
+                    return self.execute("navigate_route", {"route": target_route, "subtab": arguments.get("subtab")})
+
+            include_tool_log = arguments.get("include_tool_log", True)
+            if not isinstance(include_tool_log, bool):
+                return {"status": "rejected", "reason": "include_tool_log must be a boolean."}
+            try:
+                service = self._get_service()
+                report = service.run_diagnostic_report(
+                    conversation_id=arguments.get("conversation_id"),
+                    include_tool_log=include_tool_log,
+                )
+                return {
+                    "status": "ok",
+                    "report": report,
+                }
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
+        if name in ONBOARDING_TOOL_NAMES:
+            try:
+                service = self._get_service()
+                from .onboarding.gateway import OnboardingGateway
+                gateway = OnboardingGateway(
+                    db_factory=lambda: service._db,
+                    tenant_id=service._tenant_id,
+                    user_id=service._user_id,
+                )
+                return gateway.execute_tool_sync(
+                    name=name,
+                    arguments=arguments,
+                    lease_token=arguments.get("lease_token") if isinstance(arguments, dict) else None,
+                    control_epoch=arguments.get("control_epoch") if isinstance(arguments, dict) else None,
+                )
+            except Exception as exc:
+                return {"status": "rejected", "reason": str(exc)}
+
         return {"status": "rejected", "reason": f"Capability '{name}' is not supported."}
+
 
 
 class ProductHelpToolRegistry:

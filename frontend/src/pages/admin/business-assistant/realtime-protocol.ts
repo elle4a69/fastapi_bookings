@@ -87,32 +87,78 @@ export function parseRealtimeAssistantTranscript(value: unknown): RealtimeAssist
   return null
 }
 
-export function parseRealtimeToolCall(value: unknown): RealtimeToolCall | null {
-  const event = asRecord(value)
-  if (!event) return null
+function parseToolArguments(raw: unknown): Record<string, unknown> {
+  if (asRecord(raw)) return raw as Record<string, unknown>
+  const rawArgs = text(raw)
+  if (!rawArgs) return {}
+  try {
+    return asRecord(JSON.parse(rawArgs)) ?? {}
+  } catch {
+    return {}
+  }
+}
 
+// call_id -> function name, learned from response.output_item.added/done where the name lives.
+const toolCallNameCache = new Map<string, string>()
+
+export function resetRealtimeToolCallNameCache(): void {
+  toolCallNameCache.clear()
+}
+
+function rememberFunctionItem(item: Record<string, unknown> | null): void {
+  if (!item || text(item.type) !== 'function_call') return
+  const callId = text(item.call_id)
+  const name = text(item.name)
+  if (callId && name) toolCallNameCache.set(callId, name)
+}
+
+export function parseRealtimeToolCalls(value: unknown): RealtimeToolCall[] {
+  const event = asRecord(value)
+  if (!event) return []
   const type = text(event.type)
-  if (type === 'response.function_call_arguments.done') {
-    const callId = text(event.call_id)
-    const name = text(event.name)
-    const rawArgs = text(event.arguments)
-    let parsedArgs: Record<string, unknown> = {}
-    if (rawArgs) {
-      try {
-        const parsed = JSON.parse(rawArgs)
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          parsedArgs = parsed as Record<string, unknown>
-        }
-      } catch {
-        parsedArgs = {}
-      }
-    }
-    if (callId && name) {
-      return { callId, name, arguments: parsedArgs }
-    }
+
+  if (type === 'response.output_item.added') {
+    rememberFunctionItem(asRecord(event.item))
+    return []
   }
 
-  return null
+  if (type === 'response.function_call_arguments.done') {
+    const callId = text(event.call_id)
+    const name = text(event.name) || toolCallNameCache.get(callId) || ''
+    return callId && name ? [{ callId, name, arguments: parseToolArguments(event.arguments) }] : []
+  }
+
+  if (type === 'response.output_item.done') {
+    const item = asRecord(event.item)
+    rememberFunctionItem(item)
+    if (item && text(item.type) === 'function_call') {
+      const callId = text(item.call_id)
+      const name = text(item.name) || toolCallNameCache.get(callId) || ''
+      if (callId && name) return [{ callId, name, arguments: parseToolArguments(item.arguments) }]
+    }
+    return []
+  }
+
+  if (type === 'response.done') {
+    const output = asRecord(event.response)?.output
+    if (!Array.isArray(output)) return []
+    const calls: RealtimeToolCall[] = []
+    for (const entry of output) {
+      const item = asRecord(entry)
+      if (!item || text(item.type) !== 'function_call') continue
+      rememberFunctionItem(item)
+      const callId = text(item.call_id)
+      const name = text(item.name) || toolCallNameCache.get(callId) || ''
+      if (callId && name) calls.push({ callId, name, arguments: parseToolArguments(item.arguments) })
+    }
+    return calls
+  }
+
+  return []
+}
+
+export function parseRealtimeToolCall(value: unknown): RealtimeToolCall | null {
+  return parseRealtimeToolCalls(value)[0] ?? null
 }
 
 export function formatRealtimeToolOutput(callId: string, output: Record<string, unknown>): Record<string, unknown> {
@@ -184,3 +230,191 @@ export function pairReadyRealtimeTranscripts(
 
   return { pairs, users: remainingUsers, assistants: remainingAssistants, dropped }
 }
+
+export type AgentActivityType =
+  | 'VOICE_IN'
+  | 'USER_INPUT'
+  | 'DELEGATION'
+  | 'TOOL_EXEC'
+  | 'TOOL_RESULT'
+  | 'REASONING_OUT'
+  | 'VOICE_OUT'
+  | 'ERROR'
+
+export type AgentActivityStatus = 'info' | 'running' | 'success' | 'error'
+
+export type AgentActivityLog = {
+  id: string
+  timestamp: string
+  type: AgentActivityType
+  title: string
+  details?: string
+  payload?: unknown
+  status: AgentActivityStatus
+  agentLabel?: string
+  modelName?: string
+}
+
+export const AGENT_ACTIVITY_LOGS_STORAGE_KEY = 'fastapi_bookings_agent_activity_logs'
+export const MAX_PERSISTED_AGENT_ACTIVITY_LOGS = 300
+
+export function loadPersistedAgentActivityLogs(): AgentActivityLog[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(AGENT_ACTIVITY_LOGS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      const seen = new Set<string>()
+      const unique: AgentActivityLog[] = []
+      let hadDuplicates = false
+      for (const item of parsed) {
+        if (item && typeof item === 'object' && typeof (item as AgentActivityLog).id === 'string') {
+          const log = item as AgentActivityLog
+          if (!seen.has(log.id)) {
+            seen.add(log.id)
+            unique.push(log)
+          } else {
+            hadDuplicates = true
+          }
+        }
+      }
+      const trimmed = unique.slice(-MAX_PERSISTED_AGENT_ACTIVITY_LOGS)
+      // Auto-migrate & sanitize: immediately purge existing duplicate keys from localStorage on boot
+      if (hadDuplicates || trimmed.length !== parsed.length) {
+        try {
+          window.localStorage.setItem(AGENT_ACTIVITY_LOGS_STORAGE_KEY, JSON.stringify(trimmed))
+        } catch {
+          // safely ignore quota or permission issues
+        }
+      }
+      return trimmed
+    }
+  } catch {
+    // safely ignore corrupted JSON
+  }
+  return []
+}
+
+export function savePersistedAgentActivityLogs(logs: AgentActivityLog[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    const seen = new Set<string>()
+    const unique: AgentActivityLog[] = []
+    for (const log of logs) {
+      if (log?.id && !seen.has(log.id)) {
+        seen.add(log.id)
+        unique.push(log)
+      }
+    }
+    const trimmed = unique.slice(-MAX_PERSISTED_AGENT_ACTIVITY_LOGS)
+    window.localStorage.setItem(AGENT_ACTIVITY_LOGS_STORAGE_KEY, JSON.stringify(trimmed))
+  } catch {
+    // safely ignore quota or permission issues
+  }
+}
+
+export function clearPersistedAgentActivityLogs(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(AGENT_ACTIVITY_LOGS_STORAGE_KEY)
+  } catch {
+    // safely ignore
+  }
+}
+
+export function createAgentActivityLog(
+  type: AgentActivityType,
+  title: string,
+  options?: {
+    details?: string
+    payload?: unknown
+    status?: AgentActivityStatus
+    agentLabel?: string
+    modelName?: string
+    id?: string
+    timestamp?: string
+  },
+): AgentActivityLog {
+  let defaultAgentLabel = options?.agentLabel
+  let defaultModelName = options?.modelName
+
+  if (!defaultAgentLabel || !defaultModelName) {
+    switch (type) {
+      case 'VOICE_IN':
+        defaultAgentLabel = defaultAgentLabel ?? 'GPT-Live-1 (Voice Front)'
+        defaultModelName = defaultModelName ?? 'gpt-live-1'
+        break
+      case 'VOICE_OUT':
+        defaultAgentLabel = defaultAgentLabel ?? 'GPT-Live-1 (Voice Front)'
+        defaultModelName = defaultModelName ?? 'gpt-live-1'
+        break
+      case 'DELEGATION':
+      case 'REASONING_OUT':
+        defaultAgentLabel = defaultAgentLabel ?? 'GPT-5.6-Terra (Reasoning Engine)'
+        defaultModelName = defaultModelName ?? 'gpt-5.6-terra'
+        break
+      case 'TOOL_EXEC':
+      case 'TOOL_RESULT':
+        defaultAgentLabel = defaultAgentLabel ?? 'FastAPI Backend (Tool Runner)'
+        defaultModelName = defaultModelName ?? 'python-tools'
+        break
+      case 'USER_INPUT':
+        defaultAgentLabel = defaultAgentLabel ?? 'User / Client Input'
+        defaultModelName = defaultModelName ?? 'client'
+        break
+      case 'ERROR':
+        defaultAgentLabel = defaultAgentLabel ?? 'System / Telemetry'
+        defaultModelName = defaultModelName ?? 'error-boundary'
+        break
+    }
+  }
+
+  return {
+    id: options?.id || `act-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    timestamp: options?.timestamp || new Date().toISOString(),
+    type,
+    title,
+    details: options?.details,
+    payload: options?.payload,
+    status: options?.status ?? 'info',
+    agentLabel: defaultAgentLabel,
+    modelName: defaultModelName,
+  }
+}
+
+export const MAX_CONSECUTIVE_TOOL_CALLS = 10
+
+export function shouldResetTurnToolQuota(event: unknown): boolean {
+  if (!event || typeof event !== 'object') return false
+  const rec = event as Record<string, unknown>
+  const type = typeof rec.type === 'string' ? rec.type : ''
+
+  if (type === 'input_audio_buffer.speech_started') return true
+  if (
+    type === 'conversation.item.input_audio_transcription.completed' ||
+    type === 'input_audio_transcription.completed'
+  ) {
+    return true
+  }
+
+  if (type === 'conversation.item.created') {
+    const item = rec.item as Record<string, unknown> | undefined
+    if (item && item.role === 'user') return true
+  }
+
+  if (type === 'response.cancelled') return true
+
+  if (type === 'response.done') {
+    const response = rec.response as Record<string, unknown> | undefined
+    const output = Array.isArray(response?.output) ? response.output : []
+    const hasFunctionCall = output.some(
+      (item) => typeof item === 'object' && item !== null && (item as Record<string, unknown>).type === 'function_call',
+    )
+    if (!hasFunctionCall) return true
+  }
+
+  return false
+}
+
+
