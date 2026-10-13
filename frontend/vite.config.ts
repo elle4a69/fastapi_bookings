@@ -78,6 +78,15 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
+      '/api/admin/codex': {
+        target: 'http://127.0.0.1:4500',
+        rewrite: (p) => {
+          if (p === '/api/admin/codex/health') return '/health'
+          return p.replace(/^\/api\/admin\/codex/, '/codex')
+        },
+        changeOrigin: true,
+        ws: true,
+      },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

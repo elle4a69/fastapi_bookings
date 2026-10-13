@@ -54,7 +54,7 @@ const GDPRPage = lazy(() => import("@/pages/admin/compliance/gdpr"))
 const AuditLogsPage = lazy(() => import("@/pages/admin/audit"))
 const SystemPage = lazy(() => import("@/pages/admin/system"))
 const TelemetryPage = lazy(() => import("@/pages/admin/telemetry"))
-const ResidentAgentPage = lazy(() => import("@/pages/admin/resident-agent"))
+const CodingCockpitPage = lazy(() => import("@/pages/admin/coding-cockpit"))
 const PublicBookingPage = lazy(() => import("@/pages/public/booking-page"))
 const PublicUploadPage = lazy(() => import("@/pages/public/upload-page"))
 const WebsiteBuilderPage = lazy(() => import("@/pages/admin/website"))
@@ -211,8 +211,9 @@ function App() {
                       route.path === '/admin/audit' ? <AuditLogsPage /> :
                       route.path === '/admin/system' ? <SystemPage /> :
                       route.path === '/admin/telemetry' ? <TelemetryPage /> :
-                      route.path === '/admin/resident-agent' ? <ResidentAgentPage /> :
-                      route.path === '/admin/coding-studio' ? <ResidentAgentPage initialTab="coding" /> :
+                      route.path === '/admin/coding-cockpit' ? <CodingCockpitPage /> :
+                      route.path === '/admin/resident-agent' ? <Navigate to="/admin/coding-cockpit" replace /> :
+                      route.path === '/admin/coding-studio' ? <Navigate to="/admin/coding-cockpit?tab=workbench" replace /> :
                       route.path === '/admin/assistant-studio' ? <AssistantStudioPage /> :
                       route.path === '/admin/business-assistant' ? <BusinessAssistantPage /> :
                       route.path === '/admin/website' ? <WebsiteBuilderPage /> :
@@ -224,14 +225,29 @@ function App() {
                 <Route path="/admin/business-assistant" element={<BusinessAssistantPage />} />
                 <Route path="/admin/gpt-live" element={<GPTLivePage />} />
                 <Route path="/admin/assistant-studio/:tab" element={<AssistantStudioPage />} />
-                <Route path="/admin/resident-agent" element={<ResidentAgentPage />} />
-                <Route path="/admin/coding-studio" element={<ResidentAgentPage initialTab="coding" />} />
+                <Route path="/admin/coding-cockpit" element={<CodingCockpitPage />} />
+                <Route path="/admin/resident-agent" element={<Navigate to="/admin/coding-cockpit" replace />} />
+                <Route path="/admin/coding-studio" element={<Navigate to="/admin/coding-cockpit?tab=workbench" replace />} />
                 <Route path="/admin/settings/modules" element={<TenantModulesPage />} />
                 <Route path="/admin/website" element={<WebsiteBuilderPage />} />
                 <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
 
                 <Route path="/admin/relationships-tree" element={<RelationshipsTreePage />} />
                 <Route path="/admin/booking-forms/:formId" element={<BookingFormEditorPage />} />
+                <Route path="/admin/catalog" element={<Navigate to="/admin/catalog/services" replace />} />
+                <Route path="/admin/services" element={<Navigate to="/admin/catalog/services" replace />} />
+                <Route path="/admin/providers" element={<Navigate to="/admin/catalog/providers" replace />} />
+                <Route path="/admin/categories" element={<Navigate to="/admin/catalog/categories" replace />} />
+                <Route path="/admin/locations" element={<Navigate to="/admin/catalog/locations" replace />} />
+                <Route path="/admin/workdays" element={<Navigate to="/admin/schedule/workdays" replace />} />
+                <Route path="/admin/invoices" element={<Navigate to="/admin/finance/invoices" replace />} />
+                <Route path="/admin/payments" element={<Navigate to="/admin/finance/payments" replace />} />
+                <Route path="/admin/settings" element={<Navigate to="/admin/settings/business" replace />} />
+                <Route path="/admin/schedule" element={<Navigate to="/admin/schedule/workdays" replace />} />
+                <Route path="/admin/finance" element={<Navigate to="/admin/finance/invoices" replace />} />
+                <Route path="/admin/notifications" element={<Navigate to="/admin/notifications/messages" replace />} />
+                <Route path="/admin/compliance" element={<Navigate to="/admin/compliance/gdpr" replace />} />
+                <Route path="/admin/configuration" element={<Navigate to="/admin/configuration/additional-fields" replace />} />
                 <Route path="/admin/telemetry" element={<TelemetryPage />} />
               </Route>
             </Route>

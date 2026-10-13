@@ -7,7 +7,6 @@ import {
   CalendarDaysIcon,
   ClipboardCheckIcon,
   ClipboardListIcon,
-  Cpu,
   FileInputIcon,
   FileTextIcon,
   GiftIcon,
@@ -177,8 +176,7 @@ export const navigation: NavSection[] = [
   {
     label: "Compliance & System",
     items: [
-      { title: "Resident Agent", url: "/admin/resident-agent", icon: Cpu },
-      { title: "Conversational Coding Studio", url: "/admin/coding-studio", icon: Code2 },
+      { title: "Engineering Cockpit", url: "/admin/coding-cockpit", icon: Code2 },
       { title: "Telemetry", url: "/admin/telemetry", icon: Activity },
       { title: "GDPR", url: "/admin/compliance/gdpr", icon: ShieldCheckIcon },
       { title: "Audit Log", url: "/admin/audit", icon: ClipboardCheckIcon },
