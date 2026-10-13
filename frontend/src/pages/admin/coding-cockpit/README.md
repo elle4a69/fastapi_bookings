@@ -98,7 +98,7 @@ frontend/src/pages/admin/coding-cockpit/
 - **Authentication**:
   - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (attaching `X-Tenant`, `X-Token`, and `Authorization`).
 - **Runtime Services**:
-  - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex router under `/api/admin/codex`.
+  - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
 
 ---
 

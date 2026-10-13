@@ -147,3 +147,40 @@ def test_get_codex_threads(client: TestClient, db_session: Session):
     res = client.get("/api/admin/codex/threads", headers=headers)
     assert res.status_code == 200
     assert isinstance(res.json(), list)
+
+
+def test_get_codex_health_unauthenticated(client: TestClient):
+    """GET /api/admin/codex/health returns 200 OK without authentication."""
+    res = client.get("/api/admin/codex/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert "timestamp" in data
+    assert data.get("version") == "1.0.0"
+    assert "codex_db" in data
+
+
+def test_get_codex_health_authenticated(client: TestClient, db_session: Session):
+    """GET /api/admin/codex/health returns 200 OK with admin headers."""
+    _, _, headers = _create_admin_user(db_session, suffix="health")
+    res = client.get("/api/admin/codex/health", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert "timestamp" in data
+
+
+def test_get_codex_diagnostics_deep(client: TestClient, db_session: Session):
+    """GET /api/admin/codex/diagnostics/deep requires auth and returns diagnostics when authenticated."""
+    # Unauthenticated rejected
+    res_unauth = client.get("/api/admin/codex/diagnostics/deep")
+    assert res_unauth.status_code in (401, 403)
+
+    # Authenticated with admin user
+    _, _, headers = _create_admin_user(db_session, suffix="diagdeep")
+    res = client.get("/api/admin/codex/diagnostics/deep", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "status" in data
+    assert "subsystems" in data
+

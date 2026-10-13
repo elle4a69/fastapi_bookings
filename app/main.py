@@ -169,6 +169,7 @@ from backend.routers import (
     events as codex_events,
     settings as codex_settings,
     models as codex_models,
+    diagnostics as codex_diagnostics,
 )
 
 
@@ -615,6 +616,11 @@ app.include_router(
     prefix="/api/admin/codex/models",
     dependencies=[Depends(get_current_admin)],
     tags=["Codex Models"],
+)
+app.include_router(
+    codex_diagnostics.router,
+    prefix="/api/admin/codex",
+    tags=["Codex Diagnostics"],
 )
 
 
