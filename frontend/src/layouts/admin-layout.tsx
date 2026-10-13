@@ -13,7 +13,7 @@ import {
   FieldPointerOverlay,
   OnboardingStatusDock,
 } from "@/pages/admin/business-assistant/components"
-import { AgentProvider } from "@/components/ui-agent"
+import { AgentProvider, VoiceProvider, AgentSidebar } from "@/components/ui-agent"
 
 export function AdminLayout() {
   const location = useLocation()
@@ -26,7 +26,8 @@ export function AdminLayout() {
     <TenantModulesProvider>
       <BusinessAssistantProvider>
         <AgentProvider>
-          <TooltipProvider>
+          <VoiceProvider>
+            <TooltipProvider>
           <SidebarProvider
             style={
               {
@@ -72,8 +73,10 @@ export function AdminLayout() {
             />
             <FieldPointerOverlay />
             <OnboardingStatusDock />
+            <AgentSidebar />
           </SidebarProvider>
         </TooltipProvider>
+          </VoiceProvider>
         </AgentProvider>
       </BusinessAssistantProvider>
     </TenantModulesProvider>

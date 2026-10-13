@@ -186,3 +186,66 @@ test("operate_app is registered in ONBOARDING_RPC_METHODS and dispatches UI auto
     window.dispatchEvent = origDispatch;
   }
 });
+
+test("wakeSupported returns boolean based on SpeechRecognition availability", async () => {
+  const { wakeSupported } = await import("./wakeWord.ts");
+  const initial = wakeSupported();
+  assert.equal(typeof initial, "boolean");
+});
+
+test("startWakeListener initializes speech recognition and recognizes wake phrase", async () => {
+  const { startWakeListener } = await import("./wakeWord.ts");
+
+  let started = false;
+  let aborted = false;
+  let mockHandler: any = null;
+
+  class MockSpeechRecognition {
+    continuous = false;
+    interimResults = false;
+    lang = "";
+    set onresult(fn: any) {
+      mockHandler = fn;
+    }
+    start() {
+      started = true;
+    }
+    abort() {
+      aborted = true;
+    }
+  }
+
+  (globalThis.window as any).SpeechRecognition = MockSpeechRecognition;
+
+  let woke = false;
+  const stop = startWakeListener("Hey Aether", () => {
+    woke = true;
+  }, () => {});
+
+  assert.equal(started, true);
+
+  // Trigger speech match
+  mockHandler({
+    resultIndex: 0,
+    results: [[{ transcript: "Hey Aether please open the services" }]],
+  });
+
+  assert.equal(woke, true);
+  assert.equal(aborted, true);
+  stop();
+});
+
+test("VOICE_PROVIDERS includes GPT-Live and Grok Voice with allowed voices", async () => {
+  const { VOICE_PROVIDERS, SLEEP_OPTIONS } = await import("./voice/providers.ts");
+  assert.equal(VOICE_PROVIDERS.length, 2);
+  assert.equal(VOICE_PROVIDERS[0].id, "openai");
+  assert.equal(VOICE_PROVIDERS[0].label, "GPT-Live");
+  assert.ok(VOICE_PROVIDERS[0].voices.includes("marin"));
+
+  assert.equal(VOICE_PROVIDERS[1].id, "xai");
+  assert.equal(VOICE_PROVIDERS[1].label, "Grok Voice");
+  assert.ok(VOICE_PROVIDERS[1].voices.includes("eve"));
+
+  assert.deepEqual(SLEEP_OPTIONS, [0, 30, 60, 120, 300]);
+});
+

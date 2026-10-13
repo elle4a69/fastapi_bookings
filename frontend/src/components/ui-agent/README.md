@@ -1,12 +1,21 @@
-# UI Agent DOM Automation & Ghost Cursor Engine
+# UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite
 
 ## 1. Purpose & Scope
-The **UI Agent DOM Automation & Ghost Cursor Engine** provides live visual element scanning, automated synthetic user interaction, and an animated Ghost Cursor overlay for the administrative workspace in FastAPI Bookings.
+The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides live visual element scanning, automated synthetic user interaction, an animated Ghost Cursor overlay, and conversational voice control (GPT-Live & Grok Voice) for the administrative workspace in FastAPI Bookings.
 - **What it owns**:
   - DOM visual element scanning (`scanPage`, `labelFor`, `refOf`, `findByRef`) with accessible name extraction and ref tagging.
   - Synthetic user interaction execution (`createExecutor`, `setNativeValue`, `realClick`, `pressEnter`) targeting inputs, selects, Radix UI comboboxes, and datepicker popovers.
   - Ghost Cursor overlay (`GhostCursor.tsx`) with spring-animated cursor pointer, target focus glow, pulse ripples, and floating action tags.
-  - State machine and observation loop (`AgentProvider.tsx`) with step progression, pause/stop/replay, speed control, and SSE streaming integration.
+  - State machine and observation loop (`AgentProvider.tsx`) with step progression, pause/stop/replay, speed control (`slow`, `realistic`, `fast`), and SSE streaming integration.
+  - Hands-free wake word recognition (`wakeWord.ts`) supporting continuous browser speech recognition with phonetic consonant skeleton matching.
+  - Realtime voice delegation engines (`voice/openaiLive.ts`, `voice/grokVoice.ts`):
+    - **OpenAI Live Delegation**: Employs OpenAI Live with `"delegation": {"type": "client"}`, preventing WebRTC tool lockups by delegating DOM tasks directly to the UI Agent.
+    - **Grok Voice Realtime**: Connects to xAI Realtime via WebSockets with a single `operate_app` function tool for natural voice operations.
+  - Full UI controls:
+    - Resizable desktop sidebar (`AgentSidebar.tsx`) with live terminal action stream log, chat view, and 3D flip card settings.
+    - Floating mobile controller and speech bubble (`MobileAgent.tsx`).
+    - Audio pulse bar with sleep timer countdown and provider indicators (`VoiceBar.tsx`).
+    - Settings panel (`SettingsPanel.tsx`) for voice selection, wake phrase editing, sleep timeout, and agent speed.
   - Streaming SSE communication (`stream.ts`) communicating with `/api/admin/ui-agent/chat/stream`.
   - RPC bridge (`operate_app`) connecting the Business Assistant and Grok Voice tool runners to live UI automation.
 - **What it deliberately avoids**:
@@ -20,48 +29,64 @@ The **UI Agent DOM Automation & Ghost Cursor Engine** provides live visual eleme
 - `GhostCursor.tsx`: Renders spring-physics cursor pointer and highlighting borders using `framer-motion` and `lucide-react`.
 - `stream.ts`: Consumes server-sent events (SSE) from `/api/admin/ui-agent/chat/stream`, emitting deltas and executing final action arrays.
 - `AgentProvider.tsx`: Context provider managing session lifecycle, step counter, speed settings, error states, and listening for global `ui-agent:operate` and `operate_app` events.
-- `index.ts`: Package entry point re-exporting scanner, executor, cursor, stream, and provider.
-- `ui-agent.test.ts`: Automated test suite verifying DOM scanning, action execution, SSE parsing, and RPC event dispatch.
+- `wakeWord.ts`: Continuous SpeechRecognition engine detecting wake phrases hands-free with phonetic normalization.
+- `voice/providers.ts`: Configuration for voice engines (GPT-Live, Grok Voice) and idle sleep durations.
+- `voice/openaiLive.ts`: WebRTC client for OpenAI Live using native client delegation.
+- `voice/grokVoice.ts`: WebSocket client for xAI Realtime voice using the `operate_app` tool.
+- `VoiceProvider.tsx`: React context orchestrating voice engines, wake word listeners, caption streaming, and inactivity sleep timers.
+- `VoiceBar.tsx`: Embedded audio bar displaying active provider, voice status, wake word badge, and sleep countdown.
+- `AgentSidebar.tsx`: Resizable administrative sidebar with live action stream, chat history, suggestions, and 3D flip card.
+- `MobileAgent.tsx`: Floating mobile action button and caption bubble for small screens.
+- `SettingsPanel.tsx`: Configuration panel for voices, wake phrase, speed, and session reset.
+- `index.ts`: Package entry point re-exporting scanner, executor, cursor, voice, and layout components.
+- `ui-agent.test.ts`: Automated test suite verifying DOM scanning, action execution, wake word detection, SSE parsing, and RPC event dispatch.
 
 ## 3. Setup, Configuration & Dependencies
 - **Frontend Dependencies**:
   - `react`, `react-dom`, `react-router-dom`
-  - `framer-motion` (for spring-physics cursor and focus tag animations)
-  - `lucide-react` (for cursor icons)
+  - `framer-motion` (for spring-physics cursor, 3D flip panel, and focus tag animations)
+  - `lucide-react` (for icons)
 - **Backend API**:
   - `POST /api/admin/ui-agent/chat/stream`: SSE step planning stream.
   - `POST /api/admin/ui-agent/chat`: Synchronous action execution.
   - `POST /api/admin/ui-agent/sessions/{session_id}/final`: Final results audit endpoint.
   - `GET /api/admin/ui-agent/sessions/{session_id}/timeline`: Session history timeline.
   - `DELETE /api/admin/ui-agent/sessions/{session_id}`: Session cleanup.
+  - `GET /api/admin/ui-agent/voice/providers`: Check OpenAI and xAI API key availability.
+  - `POST /api/admin/ui-agent/voice/openai/session`: OpenAI Live WebRTC SDP negotiation with client delegation.
+  - `POST /api/admin/ui-agent/voice/xai/token`: Ephemeral xAI Realtime client token generation.
 - **Environment Variables**:
-  - `OPENAI_API_KEY`: API key for step planning model (falls back to deterministic inspection when unconfigured).
+  - `OPENAI_API_KEY`: API key for step planning model and GPT-Live voice.
+  - `XAI_API_KEY`: API key for Grok Voice realtime WebSocket sessions.
   - `LLM_BASE_URL`: Optional custom OpenAI-compatible endpoint.
   - `LLM_MODEL`: Model name (default: `gpt-4o-mini`).
 
 ## 4. Core Workflows & Contracts
 ### Inbound / Outbound Action Lifecycle
 1. **Triggering Automation**:
-   - An operator or voice assistant issues an `operate_app` RPC action with instructions (e.g. `"Navigate to services and create new service"`).
-   - `executeRpcAction('operate_app', ...)` dispatches the custom event `ui-agent:operate`.
-2. **DOM Snapshotting**:
+   - An operator issues a text prompt in `AgentSidebar`, clicks a suggestion chip, speaks aloud to GPT-Live/Grok Voice, or triggers an `operate_app` RPC action.
+   - For hands-free interaction, the operator says the wake word (e.g. *"Hey Aether"*), which automatically activates the voice session.
+2. **Client Delegation (No WebRTC Lockups)**:
+   - When using GPT-Live, requests emit `session.delegation.created`. The client `onDelegate` handler receives the intent and invokes `send(request)` on `AgentProvider`.
+   - The voice agent acknowledges the user while the UI Agent executes the required DOM actions.
+3. **DOM Snapshotting & SSE Step Generation**:
    - `AgentProvider` captures `scanPage()` containing the current route, page text, alerts, and visible interactable elements.
-3. **SSE Step Generation**:
-   - `AgentProvider` sends `message` and `page_state` to `/api/admin/ui-agent/chat/stream`.
-   - The backend LLM streams textual explanations (`delta`) followed by concrete structured actions (`click`, `type`, `select`, `pick_date`, `navigate`).
+   - Sent to `/api/admin/ui-agent/chat/stream`, streaming deltas and concrete structured actions (`click`, `type`, `select`, `pick_date`, `navigate`).
 4. **Execution & Ghost Cursor Animation**:
-   - `createExecutor` smoothly scrolls elements into view, positions the Ghost Cursor, triggers the pulse ripple, sets the input values, and reports execution status.
-5. **Observation Turn**:
+   - `createExecutor` smoothly scrolls elements into view, positions the Ghost Cursor, triggers the pulse ripple, sets the input values, and logs execution in the action stream console.
+5. **Observation Turn & Commentary Relay**:
    - If `continue: true` is returned, the new DOM state is rescanned and submitted back to the agent until the goal completes, bounded by `MAX_STEPS = 20` actions per turn loop.
+   - When finished, the UI Agent's spoken message is passed to `session.commentary.append`, allowing GPT-Live or Grok Voice to speak the conclusion naturally.
 
 ## 5. Data Safety & Isolation
-- **Tenant Isolation**: Every backend endpoint requires authenticated tenant credentials via `get_current_tenant_user`. Session histories and final execution audits are strictly segregated by `(tenant_id, session_id)`.
+- **Tenant Isolation**: Every backend endpoint requires authenticated tenant credentials via `get_current_tenant_user`. Session histories, voice tokens, and final execution audits are strictly segregated by `(tenant_id, session_id)`.
 - **Credential & Secret Protection**: No bearer tokens, authorization headers, or customer PII are logged or stored in DOM element tags.
 - **Bounded History**: In-memory session buffers are capped to the most recent 30 turns per session to avoid unbounded memory consumption.
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 - Custom canvas elements or external iframes without accessible DOM tree nodes cannot be scanned by `scanner.ts`.
 - Complex nested drag-and-drop interactions currently require manual operator takeover.
+- Browser SpeechRecognition requires Chrome, Edge, or Safari for the hands-free wake word listener.
 
 ## 7. Verification & Testing Commands
 - **Frontend Unit & Component Tests**:

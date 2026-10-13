@@ -190,3 +190,28 @@ def test_ui_agent_multi_tenant_isolation(client, db_session):
     assert res_b.status_code == 200
     # Tenant B must see empty timeline due to tenant scoping
     assert res_b.json()["timeline"] == []
+
+
+def test_ui_agent_voice_providers_and_session(client, db_session):
+    tenant, user = _owner(db_session, "voice")
+    headers = _headers(tenant, user)
+
+    # 1. Check voice providers endpoint
+    res_prov = client.get("/api/admin/ui-agent/voice/providers", headers=headers)
+    assert res_prov.status_code == 200
+    prov_data = res_prov.json()
+    assert "openai" in prov_data
+    assert "xai" in prov_data
+
+    # 2. Check OpenAI live session rejects invalid voice
+    res_bad_voice = client.post(
+        "/api/admin/ui-agent/voice/openai/session",
+        headers=headers,
+        json={"sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n", "voice": "non_existent_voice"},
+    )
+    assert res_bad_voice.status_code in (400, 503)
+
+    # 3. Check xAI token endpoint requires auth
+    res_unauth = client.post("/api/admin/ui-agent/voice/xai/token")
+    assert res_unauth.status_code in (400, 401)
+

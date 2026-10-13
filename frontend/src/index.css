@@ -485,3 +485,180 @@
     opacity: 0;
   }
 }
+
+/* ── UI Agent Sidebar, Resize Handle & Flip Card ────────────────────────── */
+:root {
+  --agent-w: 380px;
+}
+
+.agent-sidebar {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  top: 0;
+  z-index: 50;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  perspective: 1600px;
+  background: rgba(13, 19, 34, 0.94);
+  backdrop-filter: blur(20px);
+}
+
+.agent-resize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 10;
+}
+.agent-resize::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  height: 48px;
+  width: 2px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background-color 0.2s, height 0.2s;
+}
+.agent-resize:hover::after {
+  background: #06b6d4;
+  height: 96px;
+}
+
+.agent-flip {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  transform-style: preserve-3d;
+}
+
+.agent-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.agent-face-back {
+  transform: rotateY(180deg);
+}
+
+.agent-icon-btn {
+  border-radius: 0.375rem;
+  padding: 0.375rem;
+  color: #94a3b8;
+  transition: background-color 0.2s, color 0.2s;
+}
+.agent-icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.agent-fab {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  display: grid;
+  height: 3.25rem;
+  width: 3.25rem;
+  place-items: center;
+  border-radius: 9999px;
+  background-color: #6366f1;
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.55);
+  transition: background-color 0.2s, transform 0.2s;
+}
+.agent-fab:hover {
+  background-color: #4f46e5;
+  transform: scale(1.05);
+}
+
+.agent-send {
+  display: grid;
+  height: 2.25rem;
+  width: 2.25rem;
+  place-items: center;
+  border-radius: 0.375rem;
+  color: #ffffff;
+  transition: background-color 0.2s;
+}
+
+.agent-chip {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.03);
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  transition: border-color 0.2s, color 0.2s;
+}
+.agent-chip:hover {
+  border-color: rgba(6, 182, 212, 0.45);
+  color: #ffffff;
+}
+.agent-chip:disabled {
+  opacity: 0.4;
+}
+
+.agent-msg {
+  max-width: 90%;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.agent-msg-user {
+  margin-left: auto;
+  background-color: rgba(99, 102, 241, 0.9);
+  color: #ffffff;
+}
+.agent-msg-agent {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+}
+.agent-msg-error {
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  background-color: rgba(244, 63, 94, 0.1);
+  color: #fda4af;
+}
+
+.field-label {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(6, 182, 212, 0.85);
+}
+
+.field-input {
+  width: 100%;
+  border-radius: 0.375rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: #0f172a;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #f1f5f9;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  color-scheme: dark;
+}
+.field-input:focus {
+  border-color: rgba(99, 102, 241, 0.7);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+

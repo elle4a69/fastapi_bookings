@@ -382,3 +382,139 @@ async def delete_session(
     _sessions.pop(session_key, None)
     _final_results.pop(session_key, None)
     return {"ok": True}
+
+
+# ---------- Voice Endpoints (Client Delegation Architecture) ----------
+
+class SdpIn(BaseModel):
+    sdp: str
+    voice: Optional[str] = None
+
+
+OPENAI_LIVE_VOICES = {
+    "marin", "cedar", "quartz", "ripple", "vesper", "willow", "stone",
+    "gleam", "meridian", "bossa", "tempo", "beacon", "delta", "cinder",
+}
+
+VOICE_INSTRUCTIONS = (
+    "You are the friendly voice of an AI agent that operates this web app's UI on the user's behalf. "
+    "Keep spoken replies short and natural. "
+    "Whenever the user asks for anything involving the app, or gives information (names, emails, choices, dates, answers to onboarding questions), "
+    "hand the request off to the app agent instead of answering yourself. While it works, say a brief acknowledgement. "
+    "When the agent's result arrives, relay it conversationally, including any question it asks."
+)
+
+
+@router.get("/voice/providers")
+async def voice_providers(
+    tenant_user: Tuple[Tenant, User] = Depends(get_current_tenant_user),
+):
+    """Return availability of OpenAI and xAI voice provider integrations."""
+    return {
+        "openai": bool(settings.OPENAI_API_KEY and settings.OPENAI_API_KEY.strip()),
+        "xai": bool(settings.XAI_API_KEY and settings.XAI_API_KEY.strip()),
+    }
+
+
+@router.post("/voice/openai/session")
+async def openai_live_session(
+    payload: SdpIn,
+    tenant_user: Tuple[Tenant, User] = Depends(get_current_tenant_user),
+):
+    """Initiate an OpenAI Live WebRTC voice session with native client delegation."""
+    key = settings.OPENAI_API_KEY.strip() if settings.OPENAI_API_KEY else ""
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OPENAI_API_KEY is not configured",
+        )
+    model = (
+        settings.BUSINESS_ASSISTANT_REALTIME_MODEL.strip()
+        if settings.BUSINESS_ASSISTANT_REALTIME_MODEL
+        else "gpt-live-1"
+    )
+    body: Dict[str, Any] = {
+        "session": {
+            "model": model,
+            "instructions": VOICE_INSTRUCTIONS,
+            "delegation": {"type": "client"},
+        },
+        "transport": {"type": "webrtc", "sdp": payload.sdp},
+    }
+    if payload.voice:
+        if payload.voice not in OPENAI_LIVE_VOICES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown GPT-Live voice '{payload.voice}'",
+            )
+        body["session"]["audio"] = {"output": {"voice": payload.voice}}
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/live/sessions",
+                json=body,
+                headers={"Authorization": f"Bearer {key}"},
+            )
+        if r.is_error:
+            logger.error("GPT-Live session initiation failed: %s", r.text)
+            raise HTTPException(
+                status_code=r.status_code,
+                detail=f"GPT-Live session failed: {r.text[:300]}",
+            )
+        return r.json()
+    except httpx.HTTPError as exc:
+        logger.exception("HTTP error connecting to OpenAI Live API")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with OpenAI Live: {str(exc)}",
+        )
+
+
+@router.post("/voice/xai/token")
+async def xai_voice_token(
+    tenant_user: Tuple[Tenant, User] = Depends(get_current_tenant_user),
+):
+    """Generate ephemeral client secret token for xAI Realtime voice connection."""
+    key = settings.XAI_API_KEY.strip() if settings.XAI_API_KEY else ""
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="XAI_API_KEY is not configured",
+        )
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(
+                "https://api.x.ai/v1/realtime/client_secrets",
+                json={"expires_after": {"seconds": 300}},
+                headers={"Authorization": f"Bearer {key}"},
+            )
+        if r.is_error:
+            logger.error("xAI token request failed: %s", r.text)
+            raise HTTPException(
+                status_code=r.status_code,
+                detail=f"xAI token failed: {r.text[:300]}",
+            )
+        res_data = r.json()
+        token = (
+            res_data.get("value")
+            or res_data.get("token")
+            or res_data.get("client_secret")
+            or ""
+        )
+        return {
+            "token": token,
+            "model": "grok-voice-think-fast-2.0",
+            "instructions": VOICE_INSTRUCTIONS,
+        }
+    except httpx.HTTPError as exc:
+        logger.exception("HTTP error connecting to xAI Realtime service")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to communicate with xAI service: {str(exc)}",
+        )
+
