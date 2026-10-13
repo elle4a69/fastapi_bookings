@@ -9,11 +9,8 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { TenantModulesProvider } from "@/context/tenant-modules-context"
 import { BusinessAssistantProvider } from "@/pages/admin/business-assistant/business-assistant-context"
 import { AgentPopup_01 } from "@/components/agents-ui/agent-popup"
-import {
-  FieldPointerOverlay,
-  OnboardingStatusDock,
-} from "@/pages/admin/business-assistant/components"
-import { AgentProvider, VoiceProvider, AgentSidebar } from "@/components/ui-agent"
+import { FieldPointerOverlay } from "@/pages/admin/business-assistant/components"
+import { AgentProvider, VoiceProvider } from "@/components/ui-agent"
 
 export function AdminLayout() {
   const location = useLocation()
@@ -73,8 +70,6 @@ export function AdminLayout() {
               }}
             />
             <FieldPointerOverlay />
-            <OnboardingStatusDock />
-            <AgentSidebar />
           </SidebarProvider>
         </TooltipProvider>
           </VoiceProvider>

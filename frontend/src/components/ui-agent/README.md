@@ -11,8 +11,12 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
   - Realtime voice delegation engines (`voice/openaiLive.ts`, `voice/grokVoice.ts`):
     - **OpenAI Live Delegation**: Employs OpenAI Live with `"delegation": {"type": "client"}`, preventing WebRTC tool lockups by delegating DOM tasks directly to the UI Agent.
     - **Grok Voice Realtime**: Connects to xAI Realtime via WebSockets with a single `operate_app` function tool for natural voice operations.
-  - Full UI controls:
-    - Resizable desktop sidebar (`AgentSidebar.tsx`) with live terminal action stream log, chat view, and 3D flip card settings.
+  - Realtime voice delegation engines (`voice/openaiLive.ts`, `voice/grokVoice.ts`):
+    - **OpenAI Live Delegation**: Employs OpenAI Live with `"delegation": {"type": "client"}`, preventing WebRTC tool lockups by delegating DOM tasks directly to the UI Agent.
+    - **Grok Voice Realtime**: Connects to xAI Realtime via WebSockets with a single `operate_app` function tool for natural voice operations.
+  - Full UI controls and indicators:
+    - Unified Assistant Popup (`components/agents-ui/agent-popup.tsx`) housing full voice selection, wake-word toggle, DOM automation speed, and session controls.
+    - Prominent visual takeover banner (`AgentControlBanner.tsx`) displaying a soft slow red pulse indicator whenever the agent is driving the screen.
     - Floating mobile controller and speech bubble (`MobileAgent.tsx`).
     - Audio pulse bar with sleep timer countdown and provider indicators (`VoiceBar.tsx`).
     - Settings panel (`SettingsPanel.tsx`) for voice selection, wake phrase editing, sleep timeout, and agent speed.
@@ -27,6 +31,7 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
 - `scanner.ts`: Scans interactive elements (`a`, `button`, `input`, `select`, `textarea`, `role="combobox"`, etc.), assigns stable reference keys (`data-agent-ref` or `data-testid`), resolves accessible labels, and generates structured page snapshots.
 - `executor.ts`: Dispatches pointer and keyboard events using native prototype descriptor property setters (supporting React controlled inputs), Radix UI popover menus, and calendar navigation.
 - `GhostCursor.tsx`: Renders spring-physics cursor pointer and highlighting borders using `framer-motion` and `lucide-react`.
+- `AgentControlBanner.tsx`: Top-center floating takeover indicator (`● Agent in Control — Please wait while automated actions complete`) with soft slow red pulse animation active during DOM execution.
 - `stream.ts`: Consumes server-sent events (SSE) from `/api/admin/ui-agent/chat/stream`, emitting deltas and executing final action arrays.
 - `AgentProvider.tsx`: Context provider managing session lifecycle, step counter, speed settings, error states, and listening for global `ui-agent:operate` and `operate_app` events.
 - `wakeWord.ts`: Continuous SpeechRecognition engine detecting wake phrases hands-free with phonetic normalization.
@@ -35,11 +40,11 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
 - `voice/grokVoice.ts`: WebSocket client for xAI Realtime voice using the `operate_app` tool.
 - `VoiceProvider.tsx`: React context orchestrating voice engines, wake word listeners, caption streaming, and inactivity sleep timers.
 - `VoiceBar.tsx`: Embedded audio bar displaying active provider, voice status, wake word badge, and sleep countdown.
-- `AgentSidebar.tsx`: Resizable administrative sidebar with live action stream, chat history, suggestions, and 3D flip card.
+- `AgentSidebar.tsx`: Legacy desktop sidebar component (retired from default admin layout in favor of consolidated popup controls).
 - `MobileAgent.tsx`: Floating mobile action button and caption bubble for small screens.
 - `SettingsPanel.tsx`: Configuration panel for voices, wake phrase, speed, and session reset.
-- `index.ts`: Package entry point re-exporting scanner, executor, cursor, voice, and layout components.
-- `ui-agent.test.ts`: Automated test suite verifying DOM scanning, action execution, wake word detection, SSE parsing, and RPC event dispatch.
+- `index.ts`: Package entry point re-exporting scanner, executor, cursor, banner, voice, and layout components.
+- `ui-agent.test.ts`: Automated test suite verifying DOM scanning, action execution, wake word detection, SSE parsing, takeover banner, and RPC event dispatch.
 
 ## 3. Setup, Configuration & Dependencies
 - **Frontend Dependencies**:

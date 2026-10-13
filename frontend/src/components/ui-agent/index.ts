@@ -11,3 +11,4 @@ export * from "./VoiceBar.tsx";
 export * from "./SettingsPanel.tsx";
 export * from "./AgentSidebar.tsx";
 export * from "./MobileAgent.tsx";
+export * from "./AgentControlBanner.tsx";

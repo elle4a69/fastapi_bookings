@@ -16,6 +16,7 @@ import {
   type UIController,
 } from "./executor.ts";
 import { GhostCursor, type CursorState, type HighlightState } from "./GhostCursor.tsx";
+import { AgentControlBanner } from "./AgentControlBanner.tsx";
 import { streamChat } from "./stream.ts";
 import { authenticatedAdminFetch } from "../../lib/api.ts";
 
@@ -349,6 +350,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
     <AgentCtx.Provider value={value}>
       {children}
       <GhostCursor cursor={cursor} highlight={highlight} />
+      <AgentControlBanner />
     </AgentCtx.Provider>
   );
 };

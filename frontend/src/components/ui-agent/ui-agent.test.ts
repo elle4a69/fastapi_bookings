@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 // @ts-expect-error Node's test-runner types are intentionally not part of the app build.
 import test from "node:test";
+// @ts-expect-error Node's file-system types are intentionally not part of the app build.
+import { readFileSync } from "node:fs";
 
 import { clean, labelFor, refOf, scanPage } from "./scanner.ts";
 import { createExecutor } from "./executor.ts";
@@ -386,4 +388,15 @@ test("startOpenAILive throws when local SDP offer lacks audio", async () => {
     { message: /WebRTC offer does not contain a valid audio stream/ },
   );
 });
+
+test("AgentControlBanner defines prominent visual takeover indicator for automated actions", () => {
+  const bannerSource = readFileSync(
+    new URL("./AgentControlBanner.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(bannerSource, /Agent in Control — Please wait while automated actions complete/);
+  assert.match(bannerSource, /data-testid="agent-control-banner"/);
+  assert.match(bannerSource, /animate-pulse/);
+});
+
 
