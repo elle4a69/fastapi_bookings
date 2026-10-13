@@ -76,9 +76,14 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
     setIsEditingTitle(false)
   }
 
-  const currentModel = activeThread?.model || getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol')
+  const [selectedStickyModel, setSelectedStickyModel] = useState<string>(() =>
+    getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol')
+  )
+
+  const currentModel = activeThread?.model || selectedStickyModel
 
   const handleSelectModel = (model: string) => {
+    setSelectedStickyModel(model)
     setSafeLocalStorage('codex_last_used_model', model)
     if (activeThread) {
       setThreadModel(activeThread.id, model)

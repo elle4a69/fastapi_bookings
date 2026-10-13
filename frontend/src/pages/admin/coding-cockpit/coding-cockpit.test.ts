@@ -194,3 +194,38 @@ test('Monolith resident-agent.tsx is pruned and pruned of competitor radar and i
   assert.equal(content.includes('Competitor Tech Radar'), false, 'Must have zero competitor radar')
   assert.equal(content.includes('Quick Start Prompt Presets'), false, 'Must have zero static prompt copy cards')
 })
+
+test('codexApi connectThreadEvents implements resilient auto-reconnection and ticket refresh', () => {
+  const codexApiPath = fileURLToPath(new URL('./workbench/api/codexApi.ts', import.meta.url))
+  const content = readFileSync(codexApiPath, 'utf8')
+
+  assert.ok(content.includes('scheduleReconnect'), 'Must have auto-reconnect scheduling')
+  assert.ok(content.includes('currentLastEventId'), 'Must track last received event ID')
+  assert.ok(content.includes('createThreadEventTicket'), 'Must refresh SSE ticket on connection')
+  assert.ok(content.includes('Math.min(1000 * Math.pow(1.5, retryCount)'), 'Must implement exponential backoff')
+})
+
+test('ThreadHeader and useWorkbenchStore guard against null thread and undefined properties', () => {
+  const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
+  const storePath = fileURLToPath(new URL('./workbench/store/useWorkbenchStore.ts', import.meta.url))
+  const pulsePath = fileURLToPath(new URL('./workbench/components/timeline/LiveActivityPulse.tsx', import.meta.url))
+  const timelinePath = fileURLToPath(new URL('./workbench/components/timeline/Timeline.tsx', import.meta.url))
+
+  const headerContent = readFileSync(headerPath, 'utf8')
+  const storeContent = readFileSync(storePath, 'utf8')
+  const pulseContent = readFileSync(pulsePath, 'utf8')
+  const timelineContent = readFileSync(timelinePath, 'utf8')
+
+  // Reactive sticky model
+  assert.ok(headerContent.includes('selectedStickyModel'), 'ThreadHeader must have reactive sticky model state')
+  
+  // Safe optional chaining in pulse
+  assert.ok(pulseContent.includes('activeThread?.turns?.some'), 'LiveActivityPulse must safely optional chain turns')
+
+  // Safe fallback in timeline
+  assert.ok(timelineContent.includes("thread.permissionProfile || 'workspace_write'"), 'Timeline must safely fallback permissionProfile')
+
+  // Auto-thread creation fallback on message send
+  assert.ok(storeContent.includes('if (!threadId) {'), 'sendUserMessage must auto-create thread if null')
+})
+

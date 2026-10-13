@@ -9,8 +9,9 @@ interface Props {
 }
 
 export const PlanItem: React.FC<Props> = ({ item }) => {
-  const completedCount = item.tasks.filter(t => t.status === 'completed').length
-  const totalCount = item.tasks.length
+  const tasks = item.tasks || []
+  const completedCount = tasks.filter(t => t.status === 'completed').length
+  const totalCount = tasks.length
   const progressPercent = Math.round((completedCount / (totalCount || 1)) * 100)
 
   const getTaskIcon = (status: string) => {
@@ -48,7 +49,7 @@ export const PlanItem: React.FC<Props> = ({ item }) => {
       </div>
 
       <div className="space-y-1.5">
-        {item.tasks.map((task) => (
+        {tasks.map((task) => (
           <div
             key={task.id}
             className={cn(

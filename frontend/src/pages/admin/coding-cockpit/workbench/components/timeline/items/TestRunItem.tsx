@@ -10,9 +10,10 @@ interface Props {
 export const TestRunItem: React.FC<Props> = ({ item }) => {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const totalPassed = item.suites.reduce((acc, s) => acc + s.passed, 0)
-  const totalFailed = item.suites.reduce((acc, s) => acc + s.failed, 0)
-  const durationSec = (item.totalDurationMs / 1000).toFixed(2)
+  const suites = item.suites || []
+  const totalPassed = suites.reduce((acc, s) => acc + (s.passed || 0), 0)
+  const totalFailed = suites.reduce((acc, s) => acc + (s.failed || 0), 0)
+  const durationSec = ((item.totalDurationMs ?? 0) / 1000).toFixed(2)
 
   return (
     <div className="my-2 max-w-4xl mx-auto border border-[var(--border)] rounded-md bg-[var(--surface-primary)] overflow-hidden text-xs shadow-xs w-full max-w-full break-words">
@@ -50,11 +51,11 @@ export const TestRunItem: React.FC<Props> = ({ item }) => {
 
       {isExpanded && (
         <div className="p-3 border-t border-[var(--border)] space-y-2 bg-[var(--surface-secondary)]/20">
-          {item.suites.map((suite, idx) => (
+          {suites.map((suite, idx) => (
             <div key={idx} className="p-2.5 rounded bg-[var(--surface-primary)] border border-[var(--border)]">
               <div className="flex items-center justify-between font-mono text-xs">
                 <span className="font-semibold text-[var(--text-primary)] truncate max-w-[200px] sm:max-w-none">{suite.name}</span>
-                <span className="text-[10px] text-[var(--text-subtle)]">{(suite.durationMs / 1000).toFixed(2)}s</span>
+                <span className="text-[10px] text-[var(--text-subtle)]">{((suite.durationMs ?? 0) / 1000).toFixed(2)}s</span>
               </div>
 
               <div className="flex items-center gap-2 mt-1.5 text-[11px]">

@@ -11,8 +11,8 @@ export const TerminalTab: React.FC = () => {
   const realProcesses = React.useMemo(() => {
     if (!activeThread) return []
     const procs: any[] = []
-    activeThread.turns.forEach(turn => {
-      turn.items.forEach(item => {
+    activeThread.turns?.forEach(turn => {
+      turn.items?.forEach(item => {
         if (item.type === 'command_execution') {
           procs.push({
             id: item.id,

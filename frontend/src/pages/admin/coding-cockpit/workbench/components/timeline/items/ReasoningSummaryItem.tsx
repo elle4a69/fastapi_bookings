@@ -20,7 +20,7 @@ export const ReasoningSummaryItem: React.FC<Props> = ({ item }) => {
     }
   }, [item.rawTrace, item.summary, isStreaming, isExpanded])
 
-  const formattedDuration = (item.elapsedMs / 1000).toFixed(1)
+  const formattedDuration = ((item.elapsedMs ?? 0) / 1000).toFixed(1)
 
   return (
     <div className={`my-2 max-w-4xl mx-auto border rounded-md overflow-hidden text-xs w-full max-w-full transition-colors ${

@@ -23,16 +23,17 @@ export const CommandExecutionItem: React.FC<Props> = ({ item }) => {
   const [isWrapped, setIsWrapped] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
 
-  const durationFormatted = (item.durationMs / 1000).toFixed(2)
+  const durationFormatted = ((item.durationMs ?? 0) / 1000).toFixed(2)
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
-    navigator.clipboard.writeText(`${item.command}\n\n${item.stdout}`)
+    navigator.clipboard.writeText(`${item.command || ''}\n\n${item.stdout || ''}`)
     setIsCopied(true)
     setTimeout(() => setIsCopied(false), 2000)
   }
 
-  const outputLines = item.stdout.split('\n')
+  const rawStdout = item.stdout || ''
+  const outputLines = rawStdout ? rawStdout.split('\n') : []
   const filteredLines = searchQuery
     ? outputLines.filter(line => line.toLowerCase().includes(searchQuery.toLowerCase()))
     : outputLines

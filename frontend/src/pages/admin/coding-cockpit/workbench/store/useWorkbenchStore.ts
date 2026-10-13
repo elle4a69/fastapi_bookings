@@ -1732,8 +1732,15 @@ export function useWorkbenchStore() {
     text: string,
     options?: { model?: string; reasoningEffort?: ReasoningEffort }
   ) => {
-    const threadId = state.activeThreadId
-    if (!threadId || !text.trim()) return
+    if (!text.trim()) return
+
+    let threadId = state.activeThreadId
+    if (!threadId) {
+      const modelToUse = options?.model || getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol')
+      const title = text.trim().slice(0, 45) || 'New Investigation'
+      const created = await createThread(title, modelToUse, options?.reasoningEffort || 'medium')
+      threadId = created.id
+    }
 
     const newTurnId = `turn_${Date.now()}`
     const userItem: TimelineItem = {

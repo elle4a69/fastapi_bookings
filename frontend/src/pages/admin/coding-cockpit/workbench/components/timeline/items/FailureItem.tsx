@@ -21,13 +21,13 @@ export const FailureItem: React.FC<Props> = ({ item }) => {
               Turn Failed: {item.summary}
             </div>
             <div className="text-[10px] text-[var(--text-subtle)] font-mono uppercase mt-0.5">
-              Category: {item.errorCategory.replace('_', ' ')}
+              Category: {(item.errorCategory || 'internal').replace('_', ' ')}
             </div>
           </div>
         </div>
 
         <Badge variant="danger" className="uppercase font-mono text-[9px]">
-          {item.errorCategory}
+          {item.errorCategory || 'internal'}
         </Badge>
       </div>
 

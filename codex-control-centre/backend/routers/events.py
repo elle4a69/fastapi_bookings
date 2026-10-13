@@ -38,8 +38,26 @@ async def verify_sse_ticket(
         token = auth_header.split(" ")[1]
     if not token:
         token = request.query_params.get("token")
+    if not token:
+        token = request.headers.get("X-Token")
+
     if token and secrets.compare_digest(token, settings.token_secret):
         return
+
+    # Check JWT token if running within FastAPI Bookings with decoded admin user
+    if token:
+        try:
+            from app.core.security import decode_access_token
+            from app.db.database import SessionLocal
+            from app.models.user import User
+            payload = decode_access_token(token)
+            if payload and payload.get("sub"):
+                with SessionLocal() as db:
+                    user = db.query(User).filter(User.id == int(payload["sub"])).first()
+                    if user and user.role in ("owner", "admin", "manager", "superadmin"):
+                        return
+        except Exception:
+            pass
 
     logger.info(
         "Rejected SSE connection (ticket_present=%s, length=%s, project=%s, thread=%s)",
@@ -57,18 +75,28 @@ async def issue_sse_ticket(req: SseTicketRequest):
     ticket, expires_at = await sse_ticket_store.issue(req.project_id, req.thread_id)
     return {"ticket": ticket, "expires_at": expires_at.isoformat()}
 
+@router.get("/stream")
+@router.get("/events/stream")
 @router.get("/{project_id}/{thread_id}")
 @router.get("/{project_id}/{thread_id}/")
 @router.get("/events/{project_id}/{thread_id}")
 @router.get("/events/{project_id}/{thread_id}/")
 async def stream_events(
-    project_id: str,
-    thread_id: str,
     request: Request,
+    project_id: str = "default",
+    thread_id: Optional[str] = None,
+    query_thread_id: Optional[str] = Query(None, alias="thread_id"),
     last_event_id: Optional[str] = Header(None, alias="Last-Event-ID"),
     query_last_event_id: Optional[str] = Query(None, alias="last_event_id"),
-    _: None = Depends(verify_sse_ticket),
+    sse_ticket: Optional[str] = Query(None),
 ):
+    resolved_thread_id = thread_id or query_thread_id or "default"
+    await verify_sse_ticket(
+        project_id=project_id,
+        thread_id=resolved_thread_id,
+        request=request,
+        sse_ticket=sse_ticket,
+    )
     actual_last_id = last_event_id or query_last_event_id
     
     async def is_req_disconnected() -> bool:
@@ -87,10 +115,10 @@ async def stream_events(
         return False
 
     async def event_generator():
-        queue = broker.subscribe(thread_id)
+        queue = broker.subscribe(resolved_thread_id)
         try:
             # 1. Replay missed backlog
-            missed = broker.get_history(thread_id, actual_last_id)
+            missed = broker.get_history(resolved_thread_id, actual_last_id)
             for event in missed:
                 if await is_req_disconnected():
                     break
@@ -113,7 +141,7 @@ async def stream_events(
         except (asyncio.CancelledError, GeneratorExit):
             pass
         finally:
-            broker.unsubscribe(thread_id, queue)
+            broker.unsubscribe(resolved_thread_id, queue)
 
     return StreamingResponse(
         event_generator(),

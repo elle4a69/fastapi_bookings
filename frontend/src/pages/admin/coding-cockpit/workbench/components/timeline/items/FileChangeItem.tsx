@@ -24,10 +24,10 @@ export const FileChangeItem: React.FC<Props> = ({ item }) => {
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[11px] font-mono text-[var(--success)] font-medium">
-            +{item.totalAdditions}
+            +{item.totalAdditions ?? 0}
           </span>
           <span className="text-[11px] font-mono text-[var(--danger)] font-medium">
-            -{item.totalDeletions}
+            -{item.totalDeletions ?? 0}
           </span>
 
           <Button
@@ -45,7 +45,7 @@ export const FileChangeItem: React.FC<Props> = ({ item }) => {
       </div>
 
       <div className="space-y-1">
-        {item.files.map((file, idx) => (
+        {(item.files || []).map((file, idx) => (
           <button
             key={idx}
             type="button"

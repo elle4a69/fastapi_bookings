@@ -38,7 +38,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
 
       {!isSubmitted ? (
         <form onSubmit={handleSubmit} className="space-y-3">
-          {item.schema.map((field) => (
+          {(item.schema || []).map((field) => (
             <div key={field.id}>
               <label 
                 htmlFor={`user-input-${field.id}`}

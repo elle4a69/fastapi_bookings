@@ -107,22 +107,31 @@ frontend/src/pages/admin/coding-cockpit/
 1. **Unified Navigation & Routing**:
    - Accessing legacy `/admin/resident-agent` or `/admin/coding-studio` cleanly redirects to `/admin/coding-cockpit`.
    - Sidebar displays `Engineering Cockpit` under the `Compliance & System` category.
-2. **Project & Thread Hierarchy**:
+2. **Project & Thread Hierarchy & Auto-Provisioning**:
    - Operator clicks **"+ Project"** in `UnifiedSidebar.tsx` to register a local directory target.
    - Expanding the project shows its conversations. Clicking a thread selects it and sets the worktree context.
    - Clicking **"+"** on any project row creates a new conversation under that project.
+   - **Empty Thread Composer Fallback**: Submitting a message in `useWorkbenchStore.sendUserMessage` when `activeThreadId` is null automatically provisions a new conversation under the selected project with the sticky model, preventing dropped inputs or silent state failures.
 3. **Sticky Model Selection**:
    - The interactive Model Selector in `ThreadHeader.tsx` defaults to `gpt-5.6-sol` or the last chosen model from `localStorage` (`codex_last_used_model`).
+   - Fully reactive dropdown with local state ensures immediate UI feedback even prior to thread hydration.
    - Changing the model immediately updates the active thread's model policy and persists it for all subsequent turns.
-4. **Secondary Tool Modals**:
+4. **Resilient Real-Time SSE Stream Architecture (`connectThreadEvents`)**:
+   - Query-based streaming routing: Supports `GET /stream?thread_id={id}` and `GET /events/stream?thread_id={id}`.
+   - **Single-Use Ticket Renegotiation**: Because standard browser `EventSource` cannot pass custom `Authorization: Bearer` headers, `codexApi.ts` fetches a scoped, single-use ticket from `/api/admin/codex/events/ticket`.
+   - **Auto-Reconnection with Exponential Backoff**: On disconnect or stream error, the connection handler acquires a fresh ticket and reconnects using exponential backoff (`Math.min(1000 * Math.pow(1.5, retryCount), 10000)`), cleanly clearing timers on close.
+   - **Continuous Event ID Tracking**: `currentLastEventId` updates with every incoming frame (message, pulse, approval, reasoning) to guarantee no message loss across reconnections.
+5. **Defensive Streaming Property Guards**:
+   - All timeline and inspector components (`CommandExecutionItem`, `ReasoningSummaryItem`, `AgentMessageItem`, `FileChangeItem`, `PlanItem`, `SubAgentCard`, `TestRunItem`, `WebResearchItem`, `UserInputFormItem`, `FailureItem`, `TerminalTab`, `LiveActivityPulse`, `Timeline`) defensively guard against `undefined`, `null`, non-string, and empty array inputs during streaming state transitions.
+6. **Secondary Tool Modals**:
    - Operator accesses secondary tools (SRE Health, Concurrency Stress Fuzzer, AST Issues Studio, Skills Library, Event Stream) via the "Tools" dropdown in `ThreadHeader.tsx`.
    - Clicking any tool opens a spacious, full-screen dialog overlay (`SecondaryToolsModals.tsx`) with ESC and 'X' close handling.
-5. **Streamlined Terminal Runner**:
+7. **Streamlined Terminal Runner**:
    - The bottom dock is strictly dedicated to the Terminal / Live Output runner, avoiding cramped tab strips or UI clipping.
-6. **Draggable Resizable Side Panels**:
+8. **Draggable Resizable Side Panels**:
    - Desktop operators drag the splitter between Left Sidebar and Center (clamped 220px - 480px) or between Center and Right Inspector (clamped 260px - 600px).
    - Widths persist in `localStorage` under `codex_sidebar_width` and `codex_inspector_width`.
-7. **Diff Review Studio**:
+9. **Diff Review Studio**:
    - Changed files are indexed in `Inspector.tsx` (Changes tab).
    - Clicking **"Diffs"** opens `DiffReviewStudioModal.tsx` for side-by-side hunk review and operator verdict approval.
 
@@ -160,6 +169,10 @@ To verify the Codex Engineering Cockpit module, run the following commands:
 - **TypeScript & Vite Production Build**:
   ```bash
   npm run build --prefix frontend
+  ```
+- **Automated Headless Zero-Console-Error Quality Gate**:
+  ```bash
+  python scripts/verify_zero_console_errors.py --url http://localhost:7070 --routes /admin/coding-cockpit
   ```
 - **Living Documentation Compliance Verification (Rule 10)**:
   ```bash

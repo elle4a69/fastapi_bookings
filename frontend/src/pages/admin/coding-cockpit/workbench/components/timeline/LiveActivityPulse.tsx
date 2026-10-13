@@ -8,7 +8,7 @@ export const LiveActivityPulse: React.FC = () => {
 
   // Only render when turn is active or streaming
   const isStreaming = state.isStreaming
-  const hasInProgressTurn = Boolean(activeThread?.turns.some(t => t.status === 'in_progress'))
+  const hasInProgressTurn = Boolean(activeThread?.turns?.some(t => t.status === 'in_progress'))
 
   if (!isStreaming && !hasInProgressTurn) {
     return null

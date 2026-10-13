@@ -207,7 +207,7 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
           </div>
           <h2 className="text-base font-semibold text-[var(--text-primary)]">{thread.title}</h2>
           <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-md">
-            Thread initialized with <strong>{thread.model}</strong> under <strong>{thread.permissionProfile.replace('_', ' ')}</strong> permissions.
+            Thread initialized with <strong>{thread.model}</strong> under <strong>{(thread.permissionProfile || 'workspace_write').replace('_', ' ')}</strong> permissions.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-lg">

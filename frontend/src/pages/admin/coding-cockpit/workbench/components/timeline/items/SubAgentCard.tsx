@@ -61,7 +61,7 @@ export const SubAgentCard: React.FC<Props> = ({ agent }) => {
               {agent.role}
             </h4>
             <span className="text-[10px] font-mono text-[var(--text-subtle)] truncate block">
-              {agent.model} · {agent.scope.replace('_', ' ')}
+              {agent.model} · {(agent.scope || 'workspace_write').replace('_', ' ')}
             </span>
           </div>
         </div>

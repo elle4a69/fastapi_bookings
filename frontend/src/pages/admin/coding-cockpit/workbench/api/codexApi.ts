@@ -170,7 +170,7 @@ export class CodexApi {
     })
   }
 
-  // EventSource SSE Stream Connection
+  // EventSource SSE Stream Connection with Graceful Reconnection & Backoff
   connectThreadEvents(
     projectId: string,
     threadId: string,
@@ -186,6 +186,9 @@ export class CodexApi {
     const encodedThread = encodeURIComponent(threadId)
     let eventSource: EventSource | null = null
     let closed = false
+    let currentLastEventId = lastEventId || ''
+    let retryCount = 0
+    let reconnectTimer: any = null
 
     const handleRawEvent = (event: MessageEvent, eventType?: string) => {
       try {
@@ -204,11 +207,17 @@ export class CodexApi {
 
         // Skip internal keepalive pings
         if (resolvedType === 'ping') {
+          retryCount = 0
           return
         }
 
+        const envelopeId = event.lastEventId || parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        if (envelopeId) {
+          currentLastEventId = envelopeId
+        }
+
         const envelope: SSEEventEnvelope = {
-          id: event.lastEventId || parsed.id || `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          id: envelopeId,
           schema_version: parsed.schema_version || '1.0',
           project_id: parsed.project_id || projectId,
           thread_id: parsed.thread_id || threadId,
@@ -218,10 +227,23 @@ export class CodexApi {
           payload: parsed.payload !== undefined ? parsed.payload : parsed
         }
 
+        retryCount = 0
         onEvent(envelope)
       } catch (e) {
         onError?.(e)
       }
+    }
+
+    const scheduleReconnect = () => {
+      if (closed || reconnectTimer) return
+      const delay = Math.min(1000 * Math.pow(1.5, retryCount), 10000)
+      retryCount++
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        if (!closed) {
+          void openEventSource()
+        }
+      }, delay)
     }
 
     const eventNames = [
@@ -249,19 +271,38 @@ export class CodexApi {
     ]
 
     const openEventSource = async () => {
+      if (closed) return
       try {
-        // EventSource cannot send Authorization headers. A scoped, one-time
-        // ticket keeps the long-lived URL free of the bearer credential.
-        const { ticket } = await this.createThreadEventTicket(projectId, threadId)
+        let ticket = ''
+        try {
+          const res = await this.createThreadEventTicket(projectId, threadId)
+          ticket = res.ticket
+        } catch {
+          // If ticket request fails, continue and let token fallback work
+        }
+
         if (closed) return
+
         const tenant = this.client.getTenant()
-        const params = new URLSearchParams({ sse_ticket: ticket })
+        const params = new URLSearchParams()
+        if (ticket) {
+          params.set('sse_ticket', ticket)
+        } else {
+          const token = this.client.getToken()
+          if (token) params.set('token', token)
+        }
         if (tenant) params.set('tenant', tenant)
-        if (lastEventId) params.set('last_event_id', lastEventId)
+        if (currentLastEventId) params.set('last_event_id', currentLastEventId)
+
         const base = this.client.getBaseUrl().replace(/\/codex$/, '')
         const url = `${base}/codex/events/${encodedProj}/${encodedThread}?${params.toString()}`
         const es = new EventSource(url, { withCredentials: true })
         eventSource = es
+
+        es.onopen = () => {
+          retryCount = 0
+        }
+
         es.onmessage = (event) => handleRawEvent(event)
         eventNames.forEach(name => {
           es.addEventListener(name, (event: Event) => handleRawEvent(event as MessageEvent, name))
@@ -270,9 +311,11 @@ export class CodexApi {
           es.close()
           if (eventSource === es) eventSource = null
           onError?.(err)
+          scheduleReconnect()
         }
       } catch (err) {
         onError?.(err)
+        scheduleReconnect()
       }
     }
 
@@ -280,6 +323,10 @@ export class CodexApi {
 
     return () => {
       closed = true
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
       eventSource?.close()
       eventSource = null
     }

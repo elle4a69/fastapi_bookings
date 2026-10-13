@@ -10,14 +10,15 @@ export const AgentMessageItem: React.FC<Props> = ({ item }) => {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(item.content)
+    navigator.clipboard.writeText(item.content || '')
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   // Simple clean markdown parser for prose, headers, backtick code, and code fences
   const renderFormattedContent = (text: string) => {
-    const lines = text.split('\n')
+    const raw = typeof text === 'string' ? text : String(text || '')
+    const lines = raw.split('\n')
     const elements: React.ReactNode[] = []
     let inCodeBlock = false
     let codeBlockContent: string[] = []
