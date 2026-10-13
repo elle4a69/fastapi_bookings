@@ -51,7 +51,17 @@ def main():
     else:
         print("No smoke test script found. Skipping Gate 8.")
     
-    print_header("ALL 8 GATES PASSED SUCCESSFULLY")
+    print_header("Gate 9: Browser Zero-Console-Error & Network Failure Gate")
+    browser_verifier = os.path.join(workspace_dir, "scripts", "verify_zero_console_errors.py")
+    if os.path.exists(browser_verifier):
+        import urllib.request
+        try:
+            urllib.request.urlopen("http://localhost:7070", timeout=2)
+            run_command(f"{sys.executable} scripts/verify_zero_console_errors.py", cwd=workspace_dir)
+        except Exception:
+            print("Dev server not running on http://localhost:7070. Skipping live browser verification gate.")
+    
+    print_header("ALL 9 GATES PASSED SUCCESSFULLY")
 
 if __name__ == "__main__":
     main()

@@ -13,6 +13,7 @@ The operational scripts suite owns:
 - **Unified Release Gate Verification** (`verify_all_release_gates.py`): Multi-stage release verification executing syntax checks, backend unit tests, concurrency suites, API fuzzing, and frontend bundle validation.
 - **External Integration Syncing** (`sync_mock_to_chatwoot.py`): Idempotent seeding and synchronization of contacts, inboxes, and conversations with local or staging Chatwoot instances.
 - **Asset Generation** (`generate_pwa_icons.py`): Automated generation of high-resolution PWA icons and maskable web app graphics.
+- **Automated Browser Console & Network Gate** (`verify_zero_console_errors.py`): Headless Playwright suite asserting zero console errors, zero uncaught page exceptions, and zero 4xx/5xx network failures across key administrative and public frontend routes.
 
 These scripts deliberately avoid mutating production databases without explicit environment confirmation flags, printing raw credentials or tokens to stdout, or introducing non-deterministic fixture data.
 
@@ -30,11 +31,13 @@ scripts/
 ├── generate_pwa_icons.py          # Generates high-res PWA png icons and maskable graphics
 ├── verify_all_release_gates.py    # Unified release gate verification runner (pytest + build checks)
 ├── verify_production_secrets.py   # Production secrets and security toggles validator (Section 25)
+├── verify_zero_console_errors.py  # Headless browser console and network error verification gate
 └── README.md                      # Living documentation
 ```
 
 ### Key Files:
 - [verify_living_docs.py](file:///f:/Projects/fastapi_bookings/scripts/verify_living_docs.py): CI release gate validating that all module READMEs satisfy the 7 mandatory Rule 10 sections without empty placeholder stubs.
+- [verify_zero_console_errors.py](file:///f:/Projects/fastapi_bookings/scripts/verify_zero_console_errors.py): Headless browser gate asserting ZERO console errors, unhandled exceptions, and 4xx/5xx network responses across frontend routes.
 - [index_living_docs.py](file:///f:/Projects/fastapi_bookings/scripts/index_living_docs.py): Scans module READMEs, extracts metadata and test commands, and builds `docs/module_manifest.json`, `docs/MODULE_INDEX.md`, and `docs/module_docs.db`.
 - [query_docs.py](file:///f:/Projects/fastapi_bookings/scripts/query_docs.py): Rapid CLI interface for agents to look up module architecture, verification commands, and system boot snapshots.
 - [seed_clean_numbered_data.py](file:///f:/Projects/fastapi_bookings/scripts/seed_clean_numbered_data.py): Deterministic seeder establishing baseline entities (`simplydemo` tenant, providers, locations, services, and customers).
@@ -121,4 +124,7 @@ python -m pytest tests/test_living_documentation.py -v
 
 # 4. Verify production secrets in test mode
 python scripts/verify_production_secrets.py --env development
+
+# 5. Run headless browser console and network failure verification gate
+python scripts/verify_zero_console_errors.py
 ```

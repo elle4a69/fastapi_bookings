@@ -23,7 +23,9 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `app/services/auth/` | Application Business Services | `__init__.py`, `google_oidc.py`, `chatwoot_sso.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/auth/README.md) |
 | `app/services/booking/` | Core Booking Engine | `__init__.py`, `operational_window.py`, `availability_service.py` | `py -3.11 -m pytest tests/test_dynamic_itinera...` | **Compliant (Rule 10)** | [README.md](app/services/booking/README.md) |
 | `app/services/business_assistant/gpt_live/` | Business Assistant Foundation | `session_config.json`, `runtime.py`, `router.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/gpt_live/README.md) |
-| `app/services/business_assistant/` | Business Assistant Foundation | `business_assistant.py`, `repository.py`, `runtime.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/README.md) |
+| `app/services/business_assistant/livekit/` | Business Assistant Foundation | `config.py`, `session_config.json`, `token_service.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/livekit/README.md) |
+| `app/services/business_assistant/onboarding/` | Business Assistant Foundation | `schemas.py`, `normalizer.py`, `plan_service.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/onboarding/README.md) |
+| `app/services/business_assistant/` | Business Assistant Foundation | `business_assistant.py`, `onboarding.py`, `repository.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/README.md) |
 | `app/services/channel/` | Communication Channel Transports | `conversation.py`, `channel.py`, `__init__.py` | `.\.venv\Scripts\python -m pytest -q tests/tes...` | **Compliant (Rule 10)** | [README.md](app/services/channel/README.md) |
 | `app/services/curation/` | Semantic Memory Curation | `knowledge_policy.py`, `memory_curator.py`, `retrieval.py` | `.\.venv\Scripts\python.exe -m py_compile app/...` | **Compliant (Rule 10)** | [README.md](app/services/curation/README.md) |
 | `app/services/knowledge/` | Knowledge Subsystems & Graphiti | `__init__.py`, `types.py`, `policy.py` | `python -m pytest tests/test_knowledge_phase1_...` | **Compliant (Rule 10)** | [README.md](app/services/knowledge/README.md) |
@@ -37,9 +39,13 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `docs/audits/` | Documentation & Architecture Catalog | `SYSTEM_AUDIT_REPORT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/audits/README.md) |
 | `docs/` | Documentation & Architecture Catalog | `ARCHITECTURE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/README.md) |
 | `frontend/` | React Frontend SPA | `App.tsx`, `api.ts`, `AuthContext.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/README.md) |
+| `frontend/src/components/agents-ui/` | React Frontend SPA | `agent-popup.tsx`, `index.ts`, `agent-popup.test.ts` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/components/agents-ui/README.md) |
+| `frontend/src/components/ui-agent/` | React Frontend SPA | `scanner.ts`, `executor.ts`, `GhostCursor.tsx` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/components/ui-agent/README.md) |
+| `frontend/src/lib/` | React Frontend SPA | `api.ts`, `api.test.ts` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/lib/README.md) |
 | `frontend/src/pages/admin/assistant-studio/` | Frontend Admin Assistant Studio | `index.tsx`, `types.ts`, `assistant_studio.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/assistant-studio/README.md) |
 | `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
 | `frontend/src/pages/admin/catalog/` | Frontend Admin Catalog & Services | `services.tsx`, `providers.tsx`, `locations.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/catalog/README.md) |
+| `frontend/src/pages/admin/coding-cockpit/` | Frontend Administration Views | `index.tsx`, `types.ts`, `CodingCockpitPage.tsx` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/coding-cockpit/README.md) |
 | `frontend/src/pages/admin/finance/` | Frontend Admin Finance & Billing | `invoices.tsx`, `payments.tsx`, `promotions.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/finance/README.md) |
 | `frontend/src/pages/admin/gpt-live/` | Frontend Administration Views | `index.tsx`, `use-gpt-live.ts`, `protocol.ts` | `npm test -- --test-name-pattern="GPT-Live"` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/gpt-live/README.md) |
 | `frontend/src/pages/admin/` | Frontend Administration Views | `navigation.ts`, `relationships-matrix.tsx`, `relationships.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/README.md) |
@@ -48,7 +54,7 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `frontend/src/pages/portal/` | Frontend Client Portal | `portal-login.tsx`, `portal-dashboard.tsx`, `client-portal-context.tsx` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/portal/README.md) |
 | `frontend/src/pages/public/` | Frontend Public Booking Widget | `website-page.tsx`, `umbrella-directory-page.tsx`, `website.tsx` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/public/README.md) |
 | `mapbox/` | Mapbox GL Geospatial Discovery Prototype | `MapSearch.tsx`, `apiClient.ts`, `LocationManager.tsx` | `npm run check` | **Compliant (Rule 10)** | [README.md](mapbox/README.md) |
-| `scripts/` | Operational Automation & Release Gates | `verify_living_docs.py`, `index_living_docs.py`, `query_docs.py` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](scripts/README.md) |
+| `scripts/` | Operational Automation & Release Gates | `verify_living_docs.py`, `verify_zero_console_errors.py`, `index_living_docs.py` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](scripts/README.md) |
 | `tests/` | Automated Test Suites | `conftest.py`, `test_concurrency.py`, `test_sms_foundation.py` | `python -m pytest tests/ --ignore=tests/test_f...` | **Compliant (Rule 10)** | [README.md](tests/README.md) |
 
 ---
@@ -109,11 +115,23 @@ This isolated module creates authenticated GPT-Live WebRTC sessions for an exist
 - **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_gpt_live.py -q`
 - **Known Debt/Issues**: 1 item(s) logged
 
+#### [LiveKit Voice Assistant & Worker Subsystem](app/services/business_assistant/livekit/README.md) (`app/services/business_assistant/livekit`)
+The `app/services/business_assistant/livekit` package implements the real-time media, participant token issuance, LiveKit Agent worker, and business tool gateway for the FastAPI Bookings conversational business assistant. It delivers a duplex voice i...
+- **Key Files**: `config.py`, `session_config.json`, `token_service.py`, `router.py`, `tool_gateway.py`, `caption_bridge.py`, `worker.py`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_livekit_worker_baseline.py ``
+- **Known Debt/Issues**: 6 item(s) logged
+
+#### [Voice-First Onboarding & In-App Assistance Subsystem](app/services/business_assistant/onboarding/README.md) (`app/services/business_assistant/onboarding`)
+The `app/services/business_assistant/onboarding` package delivers the backend business logic, conversational intent normalization, setup planning state machine, cryptographic delegation guards, and gateway adapters for the voice-first onboarding assi...
+- **Key Files**: `schemas.py`, `normalizer.py`, `plan_service.py`, `save_guard.py`, `router.py`, `tools.py`, `gateway.py`, `interview.py`, `website_generator.py`, `errors.py`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_onboarding_text_and_intent_qa.py ``
+- **Known Debt/Issues**: 3 item(s) logged
+
 #### [Business Assistant Foundation](app/services/business_assistant/README.md) (`app/services/business_assistant`)
-This package owns tenant- and user-scoped persistence operations, bounded text generation, and server-authorised tool execution for internal Business Assistant conversations. It supports conversational onboarding, live product help, tenant settings d...
-- **Key Files**: `business_assistant.py`, `repository.py`, `runtime.py`, `service.py`, `confirmation.py`, `tickets.py`, `idempotency.py`, `product_context.py`, `tool_registry.py`, `website_sanitiser.py`, `realtime.py`, `coding_worker.py`
-- **Verification**: `.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py tests/test_business_assistant_api.py tests/test_business_assistant_tickets_api.py tests/test_business_assistant_idempotency.py tests/test_business_assistant_onboarding_api.py tests/test_business_assistant_realtime_api.py tests/test_business_assistant_tool_registry.py tests/test_business_assistant_coding_worker.py tests/test_business_assistant_realtime_voice.py tests/test_business_assistant_website_builder.py tests/test_business_assistant_hardening_and_rollout.py -q`
-- **Known Debt/Issues**: 1 item(s) logged
+This package owns tenant- and user-scoped persistence operations, bounded text generation, and server-authorised tool execution for internal Business Assistant conversations within **FastAPI Bookings**. It supports conversational onboarding, live pro...
+- **Key Files**: `business_assistant.py`, `onboarding.py`, `repository.py`, `runtime.py`, `service.py`, `confirmation.py`, `tickets.py`, `idempotency.py`, `product_context.py`, `tool_registry.py`, `website_sanitiser.py`, `realtime.py`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py ``
+- **Known Debt/Issues**: 4 item(s) logged
 
 ### 3.7 Chatwoot & Omnichannel Messaging
 
@@ -143,7 +161,7 @@ The `app.services.booking` module is the authoritative domain engine for: - **5-
 
 #### [Core Configuration, Security, Redis & Telemetry](app/core/README.md) (`app/core`)
 The `app/core/` package encapsulates cross-cutting concerns for the application: - Environment settings and secrets loading via Pydantic (`config.py`). - Cryptographic password hashing, JWT access token generation, and role checks (`security.py`). - ...
-- **Key Files**: `config.py`, `capability_validator.py`, `redis.py`, `security.py`, `state_machine.py`, `telemetry.py`, `pagination.py`
+- **Key Files**: `config.py`, `capability_validator.py`, `redis.py`, `security.py`, `state_machine.py`, `telemetry.py`, `operator_controls.py`, `pagination.py`
 - **Verification**: `python -m pytest tests/test_telemetry_pipeline.py -v`
 - **Known Debt/Issues**: 4 item(s) logged
 
@@ -196,10 +214,10 @@ The Assistant Studio owns: - **Zero-Mock Platform Compliance (AGENTS.md Rule 3)*
 ### 3.16 Frontend Admin Business Assistant
 
 #### [Business Assistant Frontend](frontend/src/pages/admin/business-assistant/README.md) (`frontend/src/pages/admin/business-assistant`)
-This module delivers both a full-page Business Assistant management view and a persistent, application-wide floating drawer accessible across all authenticated admin routes....
-- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-gpt-live.ts`, `caption-timeline.tsx`, `ticket-status.tsx`, `use-realtime-voice.ts`, `drawer.tsx`, `assistant-context.tsx`, `boundary.ts`
+This module delivers both a full-page Business Assistant management view, a persistent application-wide floating drawer accessible across all authenticated admin routes, and the client-side execution framework for voice-first onboarding assistance....
+- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-livekit-voice.ts`, `use-xai-grok-voice.ts`, `minimized-voice-controller.tsx`, `realtime-protocol.ts`, `index.ts`, `registry.ts`, `business-settings-adapter.ts`
 - **Verification**: `npm test`
-- **Known Debt/Issues**: 3 item(s) logged
+- **Known Debt/Issues**: 6 item(s) logged
 
 ### 3.17 Frontend Admin Catalog & Services
 
@@ -234,6 +252,11 @@ The Admin Schedule module owns: - Weekly recurring working hours template config
 - **Known Debt/Issues**: 3 item(s) logged
 
 ### 3.21 Frontend Administration Views
+
+#### [Codex Engineering Cockpit](frontend/src/pages/admin/coding-cockpit/README.md) (`frontend/src/pages/admin/coding-cockpit`)
+- **Primary Purpose**: Consolidates the previously split and fragmented "Resident Agent" (with its broken 750px iframe on port 5180, static prompt copy cards, and competitor radar) and "Conversational Coding Studio" into a single, cohesive, mobile-fi...
+- **Key Files**: `index.tsx`, `types.ts`, `CodingCockpitPage.tsx`, `CodexWorkbenchTab.tsx`, `HealthSentinels.tsx`, `StressFuzzer.tsx`, `IssuesStudio.tsx`, `SkillsBrowser.tsx`, `EventStream.tsx`, `client.ts`, `codexApi.ts`, `useWorkbenchStore.ts`
+- **Known Debt/Issues**: 3 item(s) logged
 
 #### [GPT-Live Admin Page](frontend/src/pages/admin/gpt-live/README.md) (`frontend/src/pages/admin/gpt-live`)
 This module starts and closes the native GPT-Live Business Assistant voice experience. Its shared browser WebRTC hook and caption renderer are used by the direct admin page and the Business Assistant drawer/full-page voice controls. It does not hold ...
@@ -291,7 +314,7 @@ The `mapbox/` directory contains a dedicated, standalone React/Vite single-page 
 
 #### [Operational & Development Scripts](scripts/README.md) (`scripts`)
 The operational scripts suite owns: - **Deterministic Test Seeding** (`seed_clean_numbered_data.py`): Populates consistent, numbered entities (Client 1..5, Provider 1..2, Service 1..5) for automated test suites and manual validation. - **Living Docum...
-- **Key Files**: `verify_living_docs.py`, `index_living_docs.py`, `query_docs.py`, `seed_clean_numbered_data.py`, `verify_production_secrets.py`, `module_manifest.json`, `MODULE_INDEX.md`, `sync_mock_to_chatwoot.py`, `generate_pwa_icons.py`, `verify_all_release_gates.py`, `import_assistant_ui_data.py`, `seed_demo_structured_catalog.py`
+- **Key Files**: `verify_living_docs.py`, `verify_zero_console_errors.py`, `index_living_docs.py`, `query_docs.py`, `seed_clean_numbered_data.py`, `verify_production_secrets.py`, `module_manifest.json`, `MODULE_INDEX.md`, `sync_mock_to_chatwoot.py`, `generate_pwa_icons.py`, `verify_all_release_gates.py`, `import_assistant_ui_data.py`
 - **Verification**: `python scripts/verify_living_docs.py`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -300,6 +323,22 @@ The operational scripts suite owns: - **Deterministic Test Seeding** (`seed_clea
 #### [FastAPI Bookings — Frontend Application & PWA](frontend/README.md) (`frontend`)
 The frontend provides the complete client and administrative interface across multiple operational surfaces: 1. **Admin Workspace** (`/admin`, `/admin/dashboard`, `/admin/calendar`, `/admin/bookings`, etc.): Comprehensive staff and management control...
 - **Key Files**: `App.tsx`, `api.ts`, `AuthContext.tsx`, `TranslationContext.tsx`, `TenantModulesContext.tsx`, `address-autocomplete.tsx`, `main.tsx`, `package.js`, `autocomplete.tsx`
+- **Verification**: `npm test`
+- **Known Debt/Issues**: 3 item(s) logged
+
+#### [Unified Business Assistant & Voice Agent Popup](frontend/src/components/agents-ui/README.md) (`frontend/src/components/agents-ui`)
+The **Unified Business Assistant & Voice Agent Popup (`agents-ui`)** delivers the authoritative floating assistant experience across the administrative workspace in FastAPI Bookings. - **What it owns**:   - Floating circular trigger button (`AgentPop...
+- **Key Files**: `agent-popup.tsx`, `index.ts`, `agent-popup.test.ts`, `popup.tsx`
+- **Known Debt/Issues**: 3 item(s) logged
+
+#### [UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite](frontend/src/components/ui-agent/README.md) (`frontend/src/components/ui-agent`)
+The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides live visual element scanning, automated synthetic user interaction, an animated Ghost Cursor overlay, and conversational voice control (GPT-Live & Grok Voice) for the adm...
+- **Key Files**: `scanner.ts`, `executor.ts`, `GhostCursor.tsx`, `AgentControlBanner.tsx`, `stream.ts`, `AgentProvider.tsx`, `wakeWord.ts`, `providers.ts`, `openaiLive.ts`, `grokVoice.ts`, `VoiceProvider.tsx`, `VoiceBar.tsx`
+- **Known Debt/Issues**: 4 item(s) logged
+
+#### [Shared frontend libraries](frontend/src/lib/README.md) (`frontend/src/lib`)
+This directory contains shared browser utilities, including the authenticated API client and tenant-host resolver in `api.ts`. It does not own backend authentication, tenant membership, booking mutations or Cloudflare configuration....
+- **Key Files**: `api.ts`, `api.test.ts`
 - **Verification**: `npm test`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -356,4 +395,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-07 12:13:32Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-13 21:20:15Z by `scripts/index_living_docs.py`.*

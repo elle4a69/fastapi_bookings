@@ -229,6 +229,7 @@ function App() {
                 <Route path="/admin/resident-agent" element={<Navigate to="/admin/coding-cockpit" replace />} />
                 <Route path="/admin/coding-studio" element={<Navigate to="/admin/coding-cockpit?tab=workbench" replace />} />
                 <Route path="/admin/settings/modules" element={<TenantModulesPage />} />
+                <Route path="/admin/onboarding" element={<Navigate to="/admin/settings/business" replace />} />
                 <Route path="/admin/website" element={<WebsiteBuilderPage />} />
                 <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
 

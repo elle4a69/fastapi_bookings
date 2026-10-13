@@ -13,7 +13,7 @@ fastapi_bookings/
 │   └── services/
 │       ├── assistant/         # Assistant Runtime & Tools [.venv\Scripts\python.exe -m pytest tests/test_a...]
 │       ├── booking/           # Core Booking Engine [py -3.11 -m pytest tests/test_dynamic_itinerary...]
-│       ├── business_assistant/# Business Assistant [.venv\Scripts\python.exe -m pytest tests/test_b...]
+│       ├── business_assistant/# Business Assistant [.\.venv\Scripts\python.exe -m pytest tests/test...]
 │       ├── curation/          # Memory Curator & PII Scrubber [.\.venv\Scripts\python.exe -m py_compile app/mo...]
 │       ├── knowledge/         # Knowledge & Graphiti Client [python -m pytest tests/test_knowledge_phase1_ga...]
 │       ├── messaging/         # Chatwoot & Omnichannel [python -m pytest tests/test_chatwoot_agentbot.p...]
@@ -36,4 +36,4 @@ fastapi_bookings/
 - **Known Debt/Issues**: `python scripts/query_docs.py --known-issues`
 - **Rule 10 Gate**: `python scripts/verify_living_docs.py`
 
-*Generated automatically on 2026-10-07 12:13:32Z by scripts/index_living_docs.py*
+*Generated automatically on 2026-10-13 21:20:15Z by scripts/index_living_docs.py*

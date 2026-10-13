@@ -124,7 +124,7 @@ before starting unrelated remediation.
 
 ### Mandatory Automated Local Commit & Push on Verified Task Completion
 To ensure verified work is never stranded, forgotten, or lost in an uncommitted state:
-- Once all verification tests pass, living documentation is verified via `python scripts/verify_living_docs.py`, and the QA audit sign-off is complete, the agent MUST automatically stage only the explicitly assigned task allowlist paths.
+- Once all verification tests pass, zero browser console errors and network failures are verified via `python scripts/verify_zero_console_errors.py`, living documentation is verified via `python scripts/verify_living_docs.py`, and the QA audit sign-off is complete, the agent MUST automatically stage only the explicitly assigned task allowlist paths.
 - The agent MUST automatically execute a clean, descriptive local git commit.
 - The agent MUST automatically push the commit to the current approved tracking branch on GitHub (`git push`).
 - The agent MUST report the resulting commit hash and push confirmation in its final delivery summary.
@@ -145,6 +145,17 @@ For any code change:
   or query. Do not make unsupported causal claims.
 - For external integrations, prove the real local integration path works using
   synthetic labelled data only.
+
+### Mandatory Automated Zero-Console-Error & Network Verification Gate
+Every agent modifying frontend components, layouts, routers, state stores, or API clients must run:
+```powershell
+python scripts/verify_zero_console_errors.py
+```
+This headless Playwright gate visits the key application routes (including `/`, `/admin/coding-cockpit`, `/admin/sms-assistant`, `/admin/onboarding`, `/admin/settings/business`, `/admin/calendar`) and asserts:
+1. **ZERO `console.error`** or assertion failures in browser logs.
+2. **ZERO uncaught window exceptions** (`pageerror`).
+3. **ZERO 4xx/5xx network failures** on API or asset endpoints.
+Frontend tasks are not considered complete until this gate exits with code 0 and confirms zero errors.
 
 ## 8. Runtime process management
 
@@ -208,3 +219,29 @@ To eliminate token waste, blind directory scanning, and hallucinated paths on ag
   - Run `python scripts/query_docs.py --search "<topic>"` (e.g. `python scripts/query_docs.py --search "arrival token"`).
 - **Compliance Verification**: All changes to modules must be verified against Rule 10 via:
   - `python scripts/verify_living_docs.py --path <module_readme_path>`.
+
+## 12. Mandatory Anti-Gravity Project Registration Protocol
+
+All major engineering initiatives, cross-repository tasks, and multi-agent programmes involving FastAPI Bookings must be registered and tracked in the centralized Anti-Gravity database (`e:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db` / port `2302`):
+
+- **Centralized Project Inception**:
+  Whenever initiating a new architectural milestone, multi-module feature, or cross-repository integration, the project manager or coordinating agent MUST register the project:
+  ```python
+  from anti_gravity_system.storage.database import DatabaseManager
+  db = DatabaseManager(r"e:\Projects\King of Kings\anti_gravity_system\storage\anti_gravity.db")
+  db.create_project(
+      project_id="unique_project_id",
+      name="Project Name",
+      status="pending",  # transitions to 'in_progress', 'completed', or 'failed'
+      codebase_path=r"f:\Projects\fastapi_bookings"
+  )
+  ```
+  Or via the REST API endpoint:
+  `POST http://localhost:2302/api/anti-gravity/project`
+- **Sub-Project and Task Decomposition**:
+  Sub-modules and independent deliverables must be registered as sub-projects (`db.create_sub_project(...)`) and discrete tasks (`db.create_task(...)`) with explicit dependency chaining and worker role assignments.
+- **Traceability, Execution Logging & Telemetry**:
+  - Live execution updates must be recorded in `execution_logs` (`db.add_execution_log(task_id, status, log_text)`).
+  - All status transitions are visible on the unified telemetry dashboard (`http://localhost:2302/`).
+  - This ensures persistent historical auditability, zero lost project context across agent sessions, and instant diagnostic capability for regressions.
+

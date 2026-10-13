@@ -271,6 +271,9 @@ pytest tests/test_telemetry_pipeline.py tests/test_telemetry_redaction.py -v
 
 # 4. SMS Engine and OpenAI tool contracts
 pytest tests/test_sms_openai.py tests/test_sms_foundation.py -v
+
+# 5. Browser zero-console-error & network verification gate (Playwright headless)
+python scripts/verify_zero_console_errors.py
 ```
 
 ---
@@ -373,3 +376,86 @@ The server secret `MAPBOX_ACCESS_TOKEN` is never returned in API responses, neve
 |---|---|
 | [`tests/test_tenant_resolution.py`](file:///F:/Projects/fastapi_bookings/tests/test_tenant_resolution.py) | RFC 6761 port stripping, reserved label exclusion, X-Tenant fallback, unknown → 404, missing → 400, mismatch → 400 |
 | [`tests/test_telemetry_privacy.py`](file:///F:/Projects/fastapi_bookings/tests/test_telemetry_privacy.py) | SAFE_ATTRIBUTE_KEYS completeness, PII key exclusion, SanitizedSpanProxy filtering, value-level redaction, log filter |
+
+---
+
+## 12. Native Business Assistant & Realtime Voice Subsystem Architecture
+
+### 12.1 Overview & Invariants
+The Native Business Assistant delivers administrative conversational intelligence, in-app onboarding automation, and real-time voice interaction for platform tenants, governed by strict invariants:
+- **100% Native Architecture**: Fully persisted and executed within FastAPI Bookings with zero runtime dependencies on legacy codebases.
+- **Absolute Prohibition of Mocks (AGENTS.md Rule 3)**: All tools, voice relays, form adapters, and availability queries interact with real services and database transactions.
+- **Visible Form Operation**: Agent writes stage values into UI form adapters (`stage_fields`) without premature database persistence (`staged_fields != saved`).
+- **Cryptographic Gateways**: Consequential business mutations (identity updates, rule activations, website publications) require single-use HMAC-SHA256 confirmation nonces with 5-minute TTLs.
+- **Staged Rollout Gating**: Controlled by `BUSINESS_ASSISTANT_ROLLOUT_STAGE` (`disabled`, `internal_synthetic`, `owner_staging`, `enabled`).
+
+### 12.2 Canonical 16-Tool Voice Schema (`VOICE_BUSINESS_ASSISTANT_TOOLS`)
+To prevent tool confusion, hallucinated navigations, and token bloat during real-time voice sessions, the voice engine is constrained to a canonical 16-tool schema:
+1. **Navigation & UI (2)**: `navigate_route`, `highlight_field`
+2. **Form & Onboarding Writes (6)**: `stage_fields`, `validate_form`, `request_save_authorization`, `commit_save`, `ask_clarification`, `pause_takeover`
+3. **Essential Reads (6)**: `list_services`, `list_providers`, `check_slot_availability`, `get_onboarding_status`, `read_system_settings`, `diagnostic_report`
+4. **Rule Writes (2)**: `draft_business_rule`, `activate_business_rule`
+
+Duplicate aliases and non-voice tools (`save_form`, `prepare_fields`, `fill_form`, `navigate_show`, `read_status`, `read_context`, `read_onboarding_progress`) are strictly omitted from voice session schemas while remaining available in text chat.
+
+### 12.3 Dual Realtime Voice Transports
+
+```mermaid
+graph LR
+    subgraph Browser["Browser Client"]
+        Microphone["Microphone (AudioContext 24kHz PCM)"]
+        UIHook["useXAIGrokVoice / useLiveKitVoice"]
+        RPCReceiver["RPC Receiver & Adapters"]
+    end
+
+    subgraph BackendGateway["FastAPI Backend"]
+        VoiceRouter["Voice & Token Router (/realtime/xai-token)"]
+        WSRelay["WebSocket Relay (/voice/realtime/xai-ws)"]
+        ToolExecutor["Realtime Tool Policy Engine"]
+    end
+
+    subgraph UpstreamProviders["Voice Providers"]
+        OpenAIRealtime["OpenAI Realtime (WebRTC)"]
+        XAIGrok["xAI Grok Voice (grok-voice-think-fast-2.0)"]
+    end
+
+    Microphone --> UIHook
+    UIHook <-->|WebRTC SDP| OpenAIRealtime
+    UIHook <-->|WebSocket Audio| WSRelay
+    WSRelay <-->|Upstream WS| XAIGrok
+    UIHook -->|Execute Tool| ToolExecutor
+    UIHook -->|Client RPC| RPCReceiver
+```
+
+1. **OpenAI Realtime / Direct WebRTC (`direct_gpt_live`)**:
+   - Server-to-server SDP negotiation via `POST /api/admin/business-assistant/conversations/{id}/realtime`.
+   - WebRTC audio stream with DataChannel transcript deltas and server-held API credentials.
+2. **xAI Grok Voice Transport (`xai_grok_voice`) & WebSocket Relay**:
+   - Powered by `grok-voice-think-fast-2.0` via client hook `useXAIGrokVoice`.
+   - Streaming 16-bit PCM 24kHz audio bidirectional WebSocket pipeline.
+   - Endpoint `GET /api/admin/business-assistant/realtime/xai-token` returns agent ID, authenticated endpoint, and local relay URL (`/api/admin/business-assistant/voice/realtime/xai-ws`).
+   - Parsed tool calls invoke UI RPC actions via `executeRpcAction` and backend tools via `POST /conversations/{id}/realtime/tools`.
+
+### 12.4 Single-Tab Active Executor Lease Token Forwarding
+1. **Multi-Tab Isolation**: In multi-tab sessions, only one designated tab acquires the `active_executor_lease` (`executor-coordinator.ts`).
+2. **Lease Token Forwarding for Voice**: When a voice session (`xai-grok-voice`, `direct-gpt-live`, `realtime-voice`) calls UI automation tools, LLMs do not supply a client lease token.
+3. The RPC executor (`action-catalogue.ts`) detects trusted voice caller identities and forwards the active tab's lease token (`leaseMgr.getActiveLease().token`), preventing lease rejection while ensuring background tabs cannot execute rogue mutations.
+
+### 12.5 Route Normalization & Security Allowlists
+1. **Route Normalization (`normalizeRoute`)**:
+   - Resolves aliases to canonical paths:
+     - `services`, `catalog`, `/admin/services`, `/admin/catalog` → `/admin/catalog/services`
+     - `website`, `website_editor` → `/admin/website`
+     - `media` → `/admin/media`
+     - `onboarding`, `settings`, `/admin/settings` → `/admin/settings/business`
+     - `bookings` → `/admin/bookings`
+   - Strips search parameters and hash anchors before comparison.
+2. **Allowlist Validation (`isRouteAllowlisted`)**:
+   - Strictly validates candidate routes against `ALLOWED_ROUTES`.
+   - Rejects dangerous schemes (`javascript:`, `http:`, `https:`, `//`), directory traversal (`..`), and unauthorized administrative paths.
+
+### 12.6 Live Diagnostic Mode & 8-Step System Runbook
+- Configured via `GET/PATCH /api/admin/business-assistant/diagnostic-mode`.
+- The `diagnostic_report` tool evaluates the live 8-step runbook (session configuration, attached tool inventory, recent tool logs, client state, route allowlist, onboarding plan, error logs, user permissions).
+- Formats structured 5-part verdicts (Verdict, Working, Not working, Cannot do, Next step) persisted directly into `conversation_messages` with expandable `<details>`.
+

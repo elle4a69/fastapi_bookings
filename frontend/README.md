@@ -149,4 +149,7 @@ npm run build
 
 # 4. Preview local production build
 npm run preview
+
+# 5. Run headless browser console and network failure verification gate
+python ../scripts/verify_zero_console_errors.py
 ```
