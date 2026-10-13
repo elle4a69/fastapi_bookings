@@ -8,7 +8,7 @@ from backend.models.codex import Thread, Project
 from backend.config import settings
 from backend.services import governance_service
 
-router = APIRouter(prefix="/codex/threads", tags=["threads"])
+router = APIRouter(prefix="", tags=["threads"])
 
 class ThreadCreate(BaseModel):
     project_id: str

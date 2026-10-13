@@ -1,6 +1,6 @@
 # Codex Control Centre - Safe Persistent Launch Script
 # Only terminates processes tracked in dedicated PID files (.codex_backend.pid, .codex_frontend.pid).
-# Refuses to start and reports an actionable error if untracked processes occupy ports 8100 or 5180.
+# Refuses to start and reports an actionable error if untracked processes occupy ports 4500 or 4600.
 
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $ROOT) { $ROOT = (Get-Location).Path }
@@ -59,8 +59,8 @@ function Test-PortAvailability {
     return $true
 }
 
-$backendPortFree = Test-PortAvailability -Port 8100 -ServiceName "Backend API"
-$frontendPortFree = Test-PortAvailability -Port 5180 -ServiceName "Frontend UI"
+$backendPortFree = Test-PortAvailability -Port 4500 -ServiceName "Backend API"
+$frontendPortFree = Test-PortAvailability -Port 4600 -ServiceName "Frontend UI"
 
 if (-not $backendPortFree -or -not $frontendPortFree) {
     Write-Output ""
@@ -70,13 +70,13 @@ if (-not $backendPortFree -or -not $frontendPortFree) {
 
 Start-Sleep -Seconds 1
 
-# 3. Start Backend (FastAPI via run_server.py on port 8100)
+# 3. Start Backend (FastAPI via run_server.py on port 4500)
 $backendOut = Join-Path $env:TEMP "codex_backend.out.log"
 $backendErr = Join-Path $env:TEMP "codex_backend.err.log"
 $frontendOut = Join-Path $env:TEMP "codex_frontend.out.log"
 $frontendErr = Join-Path $env:TEMP "codex_frontend.err.log"
 
-Write-Output "Starting Backend (uvicorn backend.main:app on 127.0.0.1:8100)..."
+Write-Output "Starting Backend (uvicorn backend.main:app on 127.0.0.1:4500)..."
 $backendProc = Start-Process -FilePath "pythonw.exe" `
     -ArgumentList "run_server.py" `
     -WorkingDirectory $ROOT `
@@ -93,8 +93,8 @@ if ($backendProc -and $backendProc.Id) {
     exit 1
 }
 
-# 4. Start Frontend (Vite on port 5180)
-Write-Output "Starting Frontend (npm run dev on :5180)..."
+# 4. Start Frontend (Vite on port 4600)
+Write-Output "Starting Frontend (npm run dev on :4600)..."
 $frontendProc = Start-Process -FilePath "cmd.exe" `
     -ArgumentList "/c npm run dev" `
     -WorkingDirectory $FRONTEND `
@@ -122,20 +122,20 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 while ($stopwatch.Elapsed.TotalSeconds -lt $timeoutSeconds) {
     if (-not $backendHealthy) {
         try {
-            $resp = Invoke-RestMethod -Uri "http://127.0.0.1:8100/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
+            $resp = Invoke-RestMethod -Uri "http://127.0.0.1:4500/health" -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($resp -and $resp.status -eq "healthy") {
                 $backendHealthy = $true
-                Write-Output "  [OK] Backend healthy (HTTP 200) at http://127.0.0.1:8100/health"
+                Write-Output "  [OK] Backend healthy (HTTP 200) at http://127.0.0.1:4500/health"
             }
         } catch {}
     }
 
     if (-not $frontendHealthy) {
         try {
-            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:5180/" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:4600/" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
             if ($resp -and $resp.StatusCode -eq 200) {
                 $frontendHealthy = $true
-                Write-Output "  [OK] Frontend active (HTTP 200) at http://127.0.0.1:5180/"
+                Write-Output "  [OK] Frontend active (HTTP 200) at http://127.0.0.1:4600/"
             }
         } catch {}
     }
@@ -152,15 +152,15 @@ $stopwatch.Stop()
 Write-Output ""
 if ($backendHealthy -and $frontendHealthy) {
     Write-Output "=== Codex Control Centre is UP and HEALTHY ==="
-    Write-Output "  Backend:  http://127.0.0.1:8100/ (PID: $($backendProc.Id))"
-    Write-Output "  Frontend: http://127.0.0.1:5180/ (PID: $($frontendProc.Id))"
+    Write-Output "  Backend:  http://127.0.0.1:4500/ (PID: $($backendProc.Id))"
+    Write-Output "  Frontend: http://127.0.0.1:4600/ (PID: $($frontendProc.Id))"
     exit 0
 } else {
     if (-not $backendHealthy) {
-        Write-Output "  [FAIL] Backend did not respond on http://127.0.0.1:8100/health"
+        Write-Output "  [FAIL] Backend did not respond on http://127.0.0.1:4500/health"
     }
     if (-not $frontendHealthy) {
-        Write-Output "  [FAIL] Frontend did not respond on http://127.0.0.1:5180/"
+        Write-Output "  [FAIL] Frontend did not respond on http://127.0.0.1:4600/"
     }
     exit 1
 }

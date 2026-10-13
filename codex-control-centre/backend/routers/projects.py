@@ -12,7 +12,7 @@ from backend.models.codex import Project, Thread
 
 logger = logging.getLogger("codex.projects")
 
-router = APIRouter(prefix="/codex/projects", tags=["projects"])
+router = APIRouter(prefix="", tags=["projects"])
 
 IGNORED_DIRS = {
     ".git",

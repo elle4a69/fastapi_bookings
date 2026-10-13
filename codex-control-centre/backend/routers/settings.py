@@ -16,7 +16,7 @@ from backend.services.telemetry_settings_service import (
     test_endpoint_connectivity,
 )
 
-router = APIRouter(prefix="/codex/settings", tags=["settings"])
+router = APIRouter(prefix="", tags=["settings"])
 
 
 # Schemas

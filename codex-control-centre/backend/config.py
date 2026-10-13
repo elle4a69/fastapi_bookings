@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     codex_worker_timeout_seconds: int = 60
     codex_api_key: Optional[str] = None
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _validate_database_url(cls, v: object) -> str:
+        # Prevent picking up parent project's PostgreSQL DATABASE_URL.
+        # Codex DB must unambiguously resolve to codex.db (SQLite WAL mode).
+        if isinstance(v, str) and (v.startswith("sqlite") or "codex.db" in v):
+            return v
+        return f"sqlite:///{default_db_path.as_posix()}"
+
     @field_validator("repo_root", mode="after")
     @classmethod
     def _validate_repo_root(cls, v: str) -> str:

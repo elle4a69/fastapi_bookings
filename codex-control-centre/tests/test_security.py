@@ -25,11 +25,17 @@ def test_protected_endpoint_valid_token():
     assert response.status_code == 200
 
 def test_cors_headers_allowed_origin():
-    response = client.options("/codex/events/publish", 
-                              headers={"Origin": "http://127.0.0.1:5180",
-                                       "Access-Control-Request-Method": "POST"})
-    assert response.status_code == 200
-    assert response.headers.get("access-control-allow-origin") == "http://127.0.0.1:5180"
+    for origin in [
+        "http://127.0.0.1:4600",
+        "http://localhost:4600",
+        "http://127.0.0.1:5180",
+        "http://localhost:5180",
+    ]:
+        response = client.options("/codex/events/publish", 
+                                  headers={"Origin": origin,
+                                           "Access-Control-Request-Method": "POST"})
+        assert response.status_code == 200
+        assert response.headers.get("access-control-allow-origin") == origin
 
 def test_cors_headers_unauthorized_origin():
     response = client.options("/codex/events/publish", 

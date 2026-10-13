@@ -18,7 +18,7 @@ from backend.services import governance_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/codex", tags=["turns"])
+router = APIRouter(prefix="", tags=["turns"])
 
 class TurnStart(BaseModel):
     thread_id: str
@@ -294,6 +294,7 @@ async def _safe_dispatch_turn_start(
             logger.error(f"Failed to publish error event to broker: {broker_err}")
 
 
+@router.post("/start")
 @router.post("/turns/start")
 async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     thread = db.query(Thread).filter(Thread.id == req.thread_id).first()
@@ -396,6 +397,7 @@ async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Sess
     
     return {"turn_id": turn.id, "status": "active", "workspace_root": wt_str}
 
+@router.post("/steer")
 @router.post("/turns/steer")
 async def steer_turn(req: TurnSteer, db: Session = Depends(get_db)):
     turn = None
@@ -437,6 +439,7 @@ async def steer_turn(req: TurnSteer, db: Session = Depends(get_db)):
         return {"status": "interrupted"}
     return {"status": "steered"}
 
+@router.post("/interrupt")
 @router.post("/turns/interrupt")
 async def interrupt_turn(req: TurnInterrupt, db: Session = Depends(get_db)):
     turn = None
@@ -511,6 +514,7 @@ async def interrupt_turn(req: TurnInterrupt, db: Session = Depends(get_db)):
     return {"status": "interrupted"}
 
 @router.post("/approvals/respond")
+@router.post("/turns/approvals/respond")
 async def respond_approval(req: ApprovalRespond, db: Session = Depends(get_db)):
     # 1. Look up pending ToolApproval by tool_call_id
     approval = db.query(ToolApproval).filter(

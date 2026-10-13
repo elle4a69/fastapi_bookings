@@ -11,6 +11,7 @@ __all__ = [
     "WorkerProcess",
     "CodexWorker",
     "WorkerManager",
+    "WorkerProcessManager",
     "resolve_codex_binary",
     "resolve_codex_command",
     "worker_manager",
@@ -37,6 +38,35 @@ class WorkerManager:
     def register_thread_mapping(self, thread_id: str, codex_thread_id: str):
         self.thread_map[thread_id] = codex_thread_id
         self.reverse_thread_map[codex_thread_id] = thread_id
+
+    def clear_thread_mapping(self, thread_id: str) -> None:
+        """Forget an app-server thread UUID after that app-server no longer has it."""
+        codex_thread_id = self.thread_map.pop(thread_id, None)
+        if codex_thread_id:
+            self.reverse_thread_map.pop(codex_thread_id, None)
+
+        worker = self.workers.get(thread_id)
+        if worker:
+            worker_codex_thread_id = worker.thread_map.pop(thread_id, None)
+            if worker_codex_thread_id:
+                worker.reverse_thread_map.pop(worker_codex_thread_id, None)
+            worker.codex_thread_id = None
+
+    @staticmethod
+    def _is_running(worker: Optional[WorkerProcess]) -> bool:
+        return bool(
+            worker
+            and worker.running
+            and (not worker.process or worker.process.returncode is None)
+        )
+
+    def get_active_worker_for_thread(self, thread_id: str) -> Optional[WorkerProcess]:
+        """Return the worker that owns this thread without starting another one."""
+        worker = self.workers.get(thread_id)
+        return worker if self._is_running(worker) else None
+
+    def get_codex_thread_id(self, thread_id: str) -> str:
+        return self.thread_map.get(thread_id, thread_id)
 
     async def get_worker(self, cwd: Optional[str] = None) -> WorkerProcess:
         if (
@@ -114,3 +144,4 @@ class WorkerManager:
 
 # Default singleton worker manager using configured Codex App-Server binary and settings
 worker_manager = WorkerManager()
+WorkerProcessManager = WorkerManager

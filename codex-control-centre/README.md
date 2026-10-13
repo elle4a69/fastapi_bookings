@@ -58,9 +58,12 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
   - `routers/`:
     - `turns.py`: Turn execution lifecycle (`/start`, `/steer`, `/interrupt`), resilient turn ID resolution.
     - `events.py`: SSE endpoints (`/codex/events/{project_id}/{thread_id}`), single-use tickets, broker bridge.
+    - `models.py`: Supported model catalog enumeration (`/models`, `/codex/models`).
     - `governance.py`: Approvals, risk tiering, subagent registration, concurrency enforcement.
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
+- **FastAPI Bookings Administrative Integration**:
+  All primary Codex routers (`projects`, `threads`, `turns`, `events`, `settings`, `models`) are mounted directly into the main FastAPI Bookings application (`app/main.py`) under `/api/admin/codex/*` with strict administrative authentication (`Depends(get_current_admin)`).
   - `services/`:
     - `worker.py`: Subprocess management, stdio JSON-RPC protocol dispatch, event routing.
     - `worker_manager.py`: Thread-to-worker process pool, graceful restart and teardown.
@@ -184,6 +187,21 @@ Set these variables in `.env` or system environment:
    - **Responsive Composer Toolbar**: Bottom controls reflow dynamically into wrapped flex rows (`flex-col sm:flex-row`), ensuring Model, Reasoning, and Permission selectors do not clip or induce horizontal scrolling.
    - **WCAG 2.2 AA Touch Target Size (SC 2.5.8)**: All interactive buttons, dropdown triggers, and modal actions enforce minimum 44x44px hit areas (`min-h-[44px]`).
 
+### 7. FastAPI Bookings Administrative Host Mount
+In addition to running as a standalone service on port 4500, Codex Control Centre is natively mounted into the FastAPI Bookings main application under the administrative namespace:
+- **Mounted Endpoints**:
+  - `GET /api/admin/codex/settings/boundaries` — Workspace boundary configuration.
+  - `GET /api/admin/codex/projects` — Registered projects list.
+  - `GET /api/admin/codex/models` — Supported model catalog (`gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`, `claude-3-5-sonnet`).
+  - `GET /api/admin/codex/threads/{project_id}` — Active threads per project.
+  - `POST /api/admin/codex/turns/start` — Start new agent turn.
+  - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
+  - `GET /api/admin/codex/events/{project_id}/{thread_id}` — Real-time SSE stream.
+- **Security Boundary**: Every endpoint is guarded with `dependencies=[Depends(get_current_admin)]`, requiring an active administrative bearer token and verified tenant context (`X-Tenant`). Unauthenticated or non-admin requests receive HTTP 401/403.
+- **Lifespan Integration**:
+  - `app_lifespan` in `app/main.py` explicitly initialises `WorkerProcessManager` (via `WorkerManager`), sets SQLite `PRAGMA journal_mode=WAL`, seeds default workspace boundaries, and performs a startup sweep on orphaned active turns.
+  - On application shutdown, active Codex worker processes and SSE subscribers are gracefully terminated.
+
 ---
 
 ## 5. Data Safety & Isolation
@@ -222,6 +240,9 @@ python -m pytest tests/test_codex_app_server.py -v
 
 # Run End-to-End smoke suite
 python -m pytest tests/test_e2e_smoke.py -v
+
+# Run FastAPI Bookings Admin Mount test suite
+python -m pytest tests/test_codex_backend_mount.py -v
 ```
 
 ### Frontend Verification

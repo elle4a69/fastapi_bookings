@@ -28,6 +28,12 @@ APPROVAL_METHODS = {
     "item/fileChange/requestApproval",
 }
 
+# Codex notifications can carry large diffs, command output, or compacted
+# history.  asyncio's default 64 KiB stream limit makes readline() raise
+# LimitOverrunError, which silently prevents all subsequent JSON-RPC replies
+# from being processed and leaves a turn stuck in the UI.
+MAX_APP_SERVER_MESSAGE_BYTES = 16 * 1024 * 1024
+
 
 def resolve_codex_binary(bin_path: Optional[str] = None) -> str:
     """
@@ -104,6 +110,10 @@ class WorkerProcess:
 
         self.process: Optional[asyncio.subprocess.Process] = None
         self.pending_requests: Dict[str, asyncio.Future] = {}
+        # Some app-server versions announce a new thread through the
+        # ``thread/started`` notification before they return the request result.
+        # Track the bootstrap request so that notification can safely complete it.
+        self._thread_start_request_ids: set[str] = set()
         self.running: bool = False
         self._read_task: Optional[asyncio.Task] = None
         self._next_id: int = 1
@@ -156,6 +166,7 @@ class WorkerProcess:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=MAX_APP_SERVER_MESSAGE_BYTES,
             env=env,
             **extra_kwargs,
         )
@@ -220,6 +231,8 @@ class WorkerProcess:
         future = asyncio.get_running_loop().create_future()
         req_key = str(req_id)
         self.pending_requests[req_key] = future
+        if method == "thread/start":
+            self._thread_start_request_ids.add(req_key)
 
         self.process.stdin.write((msg + "\n").encode("utf-8"))
         await self.process.stdin.drain()
@@ -229,6 +242,7 @@ class WorkerProcess:
             return await asyncio.wait_for(future, timeout=req_timeout)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             self.pending_requests.pop(req_key, None)
+            self._thread_start_request_ids.discard(req_key)
             raise
 
     async def _read_loop(self):
@@ -271,6 +285,7 @@ class WorkerProcess:
                     req_id = str(msg["id"])
                     if req_id in self.pending_requests:
                         future = self.pending_requests.pop(req_id)
+                        self._thread_start_request_ids.discard(req_id)
                         if not future.done():
                             if "error" in msg:
                                 err = msg["error"]
@@ -388,6 +403,21 @@ class WorkerProcess:
         method = msg.get("method")
         params = msg.get("params", {})
 
+        if method == "thread/started":
+            thread = params.get("thread") if isinstance(params, dict) else None
+            codex_thread_id = thread.get("id") if isinstance(thread, dict) else None
+            if codex_thread_id and self.thread_id:
+                self.register_thread_mapping(self.thread_id, str(codex_thread_id))
+                # A dedicated worker has only one bootstrap operation at a
+                # time. Resolve it from the notification when the matching
+                # app-server version does not send a prompt request result.
+                for request_id in tuple(self._thread_start_request_ids):
+                    future = self.pending_requests.pop(request_id, None)
+                    self._thread_start_request_ids.discard(request_id)
+                    if future and not future.done():
+                        future.set_result({"thread": thread})
+                    break
+
         if method == "notification/event":
             raw_thread_id = params.get("thread_id") or params.get("threadId")
             thread_id = self.resolve_thread_id(raw_thread_id)
@@ -435,6 +465,7 @@ class WorkerProcess:
             norm_env = Protocol.normalize_notification(method, params, thread_id=eff_thread_id)
             if norm_env:
                 broker.publish_event(norm_env)
+                terminal_failure: Optional[EventEnvelope] = None
 
                 try:
                     with SessionLocal() as db:
@@ -462,8 +493,90 @@ class WorkerProcess:
                                         turn = db.query(Turn).filter(Turn.thread_id == target_thread_id, Turn.turn_number == int_tid).first()
 
                             if turn:
-                                turn.status = "completed"
+                                has_assistant_message = (
+                                    db.query(Item.id)
+                                    .filter(Item.turn_id == turn.id, Item.item_type == "text")
+                                    .first()
+                                    is not None
+                                )
+                                reported_status = str(norm_env.payload.get("status") or "completed").lower()
+                                if reported_status not in {"completed", "success"} or not has_assistant_message:
+                                    turn.status = "failed"
+                                    raw_err = norm_env.payload.get("error") or norm_env.payload.get("summary")
+                                    failure_message = raw_err if raw_err else "Codex completed this turn without an assistant response."
+                                    failure_details = (
+                                        norm_env.payload.get("details")
+                                        or raw_err
+                                        or "The Codex app-server ended the turn without returning a message. Check Codex account availability and retry."
+                                    )
+                                    sequence = db.query(Item).filter(Item.turn_id == turn.id).count() + 1
+                                    db.add(Item(
+                                        id=f"err_{uuid.uuid4().hex[:8]}",
+                                        turn_id=turn.id,
+                                        item_type="error",
+                                        content={
+                                            "error_category": "upstream",
+                                            "summary": failure_message,
+                                            "details": failure_details,
+                                            "can_retry": True,
+                                        },
+                                        sequence=sequence,
+                                    ))
+                                    terminal_failure = EventEnvelope(
+                                        project_id=norm_env.project_id,
+                                        thread_id=target_thread_id,
+                                        type="turn_failed",
+                                        payload={
+                                            "turn_id": turn.id,
+                                            "turnId": turn.id,
+                                            "error_category": "upstream",
+                                            "summary": failure_message,
+                                            "details": failure_details,
+                                            "can_retry": True,
+                                        },
+                                    )
+                                    logger.warning(
+                                        "Codex completed turn %s without an assistant message (reported status=%s, error=%s)",
+                                        turn.id,
+                                        reported_status,
+                                        failure_message,
+                                    )
+                                else:
+                                    turn.status = "completed"
                                 turn.completed_at = datetime.now(timezone.utc)
+                                db.commit()
+
+                        elif norm_env.type == "turn_failed":
+                            turn = (
+                                db.query(Turn)
+                                .filter(Turn.thread_id == target_thread_id, Turn.status == "active")
+                                .order_by(Turn.turn_number.desc())
+                                .first()
+                            )
+                            if not turn:
+                                turn_id_val = norm_env.payload.get("turn_id") or norm_env.payload.get("turnId")
+                                if turn_id_val:
+                                    try:
+                                        turn = db.query(Turn).filter(Turn.thread_id == target_thread_id, Turn.id == int(turn_id_val)).first()
+                                    except Exception:
+                                        pass
+                            if turn:
+                                turn.status = "failed"
+                                turn.completed_at = datetime.now(timezone.utc)
+                                raw_err = norm_env.payload.get("error") or norm_env.payload.get("summary") or "Task failed during execution"
+                                seq = db.query(Item).filter(Item.turn_id == turn.id).count() + 1
+                                db.add(Item(
+                                    id=f"err_{uuid.uuid4().hex[:8]}",
+                                    turn_id=turn.id,
+                                    item_type="error",
+                                    content={
+                                        "error_category": "upstream",
+                                        "summary": raw_err,
+                                        "details": norm_env.payload.get("details") or raw_err,
+                                        "can_retry": True,
+                                    },
+                                    sequence=seq,
+                                ))
                                 db.commit()
 
                         elif norm_env.type == "agent_message" and norm_env.payload.get("is_streaming") is False:
@@ -535,6 +648,8 @@ class WorkerProcess:
 
                 except Exception as db_err:
                     logger.error(f"Error persisting item from normalized notification: {db_err}")
+                if terminal_failure:
+                    broker.publish_event(terminal_failure)
 
     async def stop(self, timeout: float = 5.0):
         self.running = False

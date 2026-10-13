@@ -85,12 +85,13 @@ def test_bounded_subscriber_queue_slow_consumer():
     assert queue.qsize() > 0
 
 def test_publish_event_endpoint():
+    from backend.config import settings
     response = client.post("/codex/events/publish", json={
         "project_id": "proj_api",
         "thread_id": "thread_api",
         "type": "api_msg",
         "payload": {"data": 123}
-    })
+    }, headers={"Authorization": f"Bearer {settings.token_secret}"})
     
     assert response.status_code == 200
     data = response.json()

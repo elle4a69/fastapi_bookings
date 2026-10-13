@@ -10,7 +10,7 @@ from backend.services.event_service import broker
 from backend.services.worker_manager import worker_manager
 from backend.middleware.logging import CorrelationLoggingMiddleware, RedactingFilter
 from backend.middleware.auth import verify_auth
-from backend.routers import events, threads, turns, worktrees, governance, diagnostics, projects, settings as settings_router
+from backend.routers import events, threads, turns, worktrees, governance, diagnostics, projects, settings as settings_router, models
 from backend.services.telemetry import init_telemetry, shutdown_telemetry
 
 # Configure root logger with RedactingFilter to ensure secrets are never leaked
@@ -132,13 +132,15 @@ async def global_exception_handler(request: Request, exc: Exception):
 # EventSource cannot attach an Authorization header.  The event stream has its
 # own one-time ticket dependency; the ticket-minting and publish routes retain
 # bearer authentication in their route declarations.
-app.include_router(events.router)
-app.include_router(threads.router, dependencies=[Depends(verify_auth)])
-app.include_router(turns.router, dependencies=[Depends(verify_auth)])
+app.include_router(events.router, prefix="/codex/events")
+app.include_router(threads.router, prefix="/codex/threads", dependencies=[Depends(verify_auth)])
+app.include_router(turns.router, prefix="/codex/turns", dependencies=[Depends(verify_auth)])
+app.include_router(turns.router, prefix="/codex", dependencies=[Depends(verify_auth)])
 app.include_router(worktrees.router, dependencies=[Depends(verify_auth)])
 app.include_router(governance.router, dependencies=[Depends(verify_auth)])
-app.include_router(projects.router, dependencies=[Depends(verify_auth)])
-app.include_router(settings_router.router, dependencies=[Depends(verify_auth)])
+app.include_router(projects.router, prefix="/codex/projects", dependencies=[Depends(verify_auth)])
+app.include_router(settings_router.router, prefix="/codex/settings", dependencies=[Depends(verify_auth)])
+app.include_router(models.router, prefix="/codex/models", dependencies=[Depends(verify_auth)])
 app.include_router(diagnostics.router)
 
 

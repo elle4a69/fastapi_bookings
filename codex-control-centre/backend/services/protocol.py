@@ -867,11 +867,69 @@ def normalize_codex_notification(
             payload["turnId"] = tid
         if "summary" in params or "summary" in turn_obj:
             payload["summary"] = params.get("summary") or turn_obj.get("summary")
+        err = params.get("error") or turn_obj.get("error")
+        if err:
+            payload["status"] = "failed"
+            error_msg = None
+            if isinstance(err, dict):
+                error_msg = err.get("message") or str(err)
+                if isinstance(error_msg, str) and error_msg.startswith("{"):
+                    try:
+                        parsed_err = json.loads(error_msg)
+                        if isinstance(parsed_err, dict) and "error" in parsed_err and isinstance(parsed_err["error"], dict):
+                            error_msg = parsed_err["error"].get("message", error_msg)
+                    except Exception:
+                        pass
+            else:
+                error_msg = str(err)
+            payload["error"] = error_msg
+            payload["details"] = error_msg
+            payload["summary"] = error_msg
         return EventEnvelope(
             project_id=eff_project_id,
             thread_id=eff_thread_id,
             type="turn_completed",
             payload=payload
+        )
+
+    # 10. Error Notification
+    elif method in ("error", "turn/error"):
+        err = params.get("error", {})
+        error_msg = err.get("message") if isinstance(err, dict) else str(err or "Unknown Codex error")
+        if isinstance(error_msg, str) and error_msg.startswith("{"):
+            try:
+                parsed_err = json.loads(error_msg)
+                if isinstance(parsed_err, dict) and "error" in parsed_err and isinstance(parsed_err["error"], dict):
+                    error_msg = parsed_err["error"].get("message", error_msg)
+            except Exception:
+                pass
+        tid = params.get("turnId") or params.get("turn_id") or eff_turn_id
+        return EventEnvelope(
+            project_id=eff_project_id,
+            thread_id=eff_thread_id,
+            type="turn_failed",
+            payload={
+                "turn_id": tid,
+                "turnId": tid,
+                "status": "failed",
+                "summary": error_msg,
+                "details": error_msg,
+                "error": error_msg,
+                "can_retry": True,
+            }
+        )
+
+    # 11. Warning Notification
+    elif method in ("warning", "turn/warning"):
+        return EventEnvelope(
+            project_id=eff_project_id,
+            thread_id=eff_thread_id,
+            type="warning",
+            payload={
+                "thread_id": eff_thread_id,
+                "turn_id": eff_turn_id,
+                "message": params.get("message") or "Warning from Codex engine",
+            }
         )
 
     return None

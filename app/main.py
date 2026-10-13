@@ -152,6 +152,24 @@ from .api.routers import (
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
 from .services.business_assistant.livekit.router import router as livekit_voice_router
 from .services.business_assistant.onboarding.router import router as onboarding_router
+from .api.deps import get_current_admin
+
+# Clean import integration for Codex Control Centre backend
+import sys
+from pathlib import Path
+
+CODEX_DIR = Path(__file__).resolve().parent.parent / "codex-control-centre"
+if str(CODEX_DIR) not in sys.path:
+    sys.path.insert(0, str(CODEX_DIR))
+
+from backend.routers import (
+    projects as codex_projects,
+    threads as codex_threads,
+    turns as codex_turns,
+    events as codex_events,
+    settings as codex_settings,
+    models as codex_models,
+)
 
 
 
@@ -219,6 +237,37 @@ async def app_lifespan(app: FastAPI):
             except Exception as exc:
                 logging.getLogger(__name__).warning("Failed starting projection worker: %s", exc)
 
+    # Codex Control Centre initialization and startup sweep
+    try:
+        from backend.config import default_db_path as codex_db_path
+        from backend.database import init_db as init_codex_db, SessionLocal as CodexSessionLocal, engine as codex_engine
+        from backend.services.boundary_service import seed_default_boundaries_if_empty
+        from backend.services.worker_manager import worker_manager, WorkerProcessManager
+        from backend.models.codex import Turn
+        from datetime import datetime, timezone
+        from sqlalchemy import text
+
+        with codex_engine.connect() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+            conn.commit()
+
+        init_codex_db()
+        with CodexSessionLocal() as codex_db:
+            seed_default_boundaries_if_empty(codex_db)
+            active_turns = codex_db.query(Turn).filter(Turn.status == "active").all()
+            if active_turns:
+                logging.getLogger(__name__).info("Codex startup sweep: found %d orphaned active turn(s); marking as interrupted.", len(active_turns))
+                for turn in active_turns:
+                    worker = worker_manager.get_active_worker_for_thread(turn.thread_id)
+                    if not worker or not worker_manager._is_running(worker):
+                        turn.status = "interrupted"
+                        turn.completed_at = datetime.now(timezone.utc)
+                codex_db.commit()
+        logging.getLogger(__name__).info("Codex Control Centre initialized with SQLite DB at %s (WAL mode)", codex_db_path)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed initializing Codex Control Centre: %s", exc)
+
     yield
 
     if arrival_alert_stop_event and arrival_alert_worker_task:
@@ -247,6 +296,19 @@ async def app_lifespan(app: FastAPI):
         sentinel_scheduler.stop()
     except Exception:
         pass
+    # Graceful shutdown for Codex worker processes, SSE streams, and database
+    try:
+        from backend.services.event_service import broker as codex_broker
+        from backend.services.worker_manager import worker_manager
+        from backend.database import engine as codex_engine
+
+        await codex_broker.close_all()
+        await worker_manager.stop()
+        codex_engine.dispose()
+        logging.getLogger(__name__).info("Codex Control Centre workers and connections gracefully shut down.")
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Error shutting down Codex Control Centre: %s", exc)
+
     from .core.telemetry import shutdown_telemetry
     shutdown_telemetry()
 
@@ -516,6 +578,44 @@ app.include_router(operator_controls.router)
 app.include_router(operator_controls.operator_alias_router)
 app.include_router(media.router)
 app.include_router(ui_agent.router, prefix="/api/admin")
+
+# Codex Control Centre Admin Routers
+app.include_router(
+    codex_projects.router,
+    prefix="/api/admin/codex/projects",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Projects"],
+)
+app.include_router(
+    codex_threads.router,
+    prefix="/api/admin/codex/threads",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Threads"],
+)
+app.include_router(
+    codex_turns.router,
+    prefix="/api/admin/codex/turns",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Turns"],
+)
+app.include_router(
+    codex_events.router,
+    prefix="/api/admin/codex/events",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Events"],
+)
+app.include_router(
+    codex_settings.router,
+    prefix="/api/admin/codex/settings",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Settings"],
+)
+app.include_router(
+    codex_models.router,
+    prefix="/api/admin/codex/models",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Models"],
+)
 
 
 

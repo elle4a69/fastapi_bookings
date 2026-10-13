@@ -61,6 +61,49 @@ async def test_worker_process():
 
 
 @pytest.mark.asyncio
+async def test_worker_process_reads_large_json_rpc_messages():
+    """Large app-server payloads must not stop the stdout reader at 64 KiB."""
+    payload_size = 128 * 1024
+    large_message_script = (
+        "import sys, json\n"
+        "while True:\n"
+        "    line = sys.stdin.readline()\n"
+        "    if not line: break\n"
+        "    request = json.loads(line)\n"
+        "    if 'id' in request:\n"
+        "        result = {'payload': 'x' * " + str(payload_size) + "}\n"
+        "        sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': request['id'], 'result': result}) + '\\n')\n"
+        "        sys.stdout.flush()\n"
+    )
+    worker = WorkerProcess([sys.executable, "-u", "-c", large_message_script])
+    await worker.start()
+    try:
+        response = await worker.send_request("large-response")
+        assert len(response["payload"]) == payload_size
+    finally:
+        await worker.stop()
+
+
+@pytest.mark.asyncio
+async def test_thread_started_notification_resolves_pending_bootstrap_request():
+    worker = WorkerProcess(command=["mock"], perform_handshake=False)
+    worker.thread_id = "ui_thread"
+    future = asyncio.get_running_loop().create_future()
+    worker.pending_requests["bootstrap"] = future
+    worker._thread_start_request_ids.add("bootstrap")
+
+    await worker._handle_notification({
+        "jsonrpc": "2.0",
+        "method": "thread/started",
+        "params": {"thread": {"id": "codex_thread", "items": []}},
+    })
+
+    assert future.result() == {"thread": {"id": "codex_thread", "items": []}}
+    assert worker.thread_map["ui_thread"] == "codex_thread"
+    assert "bootstrap" not in worker.pending_requests
+
+
+@pytest.mark.asyncio
 async def test_worker_manager():
     cmd = [sys.executable, "-u", "-c", MOCK_WORKER_SCRIPT]
     manager = WorkerManager(cmd)

@@ -538,6 +538,35 @@ def test_turn_interruption_and_cascade_cleanup(client, db_session):
     assert len(cancelled_event_types) >= 2
 
 
+def test_interrupting_missing_worker_thread_returns_cors_enabled_success(client, db_session):
+    """A stale app-server UUID must not turn Stop into a browser CORS error."""
+    from backend.routers import turns as turns_router
+
+    thread_id = "thread_cas04_e2e"
+    turn = Turn(id=302, thread_id=thread_id, turn_number=2, status="active")
+    db_session.add(turn)
+    db_session.commit()
+
+    worker = AsyncMock()
+    worker.send_request.side_effect = RuntimeError("thread not found: expired-codex-thread")
+    with (
+        patch.object(turns_router, "_get_active_thread_worker", new=AsyncMock(return_value=worker)),
+        patch.object(worker_manager, "clear_thread_mapping") as clear_mapping,
+    ):
+        response = client.post(
+            "/codex/turns/interrupt",
+            headers={"Origin": "http://localhost:4600"},
+            json={"thread_id": thread_id, "turn_id": 302},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:4600"
+    assert response.json() == {"status": "interrupted"}
+    clear_mapping.assert_called_once_with(thread_id)
+    db_session.refresh(turn)
+    assert turn.status == "interrupted"
+
+
 # =============================================================================
 # Test 6: Turn Steer Schema & expectedTurnId Validation
 # =============================================================================

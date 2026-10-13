@@ -100,7 +100,7 @@ def test_redact_secrets_strings():
     assert "super_secret_jwt_token_123456" not in sanitized
     assert "Bearer [REDACTED]" in sanitized
 
-    raw_query = "http://127.0.0.1:8100/codex/events/p1/t1?token=my_secret_token&user=frank"
+    raw_query = "http://127.0.0.1:4500/codex/events/p1/t1?token=my_secret_token&user=frank"
     sanitized_query = redact_secrets(raw_query)
     assert "my_secret_token" not in sanitized_query
     assert "token=[REDACTED]" in sanitized_query

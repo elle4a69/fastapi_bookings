@@ -9,6 +9,7 @@ filter for general operational log exports to SigNoz.
 
 import os
 import re
+import socket
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, Sequence, FrozenSet, List, Tuple
@@ -347,6 +348,19 @@ def record_telemetry_log(
 # ---------------------------------------------------------------------------
 # Telemetry lifecycle
 # ---------------------------------------------------------------------------
+def is_otlp_endpoint_reachable(endpoint: str, timeout_seconds: float = 0.1) -> bool:
+    """Quickly check if the OTLP collector endpoint is reachable before attaching network exporters."""
+    try:
+        parsed = urlparse(endpoint)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or (443 if parsed.scheme == "https" else 4318)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout_seconds)
+            return sock.connect_ex((host, port)) == 0
+    except Exception:
+        return False
+
+
 def init_telemetry(app: Optional[Any] = None) -> None:
     """Idempotently initialize OTel traces, metrics, logs, and instrumentations."""
     global _telemetry_initialized, _tracer_provider, _meter_provider
@@ -385,79 +399,91 @@ def init_telemetry(app: Optional[Any] = None) -> None:
         "deployment.environment": env,
     })
 
+    # Immediate reachability check to prevent 3-second export hangs when SigNoz is not running
+    collector_reachable = is_otlp_endpoint_reachable(base)
+    if not collector_reachable:
+        logger.warning(
+            "OTLP endpoint %s is unreachable; disabling remote network exporters to eliminate timeout log floods.",
+            base,
+        )
+        _last_export_status = "unreachable"
+
     # 1. Traces
     try:
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
-        raw = OTLPSpanExporter(endpoint=f"{base}/v1/traces", timeout=3)
-        safe = PrivacySafeSpanExporter(raw)
         _tracer_provider = TracerProvider(resource=resource)
-        _tracer_provider.add_span_processor(
-            BatchSpanProcessor(safe, max_queue_size=2048, max_export_batch_size=512)
-        )
+        if collector_reachable:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
+            raw = OTLPSpanExporter(endpoint=f"{base}/v1/traces", timeout=1)
+            safe = PrivacySafeSpanExporter(raw)
+            _tracer_provider.add_span_processor(
+                BatchSpanProcessor(safe, max_queue_size=2048, max_export_batch_size=512)
+            )
         trace.set_tracer_provider(_tracer_provider)
     except Exception as exc:
         logger.warning("Trace provider init failed: %s", exc)
 
     # 2. Metrics
     try:
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
-            OTLPMetricExporter,
-        )
-        mr = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=f"{base}/v1/metrics", timeout=3),
-            export_interval_millis=5000,
-            export_timeout_millis=3000,
-        )
-        _meter_provider = MeterProvider(resource=resource, metric_readers=[mr])
+        _meter_provider = MeterProvider(resource=resource)
+        if collector_reachable:
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+                OTLPMetricExporter,
+            )
+            mr = PeriodicExportingMetricReader(
+                OTLPMetricExporter(endpoint=f"{base}/v1/metrics", timeout=1),
+                export_interval_millis=5000,
+                export_timeout_millis=1000,
+            )
+            _meter_provider = MeterProvider(resource=resource, metric_readers=[mr])
         metrics.set_meter_provider(_meter_provider)
     except Exception as exc:
         logger.warning("Metric provider init failed: %s", exc)
 
     # 3. Logs — dedicated structured OTLP pipeline + privacy-filtered general server logs
     try:
-        from opentelemetry.exporter.otlp.proto.http._log_exporter import (
-            OTLPLogExporter,
-        )
-        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-
-        l_exp = OTLPLogExporter(endpoint=f"{base}/v1/logs", timeout=3)
         _logger_provider = LoggerProvider(resource=resource)
-        _logger_provider.add_log_record_processor(
-            BatchLogRecordProcessor(l_exp, max_queue_size=2048, max_export_batch_size=512)
-        )
+        if collector_reachable:
+            from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+                OTLPLogExporter,
+            )
+            from opentelemetry.sdk._logs import LoggingHandler
+            from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
-        # Operational log handler with privacy redaction filter
-        op_otlp_handler = LoggingHandler(
-            level=logging.INFO,
-            logger_provider=_logger_provider,
-        )
-        op_otlp_handler.addFilter(PrivacySafeLogFilter())
+            l_exp = OTLPLogExporter(endpoint=f"{base}/v1/logs", timeout=1)
+            _logger_provider.add_log_record_processor(
+                BatchLogRecordProcessor(l_exp, max_queue_size=2048, max_export_batch_size=512)
+            )
 
-        # Attach to root logger for propagating application loggers
-        root_logger = logging.getLogger()
-        root_logger.addHandler(op_otlp_handler)
-        _telemetry_owned_handlers.append((root_logger, op_otlp_handler))
+            # Operational log handler with privacy redaction filter
+            op_otlp_handler = LoggingHandler(
+                level=logging.INFO,
+                logger_provider=_logger_provider,
+            )
+            op_otlp_handler.addFilter(PrivacySafeLogFilter())
 
-        # Attach directly to non-propagating framework loggers
-        for _log_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "codex.access", "codex.main"):
-            target_logger = logging.getLogger(_log_name)
-            target_logger.addHandler(op_otlp_handler)
-            _telemetry_owned_handlers.append((target_logger, op_otlp_handler))
+            # Attach to root logger for propagating application loggers
+            root_logger = logging.getLogger()
+            root_logger.addHandler(op_otlp_handler)
+            _telemetry_owned_handlers.append((root_logger, op_otlp_handler))
 
-        # Attach dedicated structured telemetry handler ONLY to dedicated logger
-        dedicated_handler = LoggingHandler(
-            level=logging.DEBUG,
-            logger_provider=_logger_provider,
-        )
-        dedicated = logging.getLogger(_TELEMETRY_LOGGER_NAME)
-        dedicated.addHandler(dedicated_handler)
-        dedicated.setLevel(logging.DEBUG)
-        dedicated.propagate = False
-        _telemetry_owned_handlers.append((dedicated, dedicated_handler))
+            # Attach directly to non-propagating framework loggers
+            for _log_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "codex.access", "codex.main"):
+                target_logger = logging.getLogger(_log_name)
+                target_logger.addHandler(op_otlp_handler)
+                _telemetry_owned_handlers.append((target_logger, op_otlp_handler))
 
+            # Attach dedicated structured telemetry handler ONLY to dedicated logger
+            dedicated_handler = LoggingHandler(
+                level=logging.DEBUG,
+                logger_provider=_logger_provider,
+            )
+            dedicated = logging.getLogger(_TELEMETRY_LOGGER_NAME)
+            dedicated.addHandler(dedicated_handler)
+            dedicated.setLevel(logging.DEBUG)
+            dedicated.propagate = False
+            _telemetry_owned_handlers.append((dedicated, dedicated_handler))
     except Exception as exc:
         logger.warning("Log provider init failed: %s", exc)
 
