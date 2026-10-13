@@ -232,10 +232,9 @@ def test_realtime_tools_safeguards_against_cascades_and_loops(client, db_session
     assert diag2_data["result"]["throttled"] is True
     assert diag2_data["result"]["verdict"] == "Cached"
 
-    # 4. Rapid-fire barrage of calls triggers burst protection rate limit (max 4 calls per 3s)
-    # Note: We already made 3 calls above in this second, so the next 2 calls should hit the burst limit
+    # 4. Rapid-fire barrage of calls triggers burst protection rate limit (max 20 calls per 3s)
     burst_res = None
-    for _ in range(3):
+    for _ in range(19):
         burst_res = client.post(
             f"/api/admin/business-assistant/conversations/{conversation_id}/realtime/tools",
             headers=headers,

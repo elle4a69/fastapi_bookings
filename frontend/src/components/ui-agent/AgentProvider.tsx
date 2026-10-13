@@ -22,7 +22,7 @@ import { authenticatedAdminFetch } from "../../lib/api.ts";
 export const SPEEDS = { slow: 1.8, realistic: 1, fast: 0.4 } as const;
 export type AgentSpeed = keyof typeof SPEEDS;
 
-const MAX_STEPS = 12;
+const MAX_STEPS = 20;
 
 export interface AgentMessage {
   id?: string;

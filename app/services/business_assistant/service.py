@@ -476,7 +476,7 @@ class BusinessAssistantService:
                 name = "navigate_route"
                 arguments = {"route": target_route}
 
-        # Safeguard 1: Burst rate limiter (max 4 calls per 3 seconds for general tools; onboarding workflows allowed up to 10 calls per 3 seconds)
+        # Safeguard 1: Burst rate limiter (max 20 calls per 3 seconds)
         from .onboarding.tools import ONBOARDING_TOOL_NAMES
 
         now_utc = datetime.now(timezone.utc)
@@ -489,7 +489,7 @@ class BusinessAssistantService:
             )
             .scalar() or 0
         )
-        burst_limit = 10 if name in ONBOARDING_TOOL_NAMES else 4
+        burst_limit = 20
         if recent_burst_count >= burst_limit:
             return {
                 "status": "rejected",

@@ -383,7 +383,7 @@ export function createAgentActivityLog(
   }
 }
 
-export const MAX_CONSECUTIVE_TOOL_CALLS = 10
+export const MAX_CONSECUTIVE_TOOL_CALLS = 20
 
 export function shouldResetTurnToolQuota(event: unknown): boolean {
   if (!event || typeof event !== 'object') return false

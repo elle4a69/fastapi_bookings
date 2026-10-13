@@ -145,9 +145,9 @@ class Settings(BaseSettings):
         description="Maximum provider request duration for one internal text turn.",
     )
     BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS: int = Field(
-        10,
+        20,
         ge=0,
-        le=20,
+        le=50,
         description="Maximum server-authorised read-tool rounds in one internal text turn.",
     )
     BUSINESS_ASSISTANT_REALTIME_MODEL: str = Field(

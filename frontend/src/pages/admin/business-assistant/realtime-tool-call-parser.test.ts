@@ -67,9 +67,9 @@ test('parses function_call items inside response.done and ignores messages', () 
   )
 })
 
-test('MAX_CONSECUTIVE_TOOL_CALLS allows multi-step onboarding sequences up to 10 rounds', async () => {
+test('MAX_CONSECUTIVE_TOOL_CALLS allows multi-step onboarding sequences up to 20 rounds', async () => {
   const { MAX_CONSECUTIVE_TOOL_CALLS } = await import('./realtime-protocol.ts')
-  assert.equal(MAX_CONSECUTIVE_TOOL_CALLS, 10)
+  assert.equal(MAX_CONSECUTIVE_TOOL_CALLS, 20)
 })
 
 test('shouldResetTurnToolQuota identifies turn boundaries and spoken completion events', async () => {

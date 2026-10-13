@@ -52,7 +52,7 @@ The **UI Agent DOM Automation & Ghost Cursor Engine** provides live visual eleme
 4. **Execution & Ghost Cursor Animation**:
    - `createExecutor` smoothly scrolls elements into view, positions the Ghost Cursor, triggers the pulse ripple, sets the input values, and reports execution status.
 5. **Observation Turn**:
-   - If `continue: true` is returned, the new DOM state is rescanned and submitted back to the agent until the goal completes.
+   - If `continue: true` is returned, the new DOM state is rescanned and submitted back to the agent until the goal completes, bounded by `MAX_STEPS = 20` actions per turn loop.
 
 ## 5. Data Safety & Isolation
 - **Tenant Isolation**: Every backend endpoint requires authenticated tenant credentials via `get_current_tenant_user`. Session histories and final execution audits are strictly segregated by `(tenant_id, session_id)`.

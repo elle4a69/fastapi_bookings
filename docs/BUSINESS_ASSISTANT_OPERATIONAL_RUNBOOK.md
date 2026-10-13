@@ -134,7 +134,7 @@ The Business Assistant incorporates bounded constraints to prevent token runaway
 | **Max History Messages** | `20` messages | `BUSINESS_ASSISTANT_MAX_HISTORY_MESSAGES` | `BusinessAssistantTextRuntime.generate_reply` |
 | **Max Output Tokens** | `600` tokens | `BUSINESS_ASSISTANT_MAX_OUTPUT_TOKENS` | Provider chat completion `max_completion_tokens` |
 | **Turn Timeout** | `30.0` seconds | `BUSINESS_ASSISTANT_TURN_TIMEOUT_SECONDS` | Provider client HTTP request timeout |
-| **Max Tool Rounds** | `3` rounds | `BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS` | Strict loop counter in `generate_reply` |
+| **Max Tool Rounds** | `20` rounds | `BUSINESS_ASSISTANT_MAX_TOOL_ROUNDS` | Strict loop counter in `generate_reply` |
 | **Realtime SDP Max Bytes** | `100,000` bytes | `BUSINESS_ASSISTANT_REALTIME_SDP_MAX_BYTES` | `validate_sdp` and router origin gate |
 | **Idempotency Window** | `24` hours | Database unique constraints | `creation_request_key` on conversations, messages, proposals |
 
