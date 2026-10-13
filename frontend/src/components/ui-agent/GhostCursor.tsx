@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { MousePointer2 } from "lucide-react";
+import { useAgentOptional } from "./AgentProvider.tsx";
 
 export interface CursorState {
   x: number;
@@ -24,9 +25,14 @@ export interface GhostCursorProps {
 const spring = { type: "spring" as const, stiffness: 140, damping: 22 };
 
 export const GhostCursor = ({
-  cursor = { x: 0, y: 0, visible: false, pulse: false },
-  highlight = null,
-}: GhostCursorProps) => (
+  cursor: propCursor,
+  highlight: propHighlight,
+}: GhostCursorProps = {}) => {
+  const agent = useAgentOptional();
+  const cursor = propCursor ?? agent?.cursor ?? { x: 0, y: 0, visible: false, pulse: false };
+  const highlight = propHighlight !== undefined ? propHighlight : (agent?.highlight ?? null);
+
+  return (
   <div data-agent-ignore className="pointer-events-none fixed inset-0 z-[9999]">
     <AnimatePresence>
       {highlight && (
@@ -64,4 +70,5 @@ export const GhostCursor = ({
       </motion.div>
     )}
   </div>
-);
+  );
+};

@@ -2,6 +2,7 @@ import React from "react";
 import { ArrowLeft, RotateCcw, MoveHorizontal } from "lucide-react";
 import { useAgent, type AgentSpeed } from "./AgentProvider.tsx";
 import { useVoice, VOICE_PROVIDERS, SLEEP_OPTIONS } from "./VoiceProvider.tsx";
+import { DiagnosticModeToggle } from "@/pages/admin/business-assistant/components/DiagnosticModeToggle.tsx";
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <section className="space-y-3 border-b border-white/5 px-5 py-5">
@@ -178,6 +179,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </Pill>
           </Section>
         )}
+
+        <Section title="Diagnostic mode">
+          <DiagnosticModeToggle />
+        </Section>
 
         <Section title="Session">
           <Pill

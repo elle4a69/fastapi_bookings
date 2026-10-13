@@ -52,11 +52,10 @@ test('AgentPopup connects to BusinessAssistantContext lifecycle and supports typ
   assert.match(popupSource, /placeholder="Type something\.\.\."/)
 })
 
-test('AdminLayout mounts AgentPopup_01 and removes messy drawer, AgentSidebar and OnboardingStatusDock', () => {
-  assert.match(adminLayoutSource, /AgentPopup_01/)
+test('AdminLayout mounts AgentSidebar cleanly and removes messy drawer and legacy controller', () => {
+  assert.match(adminLayoutSource, /<AgentSidebar/)
   assert.doesNotMatch(adminLayoutSource, /BusinessAssistantDrawer/)
   assert.doesNotMatch(adminLayoutSource, /MinimizedVoiceController/)
-  assert.doesNotMatch(adminLayoutSource, /<AgentSidebar/)
   assert.doesNotMatch(adminLayoutSource, /<OnboardingStatusDock/)
 })
 

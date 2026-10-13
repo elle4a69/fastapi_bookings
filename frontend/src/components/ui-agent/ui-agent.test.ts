@@ -399,4 +399,51 @@ test("AgentControlBanner defines prominent visual takeover indicator for automat
   assert.match(bannerSource, /animate-pulse/);
 });
 
+test("AgentSidebar provides Diagnostics tab and toggle with clean inspector mode switching", () => {
+  const sidebarSource = readFileSync(
+    new URL("./AgentSidebar.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(sidebarSource, /data-testid="agent-tab-chat"/);
+  assert.match(sidebarSource, /data-testid="agent-tab-diagnostics"/);
+  assert.match(sidebarSource, /data-testid="agent-diagnostics-toggle"/);
+  assert.match(sidebarSource, /<AgentDiagnosticsPanel/);
+  assert.match(sidebarSource, /data-testid="agent-sidebar"/);
+  assert.match(sidebarSource, /data-testid="agent-resize-handle"/);
+  assert.match(sidebarSource, /data-testid="agent-status"/);
+  assert.match(sidebarSource, /data-testid="agent-chat-messages"/);
+});
+
+test("AgentDiagnosticsPanel provides live DOM scanner, action history, voice stream, and raw payloads", () => {
+  const diagSource = readFileSync(
+    new URL("./AgentDiagnosticsPanel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(diagSource, /data-testid="agent-diagnostics-panel"/);
+  assert.match(diagSource, /data-testid="diag-element-count"/);
+  assert.match(diagSource, /data-testid="diag-active-target"/);
+  assert.match(diagSource, /data-testid="diag-dom-search"/);
+  assert.match(diagSource, /data-testid="diag-refresh-scan"/);
+  assert.match(diagSource, /data-testid="diag-element-ref"/);
+  assert.match(diagSource, /data-testid="diag-point-btn"/);
+  assert.match(diagSource, /data-testid="diag-actions-history"/);
+  assert.match(diagSource, /data-testid="diag-event-log-stream"/);
+  assert.match(diagSource, /data-testid="diag-copy-json"/);
+  assert.match(diagSource, /DiagnosticModeToggle/);
+});
+
+test("AgentProvider provides diagnostics context with lastSnapshot, actionHistory, and highlightRef", () => {
+  const providerSource = readFileSync(
+    new URL("./AgentProvider.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(providerSource, /lastSnapshot:\s*PageSnapshot\s*\|\s*null/);
+  assert.match(providerSource, /refreshSnapshot:\s*\(\)\s*=>\s*PageSnapshot/);
+  assert.match(providerSource, /actionHistory:\s*ActionResult\[\]/);
+  assert.match(providerSource, /highlightRef:\s*\(ref:\s*string\)\s*=>\s*void/);
+  assert.match(providerSource, /clearLogs:\s*\(\)\s*=>\s*void/);
+  assert.match(providerSource, /export\s+const\s+useAgentOptional/);
+});
+
+
 

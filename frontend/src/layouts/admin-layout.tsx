@@ -8,9 +8,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TenantModulesProvider } from "@/context/tenant-modules-context"
 import { BusinessAssistantProvider } from "@/pages/admin/business-assistant/business-assistant-context"
-import { AgentPopup_01 } from "@/components/agents-ui/agent-popup"
 import { FieldPointerOverlay } from "@/pages/admin/business-assistant/components"
-import { AgentProvider, VoiceProvider } from "@/components/ui-agent"
+import { AgentProvider, VoiceProvider, AgentSidebar, GhostCursor } from "@/components/ui-agent"
 
 export function AdminLayout() {
   const location = useLocation()
@@ -41,7 +40,7 @@ export function AdminLayout() {
               Skip to content
             </a>
             <AppSidebar />
-            <SidebarInset className="h-svh min-w-0 overflow-hidden">
+            <SidebarInset className="h-svh min-w-0 overflow-hidden pr-0 lg:pr-[var(--agent-w,0px)] transition-[padding] duration-200">
               <AppHeader />
               <div
                 id="main-content"
@@ -56,20 +55,9 @@ export function AdminLayout() {
               </div>
             </SidebarInset>
             <SupportButton />
-            <AgentPopup_01
-              agentName="Business Assistant"
-              isPreConnectBufferEnabled={true}
-              preConnectMessage="Agent is listening, ask it a question"
-              audioVisualizer={{ type: 'bar', barCount: 3 }}
-              controls={{
-                leave: true,
-                microphone: true,
-                chat: true,
-                camera: true,
-                screenShare: true,
-              }}
-            />
             <FieldPointerOverlay />
+            <AgentSidebar />
+            <GhostCursor />
           </SidebarProvider>
         </TooltipProvider>
           </VoiceProvider>

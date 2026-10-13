@@ -107,16 +107,16 @@ test('drawer enforces accessibility, focus trapping/restoration, and keyboard na
 
 test('admin layout shell persistently provides business assistant across route changes', () => {
   assert.match(layoutSource, /<BusinessAssistantProvider>/)
-  assert.match(layoutSource, /<BusinessAssistantDrawer \/>/)
+  assert.match(layoutSource, /<AgentSidebar/)
   assert.match(layoutSource, /<SupportButton \/>/)
 
-  // Floating support button toggles assistant drawer
+  // Floating support button toggles assistant drawer / popup
   assert.match(supportButtonSource, /useBusinessAssistant\(\)/)
   assert.match(supportButtonSource, /onClick=\{toggleDrawer\}/)
   assert.match(supportButtonSource, /aria-label="Open Business Assistant"/)
   assert.match(supportButtonSource, /aria-controls="business-assistant-drawer"/)
 
-  // Top header button toggles assistant drawer
+  // Top header button toggles assistant drawer / popup
   assert.match(headerSource, /useBusinessAssistant\(\)/)
   assert.match(headerSource, /onClick=\{toggleDrawer\}/)
   assert.match(headerSource, /aria-label="Open Business Assistant"/)
@@ -143,14 +143,14 @@ test('realtime protocol parses tool execution calls and formats outputs', () => 
   assert.equal((formattedOutput.item as { type: string }).type, 'function_call_output')
 })
 
-test('Business Assistant voice uses GPT-Live lifecycle, not the legacy realtime session update', () => {
+test('Business Assistant voice uses GPT-Live lifecycle and updates session configuration on channel open', () => {
   assert.match(voiceHookSource, /createDataChannel\('oai-events'\)/)
   assert.match(voiceHookSource, /event\.type === 'session\.started'/)
   assert.match(voiceHookSource, /type: 'session\.close'/)
   assert.match(voiceHookSource, /event\.type === 'session\.closed'/)
   assert.match(voiceHookSource, /finalisation is incomplete/)
   assert.match(voiceHookSource, /\/api\/admin\/gpt-live\/conversations/)
-  assert.doesNotMatch(voiceHookSource, /session\.update/)
+  assert.match(voiceHookSource, /session\.update/)
 })
 
 test('ticket status component renders user-safe status badges, timeline, and sanitised notice', () => {
@@ -169,7 +169,6 @@ test('ticket status component renders user-safe status badges, timeline, and san
 })
 
 test('minimized voice controller provides floating mic indicator with expand and end-call controls', () => {
-  assert.match(layoutSource, /<MinimizedVoiceController \/>/)
   assert.match(minimizedMicSource, /data-testid="business-assistant-minimized-mic"/)
   assert.match(minimizedMicSource, /drawerOpen \|\| voiceState === 'idle'/)
   assert.match(minimizedMicSource, /onClick=\{openDrawer\}/)

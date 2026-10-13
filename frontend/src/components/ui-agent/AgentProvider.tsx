@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { scanPage, type PageSnapshot } from "./scanner.ts";
+import { scanPage, findByRef, type PageSnapshot } from "./scanner.ts";
 import {
   createExecutor,
   type AgentAction,
@@ -52,6 +52,11 @@ export interface AgentContextValue {
   setSpeed: (speed: AgentSpeed) => void;
   cursor: CursorState;
   highlight: HighlightState | null;
+  lastSnapshot: PageSnapshot | null;
+  refreshSnapshot: () => PageSnapshot;
+  actionHistory: ActionResult[];
+  highlightRef: (ref: string) => void;
+  clearLogs: () => void;
 }
 
 const AgentCtx = createContext<AgentContextValue | null>(null);
@@ -62,6 +67,10 @@ export const useAgent = (): AgentContextValue => {
     throw new Error("useAgent must be used within an AgentProvider");
   }
   return ctx;
+};
+
+export const useAgentOptional = (): AgentContextValue | null => {
+  return useContext(AgentCtx);
 };
 
 const newSession = () => {
@@ -98,6 +107,8 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [busy, setBusy] = useState(false);
   const [speed, setSpeed] = useState<AgentSpeed>("realistic");
+  const [lastSnapshot, setLastSnapshot] = useState<PageSnapshot | null>(null);
+  const [actionHistory, setActionHistory] = useState<ActionResult[]>([]);
 
   const sessionRef = useRef<string>(
     typeof window !== "undefined"
@@ -148,16 +159,54 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
   );
 
   const execute = useMemo(() => createExecutor({ ui, navigate }), [ui, navigate]);
-  const snapshot = useCallback(
-    (): PageSnapshot => scanPage({ routes, contentSelector }),
+
+  const refreshSnapshot = useCallback(
+    (): PageSnapshot => {
+      const snap = scanPage({ routes, contentSelector });
+      setLastSnapshot(snap);
+      return snap;
+    },
     [routes, contentSelector],
   );
 
+  const snapshot = useCallback(
+    (): PageSnapshot => {
+      const snap = scanPage({ routes, contentSelector });
+      setLastSnapshot(snap);
+      return snap;
+    },
+    [routes, contentSelector],
+  );
+
+  const highlightRef = useCallback(
+    (ref: string) => {
+      const el = findByRef(ref);
+      if (el) {
+        ui.point(el, ref);
+      }
+    },
+    [ui],
+  );
+
+  const clearLogs = useCallback(() => {
+    setLogs([]);
+    setActionHistory([]);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      refreshSnapshot();
+    }
+  }, [refreshSnapshot]);
+
   const executeDirect = useCallback(
     async (action: AgentAction): Promise<ActionResult> => {
-      return execute(action);
+      const r = await execute(action);
+      log(r.ok ? r.result || "Action succeeded" : `${action.type} failed: ${r.error}`, r.ok);
+      setActionHistory((prev) => [...prev.slice(-99), r]);
+      return r;
     },
-    [execute],
+    [execute, log],
   );
 
   const send = useCallback(
@@ -203,6 +252,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
             if (abortRef.current) break;
             const r = await execute(a);
             log(r.ok ? r.result || "Action succeeded" : `${a.type} failed: ${r.error}`, r.ok);
+            setActionHistory((prev) => [...prev.slice(-99), r]);
             results.push(r);
           }
 
@@ -267,6 +317,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
             r.ok ? `[replay] ${r.result}` : `[replay] ${a.type} failed: ${r.error}`,
             r.ok,
           );
+          setActionHistory((prev) => [...prev.slice(-99), r]);
         }
       } finally {
         setBusy(false);
@@ -282,6 +333,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
     sessionRef.current = newSession();
     setMessages([]);
     setLogs([]);
+    setActionHistory([]);
   }, []);
 
   // Listen for window events to trigger UI automation (e.g. from Business Assistant or Grok tool runner)
@@ -329,14 +381,24 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
       setSpeed,
       cursor,
       highlight,
+      lastSnapshot,
+      refreshSnapshot,
+      actionHistory,
+      highlightRef,
+      clearLogs,
     }),
     [
+      actionHistory,
       busy,
+      clearLogs,
       cursor,
       executeDirect,
       highlight,
+      highlightRef,
+      lastSnapshot,
       logs,
       messages,
+      refreshSnapshot,
       replay,
       reset,
       send,
