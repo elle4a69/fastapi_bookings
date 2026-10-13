@@ -145,8 +145,13 @@ from .api.routers import (
     tenants,
     translations,
     business_assistant,
+    media,
+    operator_controls,
+    ui_agent,
 )
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
+from .services.business_assistant.livekit.router import router as livekit_voice_router
+from .services.business_assistant.onboarding.router import router as onboarding_router
 
 
 
@@ -505,6 +510,12 @@ app.include_router(conversations.router, prefix="/api/admin")
 app.include_router(assistant_studio.router, prefix="/api/admin/assistant-studio", tags=["Assistant Studio"])
 app.include_router(business_assistant.router, prefix="/api/admin")
 app.include_router(gpt_live_router, prefix="/api/admin")
+app.include_router(livekit_voice_router, prefix="/api/admin")
+app.include_router(onboarding_router)
+app.include_router(operator_controls.router)
+app.include_router(operator_controls.operator_alias_router)
+app.include_router(media.router)
+app.include_router(ui_agent.router, prefix="/api/admin")
 
 
 

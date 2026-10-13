@@ -1366,6 +1366,57 @@ export async function executeRpcAction(
       }
     }
 
+    // ── UI AGENT: OPERATE APP ───────────────────────────────────────────
+    case 'operate_app': {
+      tracker.transitionTo('executing')
+      const instruction =
+        (rawPayload.instruction as string) ||
+        (rawPayload.message as string) ||
+        (rawPayload.text as string) ||
+        (rawPayload.params && typeof rawPayload.params === 'object'
+          ? ((rawPayload.params as Record<string, unknown>).instruction as string) ||
+            ((rawPayload.params as Record<string, unknown>).text as string)
+          : undefined) ||
+        ''
+
+      if (!instruction) {
+        tracker.transitionTo('failed', 'Missing instruction for operate_app')
+        return {
+          action_id: actionId,
+          action: 'operate_app',
+          status: 'failed',
+          receipt_state: 'failed',
+          caller_identity: callerIdentity,
+          timestamp,
+          control_epoch: epochMgr.getEpoch(),
+          lease_token: leaseMgr.getActiveLease().token ?? undefined,
+          error_code: 'invalid_value',
+          error: 'operate_app requires an instruction or text parameter.',
+        }
+      }
+
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(
+          new CustomEvent('ui-agent:operate', {
+            detail: { instruction, source: callerIdentity || 'assistant-rpc' },
+          }),
+        )
+      }
+
+      tracker.transitionTo('saved')
+      return {
+        action_id: actionId,
+        action: 'operate_app',
+        status: 'saved',
+        receipt_state: 'saved',
+        caller_identity: callerIdentity,
+        timestamp,
+        control_epoch: epochMgr.getEpoch(),
+        lease_token: leaseMgr.getActiveLease().token ?? undefined,
+        details: { instruction },
+      }
+    }
+
     // ── ONBOARDING: POINT TO CONTROL ─────────────────────────────────────
     case 'point_to_control': {
       tracker.transitionTo('waiting_for_ui')

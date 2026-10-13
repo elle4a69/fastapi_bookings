@@ -28,7 +28,7 @@ export type MaintenanceActionType =
   | 'diagnostic_report'
   | 'run_diagnostic_check'
 
-export type RpcActionType = WebsiteRpcActionType | OnboardingActionType | MaintenanceActionType
+export type RpcActionType = WebsiteRpcActionType | OnboardingActionType | MaintenanceActionType | 'operate_app'
 
 // ── 2. EXECUTION RECEIPT STATES & TRANSITIONS ────────────────────────────
 

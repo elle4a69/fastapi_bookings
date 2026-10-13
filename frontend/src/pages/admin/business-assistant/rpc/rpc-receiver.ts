@@ -33,6 +33,7 @@ export const ONBOARDING_RPC_METHODS = [
   'highlight_field',
   'point_to_field',
   'read_form_state',
+  'operate_app',
 ] as const
 
 export const ALL_RPC_METHODS = [

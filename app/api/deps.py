@@ -210,6 +210,14 @@ async def get_current_admin(
     return current_user
 
 
+async def get_current_tenant_user(
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+) -> tuple[Tenant, User]:
+    """Ensure tenant and user are authenticated and tenant-isolated."""
+    return tenant, current_user
+
+
 async def get_current_company(
     tenant: Tenant = Depends(get_current_tenant),
 ) -> str:

@@ -8,7 +8,12 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TenantModulesProvider } from "@/context/tenant-modules-context"
 import { BusinessAssistantProvider } from "@/pages/admin/business-assistant/business-assistant-context"
-import { BusinessAssistantDrawer } from "@/pages/admin/business-assistant/assistant-drawer"
+import { AgentPopup_01 } from "@/components/agents-ui/agent-popup"
+import {
+  FieldPointerOverlay,
+  OnboardingStatusDock,
+} from "@/pages/admin/business-assistant/components"
+import { AgentProvider } from "@/components/ui-agent"
 
 export function AdminLayout() {
   const location = useLocation()
@@ -20,7 +25,8 @@ export function AdminLayout() {
   return (
     <TenantModulesProvider>
       <BusinessAssistantProvider>
-        <TooltipProvider>
+        <AgentProvider>
+          <TooltipProvider>
           <SidebarProvider
             style={
               {
@@ -51,9 +57,24 @@ export function AdminLayout() {
               </div>
             </SidebarInset>
             <SupportButton />
-            <BusinessAssistantDrawer />
+            <AgentPopup_01
+              agentName="Business Assistant"
+              isPreConnectBufferEnabled={true}
+              preConnectMessage="Agent is listening, ask it a question"
+              audioVisualizer={{ type: 'bar', barCount: 3 }}
+              controls={{
+                leave: true,
+                microphone: true,
+                chat: true,
+                camera: true,
+                screenShare: true,
+              }}
+            />
+            <FieldPointerOverlay />
+            <OnboardingStatusDock />
           </SidebarProvider>
         </TooltipProvider>
+        </AgentProvider>
       </BusinessAssistantProvider>
     </TenantModulesProvider>
   )

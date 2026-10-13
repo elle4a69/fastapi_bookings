@@ -412,3 +412,76 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ── Ghost Cursor & UI Agent Overlay ─────────────────────────────────────── */
+.agent-dots {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+.agent-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: #38bdf8;
+  animation: agentDot 1s infinite ease-in-out;
+}
+.agent-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.agent-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes agentDot {
+  0%, 100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.agent-highlight {
+  position: fixed;
+  border: 2px solid rgba(6, 182, 212, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.15), 0 0 24px rgba(6, 182, 212, 0.45);
+  pointer-events: none;
+  z-index: 9999;
+}
+.agent-highlight-tag {
+  position: absolute;
+  top: -26px;
+  left: -2px;
+  white-space: nowrap;
+  font: 500 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background: #06b6d4;
+  color: #04111a;
+  padding: 3px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.agent-cursor-glow {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.55), transparent 70%);
+}
+.agent-cursor-pulse {
+  animation: agentPulse 0.45s ease-out;
+}
+@keyframes agentPulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
