@@ -122,7 +122,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
               <button
                 type="button"
                 onClick={() => setShowFeedback(true)}
-                className="text-[10px] text-[var(--accent)] hover:underline font-medium cursor-pointer min-h-[36px] flex items-center"
+                className="text-[10px] text-[var(--accent)] hover:underline font-medium cursor-pointer h-7 flex items-center"
               >
                 + Add operator feedback / guidance note
               </button>
@@ -154,7 +154,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
           <Button
             size="sm"
             variant="outline"
-            className="min-h-[44px] w-full sm:w-auto text-xs text-[var(--danger)] border-[var(--danger)]/40 hover:bg-[var(--danger-subtle)] justify-center"
+            className="h-8 w-full sm:w-auto text-xs text-[var(--danger)] border-[var(--danger)]/40 hover:bg-[var(--danger-subtle)] justify-center"
             onClick={() => declineRequest(item.approvalId, undefined, feedback || undefined)}
           >
             <X className="w-4 h-4 mr-1" />
@@ -164,7 +164,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
           <Button
             size="sm"
             variant="secondary"
-            className="min-h-[44px] w-full sm:w-auto text-xs justify-center"
+            className="h-8 w-full sm:w-auto text-xs justify-center"
             onClick={() => approveRequest(item.approvalId, 'session', undefined, feedback || undefined)}
           >
             Approve for Session
@@ -173,7 +173,7 @@ export const ApprovalCard: React.FC<Props> = ({ item }) => {
           <Button
             size="sm"
             variant={item.risk === 'high' ? 'danger' : 'default'}
-            className="min-h-[44px] w-full sm:w-auto text-xs justify-center font-medium"
+            className="h-8 w-full sm:w-auto text-xs justify-center font-medium"
             onClick={() => approveRequest(item.approvalId, 'once', undefined, feedback || undefined)}
           >
             <Check className="w-4 h-4 mr-1" />

@@ -45,7 +45,7 @@ export const WebResearchItem: React.FC<Props> = ({ item }) => {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Open source link: ${cite.title || cite.url}`}
-                  className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--accent)] hover:underline focus:outline-none focus:ring-1 focus:ring-[var(--accent)] flex-shrink-0"
+                  className="h-7 w-7 flex items-center justify-center text-[var(--accent)] hover:underline focus:outline-none focus:ring-1 focus:ring-[var(--accent)] flex-shrink-0"
                 >
                   <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
                 </a>

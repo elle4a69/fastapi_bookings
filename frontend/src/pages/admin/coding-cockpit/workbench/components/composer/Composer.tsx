@@ -95,8 +95,8 @@ export const Composer: React.FC = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="p-2 sm:p-3 bg-slate-900 border-t border-slate-800 max-w-4xl mx-auto w-full">
-        <div className="border border-slate-700/80 rounded-xl bg-slate-950/80 shadow-xs focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
+      <div className="p-2 sm:p-3 bg-background border-t border-border max-w-4xl mx-auto w-full">
+        <div className="border border-border rounded-xl bg-card shadow-xs focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all">
           {/* Main Textarea */}
           <textarea
             id="composer-message-input"
@@ -111,25 +111,25 @@ export const Composer: React.FC = () => {
                 : 'Give instruction to Codex... (Cmd+Enter to send, Shift+Enter for new line)'
             }
             rows={2}
-            className="w-full resize-none bg-transparent p-2.5 sm:p-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none leading-relaxed"
+            className="w-full resize-none bg-transparent p-2.5 sm:p-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none leading-relaxed"
           />
 
           {/* Bottom Toolbar & Action Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 py-2 sm:px-3 sm:py-2 border-t border-slate-800 bg-slate-900/60 rounded-b-xl gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 py-1.5 sm:px-3 sm:py-2 border-t border-border bg-muted/30 rounded-b-xl gap-2">
             {/* Left Controls: Model, Reasoning, Permissions */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Model Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                    className="h-7 sm:h-8 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-background border border-border text-foreground hover:bg-muted hover:border-border transition-colors cursor-pointer select-none"
                     aria-label="Select Model"
                   >
-                    <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                    <Cpu className="w-3.5 h-3.5 text-primary" />
                     <span>{selectedModel}</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-52 text-xs bg-slate-900 border-slate-800 text-slate-200">
+                <DropdownMenuContent align="start" className="w-52 text-xs bg-card border-border text-foreground">
                   <DropdownMenuRadioGroup
                     value={selectedModel}
                     onValueChange={(val) => {
@@ -156,14 +156,14 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                    className="h-7 sm:h-8 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-background border border-border text-foreground hover:bg-muted hover:border-border transition-colors cursor-pointer select-none"
                     aria-label="Select Reasoning Effort"
                   >
-                    <Brain className="w-3.5 h-3.5 text-indigo-400" />
+                    <Brain className="w-3.5 h-3.5 text-primary" />
                     <span className="capitalize">{reasoningEffort} effort</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40 text-xs bg-slate-900 border-slate-800 text-slate-200">
+                <DropdownMenuContent align="start" className="w-40 text-xs bg-card border-border text-foreground">
                   <DropdownMenuRadioGroup
                     value={reasoningEffort}
                     onValueChange={(val) => setReasoningEffort(val as ReasoningEffort)}
@@ -179,14 +179,14 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
+                    className="h-7 sm:h-8 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-background border border-border text-foreground hover:bg-muted hover:border-border transition-colors cursor-pointer select-none"
                     aria-label="Select Permissions"
                   >
-                    <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                    <Shield className="w-3.5 h-3.5 text-primary" />
                     <span className="capitalize">{permission.replace('_', ' ')}</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 text-xs bg-slate-900 border-slate-800 text-slate-200">
+                <DropdownMenuContent align="start" className="w-48 text-xs bg-card border-border text-foreground">
                   <DropdownMenuRadioGroup
                     value={permission}
                     onValueChange={(val) => setPermission(val as PermissionProfile)}
@@ -200,14 +200,14 @@ export const Composer: React.FC = () => {
             </div>
 
             {/* Right Action: Morphing Button (Send / Stop / Resume / Steer) */}
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
               {state.isStreaming ? (
                 <>
                   <Button
                     size="sm"
                     variant="danger"
                     onClick={stopActiveTurn}
-                    className="min-h-[44px] px-3.5 text-xs gap-1.5 font-medium shadow-xs flex-1 sm:flex-initial"
+                    className="h-8 px-3 text-xs gap-1.5 font-medium shadow-xs flex-1 sm:flex-initial"
                   >
                     <Square className="w-3.5 h-3.5 fill-current" />
                     Stop Turn
@@ -218,7 +218,7 @@ export const Composer: React.FC = () => {
                       size="sm"
                       variant="default"
                       onClick={handleSend}
-                      className="min-h-[44px] px-3.5 text-xs gap-1.5 font-medium bg-[var(--accent)] text-[var(--accent-foreground)] flex-1 sm:flex-initial"
+                      className="h-8 px-3.5 text-xs gap-1.5 font-medium flex-1 sm:flex-initial"
                     >
                       <Compass className="w-3.5 h-3.5" />
                       Steer Work
@@ -226,12 +226,12 @@ export const Composer: React.FC = () => {
                   )}
                 </>
               ) : isThreadInterrupted ? (
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => sendUserMessage('Resume previous task and verify remaining checklist items.', { model: selectedModel, reasoningEffort })}
-                    className="min-h-[44px] px-3 text-xs gap-1.5 font-medium text-[var(--accent)] flex-1 sm:flex-initial"
+                    className="h-8 px-3 text-xs gap-1.5 font-medium text-primary flex-1 sm:flex-initial"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     Resume
@@ -242,7 +242,7 @@ export const Composer: React.FC = () => {
                     variant="default"
                     onClick={handleSend}
                     disabled={!message.trim()}
-                    className="min-h-[44px] px-4 text-xs gap-1.5 font-medium flex-1 sm:flex-initial"
+                    className="h-8 px-3.5 text-xs gap-1.5 font-medium flex-1 sm:flex-initial"
                   >
                     <Send className="w-3.5 h-3.5" />
                     Send
@@ -254,11 +254,11 @@ export const Composer: React.FC = () => {
                   variant="default"
                   onClick={handleSend}
                   disabled={!message.trim()}
-                  className="min-h-[44px] px-4 text-xs gap-1.5 font-medium w-full sm:w-auto justify-center"
+                  className="h-8 px-3.5 text-xs gap-1.5 font-medium w-full sm:w-auto justify-center"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Send</span>
-                  <kbd className="hidden sm:inline text-[9px] font-mono opacity-70 bg-black/20 px-1 py-0.5 rounded ml-0.5">
+                  <kbd className="hidden sm:inline text-[9px] font-mono opacity-70 bg-black/20 dark:bg-white/20 px-1 py-0.5 rounded ml-0.5">
                     ⌘↵
                   </kbd>
                 </Button>
@@ -268,5 +268,6 @@ export const Composer: React.FC = () => {
         </div>
       </div>
     </TooltipProvider>
+
   )
 }

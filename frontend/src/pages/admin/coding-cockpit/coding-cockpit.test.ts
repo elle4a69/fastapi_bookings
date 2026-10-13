@@ -147,9 +147,9 @@ test('Standardized h-11 slim headers align across UnifiedSidebar, ThreadHeader, 
   const headerContent = readFileSync(headerPath, 'utf8')
   const inspectorContent = readFileSync(inspectorPath, 'utf8')
 
-  assert.ok(sidebarContent.includes('h-11 px-3 border-b border-slate-800'), 'UnifiedSidebar must use h-11 border-b')
-  assert.ok(headerContent.includes('h-11 px-3 border-b border-slate-800'), 'ThreadHeader must use h-11 border-b')
-  assert.ok(inspectorContent.includes('h-11 px-3 border-b border-slate-800'), 'Inspector must use h-11 border-b')
+  assert.ok(sidebarContent.includes('h-11 px-3 border-b border-border'), 'UnifiedSidebar must use h-11 border-b')
+  assert.ok(headerContent.includes('h-11 px-3 border-b border-border'), 'ThreadHeader must use h-11 border-b')
+  assert.ok(inspectorContent.includes('h-11 px-3 border-b border-border'), 'Inspector must use h-11 border-b')
 })
 
 test('Draggable resizable side panels support clamping and persistent widths', () => {

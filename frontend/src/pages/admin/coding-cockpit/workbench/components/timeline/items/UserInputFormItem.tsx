@@ -52,7 +52,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
                   aria-describedby={field.description ? `desc-${field.id}` : undefined}
                   value={formData[field.id] || ''}
                   onChange={(e) => handleChange(field.id, e.target.value)}
-                  className="w-full min-h-[44px] rounded border border-[var(--border)] bg-[var(--surface-secondary)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  className="w-full h-8 rounded border border-[var(--border)] bg-[var(--surface-secondary)] px-2.5 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >
                   <option value="">Select an option...</option>
                   {field.options?.map((opt, i) => (
@@ -66,7 +66,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
                   value={formData[field.id] || ''}
                   onChange={(e) => handleChange(field.id, e.target.value)}
                   placeholder={field.description || `Enter ${field.label}`}
-                  className="min-h-[44px] text-xs"
+                  className="h-8 text-xs"
                 />
               )}
               {field.description && (
@@ -78,7 +78,7 @@ export const UserInputFormItem: React.FC<Props> = ({ item }) => {
           ))}
 
           <div className="flex justify-end pt-2">
-            <Button size="sm" type="submit" className="min-h-[44px] px-4 text-xs">
+            <Button size="sm" type="submit" className="h-8 px-4 text-xs">
               <Send className="w-3.5 h-3.5 mr-1" />
               Submit Response
             </Button>

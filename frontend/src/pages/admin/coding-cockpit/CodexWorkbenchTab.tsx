@@ -91,19 +91,19 @@ export const CodexWorkbenchTab: React.FC<CodexWorkbenchTabProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col w-full h-full min-h-[500px] flex-1 overflow-hidden bg-slate-900 text-slate-100 select-none ${
+      className={`relative flex flex-col w-full h-full min-h-[500px] flex-1 overflow-hidden bg-background text-foreground select-none ${
         isDraggingLeft || isDraggingRight ? 'cursor-col-resize select-none' : ''
       }`}
     >
       {/* Demo Mode / Environment Status Notification Banner */}
       {state.appMode === 'demo' && (
-        <div className="bg-indigo-600/90 text-white text-xs px-3 sm:px-4 py-1.5 flex items-center justify-between shrink-0 z-30 font-medium border-b border-indigo-500/40">
+        <div className="bg-primary/90 text-primary-foreground text-xs px-3 sm:px-4 py-1.5 flex items-center justify-between shrink-0 z-30 font-medium border-b border-primary/30">
           <span className="truncate pr-2 text-[11px] sm:text-xs">
             [DEMO MODE: Synthetic Codex sandbox worktree data active]
           </span>
           <button
             onClick={() => setAppMode('live')}
-            className="px-2 py-0.5 bg-white/20 hover:bg-white/30 rounded transition-colors text-[11px] font-semibold shrink-0 cursor-pointer"
+            className="px-2 py-0.5 bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground rounded transition-colors text-[11px] font-semibold shrink-0 cursor-pointer"
           >
             Switch to Live API
           </button>
@@ -140,34 +140,34 @@ export const CodexWorkbenchTab: React.FC<CodexWorkbenchTabProps> = ({
           <div
             onPointerDown={handleLeftSplitterPointerDown}
             className={`hidden md:flex w-1.5 hover:w-1.5 shrink-0 cursor-col-resize items-center justify-center transition-colors z-30 select-none group ${
-              isDraggingLeft ? 'bg-indigo-500' : 'hover:bg-indigo-500/50 bg-slate-800'
+              isDraggingLeft ? 'bg-primary' : 'hover:bg-primary/50 bg-border'
             }`}
             title="Drag to resize sidebar (220px - 480px)"
           >
             <div
               className={`w-0.5 h-6 rounded-full transition-colors ${
-                isDraggingLeft ? 'bg-white' : 'bg-slate-600 group-hover:bg-indigo-300'
+                isDraggingLeft ? 'bg-primary-foreground' : 'bg-muted-foreground group-hover:bg-primary-foreground'
               }`}
             />
           </div>
         )}
 
         {/* 2. Primary Workspace Center (takes available width) */}
-        <main className="flex-1 flex flex-col h-full min-w-0 w-full overflow-hidden bg-slate-900 relative">
+        <main className="flex-1 flex flex-col h-full min-w-0 w-full overflow-hidden bg-background relative">
           {/* Thread Header with Standardized h-11 Slim Height, Sticky Model Selector & Tools Launcher */}
           <ThreadHeader statusData={statusData} />
 
           {/* Central Conversation and Streaming Activity Timeline */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden relative">
             {state.appMode === 'live' && state.projects.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center text-sm text-slate-400">
-                <p className="font-semibold text-slate-200">No projects connected</p>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm leading-relaxed">
+              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center text-sm text-muted-foreground">
+                <p className="font-semibold text-foreground">No projects connected</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
                   Register a repository target in the sidebar or switch to Demo Mode to explore the Codex Engineering Workbench.
                 </p>
                 <button
                   onClick={() => setAppMode('demo')}
-                  className="mt-4 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium cursor-pointer"
+                  className="mt-4 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground text-xs font-medium cursor-pointer"
                 >
                   Load Demo Mode
                 </button>
@@ -195,13 +195,13 @@ export const CodexWorkbenchTab: React.FC<CodexWorkbenchTabProps> = ({
           <div
             onPointerDown={handleRightSplitterPointerDown}
             className={`hidden lg:flex w-1.5 hover:w-1.5 shrink-0 cursor-col-resize items-center justify-center transition-colors z-30 select-none group ${
-              isDraggingRight ? 'bg-indigo-500' : 'hover:bg-indigo-500/50 bg-slate-800'
+              isDraggingRight ? 'bg-primary' : 'hover:bg-primary/50 bg-border'
             }`}
             title="Drag to resize inspector (260px - 600px)"
           >
             <div
               className={`w-0.5 h-6 rounded-full transition-colors ${
-                isDraggingRight ? 'bg-white' : 'bg-slate-600 group-hover:bg-indigo-300'
+                isDraggingRight ? 'bg-primary-foreground' : 'bg-muted-foreground group-hover:bg-primary-foreground'
               }`}
             />
           </div>

@@ -91,7 +91,7 @@ export const DiffReviewStudioModal: React.FC = () => {
 
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" className="min-h-[36px] px-2 text-xs" onClick={handlePrev} aria-label="Previous file diff">
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handlePrev} aria-label="Previous file diff">
                 <ArrowLeft className="w-3.5 h-3.5 mr-1" />
                 <span className="hidden sm:inline">Prev File</span>
                 <span className="sm:hidden">Prev</span>
@@ -99,7 +99,7 @@ export const DiffReviewStudioModal: React.FC = () => {
               <span className="text-[11px] font-mono text-[var(--text-subtle)] px-1">
                 {state.selectedDiffFileIndex + 1}/{state.diffFiles.length}
               </span>
-              <Button size="sm" variant="ghost" className="min-h-[36px] px-2 text-xs" onClick={handleNext} aria-label="Next file diff">
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleNext} aria-label="Next file diff">
                 <span className="hidden sm:inline">Next File</span>
                 <span className="sm:hidden">Next</span>
                 <ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -108,7 +108,7 @@ export const DiffReviewStudioModal: React.FC = () => {
 
             <button
               onClick={() => setDiffStudioOpen(false)}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ml-1 cursor-pointer"
+              className="h-8 w-8 flex items-center justify-center rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] ml-1 cursor-pointer"
               aria-label="Close Diff Studio"
             >
               <X className="w-4 h-4" />
@@ -202,7 +202,7 @@ export const DiffReviewStudioModal: React.FC = () => {
             {/* Bottom Actions */}
             <div className="space-y-2 pt-3 border-t border-[var(--border)]">
               <Button
-                className="w-full min-h-[44px] text-xs gap-1.5 bg-[var(--success)] text-white hover:opacity-90 font-semibold cursor-pointer"
+                className="w-full h-8 text-xs gap-1.5 bg-[var(--success)] text-white hover:opacity-90 font-semibold cursor-pointer"
                 onClick={() => handleApplyVerdict('Changes Approved for Apply')}
               >
                 <Check className="w-4 h-4" />
@@ -213,7 +213,7 @@ export const DiffReviewStudioModal: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-h-[44px] text-xs cursor-pointer"
+                  className="h-8 text-xs cursor-pointer"
                   onClick={() => handleApplyVerdict('Correction Requested from Codex')}
                 >
                   Request Correction
@@ -222,7 +222,7 @@ export const DiffReviewStudioModal: React.FC = () => {
                 <Button
                   variant="dangerOutline"
                   size="sm"
-                  className="min-h-[44px] text-xs cursor-pointer"
+                  className="h-8 text-xs cursor-pointer"
                   onClick={() => handleApplyVerdict('Changes Declined')}
                 >
                   Decline

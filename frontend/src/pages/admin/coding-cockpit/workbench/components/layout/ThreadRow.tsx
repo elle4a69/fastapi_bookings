@@ -149,7 +149,7 @@ export const ThreadRow: React.FC<ThreadRowProps> = ({ thread, isActive }) => {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="opacity-70 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 min-h-[44px] min-w-[36px] flex items-center justify-center p-1 rounded text-[var(--text-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-opacity cursor-pointer"
+                className="opacity-70 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 h-7 w-7 flex items-center justify-center p-1 rounded text-[var(--text-subtle)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-opacity cursor-pointer"
                 aria-label={`Actions for thread: ${thread.title}`}
               >
                 <MoreVertical className="w-3.5 h-3.5" />

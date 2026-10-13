@@ -60,7 +60,7 @@ export const SubagentTabBar: React.FC = () => {
       )
     }
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 shrink-0">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border shrink-0">
         <Square className="w-2 h-2" aria-hidden="true" />
         {status}
       </span>
@@ -76,7 +76,7 @@ export const SubagentTabBar: React.FC = () => {
     <div
       role="tablist"
       aria-label="Subagent Switcher and Execution Tab Strip"
-      className="flex items-center gap-1.5 px-3 sm:px-4 pt-1.5 pb-0 border-b border-slate-800 bg-slate-950/60 backdrop-blur-xs overflow-x-auto scrollbar-none shrink-0 z-10 w-full max-w-full select-none"
+      className="flex items-center gap-1.5 px-3 sm:px-4 pt-1.5 pb-0 border-b border-border bg-card/95 backdrop-blur-xs overflow-x-auto scrollbar-none shrink-0 z-10 w-full max-w-full select-none"
     >
       {/* 👑 Main Orchestrator Tab */}
       <button
@@ -86,14 +86,14 @@ export const SubagentTabBar: React.FC = () => {
         aria-selected={activeAgentId === 'main'}
         aria-controls="timeline-feed"
         onClick={() => setActiveAgentId('main')}
-        className={`min-h-[40px] px-3.5 py-1.5 rounded-t-md text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0 ${
+        className={`min-h-[40px] px-3.5 py-1.5 rounded-t-md text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-1 focus:ring-primary shrink-0 ${
           activeAgentId === 'main'
-            ? 'bg-slate-900 text-slate-100 border-indigo-500 font-semibold shadow-xs'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border-transparent font-medium'
+            ? 'bg-background text-foreground border-primary font-semibold shadow-xs'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted border-transparent font-medium'
         }`}
       >
         <Crown
-          className={`w-3.5 h-3.5 shrink-0 ${activeAgentId === 'main' ? 'text-amber-400' : 'text-slate-500'}`}
+          className={`w-3.5 h-3.5 shrink-0 ${activeAgentId === 'main' ? 'text-amber-400' : 'text-muted-foreground'}`}
           aria-hidden="true"
         />
         <span>👑 Main Agent</span>
@@ -113,14 +113,14 @@ export const SubagentTabBar: React.FC = () => {
             aria-selected={isTabSelected}
             aria-controls="timeline-feed"
             onClick={() => setActiveAgentId(sa.id)}
-            className={`min-h-[40px] px-3.5 py-1.5 rounded-t-md text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0 ${
+            className={`min-h-[40px] px-3.5 py-1.5 rounded-t-md text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-1 focus:ring-primary shrink-0 ${
               isTabSelected
-                ? 'bg-slate-900 text-slate-100 border-indigo-500 font-semibold shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border-transparent font-medium'
+                ? 'bg-background text-foreground border-primary font-semibold shadow-xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted border-transparent font-medium'
             }`}
           >
             <Bot
-              className={`w-3.5 h-3.5 shrink-0 ${isTabSelected ? 'text-indigo-400' : 'text-slate-500'}`}
+              className={`w-3.5 h-3.5 shrink-0 ${isTabSelected ? 'text-primary' : 'text-muted-foreground'}`}
               aria-hidden="true"
             />
             <span className="truncate max-w-[150px]">{sa.role || (sa as any).name || 'Subagent'}</span>

@@ -47,7 +47,7 @@ export const CodingCockpitPage: React.FC<CodingCockpitPageProps> = ({ initialTab
   }, [searchParams, initialTab, setActiveToolModal])
 
   return (
-    <div className="h-full w-full flex flex-col min-h-0 flex-1 overflow-hidden bg-slate-900 text-slate-100">
+    <div className="h-full w-full flex flex-col min-h-0 flex-1 overflow-hidden bg-background text-foreground">
       <CodexWorkbenchTab
         initialThreadId={targetThreadId}
         statusData={statusData}

@@ -92,24 +92,24 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
 
   return (
     <Dialog open={Boolean(activeTool)} onOpenChange={(open) => !open && setActiveToolModal(null)}>
-      <DialogContent className="w-full max-w-[96vw] md:max-w-7xl h-[94vh] p-0 overflow-hidden flex flex-col bg-slate-900 border border-slate-800 shadow-2xl rounded-xl text-slate-100">
+      <DialogContent className="w-full max-w-[96vw] md:max-w-7xl h-[94vh] p-0 overflow-hidden flex flex-col bg-card border border-border shadow-2xl rounded-xl text-card-foreground">
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{subtitle}</DialogDescription>
 
         {/* Modal Top Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/80 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/95 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-slate-800 text-slate-200 border border-slate-700/60 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-muted text-foreground border border-border flex items-center justify-center shrink-0">
               {icon}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="font-semibold text-sm text-slate-100 truncate m-0">
+                <h2 className="font-semibold text-sm text-foreground truncate m-0">
                   {title}
                 </h2>
                 {badge}
               </div>
-              <p className="text-[11px] text-slate-400 truncate m-0">
+              <p className="text-[11px] text-muted-foreground truncate m-0">
                 {subtitle}
               </p>
             </div>
@@ -117,7 +117,7 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
 
           <button
             onClick={() => setActiveToolModal(null)}
-            className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 sm:h-8 sm:w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             aria-label="Close Tool Modal"
           >
             <X className="w-4 h-4" />
@@ -125,7 +125,7 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
         </div>
 
         {/* Modal Content Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-slate-900">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-background">
           {activeTool === 'health' && (
             <div className="max-w-6xl mx-auto">
               <HealthSentinels

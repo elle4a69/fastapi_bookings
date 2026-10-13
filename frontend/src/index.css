@@ -487,10 +487,6 @@
 }
 
 /* ── UI Agent Sidebar, Resize Handle & Flip Card ────────────────────────── */
-:root {
-  --agent-w: 380px;
-}
-
 .agent-sidebar {
   position: fixed;
   bottom: 0;
@@ -660,5 +656,25 @@
 .field-input:focus {
   border-color: rgba(99, 102, 241, 0.7);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+/* ── Coding Cockpit / Codex Workbench Semantic Theme Variables ── */
+:root {
+  --surface-primary: var(--card);
+  --surface-secondary: var(--muted);
+  --surface-hover: color-mix(in oklab, var(--muted) 70%, var(--foreground) 10%);
+  --surface-elevated: var(--popover);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-subtle: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  --border-strong: color-mix(in oklab, var(--border) 70%, var(--foreground) 30%);
+  --code-bg: color-mix(in oklab, var(--muted) 50%, var(--background));
+  --code-border: var(--border);
+  --success: oklch(0.65 0.20 145);
+  --success-subtle: oklch(0.65 0.20 145 / 0.15);
+  --warning: oklch(0.75 0.18 75);
+  --warning-subtle: oklch(0.75 0.18 75 / 0.15);
+  --danger: var(--destructive);
+  --danger-subtle: color-mix(in oklab, var(--destructive) 15%, transparent);
 }
 

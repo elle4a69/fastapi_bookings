@@ -242,20 +242,20 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
   return (
     <aside
-      className="flex flex-col h-full w-full bg-slate-900 border-r border-slate-800 text-slate-100 select-none overflow-hidden"
+      className="flex flex-col h-full w-full bg-card border-r border-border text-card-foreground select-none overflow-hidden"
       aria-label="Unified Project and Thread Workspace"
     >
       {/* 1. Header: Brand, Connection & + New Project (Standardized h-11 slim header) */}
-      <div className="h-11 px-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0 box-border">
+      <div className="h-11 px-3 border-b border-border bg-card/95 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0 box-border">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-md bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+          <div className="w-7 h-7 rounded-md bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
             <FolderGit2 className="w-3.5 h-3.5" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-xs font-semibold text-slate-100 truncate flex items-center gap-1.5 m-0 leading-tight">
+            <h2 className="text-xs font-semibold text-foreground truncate flex items-center gap-1.5 m-0 leading-tight">
               <span>Projects & Threads</span>
             </h2>
-            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono leading-none">
+            <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground font-mono leading-none">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
                   state.connectionStatus === 'connected'
@@ -286,10 +286,10 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               setNewProjectError('')
               setIsNewProjectOpen(true)
             }}
-            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 hover:text-white cursor-pointer"
+            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-foreground border-border hover:text-white cursor-pointer"
             title="Register a new engineering project target"
           >
-            <Plus className="w-3.5 h-3.5 text-indigo-400" />
+            <Plus className="w-3.5 h-3.5 text-primary" />
             <span className="hidden sm:inline">Project</span>
           </Button>
 
@@ -298,7 +298,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             size="icon"
             variant="ghost"
             onClick={() => setSidebarOpen(false)}
-            className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-slate-800 hidden md:flex cursor-pointer"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted hidden md:flex cursor-pointer"
             aria-label="Collapse Left Sidebar"
             title="Collapse sidebar (Ctrl+B)"
           >
@@ -308,19 +308,19 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
       </div>
 
       {/* 2. Search & Filter Bar */}
-      <div className="p-2.5 border-b border-slate-800/80 bg-slate-900/60 shrink-0">
+      <div className="p-2.5 border-b border-border bg-muted/20 shrink-0">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={state.threadSearchQuery}
             onChange={(e) => setThreadSearchQuery(e.target.value)}
             placeholder="Search conversations & threads..."
-            className="h-8 pl-8 pr-7 text-xs bg-slate-950/60 border-slate-800 text-slate-200 placeholder:text-slate-500 focus-visible:ring-indigo-500"
+            className="h-8 pl-8 pr-7 text-xs bg-slate-950/60 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-indigo-500"
           />
           {state.threadSearchQuery && (
             <button
               onClick={() => setThreadSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-0.5"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
               aria-label="Clear search"
             >
               <X className="w-3 h-3" />
@@ -333,10 +333,10 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="p-2 space-y-1">
           {state.projects.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-400 space-y-3">
-              <FolderGit2 className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="font-medium text-slate-300">No Projects Registered</p>
-              <p className="text-[11px] text-slate-400 max-w-[200px] mx-auto">
+            <div className="p-6 text-center text-xs text-muted-foreground space-y-3">
+              <FolderGit2 className="w-8 h-8 text-muted-foreground/60 mx-auto" />
+              <p className="font-medium text-foreground">No Projects Registered</p>
+              <p className="text-[11px] text-muted-foreground max-w-[200px] mx-auto">
                 Add an engineering project repository target to begin autonomous agent work.
               </p>
               <Button
@@ -359,21 +359,21 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                   key={proj.id}
                   open={isExpanded}
                   onOpenChange={() => toggleProject(proj.id)}
-                  className="rounded-lg border border-slate-800/80 bg-slate-950/40 overflow-hidden"
+                  className="rounded-lg border border-border/80 bg-slate-950/40 overflow-hidden"
                 >
                   {/* Project Row Header */}
                   <div
                     onClick={() => selectProject(proj.id)}
                     className={`group flex items-center justify-between px-2.5 py-2 cursor-pointer transition-colors ${
                       isProjActive
-                        ? 'bg-indigo-950/30 border-l-2 border-indigo-500 text-slate-100'
-                        : 'hover:bg-slate-800/60 text-slate-300'
+                        ? 'bg-indigo-950/30 border-l-2 border-indigo-500 text-foreground'
+                        : 'hover:bg-muted/60 text-foreground'
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <CollapsibleTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <button
-                          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-transform"
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-transform"
                           aria-label={isExpanded ? 'Collapse project' : 'Expand project'}
                         >
                           {isExpanded ? (
@@ -386,7 +386,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
                       <FolderGit2
                         className={`w-4 h-4 shrink-0 ${
-                          isProjActive ? 'text-indigo-400' : 'text-slate-400'
+                          isProjActive ? 'text-primary' : 'text-muted-foreground'
                         }`}
                       />
 
@@ -396,7 +396,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                             {proj.name}
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-400 truncate font-mono">
+                        <p className="text-[10px] text-muted-foreground truncate font-mono">
                           {proj.repo_path || proj.repository}
                         </p>
                       </div>
@@ -406,7 +406,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                     <div className="flex items-center gap-1 shrink-0 ml-1">
                       <Badge
                         variant="secondary"
-                        className="text-[10px] h-5 px-1.5 font-mono bg-slate-800 text-slate-300 border-slate-700"
+                        className="text-[10px] h-5 px-1.5 font-mono bg-slate-800 text-foreground border-border"
                       >
                         {projThreads.length}
                       </Badge>
@@ -417,7 +417,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                             <button
                               type="button"
                               onClick={(e) => handleOpenNewThread(proj.id, e)}
-                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-indigo-600/20 text-slate-400 hover:text-indigo-400 opacity-80 group-hover:opacity-100 transition-opacity"
+                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-indigo-600/20 text-muted-foreground hover:text-primary opacity-80 group-hover:opacity-100 transition-opacity"
                               aria-label="New thread in this project"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -431,13 +431,13 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
                   {/* Expandable Nested Threads Tree */}
                   <CollapsibleContent>
-                    <div className="pl-6 pr-2 py-1 space-y-0.5 border-t border-slate-800/60 bg-slate-950/70">
+                    <div className="pl-6 pr-2 py-1 space-y-0.5 border-t border-border/60 bg-slate-950/70">
                       {projThreads.length === 0 ? (
-                        <div className="py-2.5 px-2 text-[11px] text-slate-400 flex items-center justify-between">
+                        <div className="py-2.5 px-2 text-[11px] text-muted-foreground flex items-center justify-between">
                           <span>No threads matching filter</span>
                           <button
                             onClick={() => handleOpenNewThread(proj.id)}
-                            className="text-indigo-400 hover:underline text-[11px]"
+                            className="text-primary hover:underline text-[11px]"
                           >
                             + Start one
                           </button>
@@ -457,8 +457,8 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                               }}
                               className={`group relative flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer text-xs transition-all ${
                                 isThreadActive
-                                  ? 'bg-indigo-600/20 text-slate-100 border border-indigo-500/40 shadow-xs'
-                                  : 'hover:bg-slate-800/60 text-slate-300 hover:text-white'
+                                  ? 'bg-indigo-600/20 text-foreground border border-indigo-500/40 shadow-xs'
+                                  : 'hover:bg-muted/60 text-foreground hover:text-white'
                               }`}
                             >
                               {/* Left status & title */}
@@ -480,7 +480,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                                   <span className="truncate block font-medium leading-tight">
                                     {thread.title}
                                   </span>
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
                                     <span>{thread.model}</span>
                                     <span>•</span>
                                     <span>{thread.turns?.length || 0} turns</span>
@@ -496,13 +496,13 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <button
-                                      className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200"
+                                      className="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-700 text-muted-foreground hover:text-foreground"
                                       aria-label="Thread actions"
                                     >
                                       <MoreVertical className="w-3 h-3" />
                                     </button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-44 bg-slate-900 border-slate-800 text-slate-200 text-xs">
+                                  <DropdownMenuContent align="end" className="w-44 bg-card border-border text-foreground text-xs">
                                     <DropdownMenuItem onClick={() => handleOpenRename(thread)}>
                                       Rename conversation
                                     </DropdownMenuItem>
@@ -536,14 +536,14 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
       </ScrollArea>
 
       {/* 4. Footer: Settings, App Mode & Status */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900/90 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0">
+      <div className="p-3 border-t border-border bg-card/90 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5">
           <Button
             type="button"
             size="sm"
             variant="ghost"
             onClick={handleOpenSettings}
-            className="h-8 px-2.5 text-xs gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800"
+            className="h-8 px-2.5 text-xs gap-1.5 text-foreground hover:text-white hover:bg-muted"
           >
             <Settings className="w-3.5 h-3.5" />
             <span>Settings</span>
@@ -557,7 +557,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             className={`h-8 px-2 text-[11px] font-mono border ${
               state.appMode === 'demo'
                 ? 'border-blue-500/40 text-blue-300 bg-blue-500/10 hover:bg-blue-500/20'
-                : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                : 'border-border text-foreground hover:bg-muted'
             }`}
           >
             {state.appMode === 'demo' ? 'DEMO' : 'LIVE'}
@@ -570,7 +570,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             size="icon"
             variant="ghost"
             onClick={retryConnection}
-            className="h-8 w-8 text-amber-400 hover:text-amber-300 hover:bg-slate-800"
+            className="h-8 w-8 text-amber-400 hover:text-amber-300 hover:bg-muted"
             title="Reconnect to event stream"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -580,42 +580,42 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
       {/* Dialog 1: Register New Project */}
       <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
-        <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-slate-100 p-6">
+        <DialogContent className="max-w-md bg-card border-border text-foreground p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <FolderPlus className="w-5 h-5 text-indigo-400" />
+              <FolderPlus className="w-5 h-5 text-primary" />
               <span>Register Engineering Project</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Attach a local repository path or worktree root for autonomous agent tasks and AST supervision.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateProject} className="space-y-4 py-2">
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
+              <label className="text-xs font-medium text-foreground block mb-1">
                 Project Name
               </label>
               <Input
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
                 placeholder="e.g. FastAPI Bookings"
-                className="bg-slate-950 border-slate-800 text-slate-100 text-xs"
+                className="bg-background border-border text-foreground text-xs"
                 autoFocus
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
+              <label className="text-xs font-medium text-foreground block mb-1">
                 Repository / Workspace Directory
               </label>
               <Input
                 value={newProjectRepo}
                 onChange={(e) => setNewProjectRepo(e.target.value)}
                 placeholder="e.g. F:\Projects\fastapi_bookings"
-                className="bg-slate-950 border-slate-800 text-slate-100 text-xs font-mono"
+                className="bg-background border-border text-foreground text-xs font-mono"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-muted-foreground mt-1">
                 Target worktree for isolated branches, tool executions, and diff proposals.
               </p>
             </div>
@@ -631,7 +631,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                 type="button"
                 variant="ghost"
                 onClick={() => setIsNewProjectOpen(false)}
-                className="text-xs text-slate-400 hover:text-white"
+                className="text-xs text-muted-foreground hover:text-white"
               >
                 Cancel
               </Button>
@@ -645,39 +645,39 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
       {/* Dialog 2: Create New Thread */}
       <Dialog open={isNewThreadOpen} onOpenChange={setIsNewThreadOpen}>
-        <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-slate-100 p-6">
+        <DialogContent className="max-w-md bg-card border-border text-foreground p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-indigo-400" />
+              <Sparkles className="w-5 h-5 text-primary" />
               <span>New Autonomous Thread</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Launch a new reasoning and coding turn under the selected project worktree.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleCreateThread} className="space-y-4 py-2">
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
+              <label className="text-xs font-medium text-foreground block mb-1">
                 Conversation / Task Title
               </label>
               <Input
                 value={newThreadTitle}
                 onChange={(e) => setNewThreadTitle(e.target.value)}
                 placeholder="e.g. Implement OTel distributed tracing for SMS webhooks"
-                className="bg-slate-950 border-slate-800 text-slate-100 text-xs"
+                className="bg-background border-border text-foreground text-xs"
                 autoFocus
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">
+              <label className="text-xs font-medium text-foreground block mb-1">
                 Language Model
               </label>
               <select
                 value={newThreadModel}
                 onChange={(e) => setNewThreadModel(e.target.value)}
-                className="w-full h-9 rounded-md bg-slate-950 border border-slate-800 text-slate-100 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full h-9 rounded-md bg-slate-950 border border-border text-foreground text-xs px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="gpt-5.6-sol">GPT-5.6 Sol (Autonomous Architecture & Code)</option>
                 <option value="gpt-4o">GPT-4o (Production Multimodal Default)</option>
@@ -697,7 +697,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                 type="button"
                 variant="ghost"
                 onClick={() => setIsNewThreadOpen(false)}
-                className="text-xs text-slate-400 hover:text-white"
+                className="text-xs text-muted-foreground hover:text-white"
               >
                 Cancel
               </Button>
@@ -711,7 +711,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
       {/* Dialog 3: Rename Thread */}
       <Dialog open={isRenameThreadOpen} onOpenChange={setIsRenameThreadOpen}>
-        <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-slate-100 p-6">
+        <DialogContent className="max-w-md bg-card border-border text-foreground p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">Rename Conversation</DialogTitle>
           </DialogHeader>
@@ -719,7 +719,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             <Input
               value={renameTitle}
               onChange={(e) => setRenameTitle(e.target.value)}
-              className="bg-slate-950 border-slate-800 text-slate-100 text-xs"
+              className="bg-background border-border text-foreground text-xs"
               autoFocus
             />
             <DialogFooter>
@@ -741,25 +741,25 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
 
       {/* Dialog 4: Cockpit Settings (Boundaries & Telemetry) */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="max-w-lg bg-slate-900 border-slate-800 text-slate-100 p-6">
+        <DialogContent className="max-w-lg bg-card border-border text-foreground p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Settings className="w-5 h-5 text-indigo-400" />
+              <Settings className="w-5 h-5 text-primary" />
               <span>Cockpit Settings & Boundaries</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Manage filesystem boundary access controls and SigNoz OpenTelemetry tracing sentinels.
             </DialogDescription>
           </DialogHeader>
 
           {/* Settings Tabs */}
-          <div className="flex border-b border-slate-800 gap-4 mt-2">
+          <div className="flex border-b border-border gap-4 mt-2">
             <button
               onClick={() => setSettingsTab('boundaries')}
               className={`pb-2 text-xs font-medium border-b-2 transition-colors ${
                 settingsTab === 'boundaries'
-                  ? 'border-indigo-500 text-indigo-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-indigo-500 text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               Workspace Boundaries
@@ -768,8 +768,8 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               onClick={() => setSettingsTab('telemetry')}
               className={`pb-2 text-xs font-medium border-b-2 transition-colors ${
                 settingsTab === 'telemetry'
-                  ? 'border-indigo-500 text-indigo-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-indigo-500 text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               OTel Telemetry
@@ -779,7 +779,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
           <div className="py-4">
             {settingsTab === 'boundaries' ? (
               <div className="space-y-4">
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-foreground leading-relaxed">
                   Workspace boundaries restrict Codex mutations and file reads strictly to authorized paths.
                 </p>
 
@@ -787,11 +787,11 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                   {state.boundaries.map((b) => (
                     <div
                       key={b.id}
-                      className="p-2.5 rounded-lg border border-slate-800 bg-slate-950/60 flex items-center justify-between text-xs"
+                      className="p-2.5 rounded-lg border border-border bg-slate-950/60 flex items-center justify-between text-xs"
                     >
                       <div className="min-w-0 flex-1 pr-2">
-                        <div className="font-medium text-slate-200 truncate">{b.name}</div>
-                        <div className="text-[11px] font-mono text-slate-400 truncate">{b.path}</div>
+                        <div className="font-medium text-foreground truncate">{b.name}</div>
+                        <div className="text-[11px] font-mono text-muted-foreground truncate">{b.path}</div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {b.is_default && (
@@ -802,7 +802,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                         {!b.is_default && (
                           <button
                             onClick={() => removeBoundary(b.id)}
-                            className="p-1 text-slate-400 hover:text-rose-400"
+                            className="p-1 text-muted-foreground hover:text-rose-400"
                             title="Remove boundary"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -813,20 +813,20 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                   ))}
                 </div>
 
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <div className="text-xs font-medium text-slate-300">Add Authorized Boundary Path</div>
+                <div className="pt-2 border-t border-border space-y-2">
+                  <div className="text-xs font-medium text-foreground">Add Authorized Boundary Path</div>
                   <Input
                     value={newBoundaryPath}
                     onChange={(e) => setNewBoundaryPath(e.target.value)}
                     placeholder="Path, e.g. F:\Projects\fastapi_bookings"
-                    className="h-8 text-xs bg-slate-950 border-slate-800 text-slate-100 font-mono"
+                    className="h-8 text-xs bg-background border-border text-foreground font-mono"
                   />
                   <div className="flex gap-2">
                     <Input
                       value={newBoundaryName}
                       onChange={(e) => setNewBoundaryName(e.target.value)}
                       placeholder="Display label (optional)"
-                      className="h-8 text-xs bg-slate-950 border-slate-800 text-slate-100 flex-1"
+                      className="h-8 text-xs bg-background border-border text-foreground flex-1"
                     />
                     <Button
                       size="sm"
@@ -842,31 +842,31 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                  <label className="text-xs font-medium text-foreground block mb-1">
                     SigNoz UI Dashboard URL
                   </label>
                   <Input
                     value={telemetrySignoz}
                     onChange={(e) => setTelemetrySignoz(e.target.value)}
                     placeholder="http://localhost:3301"
-                    className="h-8 text-xs bg-slate-950 border-slate-800 text-slate-100 font-mono"
+                    className="h-8 text-xs bg-background border-border text-foreground font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-300 block mb-1">
+                  <label className="text-xs font-medium text-foreground block mb-1">
                     OTLP Collector Endpoint
                   </label>
                   <Input
                     value={telemetryOtlp}
                     onChange={(e) => setTelemetryOtlp(e.target.value)}
                     placeholder="http://localhost:4318"
-                    className="h-8 text-xs bg-slate-950 border-slate-800 text-slate-100 font-mono"
+                    className="h-8 text-xs bg-background border-border text-foreground font-mono"
                   />
                 </div>
 
                 {telemetryFeedback && (
-                  <p className="text-xs p-2 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                  <p className="text-xs p-2 rounded bg-slate-950 border border-border text-foreground">
                     {telemetryFeedback}
                   </p>
                 )}
@@ -878,7 +878,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
                     variant="outline"
                     onClick={handleTestTelemetry}
                     disabled={isTestingTelemetry}
-                    className="text-xs border-slate-700 text-slate-300 hover:bg-slate-800"
+                    className="text-xs border-border text-foreground hover:bg-muted"
                   >
                     {isTestingTelemetry ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                     Test Sentinel Connectivity
@@ -901,7 +901,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               type="button"
               variant="ghost"
               onClick={() => setIsSettingsOpen(false)}
-              className="text-xs text-slate-400"
+              className="text-xs text-muted-foreground"
             >
               Close
             </Button>
