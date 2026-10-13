@@ -81,6 +81,8 @@ const newSession = () => {
   return id;
 };
 
+const DEFAULT_ROUTES: Array<{ path: string; title?: string } | string> = [];
+
 export interface AgentProviderProps {
   children: React.ReactNode;
   routes?: Array<{ path: string; title?: string } | string>;
@@ -90,11 +92,16 @@ export interface AgentProviderProps {
 
 export const AgentProvider: React.FC<AgentProviderProps> = ({
   children,
-  routes = [],
+  routes = DEFAULT_ROUTES,
   contentSelector = "main",
   apiEndpoint = "/api/admin/ui-agent",
 }) => {
   const navigate = useNavigate();
+  const routesRef = useRef(routes);
+  routesRef.current = routes;
+  const contentSelectorRef = useRef(contentSelector);
+  contentSelectorRef.current = contentSelector;
+
   const [cursor, setCursor] = useState<CursorState>({
     x: typeof window !== "undefined" ? window.innerWidth / 2 : 0,
     y: 120,
@@ -162,20 +169,20 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
 
   const refreshSnapshot = useCallback(
     (): PageSnapshot => {
-      const snap = scanPage({ routes, contentSelector });
+      const snap = scanPage({ routes: routesRef.current, contentSelector: contentSelectorRef.current });
       setLastSnapshot(snap);
       return snap;
     },
-    [routes, contentSelector],
+    [],
   );
 
   const snapshot = useCallback(
     (): PageSnapshot => {
-      const snap = scanPage({ routes, contentSelector });
+      const snap = scanPage({ routes: routesRef.current, contentSelector: contentSelectorRef.current });
       setLastSnapshot(snap);
       return snap;
     },
-    [routes, contentSelector],
+    [],
   );
 
   const highlightRef = useCallback(
