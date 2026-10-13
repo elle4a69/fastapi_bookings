@@ -94,16 +94,30 @@ export class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     const activeToken = this.token || getAdminAccessToken()
-    const baseHeaders = getAuthenticatedAdminHeaders('application/json')
-    const requestHeaders: Record<string, string> = {
-      Accept: 'application/json',
-      ...Object.fromEntries(baseHeaders.entries()),
-      ...(activeToken ? { Authorization: `Bearer ${activeToken}`, 'X-Token': activeToken } : {}),
-      ...(headers as Record<string, string>)
+    const requestHeaders = getAuthenticatedAdminHeaders('application/json')
+    requestHeaders.set('Accept', 'application/json')
+
+    if (activeToken) {
+      requestHeaders.set('Authorization', `Bearer ${activeToken}`)
+      requestHeaders.set('X-Token', activeToken)
     }
 
-    if (!requestHeaders['X-Tenant']) {
-      requestHeaders['X-Tenant'] = this.getTenant()
+    if (!requestHeaders.get('X-Tenant')) {
+      requestHeaders.set('X-Tenant', this.getTenant())
+    }
+
+    if (headers) {
+      if (headers instanceof Headers) {
+        headers.forEach((val, key) => requestHeaders.set(key, val))
+      } else if (Array.isArray(headers)) {
+        headers.forEach(([key, val]) => requestHeaders.set(key, val))
+      } else {
+        Object.entries(headers).forEach(([key, val]) => {
+          if (val !== undefined && val !== null) {
+            requestHeaders.set(key, String(val))
+          }
+        })
+      }
     }
 
     try {

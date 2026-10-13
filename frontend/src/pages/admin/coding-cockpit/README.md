@@ -96,7 +96,7 @@ frontend/src/pages/admin/coding-cockpit/
   - Tailwind CSS dark theme tokens (`bg-slate-900`, `border-slate-800`, `text-slate-100`, `bg-slate-950`).
   - Standardized `h-11 border-b border-slate-800` header styling across all three columns.
 - **Authentication**:
-  - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (attaching `X-Tenant`, `X-Token`, and `Authorization`).
+  - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (natively normalized via the Fetch `Headers` API to guarantee case-insensitive uniqueness and prevent duplicate `X-Tenant`/`X-Token` header emissions).
 - **Runtime Services**:
   - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
 

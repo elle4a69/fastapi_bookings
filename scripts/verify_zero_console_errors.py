@@ -90,13 +90,42 @@ def verify_route(
     start_time = time.time()
 
     try:
-        response = page.goto(target_url, wait_until="networkidle", timeout=timeout_ms)
-        # Give extra time for React hydration and background polling/DOM scanning
+        response = page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
+        # Attempt networkidle stabilization
+        try:
+            page.wait_for_load_state("networkidle", timeout=6000)
+        except Exception:
+            pass
+
+        # Wait for React root container to mount and render children
+        try:
+            page.wait_for_selector("#root", state="visible", timeout=5000)
+            page.wait_for_function(
+                "() => Boolean(document.querySelector('#root') && document.querySelector('#root').children.length > 0)",
+                timeout=5000,
+            )
+        except Exception:
+            pass
+
+        # Wait for document to reach complete readyState
+        try:
+            page.wait_for_function("() => document.readyState === 'complete'", timeout=5000)
+        except Exception:
+            pass
+
+        # Allow animation frames and async React re-render cycles to settle
+        try:
+            page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 500)))")
+        except Exception:
+            pass
+
+        # Generous settlement buffer for async useEffect hooks, re-renders, and WebSocket/SSE setup
         page.wait_for_timeout(2000)
+
         result.final_url = page.url
         result.status_code = response.status if response else 200
     except Exception as e:
-        # Fallback: if networkidle times out due to persistent SSE/websockets, check if page loaded
+        # Fallback: if network or DOM timeout occurs, inspect captured page state
         try:
             result.final_url = page.url
             result.status_code = 200
@@ -164,7 +193,23 @@ def main():
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             ignore_https_errors=True,
+            has_touch=False,
+            extra_http_headers={
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+            },
         )
+
+        # Ensure third-party font CDNs do not fail CORS preflight when extra_http_headers are attached
+        def handle_route(route):
+            req = route.request
+            if "fonts.gstatic.com" in req.url or "fonts.googleapis.com" in req.url:
+                headers = {k: v for k, v in req.headers.items() if k.lower() not in ("cache-control", "pragma")}
+                route.continue_(headers=headers)
+            else:
+                route.continue_()
+
+        context.route("**/*", handle_route)
 
         # Inject dev auth tokens and tenant identity directly into localStorage
         init_script = f"""
