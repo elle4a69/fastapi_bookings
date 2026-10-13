@@ -75,8 +75,11 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
   - `src/components/layout/ThreadHeader.tsx`: Responsive header with mobile hamburger trigger, truncated breadcrumbs, compaction gauge, and inspector toggle.
   - `src/components/inspector/Inspector.tsx`: Adaptive panel (in-flow on desktop >1024px, slide-over overlay on tablet 768px-1023px, full-width sheet on mobile <768px).
   - `src/components/composer/Composer.tsx`: Prompt input, model selector (`gpt-5.6-sol`, `o3-mini`), reasoning controls, responsive wrapping toolbar with 44px tap targets.
-  - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys and mobile horizontal containment.
-  - `src/store/useWorkbenchStore.ts`: Global state, SSE reducer, optimistic turn adoption, turn interruption.
+  - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys, subagent filtering, and mobile horizontal containment.
+  - `src/components/timeline/SubagentTabBar.tsx`: Horizontal interactive tab strip placed at the top of the timeline for switching between Main Orchestrator and child subagents with live status badges.
+  - `src/components/timeline/LiveActivityPulse.tsx`: Pinned execution pulse beacon above the composer displaying active action, elapsed seconds, and an inline Stop / Interrupt button.
+  - `src/components/timeline/items/ReasoningSummaryItem.tsx`: Dynamic auto-scrolling live reasoning accordion displaying real-time streaming tokens and thought trace.
+  - `src/store/useWorkbenchStore.ts`: Global state, SSE reducer, subagent lifecycle events (`subagent_started`, `subagent_progress`, `subagent_completed`), live action tracking, optimistic turn adoption, turn interruption.
   - `src/api/codexApi.ts`: REST and SSE client wrappers.
   - `src/types/workbench.ts`: TypeScript contracts and DTO interfaces.
 

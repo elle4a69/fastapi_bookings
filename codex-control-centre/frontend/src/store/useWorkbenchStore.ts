@@ -8,6 +8,7 @@ import type {
   ReasoningEffort,
   PermissionProfile,
   TimelineItem,
+  SubAgentActivityItem,
   SSEEventEnvelope,
   WorkspaceBoundary,
   TelemetrySettings
@@ -74,6 +75,9 @@ export interface LocalUIState {
   appMode: AppMode
   activeProjectId: string
   activeThreadId: string | null
+  activeAgentId: string
+  currentActionText?: string
+  turnElapsedSeconds: number
   isSidebarOpen: boolean
   isInspectorOpen: boolean
   activeInspectorTab: InspectorTab
@@ -126,6 +130,9 @@ export const initialLocalUIState: LocalUIState = {
   appMode: storedAppMode,
   activeProjectId: isDemo ? 'proj_fastapi_bookings' : '',
   activeThreadId: isDemo ? 'th_active_stream' : null,
+  activeAgentId: 'main',
+  currentActionText: undefined,
+  turnElapsedSeconds: 0,
   isSidebarOpen: true,
   isInspectorOpen: true,
   activeInspectorTab: 'changes',
@@ -168,6 +175,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
   let nextStreamingTurns = { ...prevState.streamingTurnIdByThread }
   let nextInterruptedTurns = { ...prevState.interruptedTurnIdsByThread }
   let nextSubAgents = [...prevState.subAgents]
+  let currentActionText = prevState.currentActionText
+  let turnElapsedSeconds = prevState.turnElapsedSeconds
 
   // Ensure target thread exists
   let targetThreadIndex = nextThreads.findIndex(t => t.id === threadId)
@@ -203,6 +212,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'turn/start': {
       const turnId = String(payload.turn_id || payload.turnId || `turn_${Date.now()}`)
       nextStreamingTurns[threadId] = turnId
+      currentActionText = payload.prompt ? `Starting: ${String(payload.prompt).slice(0, 40)}...` : 'Thinking...'
+      turnElapsedSeconds = 0
 
       // Remove turn from interrupted list if restarted
       if (nextInterruptedTurns[threadId]) {
@@ -261,6 +272,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
       const itemId = String(payload.item_id || payload.id || `msg_${Date.now()}`)
       const isStreaming = payload.is_streaming ?? false
       const incomingChunk = payload.chunk || payload.delta || payload.text || payload.content || ''
+      currentActionText = 'Generating response...'
 
       targetThread.turns = targetThread.turns.map(turn => {
         if (turn.id !== turnId && turn.status !== 'in_progress') return turn
@@ -281,7 +293,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
             ...prev,
             type: 'agent_message',
             content: nextText,
-            isStreaming
+            isStreaming,
+            agentId: payload.agent_id || payload.agentId || prev.agentId
           }
           return { ...turn, id: turnId || turn.id, items: updatedItems }
         }
@@ -297,7 +310,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
               type: 'agent_message',
               timestamp: eventTime,
               content: incomingChunk,
-              isStreaming
+              isStreaming,
+              agentId: payload.agent_id || payload.agentId
             }
           ]
         }
@@ -309,18 +323,28 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'reasoning_summary': {
       const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? ''))
       const itemId = String(payload.item_id || payload.id || `reason_${Date.now()}`)
+      const isStreaming = payload.is_streaming ?? (Boolean(nextStreamingTurns[threadId]))
+      const incomingChunk = payload.chunk || payload.delta || ''
+      currentActionText = payload.summary ? `Thinking: ${payload.summary}` : 'Thinking...'
 
       targetThread.turns = targetThread.turns.map(turn => {
-        if (turn.id !== turnId) return turn
+        if (turn.id !== turnId && turn.status !== 'in_progress') return turn
         const existingItemIndex = turn.items.findIndex(i => i.id === itemId)
+        const prev = existingItemIndex >= 0 ? (turn.items[existingItemIndex] as any) : null
+        const prevTrace = prev?.rawTrace || ''
+        const nextTrace = payload.raw_trace || payload.reasoning || (incomingChunk ? prevTrace + incomingChunk : (prevTrace || payload.summary || ''))
+        const nextSummary = payload.summary || (nextTrace ? (nextTrace.slice(0, 100) + (nextTrace.length > 100 ? '...' : '')) : 'Analyzing repository architecture and constraints...')
+
         const item: TimelineItem = {
           id: itemId,
-          turnId,
+          turnId: turn.id,
           type: 'reasoning_summary',
           timestamp: eventTime,
-          summary: payload.summary || payload.chunk || payload.reasoning || 'Analyzing repository architecture and constraints...',
-          rawTrace: payload.raw_trace || payload.chunk || payload.reasoning,
-          elapsedMs: payload.elapsed_ms || 1200
+          summary: nextSummary,
+          rawTrace: nextTrace,
+          elapsedMs: payload.elapsed_ms || payload.elapsedMs || (prev?.elapsedMs ? prev.elapsedMs + 200 : 1200),
+          isStreaming,
+          agentId: payload.agent_id || payload.agentId || prev?.agentId
         }
         if (existingItemIndex >= 0) {
           const updated = [...turn.items]
@@ -345,7 +369,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
           type: 'plan',
           timestamp: eventTime,
           title: payload.title || 'Execution Plan',
-          tasks: payload.tasks || []
+          tasks: payload.tasks || [],
+          agentId: payload.agent_id || payload.agentId
         }
         if (existingItemIndex >= 0) {
           const updated = [...turn.items]
@@ -361,6 +386,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'command_execution': {
       const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? ''))
       const itemId = String(payload.item_id || payload.id || `cmd_${Date.now()}`)
+      currentActionText = payload.command ? `Running command: ${payload.command}` : 'Running command...'
 
       targetThread.turns = targetThread.turns.map(turn => {
         if (turn.id !== turnId) return turn
@@ -379,7 +405,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
           stderr: payload.stderr,
           exitCode: payload.exitCode ?? payload.exit_code ?? 0,
           lineCount: payload.lineCount || (payload.stdout ? payload.stdout.split('\n').length : (payload.chunk ? payload.chunk.split('\n').length : 0)),
-          processId: payload.processId || payload.process_id
+          processId: payload.processId || payload.process_id,
+          agentId: payload.agent_id || payload.agentId
         }
         if (existingItemIndex >= 0) {
           const updated = [...turn.items]
@@ -394,6 +421,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
     case 'file_change': {
       const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? ''))
       const itemId = String(payload.item_id || payload.id || `file_${Date.now()}`)
+      currentActionText = payload.summary ? `Updating files: ${payload.summary}` : 'Updating files...'
 
       targetThread.turns = targetThread.turns.map(turn => {
         if (turn.id !== turnId) return turn
@@ -406,7 +434,40 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
           summary: payload.summary || 'Applied source code updates',
           files: payload.files || [],
           totalAdditions: payload.totalAdditions ?? payload.total_additions ?? 0,
-          totalDeletions: payload.totalDeletions ?? payload.total_deletions ?? 0
+          totalDeletions: payload.totalDeletions ?? payload.total_deletions ?? 0,
+          agentId: payload.agent_id || payload.agentId
+        }
+        if (existingItemIndex >= 0) {
+          const updated = [...turn.items]
+          updated[existingItemIndex] = item
+          return { ...turn, items: updated }
+        }
+        return { ...turn, items: [...turn.items, item] }
+      })
+      break
+    }
+
+    case 'tool_call': {
+      const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? ''))
+      const itemId = String(payload.item_id || payload.id || `tool_${Date.now()}`)
+      const toolName = payload.tool_name || payload.toolName || 'tool'
+      currentActionText = `Executing tool: ${toolName}`
+
+      targetThread.turns = targetThread.turns.map(turn => {
+        if (turn.id !== turnId) return turn
+        const existingItemIndex = turn.items.findIndex(i => i.id === itemId)
+        const item: TimelineItem = {
+          id: itemId,
+          turnId,
+          type: 'tool_call',
+          timestamp: eventTime,
+          serverName: payload.server_name || payload.serverName || 'system',
+          toolName,
+          args: payload.args || {},
+          resultSummary: payload.result_summary || payload.resultSummary || 'Tool execution completed',
+          status: payload.status || 'success',
+          durationMs: payload.duration_ms || payload.durationMs || 150,
+          agentId: payload.agent_id || payload.agentId
         }
         if (existingItemIndex >= 0) {
           const updated = [...turn.items]
@@ -595,6 +656,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
 
       // Turn finished or resolved
       nextStreamingTurns[threadId] = null
+      currentActionText = undefined
+      turnElapsedSeconds = 0
       break
     }
 
@@ -630,6 +693,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         }
       })
       nextStreamingTurns[threadId] = null
+      currentActionText = undefined
+      turnElapsedSeconds = 0
       break
     }
 
@@ -659,6 +724,176 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         }
       })
       nextStreamingTurns[threadId] = null
+      currentActionText = undefined
+      turnElapsedSeconds = 0
+      break
+    }
+
+    case 'subagent_started': {
+      const agentId = String(payload.agent_id || payload.agentId || payload.id || `sa_${Date.now()}`)
+      const existingIdx = nextSubAgents.findIndex(sa => sa.id === agentId)
+      const role = payload.role || payload.name || 'Subagent Worker'
+      const progressSummary = payload.progress_summary || payload.current_action || 'Subagent started'
+      currentActionText = `Subagent ${role}: Starting...`
+
+      const subAgentData: SubAgent = {
+        id: agentId,
+        parentThreadId: threadId,
+        role,
+        objective: payload.objective || payload.goal || 'Assist engineering workflow',
+        status: (payload.status as any) || 'running',
+        model: payload.model || 'gpt-4o',
+        reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || 'medium',
+        scope: payload.scope || 'workspace_write',
+        branch: payload.branch,
+        startedAt: payload.started_at || eventTime,
+        elapsedSeconds: payload.elapsed_seconds ?? payload.elapsedSeconds ?? 0,
+        progressSummary,
+        resultSummary: payload.result_summary,
+        filesChangedCount: payload.files_changed_count ?? payload.filesChangedCount ?? 0,
+        testsRunCount: payload.tests_run_count ?? payload.testsRunCount ?? 0
+      }
+      if (existingIdx >= 0) {
+        nextSubAgents[existingIdx] = { ...nextSubAgents[existingIdx], ...subAgentData }
+      } else {
+        nextSubAgents.push(subAgentData)
+      }
+      targetThread.subAgentCount = nextSubAgents.filter(sa => sa.parentThreadId === threadId).length
+
+      const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? 'turn_0'))
+      const subAgentItem: TimelineItem = {
+        id: `sa_item_${agentId}`,
+        turnId,
+        type: 'sub_agent_activity',
+        timestamp: eventTime,
+        agentId,
+        role: subAgentData.role,
+        objective: subAgentData.objective,
+        status: subAgentData.status,
+        progressSummary: subAgentData.progressSummary,
+        resultSummary: subAgentData.resultSummary,
+        filesChangedCount: subAgentData.filesChangedCount,
+        testsRunCount: subAgentData.testsRunCount
+      }
+      targetThread.turns = targetThread.turns.map(t => {
+        if (t.id !== turnId && t.status !== 'in_progress') return t
+        const existingItemIdx = t.items.findIndex(i => i.id === subAgentItem.id || (i.type === 'sub_agent_activity' && (i as any).agentId === agentId))
+        if (existingItemIdx >= 0) {
+          const updated = [...t.items]
+          updated[existingItemIdx] = subAgentItem
+          return { ...t, items: updated }
+        }
+        return { ...t, items: [...t.items, subAgentItem] }
+      })
+      break
+    }
+
+    case 'subagent_progress': {
+      const agentId = String(payload.agent_id || payload.agentId || payload.id || '')
+      const existingIdx = nextSubAgents.findIndex(sa => sa.id === agentId)
+      const existing = existingIdx >= 0 ? nextSubAgents[existingIdx] : null
+      const role = payload.role || payload.name || existing?.role || 'Subagent Worker'
+      const updatedStatus = (payload.status as any) || existing?.status || 'running'
+      const updatedProgress = payload.progress_summary || payload.current_action || payload.summary || existing?.progressSummary || 'Executing subagent tasks'
+      currentActionText = `Subagent ${role}: ${updatedProgress}`
+
+      const subAgentData: SubAgent = {
+        id: agentId || existing?.id || `sa_${Date.now()}`,
+        parentThreadId: threadId,
+        role,
+        objective: payload.objective || existing?.objective || 'Assist engineering workflow',
+        status: updatedStatus,
+        model: payload.model || existing?.model || 'gpt-4o',
+        reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || existing?.reasoningEffort || 'medium',
+        scope: payload.scope || existing?.scope || 'workspace_write',
+        branch: payload.branch || existing?.branch,
+        startedAt: existing?.startedAt || eventTime,
+        elapsedSeconds: payload.elapsed_seconds ?? payload.elapsedSeconds ?? ((existing?.elapsedSeconds || 0) + 5),
+        progressSummary: updatedProgress,
+        resultSummary: payload.result_summary || existing?.resultSummary,
+        filesChangedCount: payload.files_changed_count ?? payload.filesChangedCount ?? existing?.filesChangedCount,
+        testsRunCount: payload.tests_run_count ?? payload.testsRunCount ?? existing?.testsRunCount
+      }
+      if (existingIdx >= 0) {
+        nextSubAgents[existingIdx] = subAgentData
+      } else {
+        nextSubAgents.push(subAgentData)
+      }
+      targetThread.subAgentCount = nextSubAgents.filter(sa => sa.parentThreadId === threadId).length
+
+      targetThread.turns = targetThread.turns.map(t => {
+        const itemIdx = t.items.findIndex(i => i.type === 'sub_agent_activity' && (i as any).agentId === agentId)
+        if (itemIdx >= 0) {
+          const prevItem = t.items[itemIdx] as SubAgentActivityItem
+          const updatedItem: TimelineItem = {
+            ...prevItem,
+            status: updatedStatus,
+            progressSummary: updatedProgress,
+            resultSummary: subAgentData.resultSummary,
+            filesChangedCount: subAgentData.filesChangedCount,
+            testsRunCount: subAgentData.testsRunCount
+          }
+          const updated = [...t.items]
+          updated[itemIdx] = updatedItem
+          return { ...t, items: updated }
+        }
+        return t
+      })
+      break
+    }
+
+    case 'subagent_completed': {
+      const agentId = String(payload.agent_id || payload.agentId || payload.id || '')
+      const existingIdx = nextSubAgents.findIndex(sa => sa.id === agentId)
+      const existing = existingIdx >= 0 ? nextSubAgents[existingIdx] : null
+      const role = payload.role || payload.name || existing?.role || 'Subagent Worker'
+      const isFailed = payload.status === 'failed' || Boolean(payload.error)
+      const completedStatus = isFailed ? 'failed' : ((payload.status as any) || 'completed')
+      const summaryText = payload.result_summary || payload.summary || payload.progress_summary || (isFailed ? 'Subagent failed execution' : 'Subagent completed execution')
+      currentActionText = `Subagent ${role}: ${isFailed ? 'Failed' : 'Completed'}`
+
+      const subAgentData: SubAgent = {
+        id: agentId || existing?.id || `sa_${Date.now()}`,
+        parentThreadId: threadId,
+        role,
+        objective: payload.objective || existing?.objective || 'Assist engineering workflow',
+        status: completedStatus,
+        model: payload.model || existing?.model || 'gpt-4o',
+        reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || existing?.reasoningEffort || 'medium',
+        scope: payload.scope || existing?.scope || 'workspace_write',
+        branch: payload.branch || existing?.branch,
+        startedAt: existing?.startedAt || eventTime,
+        elapsedSeconds: payload.elapsed_seconds ?? payload.elapsedSeconds ?? existing?.elapsedSeconds ?? 15,
+        progressSummary: summaryText,
+        resultSummary: summaryText,
+        filesChangedCount: payload.files_changed_count ?? payload.filesChangedCount ?? existing?.filesChangedCount,
+        testsRunCount: payload.tests_run_count ?? payload.testsRunCount ?? existing?.testsRunCount
+      }
+      if (existingIdx >= 0) {
+        nextSubAgents[existingIdx] = subAgentData
+      } else {
+        nextSubAgents.push(subAgentData)
+      }
+      targetThread.subAgentCount = nextSubAgents.filter(sa => sa.parentThreadId === threadId).length
+
+      targetThread.turns = targetThread.turns.map(t => {
+        const itemIdx = t.items.findIndex(i => i.type === 'sub_agent_activity' && (i as any).agentId === agentId)
+        if (itemIdx >= 0) {
+          const prevItem = t.items[itemIdx] as SubAgentActivityItem
+          const updatedItem: TimelineItem = {
+            ...prevItem,
+            status: completedStatus,
+            progressSummary: summaryText,
+            resultSummary: summaryText,
+            filesChangedCount: subAgentData.filesChangedCount,
+            testsRunCount: subAgentData.testsRunCount
+          }
+          const updated = [...t.items]
+          updated[itemIdx] = updatedItem
+          return { ...t, items: updated }
+        }
+        return t
+      })
       break
     }
 
@@ -713,6 +948,8 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
   return {
     ...prevState,
     ...nextServerState,
+    currentActionText,
+    turnElapsedSeconds,
     isStreaming: computeIsStreaming(nextServerState, prevState.activeThreadId)
   }
 }
@@ -962,6 +1199,7 @@ export function useWorkbenchStore() {
       updateState({
         activeThreadId: threadId,
         activeProjectId: thread.projectId,
+        activeAgentId: 'main',
         liveAnnouncements: [`Opened thread: ${thread.title}`]
       })
     }
@@ -1493,6 +1731,8 @@ export function useWorkbenchStore() {
         ...prev.streamingTurnIdByThread,
         [threadId]: newTurnId
       },
+      currentActionText: 'Thinking...',
+      turnElapsedSeconds: 0,
       threads: prev.threads.map(t => {
         if (t.id !== threadId) return t
         return {
@@ -1649,6 +1889,8 @@ export function useWorkbenchStore() {
           ...prev.streamingTurnIdByThread,
           [threadId]: null
         },
+        currentActionText: undefined,
+        turnElapsedSeconds: 0,
         interruptedTurnIdsByThread: {
           ...prev.interruptedTurnIdsByThread,
           [threadId]: updatedInterrupted
@@ -1780,12 +2022,35 @@ export function useWorkbenchStore() {
     }
   }
 
+  // Live ticking turnElapsedSeconds during active streaming
+  useEffect(() => {
+    if (!state.isStreaming) return
+    const interval = setInterval(() => {
+      updateState(prev => {
+        if (!prev.isStreaming) return prev
+        return { turnElapsedSeconds: prev.turnElapsedSeconds + 1 }
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [state.isStreaming])
+
+  const setActiveAgentId = (id: string) => {
+    updateState({
+      activeAgentId: id,
+      liveAnnouncements: [id === 'main' ? 'Switched to Main Orchestrator view' : `Switched to subagent view: ${id}`]
+    })
+  }
+
   return {
     state,
     activeProject,
     activeThread,
     projectThreads,
     activeSubAgents,
+    activeAgentId: state.activeAgentId,
+    currentActionText: state.currentActionText,
+    turnElapsedSeconds: state.turnElapsedSeconds,
+    setActiveAgentId,
     toggleTheme,
     selectProject,
     selectThread,

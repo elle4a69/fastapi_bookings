@@ -58,6 +58,7 @@ export interface BaseTimelineItem {
   type: TimelineItemType
   timestamp: string
   isStreaming?: boolean
+  agentId?: string
 }
 
 export interface UserInstructionItem extends BaseTimelineItem {
@@ -210,7 +211,7 @@ export interface SubAgentActivityItem extends BaseTimelineItem {
   agentId: string
   role: string
   objective: string
-  status: 'running' | 'completed' | 'failed' | 'waiting' | 'stopped'
+  status: 'running' | 'completed' | 'failed' | 'waiting' | 'stopped' | 'waiting_approval'
   progressSummary: string
   resultSummary?: string
   filesChangedCount?: number
@@ -290,7 +291,7 @@ export interface SubAgent {
   parentThreadId: string
   role: string
   objective: string
-  status: 'running' | 'completed' | 'failed' | 'waiting' | 'stopped'
+  status: 'running' | 'completed' | 'failed' | 'waiting' | 'stopped' | 'waiting_approval'
   model: string
   reasoningEffort: ReasoningEffort
   scope: 'read_only' | 'workspace_write'

@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useState, useMemo } from 'react'
 import { ArrowDown, MessageSquareCode, Terminal } from 'lucide-react'
 import type { Thread, TimelineItem } from '../../types/workbench'
 import { useWorkbenchStore } from '../../store/useWorkbenchStore'
+import { SubagentTabBar } from './SubagentTabBar'
+import { LiveActivityPulse } from './LiveActivityPulse'
 import { UserInstructionItem } from './items/UserInstructionItem'
 import { AgentMessageItem } from './items/AgentMessageItem'
 import { ReasoningSummaryItem } from './items/ReasoningSummaryItem'
@@ -27,10 +29,12 @@ interface TimelineProps {
 }
 
 export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
-  const { sendUserMessage } = useWorkbenchStore()
+  const { sendUserMessage, state, activeSubAgents } = useWorkbenchStore()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false)
+
+  const activeAgentId = state.activeAgentId || 'main'
 
   // Flatten all items across turns in chronological order
   const allItems = useMemo(() => {
@@ -43,6 +47,29 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
     })
     return items
   }, [thread])
+
+  // Filter items based on active tab: main vs child subagent
+  const filteredItems = useMemo(() => {
+    if (activeAgentId === 'main') {
+      return allItems.filter(item => {
+        const itemAgentId = (item as any).agentId
+        // Main thread shows items without agentId, or explicitly marked 'main', or subagent activity overview items
+        return !itemAgentId || itemAgentId === 'main' || item.type === 'sub_agent_activity'
+      })
+    } else {
+      // Subagent tab shows items belonging to the selected subagent
+      return allItems.filter(item => {
+        const itemAgentId = (item as any).agentId
+        return itemAgentId === activeAgentId || (item.type === 'sub_agent_activity' && (item as any).agentId === activeAgentId)
+      })
+    }
+  }, [allItems, activeAgentId])
+
+  // Lookup subagent if currently focused on a subagent tab
+  const selectedSubAgent = useMemo(() => {
+    if (activeAgentId === 'main') return null
+    return activeSubAgents.find(sa => sa.id === activeAgentId) || state.subAgents.find(sa => sa.id === activeAgentId) || null
+  }, [activeAgentId, activeSubAgents, state.subAgents])
 
   // Scroll to bottom helper
   const scrollToBottom = (smooth = true) => {
@@ -70,12 +97,12 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
     }
   }
 
-  // Auto-scroll on new items unless user is reading history
+  // Auto-scroll on new items or streaming updates unless user is reading history
   useEffect(() => {
     if (!userHasScrolledUp) {
       scrollToBottom(false)
     }
-  }, [allItems.length, userHasScrolledUp])
+  }, [allItems.length, state.isStreaming, state.currentActionText, userHasScrolledUp])
 
   if (!thread) {
     return (
@@ -89,41 +116,13 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
     )
   }
 
-  // Empty thread starter screen
-  if (allItems.length === 0) {
-    const starterChips = [
-      'Explore repository and verify invariants',
-      'Diagnose race condition in availability service',
-      'Generate Alembic schema migration for slot locking',
-      'Run focused pytest suite with synthetic fixtures',
-      'Audit OpenTelemetry traces in SigNoz preview'
-    ]
-
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-app)]">
-        <div className="w-12 h-12 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border)] flex items-center justify-center mb-3 shadow-xs">
-          <Terminal className="w-6 h-6 text-[var(--accent)]" aria-hidden="true" />
-        </div>
-        <h2 className="text-base font-semibold text-[var(--text-primary)]">{thread.title}</h2>
-        <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-md">
-          Thread initialized with <strong>{thread.model}</strong> under <strong>{thread.permissionProfile.replace('_', ' ')}</strong> permissions.
-        </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-lg">
-          {starterChips.map((chip, idx) => (
-            <button
-              key={idx}
-              onClick={() => sendUserMessage(chip)}
-              aria-label={`Send starter prompt: ${chip}`}
-              className="px-3 py-1.5 rounded-full bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const starterChips = [
+    'Explore repository and verify invariants',
+    'Diagnose race condition in availability service',
+    'Generate Alembic schema migration for slot locking',
+    'Run focused pytest suite with synthetic fixtures',
+    'Audit OpenTelemetry traces in SigNoz preview'
+  ]
 
   // Render individual timeline item with fallback for unknown types
   const renderItem = (item: TimelineItem, index: number) => {
@@ -197,22 +196,63 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
 
   return (
     <div className="relative flex-1 flex flex-col h-full w-full max-w-full overflow-hidden bg-[var(--bg-app)]">
-      {/* Scrollable Timeline */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 sm:py-4 scroll-smooth w-full max-w-full overflow-x-hidden"
-        role="feed"
-        aria-label="Thread Conversation and Activity Timeline"
-      >
-        <div className="max-w-4xl mx-auto w-full pb-6 space-y-3 min-w-0 overflow-x-hidden">
-          {allItems.map((item, index) => renderItem(item, index))}
+      {/* Subagent Tab Strip at Top of Timeline */}
+      <SubagentTabBar />
+
+      {/* Main Content Area */}
+      {allItems.length === 0 && activeAgentId === 'main' ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-app)]">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--surface-primary)] border border-[var(--border)] flex items-center justify-center mb-3 shadow-xs">
+            <Terminal className="w-6 h-6 text-[var(--accent)]" aria-hidden="true" />
+          </div>
+          <h2 className="text-base font-semibold text-[var(--text-primary)]">{thread.title}</h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-md">
+            Thread initialized with <strong>{thread.model}</strong> under <strong>{thread.permissionProfile.replace('_', ' ')}</strong> permissions.
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-lg">
+            {starterChips.map((chip, idx) => (
+              <button
+                key={idx}
+                onClick={() => sendUserMessage(chip)}
+                aria-label={`Send starter prompt: ${chip}`}
+                className="px-3 py-1.5 rounded-full bg-[var(--surface-primary)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer text-left shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 sm:py-4 scroll-smooth w-full max-w-full overflow-x-hidden"
+          role="feed"
+          aria-label={activeAgentId === 'main' ? 'Main Orchestrator Conversation and Activity Timeline' : `Subagent ${activeAgentId} Activity Timeline`}
+        >
+          <div className="max-w-4xl mx-auto w-full pb-6 space-y-3 min-w-0 overflow-x-hidden">
+            {/* If focused on a subagent tab and its card is not already an item, render card at top */}
+            {selectedSubAgent && !filteredItems.some(i => i.type === 'sub_agent_activity' && (i as any).agentId === selectedSubAgent.id) && (
+              <div className="my-2 max-w-4xl mx-auto">
+                <SubAgentCard agent={selectedSubAgent} />
+              </div>
+            )}
+
+            {filteredItems.map((item, index) => renderItem(item, index))}
+
+            {activeAgentId !== 'main' && filteredItems.length === 0 && !selectedSubAgent && (
+              <div className="text-center py-8 text-xs text-[var(--text-secondary)]">
+                No activity recorded for this subagent yet.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Floating 'New activity ↓' Chip */}
       {showScrollBottom && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20">
           <Button
             size="sm"
             variant="secondary"
@@ -225,6 +265,9 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
           </Button>
         </div>
       )}
+
+      {/* Live Activity Pulse Beacon mounted at bottom above Composer */}
+      <LiveActivityPulse />
     </div>
   )
 }

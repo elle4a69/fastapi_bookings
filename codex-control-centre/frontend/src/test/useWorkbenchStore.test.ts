@@ -817,4 +817,175 @@ describe('useWorkbenchStore & State Architecture (WP-07)', () => {
     expect(testResult.connected).toBe(true)
     expect(testResult.latency_ms).toBe(3.5)
   })
+
+  // -------------------------------------------------------------
+  // Test 16: Subagent Lifecycle Events (Started, Progress, Completed)
+  // -------------------------------------------------------------
+  it('WP-Workstream-1: handles subagent_started, subagent_progress, and subagent_completed events', () => {
+    // 1. subagent_started
+    const startedEvent: SSEEventEnvelope = {
+      id: 'evt_sa_start_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 1,
+      type: 'subagent_started',
+      occurred_at: '10:10 AM',
+      payload: {
+        agent_id: 'sa_db_worker',
+        role: 'Database Migration Specialist',
+        objective: 'Generate slot locking migration',
+        status: 'running',
+        model: 'gpt-4o'
+      }
+    }
+    const stateAfterStart = reduceSSEEvent(baseState, startedEvent)
+    expect(stateAfterStart.subAgents).toHaveLength(1)
+    expect(stateAfterStart.subAgents[0].id).toBe('sa_db_worker')
+    expect(stateAfterStart.subAgents[0].status).toBe('running')
+    expect(stateAfterStart.threads.find(t => t.id === 'th_alpha')?.subAgentCount).toBe(1)
+    expect(stateAfterStart.currentActionText).toContain('Database Migration Specialist')
+
+    // 2. subagent_progress
+    const progressEvent: SSEEventEnvelope = {
+      id: 'evt_sa_progress_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 2,
+      type: 'subagent_progress',
+      occurred_at: '10:11 AM',
+      payload: {
+        agent_id: 'sa_db_worker',
+        status: 'running',
+        progress_summary: 'Synthesizing Alembic revision AST...',
+        files_changed_count: 1
+      }
+    }
+    const stateAfterProgress = reduceSSEEvent(stateAfterStart, progressEvent)
+    expect(stateAfterProgress.subAgents[0].progressSummary).toBe('Synthesizing Alembic revision AST...')
+    expect(stateAfterProgress.subAgents[0].filesChangedCount).toBe(1)
+    expect(stateAfterProgress.currentActionText).toContain('Synthesizing Alembic revision AST...')
+
+    // 3. subagent_completed
+    const completedEvent: SSEEventEnvelope = {
+      id: 'evt_sa_comp_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 3,
+      type: 'subagent_completed',
+      occurred_at: '10:12 AM',
+      payload: {
+        agent_id: 'sa_db_worker',
+        status: 'completed',
+        summary: 'Successfully applied schema migration.',
+        tests_run_count: 3
+      }
+    }
+    const stateAfterCompleted = reduceSSEEvent(stateAfterProgress, completedEvent)
+    expect(stateAfterCompleted.subAgents[0].status).toBe('completed')
+    expect(stateAfterCompleted.subAgents[0].resultSummary).toBe('Successfully applied schema migration.')
+    expect(stateAfterCompleted.subAgents[0].testsRunCount).toBe(3)
+  })
+
+  // -------------------------------------------------------------
+  // Test 17: Live Activity Pulse Action Tracking & Reset
+  // -------------------------------------------------------------
+  it('WP-Workstream-1: tracks currentActionText dynamically and resets on turn completion', () => {
+    // 1. turn_started
+    const turnStart: SSEEventEnvelope = {
+      id: 'evt_ts_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 1,
+      type: 'turn_started',
+      occurred_at: '10:15 AM',
+      payload: { turn_id: 'turn_10', prompt: 'Run test suite' }
+    }
+    const state1 = reduceSSEEvent(baseState, turnStart)
+    expect(state1.currentActionText).toContain('Starting')
+
+    // 2. command_execution
+    const cmdEvent: SSEEventEnvelope = {
+      id: 'evt_cmd_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 2,
+      type: 'command_execution',
+      occurred_at: '10:15:05 AM',
+      payload: { turn_id: 'turn_10', command: 'pytest tests/test_concurrency.py' }
+    }
+    const state2 = reduceSSEEvent(state1, cmdEvent)
+    expect(state2.currentActionText).toBe('Running command: pytest tests/test_concurrency.py')
+
+    // 3. turn_completed
+    const turnComplete: SSEEventEnvelope = {
+      id: 'evt_tc_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 3,
+      type: 'turn_completed',
+      occurred_at: '10:15:10 AM',
+      payload: { turn_id: 'turn_10', status: 'completed' }
+    }
+    const state3 = reduceSSEEvent(state2, turnComplete)
+    expect(state3.currentActionText).toBeUndefined()
+    expect(state3.turnElapsedSeconds).toBe(0)
+  })
+
+  // -------------------------------------------------------------
+  // Test 18: Streaming Reasoning Tokens Aggregation
+  // -------------------------------------------------------------
+  it('WP-Workstream-1: aggregates streaming reasoning chunks into rawTrace with isStreaming active', () => {
+    const turnStart: SSEEventEnvelope = {
+      id: 'evt_ts_2',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 1,
+      type: 'turn_started',
+      occurred_at: '10:20 AM',
+      payload: { turn_id: 'turn_20' }
+    }
+    const state1 = reduceSSEEvent(baseState, turnStart)
+
+    // First reasoning chunk
+    const r1: SSEEventEnvelope = {
+      id: 'evt_r_1',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 2,
+      type: 'reasoning',
+      occurred_at: '10:20:01 AM',
+      payload: {
+        turn_id: 'turn_20',
+        item_id: 'reason_20',
+        chunk: 'Step 1: Check lock acquisition. ',
+        is_streaming: true
+      }
+    }
+    const state2 = reduceSSEEvent(state1, r1)
+    const turn20 = state2.threads.find(t => t.id === 'th_alpha')?.turns.find(t => t.id === 'turn_20')
+    const reasonItem = turn20?.items.find(i => i.id === 'reason_20') as any
+    expect(reasonItem).toBeDefined()
+    expect(reasonItem.rawTrace).toBe('Step 1: Check lock acquisition. ')
+    expect(reasonItem.isStreaming).toBe(true)
+
+    // Second reasoning chunk appended
+    const r2: SSEEventEnvelope = {
+      id: 'evt_r_2',
+      project_id: 'proj_codex',
+      thread_id: 'th_alpha',
+      sequence: 3,
+      type: 'reasoning',
+      occurred_at: '10:20:02 AM',
+      payload: {
+        turn_id: 'turn_20',
+        item_id: 'reason_20',
+        chunk: 'Step 2: Validate timeout parameters.',
+        is_streaming: true
+      }
+    }
+    const state3 = reduceSSEEvent(state2, r2)
+    const reasonItem2 = state3.threads.find(t => t.id === 'th_alpha')?.turns.find(t => t.id === 'turn_20')?.items.find(i => i.id === 'reason_20') as any
+    expect(reasonItem2.rawTrace).toBe('Step 1: Check lock acquisition. Step 2: Validate timeout parameters.')
+    expect(reasonItem2.isStreaming).toBe(true)
+  })
 })
