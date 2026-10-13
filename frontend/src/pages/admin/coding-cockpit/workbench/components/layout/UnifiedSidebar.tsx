@@ -245,17 +245,17 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
       className="flex flex-col h-full w-full bg-slate-900 border-r border-slate-800 text-slate-100 select-none overflow-hidden"
       aria-label="Unified Project and Thread Workspace"
     >
-      {/* 1. Header: Brand, Connection & + New Project */}
-      <div className="p-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0">
+      {/* 1. Header: Brand, Connection & + New Project (Standardized h-11 slim header) */}
+      <div className="h-11 px-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur-xs flex items-center justify-between gap-2 shrink-0 box-border">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
-            <FolderGit2 className="w-4 h-4" />
+          <div className="w-7 h-7 rounded-md bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+            <FolderGit2 className="w-3.5 h-3.5" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-xs font-semibold text-slate-100 truncate flex items-center gap-1.5">
+            <h2 className="text-xs font-semibold text-slate-100 truncate flex items-center gap-1.5 m-0 leading-tight">
               <span>Projects & Threads</span>
             </h2>
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono">
+            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono leading-none">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
                   state.connectionStatus === 'connected'
@@ -267,7 +267,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               />
               <span className="capitalize">{state.connectionStatus}</span>
               {state.appMode === 'demo' && (
-                <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[9px] uppercase font-semibold">
+                <span className="px-1 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[8px] uppercase font-semibold">
                   Demo
                 </span>
               )}
@@ -286,7 +286,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               setNewProjectError('')
               setIsNewProjectOpen(true)
             }}
-            className="h-8 px-2.5 text-xs gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 hover:text-white"
+            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 hover:text-white cursor-pointer"
             title="Register a new engineering project target"
           >
             <Plus className="w-3.5 h-3.5 text-indigo-400" />
@@ -298,11 +298,11 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             size="icon"
             variant="ghost"
             onClick={() => setSidebarOpen(false)}
-            className="h-8 w-8 text-slate-400 hover:text-slate-100 hover:bg-slate-800 hidden md:flex"
+            className="h-7 w-7 text-slate-400 hover:text-slate-100 hover:bg-slate-800 hidden md:flex cursor-pointer"
             aria-label="Collapse Left Sidebar"
             title="Collapse sidebar (Ctrl+B)"
           >
-            <PanelLeftClose className="w-4 h-4" />
+            <PanelLeftClose className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>

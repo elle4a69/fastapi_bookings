@@ -26,11 +26,14 @@ export const Composer: React.FC = () => {
     sendUserMessage, 
     stopActiveTurn,
     steerActiveTurn,
+    setThreadModel,
     state 
   } = useWorkbenchStore()
 
   const [message, setMessage] = useState('')
-  const [selectedModel, setSelectedModel] = useState(activeThread?.model || 'gpt-5.6-sol')
+  const [selectedModel, setSelectedModel] = useState(
+    () => activeThread?.model || (typeof localStorage !== 'undefined' ? localStorage.getItem('codex_last_used_model') : null) || 'gpt-5.6-sol'
+  )
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>(activeThread?.reasoningEffort || 'medium')
   const [permission, setPermission] = useState<PermissionProfile>(activeThread?.permissionProfile || 'workspace_write')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -40,11 +43,11 @@ export const Composer: React.FC = () => {
     if (activeThread) {
       const savedDraft = localStorage.getItem(`draft_${activeThread.id}`) || ''
       setMessage(savedDraft)
-      setSelectedModel(activeThread.model || 'gpt-5.6-sol')
+      setSelectedModel(activeThread.model || (typeof localStorage !== 'undefined' ? localStorage.getItem('codex_last_used_model') : null) || 'gpt-5.6-sol')
       setReasoningEffort(activeThread.reasoningEffort || 'medium')
       setPermission(activeThread.permissionProfile || 'workspace_write')
     }
-  }, [activeThread?.id])
+  }, [activeThread?.id, activeThread?.model])
 
   // Save draft to localStorage as user types
   const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -127,12 +130,24 @@ export const Composer: React.FC = () => {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-52 text-xs bg-slate-900 border-slate-800 text-slate-200">
-                  <DropdownMenuRadioGroup value={selectedModel} onValueChange={setSelectedModel}>
+                  <DropdownMenuRadioGroup
+                    value={selectedModel}
+                    onValueChange={(val) => {
+                      setSelectedModel(val)
+                      if (typeof localStorage !== 'undefined') {
+                        localStorage.setItem('codex_last_used_model', val)
+                      }
+                      if (activeThread) {
+                        setThreadModel(activeThread.id, val)
+                      }
+                    }}
+                  >
                     <DropdownMenuRadioItem value="gpt-5.6-sol">gpt-5.6-sol (Default)</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="gpt-5.5">gpt-5.5 (Fast)</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="gpt-5.6-terra">gpt-5.6-terra (Balanced)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-4o">gpt-4o</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="gpt-4o-mini">gpt-4o-mini</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="o3-mini">o3-mini (Reasoning)</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="gpt-4o">gpt-4o (API Tier)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="o1">o1 (Deep Reasoning)</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="claude-3-5-sonnet">claude-3-5-sonnet</DropdownMenuRadioItem>
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>

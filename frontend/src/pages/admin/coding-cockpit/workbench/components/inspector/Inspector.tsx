@@ -42,9 +42,9 @@ export const Inspector: React.FC = () => {
         className="fixed lg:relative inset-y-0 right-0 z-50 lg:z-auto flex flex-col h-full bg-slate-900 border-l border-slate-800 text-slate-100 w-full max-w-[92vw] sm:max-w-md lg:max-w-none shadow-2xl lg:shadow-none shrink-0 overflow-hidden select-none transition-transform duration-200"
         aria-label="Inspector Panel"
       >
-        {/* Header with Title and Close Button */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-950/70 shrink-0 min-h-[46px]">
-          <h2 className="flex items-center gap-2 font-semibold text-xs text-slate-100 m-0">
+        {/* Header with Title and Close Button (Standardized h-11 slim header) */}
+        <div className="h-11 px-3 border-b border-slate-800 bg-slate-950/70 shrink-0 flex items-center justify-between box-border">
+          <h2 className="flex items-center gap-2 font-semibold text-xs text-slate-100 m-0 leading-tight">
             <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
             <span>Inspector & Diff Review</span>
           </h2>
@@ -54,7 +54,7 @@ export const Inspector: React.FC = () => {
             size="icon"
             variant="ghost"
             onClick={() => setInspectorOpen(false)}
-            className="min-h-[44px] min-w-[44px] sm:h-7 sm:w-7 text-slate-400 hover:text-white hover:bg-slate-800"
+            className="h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
             aria-label="Close Inspector"
           >
             <X className="w-4 h-4" />

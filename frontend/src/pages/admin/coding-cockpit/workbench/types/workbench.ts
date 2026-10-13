@@ -405,6 +405,7 @@ export interface UpdateThreadPayload {
   is_pinned?: boolean
   is_archived?: boolean
   status?: string
+  model?: string
 }
 
 export interface TurnStartPayload {

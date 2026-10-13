@@ -83,22 +83,32 @@ test('UnifiedSidebar eliminates redundant 2-column sidebar into single nested tr
   assert.ok(threadSidebarContent.length < 500, 'ThreadSidebar must be a thin shim')
 })
 
-test('BottomConsoleDock integrates Terminal, SRE Health, Stress Fuzzer, and AST Issues', () => {
+test('BottomConsoleDock is streamlined strictly to Terminal / Live Output runner', () => {
   const dockPath = fileURLToPath(new URL('./workbench/components/dock/BottomConsoleDock.tsx', import.meta.url))
   const content = readFileSync(dockPath, 'utf8')
 
-  // Core tabs
+  // Streamlined strictly to TerminalTab
   assert.ok(content.includes('TerminalTab'), 'Must embed TerminalTab')
-  assert.ok(content.includes('HealthSentinels'), 'Must embed HealthSentinels')
-  assert.ok(content.includes('StressFuzzer'), 'Must embed StressFuzzer')
-  assert.ok(content.includes('IssuesStudio'), 'Must embed IssuesStudio')
+  assert.ok(content.includes('Terminal / Live Output Runner'), 'Must have Terminal runner header')
 
   // Minimizable / maximizable controls
   assert.ok(content.includes('Minimize2') || content.includes('Maximize2'), 'Must have maximize/restore controls')
   assert.ok(content.includes('ChevronDown') || content.includes('ChevronUp'), 'Must have minimize/collapse controls')
 })
 
-test('ThreadHeader features Active Agent HUD with live status, timer, and panel toggles', () => {
+test('Full-screen modal overlays house secondary tools (SRE Health, Fuzzer, AST Issues, Skills, Stream)', () => {
+  const modalPath = fileURLToPath(new URL('./workbench/components/tools/SecondaryToolsModals.tsx', import.meta.url))
+  const content = readFileSync(modalPath, 'utf8')
+
+  assert.ok(content.includes('HealthSentinels'), 'Must embed HealthSentinels')
+  assert.ok(content.includes('StressFuzzer'), 'Must embed StressFuzzer')
+  assert.ok(content.includes('IssuesStudio'), 'Must embed IssuesStudio')
+  assert.ok(content.includes('SkillsBrowser'), 'Must embed SkillsBrowser')
+  assert.ok(content.includes('EventStream'), 'Must embed EventStream')
+  assert.ok(content.includes('DialogContent'), 'Must render within Radix DialogContent')
+})
+
+test('ThreadHeader features Active Agent HUD, secondary tools launcher, and sticky Model Selector', () => {
   const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
   const content = readFileSync(headerPath, 'utf8')
 
@@ -108,6 +118,57 @@ test('ThreadHeader features Active Agent HUD with live status, timer, and panel 
   assert.ok(content.includes('setSidebarOpen'), 'Must toggle collapsible left sidebar')
   assert.ok(content.includes('setInspectorOpen'), 'Must toggle collapsible right inspector')
   assert.ok(content.includes('toggleBottomDock'), 'Must toggle integrated bottom dock')
+
+  // Secondary Tools launcher dropdown
+  assert.ok(content.includes('setActiveToolModal'), 'Must launch tool modals')
+  assert.ok(content.includes('SRE Health Sentinels'), 'Must include SRE Health')
+  assert.ok(content.includes('Concurrency Stress Fuzzer'), 'Must include Stress Fuzzer')
+  assert.ok(content.includes('AST Issues Studio'), 'Must include AST Issues')
+  assert.ok(content.includes('Skills Library'), 'Must include Skills Library')
+  assert.ok(content.includes('Event Stream'), 'Must include Event Stream')
+
+  // Sticky Model Selector dropdown
+  assert.ok(content.includes('gpt-5.6-sol'), 'Must list gpt-5.6-sol')
+  assert.ok(content.includes('gpt-4o'), 'Must list gpt-4o')
+  assert.ok(content.includes('gpt-4o-mini'), 'Must list gpt-4o-mini')
+  assert.ok(content.includes('o3-mini'), 'Must list o3-mini')
+  assert.ok(content.includes('o1'), 'Must list o1')
+  assert.ok(content.includes('claude-3-5-sonnet'), 'Must list claude-3-5-sonnet')
+  assert.ok(content.includes('codex_last_used_model'), 'Must persist model to localStorage')
+  assert.equal(content.includes('GPT-4 over 0.0'), false, 'Must not contain stale model strings')
+})
+
+test('Standardized h-11 slim headers align across UnifiedSidebar, ThreadHeader, and Inspector', () => {
+  const sidebarPath = fileURLToPath(new URL('./workbench/components/layout/UnifiedSidebar.tsx', import.meta.url))
+  const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
+  const inspectorPath = fileURLToPath(new URL('./workbench/components/inspector/Inspector.tsx', import.meta.url))
+
+  const sidebarContent = readFileSync(sidebarPath, 'utf8')
+  const headerContent = readFileSync(headerPath, 'utf8')
+  const inspectorContent = readFileSync(inspectorPath, 'utf8')
+
+  assert.ok(sidebarContent.includes('h-11 px-3 border-b border-slate-800'), 'UnifiedSidebar must use h-11 border-b')
+  assert.ok(headerContent.includes('h-11 px-3 border-b border-slate-800'), 'ThreadHeader must use h-11 border-b')
+  assert.ok(inspectorContent.includes('h-11 px-3 border-b border-slate-800'), 'Inspector must use h-11 border-b')
+})
+
+test('Draggable resizable side panels support clamping and persistent widths', () => {
+  const workbenchPath = fileURLToPath(new URL('./CodexWorkbenchTab.tsx', import.meta.url))
+  const storePath = fileURLToPath(new URL('./workbench/store/useWorkbenchStore.ts', import.meta.url))
+
+  const workbenchContent = readFileSync(workbenchPath, 'utf8')
+  const storeContent = readFileSync(storePath, 'utf8')
+
+  // Splitters in workbench
+  assert.ok(workbenchContent.includes('handleLeftSplitterPointerDown'), 'Must have left splitter handler')
+  assert.ok(workbenchContent.includes('handleRightSplitterPointerDown'), 'Must have right splitter handler')
+  assert.ok(workbenchContent.includes('cursor-col-resize'), 'Must set cursor-col-resize')
+
+  // Persistence in store
+  assert.ok(storeContent.includes('codex_sidebar_width'), 'Must persist sidebar width in localStorage')
+  assert.ok(storeContent.includes('codex_inspector_width'), 'Must persist inspector width in localStorage')
+  assert.ok(storeContent.includes('Math.max(220, Math.min(480'), 'Sidebar width must clamp between 220 and 480')
+  assert.ok(storeContent.includes('Math.max(260, Math.min(600'), 'Inspector width must clamp between 260 and 600')
 })
 
 test('Inspector houses Diff Review, Active Files, and Settings', () => {

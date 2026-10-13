@@ -24,6 +24,7 @@ import { codexApi } from '../api/codexApi'
 
 export type InspectorTab = 'changes' | 'files' | 'settings' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
 export type BottomDockTab = 'terminal' | 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream'
+export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream' | null
 export type BottomDockMode = 'collapsed' | 'expanded' | 'maximized'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting'
 export type AppMode = 'live' | 'demo' | 'unavailable'
@@ -91,6 +92,7 @@ export interface LocalUIState {
   isCommandPaletteOpen: boolean
   sidebarWidth: number
   inspectorWidth: number
+  activeToolModal: ActiveToolModal
   threadSearchQuery: string
   threadStatusFilter: string
   connectionStatus: ConnectionStatus
@@ -147,8 +149,9 @@ export const initialLocalUIState: LocalUIState = {
   isDiffStudioOpen: false,
   selectedDiffFileIndex: 0,
   isCommandPaletteOpen: false,
-  sidebarWidth: 300,
-  inspectorWidth: 380,
+  sidebarWidth: Math.max(220, Math.min(480, parseInt(getSafeLocalStorage('codex_sidebar_width', '300'), 10) || 300)),
+  inspectorWidth: Math.max(260, Math.min(600, parseInt(getSafeLocalStorage('codex_inspector_width', '380'), 10) || 380)),
+  activeToolModal: null,
   threadSearchQuery: '',
   threadStatusFilter: 'all',
   connectionStatus: isDemo ? 'connected' : 'disconnected',
@@ -1219,7 +1222,7 @@ export function useWorkbenchStore() {
 
   const createThread = async (
     title: string,
-    model: string = 'gpt-4o',
+    model: string = getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol'),
     reasoning: ReasoningEffort = 'medium',
     permission: PermissionProfile = 'workspace_write'
   ) => {
@@ -1278,6 +1281,22 @@ export function useWorkbenchStore() {
         await codexApi.updateThread(threadId, { title: newTitle })
       } catch (err) {
         console.error('Failed to update thread title on API:', err)
+      }
+    }
+  }
+
+  const setThreadModel = async (threadId: string, model: string) => {
+    setSafeLocalStorage('codex_last_used_model', model)
+    updateState(prev => ({
+      threads: prev.threads.map(t => t.id === threadId ? { ...t, model } : t),
+      liveAnnouncements: [`Changed model to: ${model}`]
+    }))
+
+    if (state.appMode === 'live') {
+      try {
+        await codexApi.updateThread(threadId, { model })
+      } catch (err) {
+        console.error('Failed to update thread model on API:', err)
       }
     }
   }
@@ -1996,8 +2015,19 @@ export function useWorkbenchStore() {
   const setCommandPaletteOpen = (open: boolean) => updateState({ isCommandPaletteOpen: open })
   const setThreadSearchQuery = (query: string) => updateState({ threadSearchQuery: query })
   const setThreadStatusFilter = (filter: string) => updateState({ threadStatusFilter: filter })
-  const setSidebarWidth = (width: number) => updateState({ sidebarWidth: Math.max(260, Math.min(480, width)) })
-  const setInspectorWidth = (width: number) => updateState({ inspectorWidth: Math.max(320, Math.min(600, width)) })
+  const setSidebarWidth = (width: number) => {
+    const clamped = Math.max(220, Math.min(480, width))
+    setSafeLocalStorage('codex_sidebar_width', clamped.toString())
+    updateState({ sidebarWidth: clamped })
+  }
+  const setInspectorWidth = (width: number) => {
+    const clamped = Math.max(260, Math.min(600, width))
+    setSafeLocalStorage('codex_inspector_width', clamped.toString())
+    updateState({ inspectorWidth: clamped })
+  }
+  const setActiveToolModal = (modal: ActiveToolModal) => {
+    updateState({ activeToolModal: modal })
+  }
 
   const retryConnection = () => {
     updateState({ connectionStatus: 'connecting', liveAnnouncements: ['Reconnecting to Codex Event stream...'] })
@@ -2124,6 +2154,8 @@ export function useWorkbenchStore() {
     setThreadStatusFilter,
     setSidebarWidth,
     setInspectorWidth,
+    setActiveToolModal,
+    setThreadModel,
     retryConnection,
     setAppMode,
     fetchBoundaries,
