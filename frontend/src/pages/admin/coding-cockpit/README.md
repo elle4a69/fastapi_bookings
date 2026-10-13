@@ -87,7 +87,7 @@ frontend/src/pages/admin/coding-cockpit/
 ## 3. Setup, Configuration & Dependencies
 
 - **Vite Reverse Proxy Rule**:
-  - `frontend/vite.config.ts` includes a dedicated proxy mapping `/api/admin/codex` -> `http://127.0.0.1:4500`, stripping the `/api/admin` prefix to forward `/codex/...` endpoints directly to the Codex Control Centre daemon.
+  - `frontend/vite.config.ts` proxies `/api` directly to `http://localhost:8000`. Native Codex endpoints are mounted directly in FastAPI Bookings under `/api/admin/codex` (eliminating the legacy standalone port 4500 rewrite rule).
 - **Admin Shell Integration**:
   - Mounted inside `AdminLayout.tsx` at `/admin/coding-cockpit`.
   - Registered as an operational route in `admin-layout.tsx` (`min-h-0 flex-1 flex flex-col p-0 overflow-hidden`), giving full height to the workspace without clipping or duplicate outer scrollbars.
@@ -96,10 +96,9 @@ frontend/src/pages/admin/coding-cockpit/
   - Tailwind CSS dark theme tokens (`bg-slate-900`, `border-slate-800`, `text-slate-100`, `bg-slate-950`).
   - Standardized `h-11 border-b border-slate-800` header styling across all three columns.
 - **Authentication**:
-  - Uses the same-origin admin session bearer token retrieved via `getAdminAccessToken()` from `src/lib/api.ts`.
+  - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (attaching `X-Tenant`, `X-Token`, and `Authorization`).
 - **Runtime Services**:
-  - FastAPI Bookings backend on `http://127.0.0.1:8000`.
-  - Codex Control Centre backend daemon on `http://127.0.0.1:4500`.
+  - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex router under `/api/admin/codex`.
 
 ---
 

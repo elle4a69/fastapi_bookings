@@ -1,4 +1,4 @@
-import { getAdminAccessToken } from '../../../../../lib/api.ts'
+import { getAdminAccessToken, getAuthenticatedAdminHeaders } from '../../../../../lib/api.ts'
 
 export interface ApiClientConfig {
   baseUrl?: string
@@ -78,10 +78,11 @@ export class ApiClient {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-    const activeToken = getAdminAccessToken() || this.token
+    const activeToken = this.token || getAdminAccessToken()
+    const baseHeaders = getAuthenticatedAdminHeaders('application/json')
     const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
       Accept: 'application/json',
+      ...Object.fromEntries(baseHeaders.entries()),
       ...(activeToken ? { Authorization: `Bearer ${activeToken}`, 'X-Token': activeToken } : {}),
       ...(headers as Record<string, string>)
     }
