@@ -45,6 +45,48 @@ const TOOL = {
 };
 
 /**
+ * Safely instantiate an AudioContext with fallback sample rate support
+ * and state change suppression to prevent unhandled device/renderer errors.
+ */
+export function createSafeAudioContext(desiredSampleRate = 24000): AudioContext {
+  if (typeof window === "undefined") {
+    throw new Error("Web Audio API is not available in non-browser environments");
+  }
+
+  const AudioContextClass =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) {
+    throw new Error("Web Audio API is not supported in this browser environment");
+  }
+
+  let ctx: AudioContext;
+  try {
+    ctx = new AudioContextClass({ sampleRate: desiredSampleRate });
+  } catch {
+    // Hardware or browser rejected desired sample rate, fallback to system default
+    try {
+      ctx = new AudioContextClass();
+    } catch (fallbackErr) {
+      throw new Error(
+        `Unable to initialize AudioContext: ${
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+        }`,
+      );
+    }
+  }
+
+  // Attach state change listener to monitor context and handle unhandled device state transitions
+  ctx.onstatechange = () => {
+    if (ctx.state === "suspended") {
+      void ctx.resume().catch(() => {});
+    }
+  };
+
+  return ctx;
+}
+
+/**
  * Grok Voice: speech-to-speech over WebSocket with operate_app tool delegation
  */
 export const startGrok = async ({
@@ -71,12 +113,24 @@ export const startGrok = async ({
   }
 
   const data = await res.json();
-  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-  const ctx = new AudioContextClass();
 
   const mic = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
+  const audioTracks = mic.getAudioTracks();
+  if (!audioTracks.length) {
+    mic.getTracks().forEach((t) => t.stop());
+    throw new Error("No microphone audio track available");
+  }
+
+  const ctx = createSafeAudioContext(24000);
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      // User gesture might still be activating; state listener will resume
+    }
+  }
 
   const ws = new WebSocket(`wss://api.x.ai/v1/realtime?model=${data.model || "grok-voice-think-fast-2.0"}`, [
     `xai-client-secret.${data.token}`,
@@ -96,6 +150,10 @@ export const startGrok = async ({
 
   const play = (b64: string) => {
     try {
+      if (ctx.state === "closed") return;
+      if (ctx.state === "suspended") {
+        void ctx.resume().catch(() => {});
+      }
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       const pcm = new Int16Array(bytes.buffer);
       const buf = ctx.createBuffer(1, pcm.length, 24000);
@@ -149,6 +207,12 @@ export const startGrok = async ({
     try {
       proc.disconnect();
     } catch {}
+    try {
+      mute.disconnect();
+    } catch {}
+    try {
+      input.disconnect();
+    } catch {}
     mic.getTracks().forEach((t) => t.stop());
     if (ws.readyState <= WebSocket.OPEN) {
       try {
@@ -156,7 +220,10 @@ export const startGrok = async ({
       } catch {}
     }
     try {
-      ctx.close();
+      ctx.onstatechange = null;
+      if (ctx.state !== "closed") {
+        void ctx.close().catch(() => {});
+      }
     } catch {}
     onEnd();
   };

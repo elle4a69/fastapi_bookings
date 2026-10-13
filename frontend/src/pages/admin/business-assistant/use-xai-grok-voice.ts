@@ -72,6 +72,35 @@ function base64ToFloat32Array(base64: string): Float32Array {
   return float32
 }
 
+function createSafeAudioContext(desiredSampleRate = 24000): AudioContext {
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtx) {
+    throw new Error('Web Audio API is not supported in this browser environment')
+  }
+  let ctx: AudioContext
+  try {
+    ctx = new AudioCtx({ sampleRate: desiredSampleRate })
+  } catch {
+    try {
+      ctx = new AudioCtx()
+    } catch (fallbackErr) {
+      throw new Error(
+        `Unable to initialize AudioContext: ${
+          fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+        }`,
+      )
+    }
+  }
+  ctx.onstatechange = () => {
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {})
+    }
+  }
+  return ctx
+}
+
 export function useXAIGrokVoice({
   conversationId,
   onCaptionsChange,
@@ -171,7 +200,10 @@ export function useXAIGrokVoice({
 
     if (audioContextRef.current) {
       try {
-        void audioContextRef.current.close()
+        audioContextRef.current.onstatechange = null
+        if (audioContextRef.current.state !== 'closed') {
+          void audioContextRef.current.close().catch(() => {})
+        }
       } catch {
         // safe ignore
       }
@@ -186,13 +218,12 @@ export function useXAIGrokVoice({
 
   const playPcmChunk = useCallback((float32: Float32Array) => {
     try {
-      if (!audioContextRef.current) {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        audioContextRef.current = new AudioCtx({ sampleRate: 24000 })
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = createSafeAudioContext(24000)
       }
       const audioCtx = audioContextRef.current
       if (audioCtx.state === 'suspended') {
-        void audioCtx.resume()
+        void audioCtx.resume().catch(() => {})
       }
 
       const buffer = audioCtx.createBuffer(1, float32.length, 24000)
@@ -336,9 +367,14 @@ export function useXAIGrokVoice({
             }
             microphoneStreamRef.current = stream
 
-            const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-            const audioCtx = new AudioCtx({ sampleRate: 24000 })
+            const audioCtx =
+              audioContextRef.current && audioContextRef.current.state !== 'closed'
+                ? audioContextRef.current
+                : createSafeAudioContext(24000)
             audioContextRef.current = audioCtx
+            if (audioCtx.state === 'suspended') {
+              void audioCtx.resume().catch(() => {})
+            }
 
             const source = audioCtx.createMediaStreamSource(stream)
             sourceNodeRef.current = source

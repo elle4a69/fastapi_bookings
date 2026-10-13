@@ -69,6 +69,8 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
 2. **Client Delegation (No WebRTC Lockups)**:
    - When using GPT-Live, requests emit `session.delegation.created`. The client `onDelegate` handler receives the intent and invokes `send(request)` on `AgentProvider`.
    - The voice agent acknowledges the user while the UI Agent executes the required DOM actions.
+   - `openaiLive.ts` negotiates `POST /api/admin/ui-agent/voice/openai/session` configured specifically with `gpt-live-1`, verifying that local microphone tracks are attached to the peer connection and that the SDP offer contains a valid audio media section (`m=audio`) prior to dispatch.
+   - Web Audio API instances (`AudioContext`) are lazy-initialized strictly on explicit user gesture / connection initiation via `createSafeAudioContext`, wrapping initialization in sample rate fallback logic (24000 Hz falling back to system default) and attaching state change listeners to prevent device renderer errors.
 3. **DOM Snapshotting & SSE Step Generation**:
    - `AgentProvider` captures `scanPage()` containing the current route, page text, alerts, and visible interactable elements.
    - Sent to `/api/admin/ui-agent/chat/stream`, streaming deltas and concrete structured actions (`click`, `type`, `select`, `pick_date`, `navigate`).
@@ -87,6 +89,7 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
 - Custom canvas elements or external iframes without accessible DOM tree nodes cannot be scanned by `scanner.ts`.
 - Complex nested drag-and-drop interactions currently require manual operator takeover.
 - Browser SpeechRecognition requires Chrome, Edge, or Safari for the hands-free wake word listener.
+- Hardware audio outputs that reject explicit 24000 Hz sample rates fall back to the host audio renderer's default sample rate.
 
 ## 7. Verification & Testing Commands
 - **Frontend Unit & Component Tests**:

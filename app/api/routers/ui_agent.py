@@ -389,6 +389,7 @@ async def delete_session(
 class SdpIn(BaseModel):
     sdp: str
     voice: Optional[str] = None
+    model: Optional[str] = None
 
 
 OPENAI_LIVE_VOICES = {
@@ -428,10 +429,25 @@ async def openai_live_session(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="OPENAI_API_KEY is not configured",
         )
+    if not payload.sdp or not payload.sdp.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing SDP offer in request payload",
+        )
+    if "m=audio" not in payload.sdp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SDP offer does not contain an audio media section (m=audio)",
+        )
+
+    # The OpenAI Live API (POST /v1/live/sessions) requires model "gpt-live-1".
+    # We do not use BUSINESS_ASSISTANT_REALTIME_MODEL here, as that is configured for
+    # the server-negotiated Realtime calls endpoint (/v1/realtime/calls, e.g. gpt-realtime-2.1)
+    # which OpenAI rejects on /v1/live/sessions with HTTP 400 invalid_model.
     model = (
-        settings.BUSINESS_ASSISTANT_REALTIME_MODEL.strip()
-        if settings.BUSINESS_ASSISTANT_REALTIME_MODEL
-        else "gpt-live-1"
+        payload.model.strip()
+        if payload.model and payload.model.strip()
+        else getattr(settings, "UI_AGENT_LIVE_MODEL", "gpt-live-1") or "gpt-live-1"
     )
     body: Dict[str, Any] = {
         "session": {
@@ -459,18 +475,40 @@ async def openai_live_session(
                 headers={"Authorization": f"Bearer {key}"},
             )
         if r.is_error:
-            logger.error("GPT-Live session initiation failed: %s", r.text)
+            logger.error("GPT-Live session initiation failed (%d): %s", r.status_code, r.text)
+            err_msg = f"GPT-Live session failed ({r.status_code})"
+            try:
+                err_data = r.json()
+                if isinstance(err_data, dict):
+                    if "error" in err_data:
+                        err_obj = err_data["error"]
+                        if isinstance(err_obj, dict):
+                            provider_msg = err_obj.get("message") or err_obj.get("code")
+                            if provider_msg:
+                                err_msg = f"GPT-Live session failed: {provider_msg}"
+                        elif isinstance(err_obj, str):
+                            err_msg = f"GPT-Live session failed: {err_obj}"
+                    elif "message" in err_data:
+                        err_msg = f"GPT-Live session failed: {err_data['message']}"
+                    elif "detail" in err_data:
+                        err_msg = f"GPT-Live session failed: {err_data['detail']}"
+            except Exception:
+                if r.text:
+                    err_msg = f"GPT-Live session failed: {r.text[:300]}"
             raise HTTPException(
                 status_code=r.status_code,
-                detail=f"GPT-Live session failed: {r.text[:300]}",
+                detail=err_msg,
             )
         return r.json()
+    except HTTPException:
+        raise
     except httpx.HTTPError as exc:
         logger.exception("HTTP error connecting to OpenAI Live API")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to communicate with OpenAI Live: {str(exc)}",
         )
+
 
 
 @router.post("/voice/xai/token")

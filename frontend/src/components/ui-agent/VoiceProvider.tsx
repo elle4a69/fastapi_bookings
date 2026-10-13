@@ -159,6 +159,7 @@ export const VoiceProvider: React.FC<VoiceProviderProps> = ({
           api: apiEndpoint,
           greet,
           voice: voices[provider] || (provider === "openai" ? "marin" : "eve"),
+          model: provider === "openai" ? "gpt-live-1" : undefined,
           onDelegate,
           onError: setError,
           onCaption: (c: string) => {

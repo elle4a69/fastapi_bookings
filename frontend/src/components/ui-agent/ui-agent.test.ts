@@ -43,6 +43,14 @@ if (typeof (globalThis as any).CSS === "undefined") {
     escape: (s: string) => s,
   };
 }
+if (typeof (globalThis as any).Audio === "undefined") {
+  (globalThis as any).Audio = class MockAudio {
+    autoplay = true;
+    srcObject = null;
+    play = async () => {};
+    pause = () => {};
+  };
+}
 
 test("clean normalizes whitespace and truncates length", () => {
   const result = clean("   hello    world   fastapi   ", 11);
@@ -247,5 +255,135 @@ test("VOICE_PROVIDERS includes GPT-Live and Grok Voice with allowed voices", asy
   assert.ok(VOICE_PROVIDERS[1].voices.includes("eve"));
 
   assert.deepEqual(SLEEP_OPTIONS, [0, 30, 60, 120, 300]);
+});
+
+test("createSafeAudioContext instantiates AudioContext with sample rate fallback and state handler", async () => {
+  const { createSafeAudioContext } = await import("./voice/grokVoice.ts");
+
+  let createdWithRate = false;
+  let createdFallback = false;
+
+  class MockAudioContext {
+    sampleRate: number;
+    state = "suspended";
+    onstatechange: (() => void) | null = null;
+    constructor(opts?: { sampleRate?: number }) {
+      if (opts?.sampleRate === 999999) {
+        throw new Error("Invalid sample rate");
+      }
+      if (opts?.sampleRate) {
+        createdWithRate = true;
+        this.sampleRate = opts.sampleRate;
+      } else {
+        createdFallback = true;
+        this.sampleRate = 44100;
+      }
+    }
+    async resume() {
+      this.state = "running";
+    }
+  }
+
+  (globalThis.window as any).AudioContext = MockAudioContext;
+
+  const ctx1 = createSafeAudioContext(24000);
+  assert.equal(createdWithRate, true);
+  assert.equal(typeof ctx1.onstatechange, "function");
+
+  const ctxFallback = createSafeAudioContext(999999);
+  assert.equal(createdFallback, true);
+  assert.equal(typeof ctxFallback.onstatechange, "function");
+});
+
+test("startOpenAILive throws when microphone stream lacks audio tracks", async () => {
+  const { startOpenAILive } = await import("./voice/openaiLive.ts");
+
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      mediaDevices: {
+        getUserMedia: async () => ({
+          getAudioTracks: () => [],
+          getTracks: () => [],
+        }),
+      },
+    },
+    configurable: true,
+    writable: true,
+  });
+
+  (globalThis as any).RTCPeerConnection = class MockRTCPeerConnection {
+    ontrack = null;
+    addTrack() {}
+    getSenders() {
+      return [];
+    }
+    createDataChannel() {
+      return { onmessage: null, onclose: null };
+    }
+    close() {}
+  };
+
+  await assert.rejects(
+    async () => {
+      await startOpenAILive({
+        api: "/api/test",
+        onStatus: () => {},
+        onCaption: () => {},
+        onDelegate: () => {},
+        onError: () => {},
+        onEnd: () => {},
+      });
+    },
+    { message: /No microphone audio track available/ },
+  );
+});
+
+test("startOpenAILive throws when local SDP offer lacks audio", async () => {
+  const { startOpenAILive } = await import("./voice/openaiLive.ts");
+
+  const mockTrack = { kind: "audio", stop: () => {} };
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      mediaDevices: {
+        getUserMedia: async () => ({
+          getAudioTracks: () => [mockTrack],
+          getTracks: () => [mockTrack],
+        }),
+      },
+    },
+    configurable: true,
+    writable: true,
+  });
+
+  (globalThis as any).RTCPeerConnection = class MockRTCPeerConnection {
+    ontrack = null;
+    iceGatheringState = "complete";
+    localDescription = { sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n" };
+    addTrack() {}
+    getSenders() {
+      return [{ track: mockTrack }];
+    }
+    createDataChannel() {
+      return { onmessage: null, onclose: null, close: () => {} };
+    }
+    createOffer = async () => ({ sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n" });
+    setLocalDescription = async () => {};
+    close() {}
+    addEventListener() {}
+  };
+
+  await assert.rejects(
+    async () => {
+      await startOpenAILive({
+        api: "/api/test",
+        onStatus: () => {},
+        onCaption: () => {},
+        onDelegate: () => {},
+        onError: () => {},
+        onEnd: () => {},
+      });
+    },
+    { message: /WebRTC offer does not contain a valid audio stream/ },
+  );
 });
 

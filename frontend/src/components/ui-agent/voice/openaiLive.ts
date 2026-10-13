@@ -4,6 +4,7 @@ export interface OpenAILiveOptions {
   api: string;
   greet?: boolean;
   voice?: string;
+  model?: string;
   onStatus: (status: "connecting" | "listening" | "speaking" | "off") => void;
   onCaption: (caption: string) => void;
   onDelegate: (text: string, reply: (content: string) => void) => void;
@@ -38,6 +39,7 @@ export const startOpenAILive = async ({
   api,
   greet = false,
   voice = "marin",
+  model = "gpt-live-1",
   onStatus,
   onCaption,
   onDelegate,
@@ -45,7 +47,7 @@ export const startOpenAILive = async ({
   onEnd,
 }: OpenAILiveOptions): Promise<LiveConnection> => {
   const pc = new RTCPeerConnection();
-  const audio = new Audio();
+  const audio = typeof Audio !== "undefined" ? new Audio() : ({ autoplay: false, play: async () => {}, srcObject: null } as any);
   audio.autoplay = true;
 
   pc.ontrack = (e) => {
@@ -58,7 +60,18 @@ export const startOpenAILive = async ({
   const mic = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true },
   });
-  mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
+  const audioTracks = mic.getAudioTracks();
+  if (!audioTracks.length) {
+    mic.getTracks().forEach((t) => t.stop());
+    throw new Error("No microphone audio track available");
+  }
+  audioTracks.forEach((t) => pc.addTrack(t, mic));
+
+  const hasAudioSender = pc.getSenders().some((s) => s.track && s.track.kind === "audio");
+  if (!hasAudioSender) {
+    mic.getTracks().forEach((t) => t.stop());
+    throw new Error("Failed to attach microphone audio track to WebRTC connection");
+  }
 
   const dc = pc.createDataChannel("oai-events");
   const send = (ev: unknown) => {
@@ -139,19 +152,39 @@ export const startOpenAILive = async ({
   await pc.setLocalDescription(offer);
   await waitIce(pc);
 
+  const localSdp = pc.localDescription?.sdp;
+  if (!localSdp || !localSdp.includes("m=audio")) {
+    cleanup();
+    throw new Error("WebRTC offer does not contain a valid audio stream (m=audio missing)");
+  }
+
   const headers = new Headers(getAuthenticatedAdminHeaders());
   headers.set("Content-Type", "application/json");
 
   const res = await fetch(`${api}/voice/openai/session`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ sdp: pc.localDescription?.sdp, voice }),
+    body: JSON.stringify({ sdp: localSdp, voice, model }),
   });
 
   if (!res.ok) {
     cleanup();
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.detail || `GPT-Live session failed (${res.status})`);
+    let errorDetail = `GPT-Live session failed (${res.status})`;
+    try {
+      const errData = await res.json();
+      if (errData?.detail) {
+        errorDetail = typeof errData.detail === "string" ? errData.detail : JSON.stringify(errData.detail);
+      } else if (errData?.error?.message) {
+        errorDetail = errData.error.message;
+      } else if (errData?.message) {
+        errorDetail = errData.message;
+      }
+    } catch {
+      if (res.statusText) {
+        errorDetail = `GPT-Live session failed (${res.status}: ${res.statusText})`;
+      }
+    }
+    throw new Error(errorDetail);
   }
 
   const result = await res.json();

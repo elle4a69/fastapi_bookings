@@ -207,11 +207,79 @@ def test_ui_agent_voice_providers_and_session(client, db_session):
     res_bad_voice = client.post(
         "/api/admin/ui-agent/voice/openai/session",
         headers=headers,
-        json={"sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n", "voice": "non_existent_voice"},
+        json={"sdp": "v=0\r\nm=audio 9 UDP\r\n", "voice": "non_existent_voice"},
     )
     assert res_bad_voice.status_code in (400, 503)
 
     # 3. Check xAI token endpoint requires auth
     res_unauth = client.post("/api/admin/ui-agent/voice/xai/token")
     assert res_unauth.status_code in (400, 401)
+
+
+def test_ui_agent_openai_live_sdp_validation(client, db_session, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test-live-key")
+    tenant, user = _owner(db_session, "sdp-test")
+    headers = _headers(tenant, user)
+
+    # 1. Missing SDP offer -> 400
+    res_empty_sdp = client.post(
+        "/api/admin/ui-agent/voice/openai/session",
+        headers=headers,
+        json={"sdp": ""},
+    )
+    assert res_empty_sdp.status_code == 400
+    msg1 = res_empty_sdp.json().get("detail") or res_empty_sdp.json().get("error", {}).get("message", "")
+    assert "Missing SDP offer" in msg1
+
+    # 2. SDP offer without m=audio -> 400
+    res_no_audio = client.post(
+        "/api/admin/ui-agent/voice/openai/session",
+        headers=headers,
+        json={"sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n"},
+    )
+    assert res_no_audio.status_code == 400
+    msg2 = res_no_audio.json().get("detail") or res_no_audio.json().get("error", {}).get("message", "")
+    assert "m=audio" in msg2
+
+    # 3. Valid SDP with gpt-live-1 model
+    posted_payload = {}
+
+    class MockHttpxResponse:
+        status_code = 200
+        is_error = False
+
+        def json(self):
+            return {
+                "session": {"id": "live_sess_123", "model": "gpt-live-1"},
+                "transport": {"type": "webrtc", "sdp": "v=0\r\nm=audio 9 UDP\r\n"},
+            }
+
+    class MockHttpxClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, json=None, headers=None):
+            nonlocal posted_payload
+            posted_payload = json
+            return MockHttpxResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", MockHttpxClient)
+
+    valid_sdp = "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
+    res_valid = client.post(
+        "/api/admin/ui-agent/voice/openai/session",
+        headers=headers,
+        json={"sdp": valid_sdp, "voice": "marin", "model": "gpt-live-1"},
+    )
+    assert res_valid.status_code == 200
+    assert posted_payload["session"]["model"] == "gpt-live-1"
+    assert posted_payload["transport"]["sdp"] == valid_sdp
 
