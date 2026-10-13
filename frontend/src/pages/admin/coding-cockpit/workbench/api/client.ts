@@ -50,6 +50,21 @@ export class ApiClient {
     return this.token || getAdminAccessToken() || ''
   }
 
+  getTenant(): string {
+    const baseHeaders = getAuthenticatedAdminHeaders()
+    const headerTenant = baseHeaders.get('X-Tenant')
+    if (headerTenant) return headerTenant
+
+    if (typeof window !== 'undefined') {
+      const stored =
+        localStorage.getItem('tenant_subdomain') ||
+        localStorage.getItem('tenant') ||
+        localStorage.getItem('selected_tenant')
+      if (stored) return stored
+    }
+    return 'simplydemo'
+  }
+
   async request<T = any>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { timeoutMs = this.defaultTimeoutMs, params, headers, ...customConfig } = options
 
@@ -85,6 +100,10 @@ export class ApiClient {
       ...Object.fromEntries(baseHeaders.entries()),
       ...(activeToken ? { Authorization: `Bearer ${activeToken}`, 'X-Token': activeToken } : {}),
       ...(headers as Record<string, string>)
+    }
+
+    if (!requestHeaders['X-Tenant']) {
+      requestHeaders['X-Tenant'] = this.getTenant()
     }
 
     try {

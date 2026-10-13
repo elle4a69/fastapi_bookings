@@ -42,6 +42,9 @@ test('ApiClient defaults to same-origin /api/admin/codex and attaches admin toke
 
   // Check default timeout
   assert.ok(client.getBaseUrl().startsWith('/api/admin/codex'))
+
+  // Check tenant resolution fallback
+  assert.equal(client.getTenant(), 'simplydemo')
 })
 
 test('CodexWorkbenchTab contains ZERO IFRAMES and uses native embedded components', () => {

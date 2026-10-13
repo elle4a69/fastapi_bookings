@@ -254,7 +254,9 @@ export class CodexApi {
         // ticket keeps the long-lived URL free of the bearer credential.
         const { ticket } = await this.createThreadEventTicket(projectId, threadId)
         if (closed) return
+        const tenant = this.client.getTenant()
         const params = new URLSearchParams({ sse_ticket: ticket })
+        if (tenant) params.set('tenant', tenant)
         if (lastEventId) params.set('last_event_id', lastEventId)
         const base = this.client.getBaseUrl().replace(/\/codex$/, '')
         const url = `${base}/codex/events/${encodedProj}/${encodedThread}?${params.toString()}`
