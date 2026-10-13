@@ -1,7 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.database import engine, init_db
 from backend.services.event_service import broker
@@ -25,6 +27,10 @@ async def lifespan(app: FastAPI):
     logger.info("Codex Control Centre API starting up...")
     try:
         init_db()
+        from backend.database import SessionLocal
+        from backend.services.boundary_service import seed_default_boundaries_if_empty
+        with SessionLocal() as db_session:
+            seed_default_boundaries_if_empty(db_session)
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
 
@@ -101,6 +107,27 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, (HTTPException, StarletteHTTPException)):
+        raise exc
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        headers["Access-Control-Allow-Headers"] = "*"
+    else:
+        headers["Access-Control-Allow-Origin"] = "*"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "error": "Internal Server Error"},
+        headers=headers,
+    )
 
 # EventSource cannot attach an Authorization header.  The event stream has its
 # own one-time ticket dependency; the ticket-minting and publish routes retain

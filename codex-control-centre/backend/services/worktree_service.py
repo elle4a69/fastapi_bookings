@@ -198,7 +198,7 @@ def remove_worktree(repo_path: str, worktree_name: str, force: bool = False) -> 
     return {"status": "success", "worktree": worktree_name}
 
 
-def ensure_thread_worktree(repo_path: str, thread_id: str, default_branch: str = "main") -> Path:
+def ensure_thread_worktree(repo_path: str, thread_id: str, default_branch: str = "main", db: Optional[Any] = None) -> Path:
     """
     Guarantees an isolated Git worktree exists for the given thread under <repo_path>/worktrees/wt-<threadId>.
     Validates worktree path safety to prevent directory traversal outside of the worktree sandbox.
@@ -208,7 +208,7 @@ def ensure_thread_worktree(repo_path: str, thread_id: str, default_branch: str =
     clean_thread_id = str(thread_id).strip()
     worktree_name = f"wt-{clean_thread_id}"
     validate_worktree_name(worktree_name)
-    repo_dir = validate_repo_bounds(repo_path)
+    repo_dir = validate_repo_bounds(repo_path, db=db)
     target_path = get_worktree_path(str(repo_dir), worktree_name)
 
     if target_path.exists() and target_path.is_dir():

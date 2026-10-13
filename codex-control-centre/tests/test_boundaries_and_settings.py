@@ -47,7 +47,7 @@ def client(db_engine):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[verify_auth] = lambda: None
 
-    yield TestClient(app)
+    yield TestClient(app, raise_server_exceptions=False)
     app.dependency_overrides.clear()
 
 
@@ -266,3 +266,84 @@ def test_add_fastapi_bookings_boundary_and_verify_no_monorepo_redirection(client
         validated = validate_repo_bounds(fastapi_bookings_path, db=session)
         assert validated == Path(fastapi_bookings_path).resolve()
         assert validated != codex_dir.resolve()
+
+
+def test_turn_start_boundary_violation_returns_400_with_cors(client, db_engine, tmp_path):
+    from backend.models.codex import Project, Thread, Turn, WorkspaceBoundary
+    from backend.services.event_service import broker
+    from unittest.mock import patch
+
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    outside_dir = tmp_path / "strictly_outside_boundary_dir"
+    outside_dir.mkdir()
+
+    with TestingSessionLocal() as session:
+        # Isolate boundaries to only codex_dir
+        session.query(WorkspaceBoundary).delete()
+        session.add(WorkspaceBoundary(id="b_ccc", path=str(codex_dir.resolve()), name="Codex", is_default=True))
+
+        proj = Project(id="proj_outside", name="Outside Project", repo_path=str(outside_dir), default_branch="main")
+        session.add(proj)
+        th = Thread(id="th_outside_test", project_id="proj_outside", title="Outside Thread")
+        session.add(th)
+        session.commit()
+
+    captured_events = []
+    orig_publish = broker.publish_event
+    with patch.object(broker, "publish_event", side_effect=lambda evt: (captured_events.append(evt), orig_publish(evt))):
+        orig_test = os.environ.pop("PYTEST_CURRENT_TEST", None)
+        orig_env = settings.environment
+        settings.environment = "production"
+        try:
+            res = client.post(
+                "/codex/turns/start",
+                json={"thread_id": "th_outside_test", "prompt": "Test outside turn"},
+                headers={"Origin": "http://localhost:4600"},
+            )
+        finally:
+            if orig_test:
+                os.environ["PYTEST_CURRENT_TEST"] = orig_test
+            settings.environment = orig_env
+
+    assert res.status_code == 400
+    assert res.headers.get("access-control-allow-origin") == "http://localhost:4600"
+    assert "outside all active workspace boundaries" in res.json()["detail"]
+
+    # Verify DB state
+    with TestingSessionLocal() as session:
+        turn = session.query(Turn).filter(Turn.thread_id == "th_outside_test").first()
+        assert turn is not None
+        assert turn.status == "failed"
+        assert len(turn.items) >= 1
+        assert turn.items[0].item_type == "error"
+        assert "outside all active workspace boundaries" in turn.items[0].content["error"]
+
+    # Verify broker events
+    assert any(e.type == "error" for e in captured_events)
+    assert any(e.type == "turn_completed" and e.payload.get("status") == "failed" for e in captured_events)
+
+
+def test_global_exception_handler_returns_500_with_cors(client, db_engine):
+    from backend.models.codex import Project, Thread
+    from unittest.mock import patch
+
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    with TestingSessionLocal() as session:
+        proj = Project(id="proj_crash", name="Crash Proj", repo_path=str(codex_dir), default_branch="main")
+        session.add(proj)
+        th = Thread(id="th_crash_test", project_id="proj_crash", title="Crash Thread")
+        session.add(th)
+        session.commit()
+
+    with patch("backend.routers.turns.ensure_thread_worktree", side_effect=RuntimeError("Simulated unhandled crash")):
+        res = client.post(
+            "/codex/turns/start",
+            json={"thread_id": "th_crash_test", "prompt": "Crash test"},
+            headers={"Origin": "http://localhost:4600"},
+        )
+        assert res.status_code == 500
+        assert res.headers.get("access-control-allow-origin") == "http://localhost:4600"
+        data = res.json()
+        assert data["error"] == "Internal Server Error"
+        assert "Simulated unhandled crash" in data["detail"]
+

@@ -9,7 +9,7 @@ import logging
 import uuid
 
 from backend.config import settings
-from backend.database import get_db, SessionLocal
+from backend.database import get_db
 from backend.models.codex import Thread, Turn, ToolApproval, Item
 from backend.services.worker_manager import worker_manager
 from backend.services.worktree_service import ensure_thread_worktree
@@ -55,7 +55,7 @@ class TurnSteer(BaseModel):
 
 class TurnInterrupt(BaseModel):
     thread_id: str
-    turn_id: int
+    turn_id: Optional[int] = 0
 
     @model_validator(mode="before")
     @classmethod
@@ -65,7 +65,17 @@ class TurnInterrupt(BaseModel):
             if "threadId" in data and "thread_id" not in data:
                 data["thread_id"] = data["threadId"]
             if "turnId" in data and "turn_id" not in data:
-                data["turn_id"] = data["turnId"]
+                val = data["turnId"]
+                if isinstance(val, str) and not val.isdigit():
+                    data["turn_id"] = 0
+                else:
+                    data["turn_id"] = int(val) if val is not None else 0
+            elif "turn_id" in data:
+                val = data["turn_id"]
+                if isinstance(val, str) and not val.isdigit():
+                    data["turn_id"] = 0
+                elif val is not None:
+                    data["turn_id"] = int(val)
         return data
 
 class ApprovalRespond(BaseModel):
@@ -102,6 +112,53 @@ def _should_initialize_thread(worker: Any, thread_id: str) -> bool:
     return True
 
 
+async def _get_active_thread_worker(thread_id: str) -> Any:
+    """Use only the worker that created a thread for control operations."""
+    get_bound = getattr(worker_manager, "get_active_worker_for_thread", None)
+    if callable(get_bound):
+        worker = get_bound(thread_id)
+        if worker is not None:
+            return worker
+
+        # Retain compatibility with tests and legacy injected managers.
+        legacy_get_worker = getattr(worker_manager, "get_worker", None)
+        if _is_mock(legacy_get_worker) and callable(legacy_get_worker):
+            return await legacy_get_worker()
+        return None
+
+    legacy_get_worker = getattr(worker_manager, "get_worker", None)
+    return await legacy_get_worker() if callable(legacy_get_worker) else None
+
+
+def _get_codex_thread_id(thread_id: str, worker: Any) -> str:
+    get_mapping = getattr(worker_manager, "get_codex_thread_id", None)
+    if callable(get_mapping):
+        return get_mapping(thread_id)
+    if hasattr(worker_manager, "thread_map") and isinstance(worker_manager.thread_map, dict):
+        return worker_manager.thread_map.get(thread_id, thread_id)
+    if not _is_mock(worker) and hasattr(worker, "thread_map") and isinstance(worker.thread_map, dict):
+        return worker.thread_map.get(thread_id, thread_id)
+    return thread_id
+
+
+def _is_missing_codex_thread(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in ("thread not found", "unknown thread", "no such thread"))
+
+
+def _is_idempotent_interrupt_error(error: Exception) -> bool:
+    """Whether Stop reached a turn that has already ended server-side."""
+    message = str(error).lower()
+    return _is_missing_codex_thread(error) or any(marker in message for marker in (
+        "no active turn to interrupt",
+        "no active turn",
+        "turn is not active",
+        "turn already completed",
+        "turn already interrupted",
+        "expected active turn id",
+    ))
+
+
 async def _safe_dispatch_turn_start(
     worker: Any,
     thread_id: str,
@@ -121,7 +178,9 @@ async def _safe_dispatch_turn_start(
             codex_thread_id = worker.thread_map.get(thread_id)
 
         if not codex_thread_id:
-            if _should_initialize_thread(worker, thread_id):
+            if _is_mock(worker) and not worker.__dict__.get("requires_thread_init", False):
+                codex_thread_id = thread_id
+            elif _should_initialize_thread(worker, thread_id):
                 try:
                     res = await worker.send_request("thread/start", {"cwd": wt_str})
                     if isinstance(res, dict):
@@ -133,7 +192,10 @@ async def _safe_dispatch_turn_start(
                         if not codex_thread_id:
                             codex_thread_id = res.get("id")
                 except Exception as th_err:
-                    logger.warning(f"Worker thread/start failed or skipped: {th_err}")
+                    raise RuntimeError(
+                        "Codex app-server could not create a thread: "
+                        f"{th_err or type(th_err).__name__}"
+                    ) from th_err
 
             if not codex_thread_id:
                 codex_thread_id = thread_id
@@ -250,22 +312,72 @@ async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Sess
     db.commit()
     db.refresh(turn)
     
-    # 1. Resolve worktree sandbox path strictly to worktrees/wt-<threadId>
-    repo_path = thread.project.repo_path if thread.project and thread.project.repo_path else str(settings.repo_root)
-    if repo_path == "/" or not Path(repo_path).is_absolute() or not Path(repo_path).exists():
-        repo_path = str(settings.repo_root)
-
-    base_branch = thread.project.default_branch if thread.project and thread.project.default_branch else "main"
-    wt_path = ensure_thread_worktree(repo_path, req.thread_id, default_branch=base_branch)
-    wt_str = str(wt_path.resolve())
-
-    # 2. Retrieve worker bound to the worktree cwd
-    if hasattr(worker_manager, "get_worker_for_thread"):
-        worker = await worker_manager.get_worker_for_thread(req.thread_id, repo_path=repo_path, base_branch=base_branch)
-    else:
-        worker = await worker_manager.get_worker()
-
     project_id = thread.project_id if thread.project_id else "default"
+
+    try:
+        # 1. Resolve worktree sandbox path strictly to worktrees/wt-<threadId>
+        repo_path = thread.project.repo_path if thread.project and thread.project.repo_path else str(settings.repo_root)
+        if repo_path == "/" or not Path(repo_path).is_absolute() or not Path(repo_path).exists():
+            repo_path = str(settings.repo_root)
+
+        base_branch = thread.project.default_branch if thread.project and thread.project.default_branch else "main"
+        wt_path = ensure_thread_worktree(repo_path, req.thread_id, default_branch=base_branch, db=db)
+        wt_str = str(wt_path.resolve())
+
+        # 2. Retrieve worker bound to the worktree cwd
+        if hasattr(worker_manager, "get_worker_for_thread"):
+            worker = await worker_manager.get_worker_for_thread(req.thread_id, repo_path=repo_path, base_branch=base_branch)
+        else:
+            worker = await worker_manager.get_worker()
+    except ValueError as ve:
+        err_msg = str(ve)
+        logger.error(f"Failed to start turn {turn.id} on thread {req.thread_id}: {err_msg}")
+        turn.status = "failed"
+        turn.completed_at = datetime.now(timezone.utc)
+        seq = db.query(Item).filter(Item.turn_id == turn.id).count() + 1
+        err_item = Item(
+            id=f"err_{uuid.uuid4().hex[:8]}",
+            turn_id=turn.id,
+            item_type="error",
+            content={"message": err_msg, "error": err_msg},
+            sequence=seq,
+        )
+        db.add(err_item)
+        db.commit()
+
+        try:
+            err_env = EventEnvelope(
+                project_id=project_id,
+                thread_id=req.thread_id,
+                type="error",
+                payload={
+                    "turn_id": turn.id,
+                    "turnId": turn.id,
+                    "message": err_msg,
+                    "error": err_msg,
+                    "status": "failed",
+                },
+            )
+            broker.publish_event(err_env)
+
+            completed_env = EventEnvelope(
+                project_id=project_id,
+                thread_id=req.thread_id,
+                type="turn_completed",
+                payload={
+                    "turn_id": turn.id,
+                    "turnId": turn.id,
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": err_msg,
+                },
+            )
+            broker.publish_event(completed_env)
+        except Exception as broker_err:
+            logger.error(f"Failed to publish boundary error event: {broker_err}")
+
+        raise HTTPException(status_code=400, detail=err_msg)
+
     db_bind = db.get_bind()
     asyncio.create_task(
         _safe_dispatch_turn_start(
@@ -289,52 +401,105 @@ async def steer_turn(req: TurnSteer, db: Session = Depends(get_db)):
     if not turn:
         raise HTTPException(status_code=404, detail="Turn not found")
     
-    worker = await worker_manager.get_worker()
+    worker = await _get_active_thread_worker(req.thread_id)
+    if worker is None:
+        raise HTTPException(status_code=409, detail="No active worker is bound to this thread")
+    codex_thread_id = _get_codex_thread_id(req.thread_id, worker)
 
-    codex_thread_id = None
-    if hasattr(worker_manager, "thread_map") and isinstance(worker_manager.thread_map, dict):
-        codex_thread_id = worker_manager.thread_map.get(req.thread_id)
-    if not codex_thread_id and not _is_mock(worker) and hasattr(worker, "thread_map") and isinstance(worker.thread_map, dict):
-        codex_thread_id = worker.thread_map.get(req.thread_id)
-    if not codex_thread_id:
-        codex_thread_id = req.thread_id
+    try:
+        await worker.send_request("turn/steer", {
+            "threadId": codex_thread_id,
+            "turnId": str(req.turn_id),
+            "expectedTurnId": str(req.turn_id),
+            "instruction": req.instruction,
+            "input": [{"type": "text", "text": req.instruction}],
+        })
+    except Exception as err:
+        if not _is_idempotent_interrupt_error(err):
+            logger.warning("Failed to steer turn %s: %s", req.turn_id, err)
+            raise HTTPException(status_code=502, detail="Unable to steer the active worker turn") from err
 
-    await worker.send_request("turn/steer", {
-        "threadId": codex_thread_id,
-        "turnId": str(req.turn_id),
-        "expectedTurnId": str(req.turn_id),
-        "instruction": req.instruction,
-        "input": [{"type": "text", "text": req.instruction}],
-    })
+        if _is_missing_codex_thread(err):
+            clear_mapping = getattr(worker_manager, "clear_thread_mapping", None)
+            if callable(clear_mapping):
+                clear_mapping(req.thread_id)
+        turn.status = "interrupted"
+        turn.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"status": "interrupted"}
     return {"status": "steered"}
 
 @router.post("/turns/interrupt")
 async def interrupt_turn(req: TurnInterrupt, db: Session = Depends(get_db)):
-    turn = db.query(Turn).filter(Turn.id == req.turn_id, Turn.thread_id == req.thread_id).first()
+    turn = None
+    # 1. Exact ID match if positive
+    if req.turn_id and req.turn_id > 0:
+        turn = db.query(Turn).filter(Turn.id == req.turn_id, Turn.thread_id == req.thread_id).first()
+        if not turn:
+            turn = db.query(Turn).filter(Turn.turn_number == req.turn_id, Turn.thread_id == req.thread_id).first()
+
+    # 2. Fall back to active turn on this thread
+    if not turn:
+        turn = db.query(Turn).filter(Turn.thread_id == req.thread_id, Turn.status == "active").order_by(Turn.id.desc()).first()
+
+    # 3. Fall back to latest turn on this thread
+    if not turn:
+        turn = db.query(Turn).filter(Turn.thread_id == req.thread_id).order_by(Turn.id.desc()).first()
+
     if not turn:
         raise HTTPException(status_code=404, detail="Turn not found")
-        
-    worker = await worker_manager.get_worker()
 
-    codex_thread_id = None
-    if hasattr(worker_manager, "thread_map") and isinstance(worker_manager.thread_map, dict):
-        codex_thread_id = worker_manager.thread_map.get(req.thread_id)
-    if not codex_thread_id and not _is_mock(worker) and hasattr(worker, "thread_map") and isinstance(worker.thread_map, dict):
-        codex_thread_id = worker.thread_map.get(req.thread_id)
-    if not codex_thread_id:
-        codex_thread_id = req.thread_id
+    target_turn_id = turn.id
 
-    await worker.send_request("turn/interrupt", {
-        "threadId": codex_thread_id,
-        "turnId": str(req.turn_id)
-    })
+    worker = await _get_active_thread_worker(req.thread_id)
+    if worker is not None and turn.status == "active":
+        try:
+            await worker.send_request("turn/interrupt", {
+                "threadId": _get_codex_thread_id(req.thread_id, worker),
+                "turnId": str(target_turn_id),
+            })
+        except Exception as err:
+            # A worker/app-server restart can lose its transient thread UUID.
+            # Stopping is still safe and must complete locally.
+            if not _is_idempotent_interrupt_error(err):
+                logger.warning("Failed to interrupt turn %s: %s", target_turn_id, err)
+                # Do not hard-crash with 502 if turn can be marked interrupted locally
+            if _is_missing_codex_thread(err):
+                clear_mapping = getattr(worker_manager, "clear_thread_mapping", None)
+                if callable(clear_mapping):
+                    clear_mapping(req.thread_id)
+
+    if turn.status == "active":
+        turn.status = "interrupted"
+        turn.completed_at = datetime.now(timezone.utc)
+        db.commit()
 
     # Cascade cancellation: cancel all pending approvals for this thread
     governance_service.cancel_pending_approvals_for_thread(
         thread_id=req.thread_id,
         db=db,
-        reason=f"Turn {req.turn_id} interrupted"
+        reason=f"Turn {target_turn_id} interrupted"
     )
+
+    try:
+        project_id = turn.thread.project_id if turn.thread and turn.thread.project_id else "default"
+        broker.publish_event(
+            EventEnvelope(
+                project_id=project_id,
+                thread_id=req.thread_id,
+                type="turn_interrupted",
+                payload={
+                    "turn_id": target_turn_id,
+                    "turnId": target_turn_id,
+                    "status": "interrupted",
+                    "reason": "Turn manually interrupted by operator via Stop button.",
+                    "interrupted_by": "Operator",
+                }
+            )
+        )
+    except Exception as broker_err:
+        logger.debug(f"Broker publish turn_interrupted failed: {broker_err}")
+
     return {"status": "interrupted"}
 
 @router.post("/approvals/respond")
@@ -379,4 +544,3 @@ async def respond_approval(req: ApprovalRespond, db: Session = Depends(get_db)):
         "status": "approved" if req.approved else "declined",
         "tool_call_id": req.tool_call_id
     }
-

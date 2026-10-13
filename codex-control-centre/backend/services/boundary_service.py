@@ -35,7 +35,7 @@ def is_within_boundary(target_path: Path, boundary_path: Path) -> bool:
 
 def get_default_boundary_paths() -> List[str]:
     """Returns baseline allowed boundaries configured via settings or environment."""
-    paths = [str(codex_dir.resolve())]
+    paths = [str(codex_dir.resolve()), str(codex_dir.parent.resolve())]
     for b in settings.allowed_boundaries:
         try:
             resolved = str(Path(b).resolve())
@@ -55,27 +55,73 @@ def get_default_boundary_paths() -> List[str]:
 
 def seed_default_boundaries_if_empty(db: Session) -> List[WorkspaceBoundary]:
     try:
+        from backend.models.codex import Project
         existing = db.query(WorkspaceBoundary).all()
-        if existing:
-            return existing
+        existing_paths = {normalize_path(b.path) for b in existing}
 
         defaults = get_default_boundary_paths()
-        seeded = []
-        for i, p_str in enumerate(defaults):
-            p = Path(p_str).resolve()
-            name = "Codex Control Centre" if p == codex_dir.resolve() else (p.name or str(p))
+        seeded = list(existing)
+        modified = False
+
+        if not existing:
+            for i, p_str in enumerate(defaults):
+                p = normalize_path(p_str)
+                if p not in existing_paths:
+                    name = "Codex Control Centre" if p == normalize_path(codex_dir) else (p.name or str(p))
+                    boundary = WorkspaceBoundary(
+                        id=f"bound_{uuid.uuid4().hex[:8]}",
+                        path=str(p),
+                        name=name,
+                        is_default=(i == 0),
+                    )
+                    db.add(boundary)
+                    seeded.append(boundary)
+                    existing_paths.add(p)
+                    modified = True
+
+        # Always ensure pre-existing project paths from 'projects' table are seeded
+        try:
+            projects = db.query(Project).all()
+            for proj in projects:
+                if proj.repo_path and proj.repo_path != "/":
+                    proj_p = normalize_path(proj.repo_path)
+                    if proj_p.exists() and proj_p.is_dir() and proj_p not in existing_paths:
+                        boundary = WorkspaceBoundary(
+                            id=f"bound_{uuid.uuid4().hex[:8]}",
+                            path=str(proj_p),
+                            name=proj.name or proj_p.name,
+                            is_default=False,
+                        )
+                        db.add(boundary)
+                        seeded.append(boundary)
+                        existing_paths.add(proj_p)
+                        modified = True
+        except Exception as pe:
+            logger.debug(f"Could not seed existing project boundaries: {pe}")
+
+        # Ensure parent boundary (codex_dir.parent) is seeded if missing
+        parent_p = normalize_path(codex_dir.parent)
+        if parent_p.exists() and parent_p.is_dir() and parent_p not in existing_paths:
             boundary = WorkspaceBoundary(
                 id=f"bound_{uuid.uuid4().hex[:8]}",
-                path=str(p),
-                name=name,
-                is_default=(i == 0),
+                path=str(parent_p),
+                name=parent_p.name or "Parent Workspace",
+                is_default=False,
             )
             db.add(boundary)
             seeded.append(boundary)
-        db.commit()
-        for b in seeded:
-            db.refresh(b)
-        return seeded
+            existing_paths.add(parent_p)
+            modified = True
+
+        if modified:
+            db.commit()
+            for b in seeded:
+                try:
+                    db.refresh(b)
+                except Exception:
+                    pass
+
+        return db.query(WorkspaceBoundary).order_by(WorkspaceBoundary.created_at.asc()).all()
     except Exception as e:
         logger.warning(f"Error querying/seeding boundaries from DB: {e}")
         return [
@@ -114,6 +160,10 @@ def add_boundary(db: Session, path_str: str, name: Optional[str] = None) -> Work
     existing = db.query(WorkspaceBoundary).all()
     for b in existing:
         if normalize_path(b.path) == p:
+            if name and name.strip() and b.name != name.strip():
+                b.name = name.strip()
+                db.commit()
+                db.refresh(b)
             return b
 
     boundary = WorkspaceBoundary(
