@@ -26,6 +26,7 @@ app/services/business_assistant/
 ├── livekit/             # LiveKit voice assistant gateway, worker subsystem, and token dispatch
 ├── onboarding/          # Voice-first onboarding assistant, intent normalizer, plan service, and save guard
 ├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
+├── ccc_bridge_service.py # Autonomous bridge for Codex Control Centre remediation, steering & UI verification
 ├── rollout.py           # Staged rollout lifecycle, stage gate evaluation and safe degradation
 ├── adapters/
 │   ├── reads.py         # Scoped native read adapters for product help, settings, and scheduling
@@ -65,6 +66,9 @@ The package uses the application SQLAlchemy session and existing tables (`tenant
   - `XAI_API_KEY`: Server-held API key for xAI Grok voice and realtime WebSocket services.
   - `XAI_REALTIME_AGENT_ID`: Configured agent identifier for xAI Realtime voice assistant.
   - `XAI_REALTIME_URL`: Base WebSocket endpoint for xAI Realtime connections (`wss://api.x.ai/v1/realtime`).
+- **Codex Control Centre (CCC) Autonomous Agent Bridge Settings**:
+  - `CODEX_CONTROL_CENTRE_URL`: Base URL for Codex Control Centre API (default: `http://127.0.0.1:4500`).
+  - `CODEX_CONTROL_CENTRE_TOKEN`: Optional Bearer token for authenticating with CCC.
 - **Rollout Gating**:
   - `BUSINESS_ASSISTANT_ROLLOUT_STAGE`: Staged lifecycle gate (`disabled`, `internal_synthetic`, `owner_staging`, `enabled`).
   - `BUSINESS_ASSISTANT_SYNTHETIC_TENANT_IDS`: Comma-separated allowlist of synthetic tenant IDs for testing.
@@ -186,6 +190,24 @@ Mounted at `/api/admin/business-assistant`:
 - When enabled, `diagnostic_report` evaluates the live 8-step runbook (session configuration, attached tool inventory, tool run logs, client snapshot state, navigation allowlists, onboarding plan, backend error logs, user permissions).
 - Outputs structured 5-part verdicts (Verdict, Working Subsystems, Issues & Degradations, Operating Boundaries, Recommended Next Steps) persisted directly into `conversation_messages` with expandable `<details>`.
 
+### 4.12 Autonomous Ticket Bridge & Codex Control Centre (CCC) Dispatch
+Bridges support tickets (`SupportTicket`) in `awaiting_engineering` to local Codex Control Centre autonomous engineering workers:
+- **Dispatch to CCC**: `POST /api/admin/business-assistant/tickets/{ticket_id}/dispatch-ccc`
+  - Validates tenant-scoped ownership and constructs a comprehensive remediation prompt containing ticket summary, category, severity, observed behaviour, affected product area, user impact, and acceptance criteria.
+  - Creates dedicated remediation thread in CCC (`POST /codex/threads`) targeting isolated worktree sandbox (`worktrees/wt-{ticket_id}`).
+  - Starts autonomous remediation turn (`POST /codex/turns/start`).
+  - Transitions ticket status to `in_progress`, binds `coding_task_id`, and records `dispatched_to_ccc` audit event.
+- **Background SSE Stream & Milestone Tracking**:
+  - Connects to `/codex/events/fastapi-bookings/{thread_id}` stream.
+  - Automatically records milestones: `engineering_turn_started`, `command_executed`, `file_modified`, `clarification_requested`, `engineering_turn_completed`, `engineering_error`.
+  - On `turn_completed` with `completed` status, advances ticket status to `awaiting_verification`.
+- **In-Session Clarification & Natural Language Steering**:
+  - When worker requests clarification or command approval (`clarification_requested`), an assistant message is injected into the active Business Assistant conversation for staff guidance.
+  - Staff / Grok voice assistant can reply or steer via `POST /api/admin/business-assistant/tickets/{ticket_id}/steer`, forwarding instructions to `POST /codex/turns/steer` and logging `engineering_steer_sent`.
+- **UI Verification Receipts & Resolution**:
+  - Frontend Ticket Cockpit triggers UI inspection actions (`verify_ui_state`).
+  - `POST /api/admin/business-assistant/tickets/{ticket_id}/verify-receipt` records receipt metadata (`route`, `verified_elements`, `resolution_summary`) via `ui_verification_receipt` event and marks ticket `resolved`.
+
 ---
 
 ## 5. Data Safety & Isolation
@@ -217,6 +239,7 @@ Execute backend and contract test suites using the project Python environment:
 .\.venv\Scripts\python.exe -m pytest tests/test_business_assistant_foundation.py `
   tests/test_business_assistant_api.py `
   tests/test_business_assistant_tickets_api.py `
+  tests/test_ccc_bridge.py `
   tests/test_business_assistant_idempotency.py `
   tests/test_business_assistant_onboarding_api.py `
   tests/test_business_assistant_realtime_api.py `

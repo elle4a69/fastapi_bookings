@@ -1,7 +1,7 @@
 // @ts-expect-error Node's test-runner types are intentionally not part of the app build.
 import assert from 'node:assert/strict'
 // @ts-expect-error Node's test-runner types are intentionally not part of the app build.
-import test from 'node:test'
+import test, { beforeEach } from 'node:test'
 
 import {
   ExecutorCoordinator,
@@ -66,6 +66,10 @@ class MockStorage {
     this.store.clear()
   }
 }
+
+beforeEach(() => {
+  MockBroadcastChannel.channels.clear()
+})
 
 // ── 1. INITIALIZATION & TAB ID GENERATION ────────────────────────────────
 

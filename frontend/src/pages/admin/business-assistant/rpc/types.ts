@@ -24,6 +24,7 @@ export type OnboardingActionType =
 export type MaintenanceActionType =
   | 'create_maintenance_handoff'
   | 'create_support_ticket'
+  | 'verify_ui_state'
   | 'diagnostic_report'
   | 'run_diagnostic_check'
 
@@ -299,6 +300,7 @@ export interface RpcReceiverContext {
   expectedAgentName?: string | null
   allowedAgentIdentities?: string[]
   conversationId?: number
+  ticketId?: number
 
   // Website action hooks
   onNavigate?: (path: string) => void

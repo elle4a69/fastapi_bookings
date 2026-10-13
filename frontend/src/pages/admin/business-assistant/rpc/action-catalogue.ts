@@ -14,6 +14,56 @@ import {
 import { formAdapterRegistry } from '../adapters/index.ts'
 import { authenticatedAdminFetch } from '../../../../lib/api.ts'
 
+// ── CONSOLE LOG RECORDER BUFFER ──────────────────────────────────────────
+export interface CapturedConsoleLog {
+  level: string
+  message: string
+  timestamp: string
+}
+
+const capturedConsoleLogs: CapturedConsoleLog[] = []
+const MAX_CAPTURED_CONSOLE_LOGS = 5
+
+export function recordConsoleLog(level: string, message: string): void {
+  capturedConsoleLogs.push({
+    level,
+    message: String(message).slice(0, 500),
+    timestamp: new Date().toISOString(),
+  })
+  if (capturedConsoleLogs.length > MAX_CAPTURED_CONSOLE_LOGS) {
+    capturedConsoleLogs.shift()
+  }
+}
+
+export function getRecentConsoleLogs(): CapturedConsoleLog[] {
+  return [...capturedConsoleLogs]
+}
+
+if (typeof window !== 'undefined' && !(window as any).__business_assistant_console_hook__) {
+  (window as any).__business_assistant_console_hook__ = true
+  const origLog = console.log
+  const origWarn = console.warn
+  const origError = console.error
+
+  console.log = (...args: any[]) => {
+    try {
+      recordConsoleLog('log', args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '))
+    } catch {}
+    origLog.apply(console, args)
+  }
+  console.warn = (...args: any[]) => {
+    try {
+      recordConsoleLog('warn', args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '))
+    } catch {}
+    origWarn.apply(console, args)
+  }
+  console.error = (...args: any[]) => {
+    try {
+      recordConsoleLog('error', args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '))
+    } catch {}
+    origError.apply(console, args)
+  }
+}
 
 // ── 1. ROUTE & SUBTAB NORMALIZATION ──────────────────────────────────────
 
@@ -1725,6 +1775,26 @@ export async function executeRpcAction(
       const targetAction = action as RpcActionType
       let backendData: Record<string, unknown> | undefined
 
+      // Attach active route, active form state, and last 5 console logs
+      const activeRoute = typeof window !== 'undefined' ? window.location.pathname : ''
+      let activeFormState: Record<string, unknown> | null = null
+      try {
+        const adapter = formAdapterRegistry.getActiveAdapter()
+        if (adapter) {
+          activeFormState = adapter.get_all_staged_fields()
+        }
+      } catch {
+        // Safe fallback
+      }
+
+      const recentLogs = getRecentConsoleLogs()
+      const enhancedArgs = {
+        ...(rawPayload.params && typeof rawPayload.params === 'object' ? rawPayload.params : rawPayload),
+        active_route: activeRoute,
+        form_state: activeFormState,
+        console_logs: recentLogs,
+      }
+
       const convId = context?.conversationId
       if (convId) {
         try {
@@ -1735,7 +1805,7 @@ export async function executeRpcAction(
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 name: action,
-                arguments: rawPayload.params || rawPayload,
+                arguments: enhancedArgs,
               }),
             },
           )
@@ -1760,6 +1830,83 @@ export async function executeRpcAction(
         details: {
           handshake: 'delegated_to_backend',
           backend_response: backendData,
+          active_route: activeRoute,
+          form_state: activeFormState,
+          console_logs: recentLogs,
+          ...rawPayload,
+        },
+      }
+    }
+
+    // ── UI STATE VERIFICATION & RECEIPT RECORDING ─────────────────────────
+    case 'verify_ui_state': {
+      tracker.transitionTo('executing', 'Verifying UI state and form readiness')
+      const activeRoute = typeof window !== 'undefined' ? window.location.pathname : ''
+      let formState: Record<string, unknown> | null = null
+      let isValid = true
+      let validationErrors: string[] = []
+
+      try {
+        const adapter = formAdapterRegistry.getActiveAdapter()
+        if (adapter) {
+          formState = adapter.get_all_staged_fields()
+          const v = await adapter.validate()
+          isValid = v.valid
+          validationErrors = v.errors
+            ? Object.entries(v.errors).map(([k, msg]) => `${k}: ${msg}`)
+            : []
+        }
+      } catch (err) {
+        isValid = false
+        validationErrors.push(err instanceof Error ? err.message : 'Adapter inspection failed')
+      }
+
+      const ticketId = rawPayload.ticket_id || rawPayload.ticketId || context?.ticketId
+      let backendReceipt: Record<string, unknown> | undefined
+
+      if (ticketId) {
+        try {
+          const receiptRes = await authenticatedAdminFetch(
+            `/api/admin/business-assistant/tickets/${ticketId}/verify-receipt`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                receipt_state: isValid ? 'saved' : 'failed',
+                verified: isValid,
+                route: activeRoute,
+                notes: rawPayload.notes || (isValid ? 'UI state verified successfully' : 'Validation errors observed in UI state'),
+                details: {
+                  form_state: formState,
+                  validation_errors: validationErrors,
+                },
+              }),
+            },
+          )
+          if (receiptRes.ok) {
+            backendReceipt = (await receiptRes.json()) as Record<string, unknown>
+          }
+        } catch (err) {
+          console.warn('[RPC] Failed to record verify-receipt on backend:', err)
+        }
+      }
+
+      tracker.transitionTo(isValid ? 'saved' : 'failed', isValid ? 'UI state verified' : 'UI validation failed')
+      return {
+        action_id: actionId,
+        action: 'verify_ui_state',
+        status: isValid ? 'success' : 'failed',
+        receipt_state: isValid ? 'saved' : 'failed',
+        caller_identity: callerIdentity,
+        timestamp,
+        control_epoch: epochMgr.getEpoch(),
+        lease_token: leaseMgr.getActiveLease().token ?? undefined,
+        details: {
+          route: activeRoute,
+          valid: isValid,
+          validation_errors: validationErrors,
+          form_state: formState,
+          backend_receipt: backendReceipt,
           ...rawPayload,
         },
       }

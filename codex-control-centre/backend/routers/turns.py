@@ -39,8 +39,8 @@ class TurnStart(BaseModel):
 
 class TurnSteer(BaseModel):
     thread_id: str
-    turn_id: int
     instruction: str
+    turn_id: Optional[int] = 0
 
     @model_validator(mode="before")
     @classmethod
@@ -50,7 +50,8 @@ class TurnSteer(BaseModel):
             if "threadId" in data and "thread_id" not in data:
                 data["thread_id"] = data["threadId"]
             if "turnId" in data and "turn_id" not in data:
-                data["turn_id"] = data["turnId"]
+                val = data["turnId"]
+                data["turn_id"] = int(val) if isinstance(val, (int, str)) and str(val).isdigit() else 0
         return data
 
 class TurnInterrupt(BaseModel):
@@ -397,7 +398,14 @@ async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Sess
 
 @router.post("/turns/steer")
 async def steer_turn(req: TurnSteer, db: Session = Depends(get_db)):
-    turn = db.query(Turn).filter(Turn.id == req.turn_id, Turn.thread_id == req.thread_id).first()
+    turn = None
+    if req.turn_id and req.turn_id > 0:
+        turn = db.query(Turn).filter(Turn.id == req.turn_id, Turn.thread_id == req.thread_id).first()
+    if not turn:
+        turn = db.query(Turn).filter(Turn.thread_id == req.thread_id, Turn.status == "active").order_by(Turn.id.desc()).first()
+    if not turn:
+        turn = db.query(Turn).filter(Turn.thread_id == req.thread_id).order_by(Turn.id.desc()).first()
+
     if not turn:
         raise HTTPException(status_code=404, detail="Turn not found")
     
@@ -409,8 +417,8 @@ async def steer_turn(req: TurnSteer, db: Session = Depends(get_db)):
     try:
         await worker.send_request("turn/steer", {
             "threadId": codex_thread_id,
-            "turnId": str(req.turn_id),
-            "expectedTurnId": str(req.turn_id),
+            "turnId": str(turn.id),
+            "expectedTurnId": str(turn.id),
             "instruction": req.instruction,
             "input": [{"type": "text", "text": req.instruction}],
         })

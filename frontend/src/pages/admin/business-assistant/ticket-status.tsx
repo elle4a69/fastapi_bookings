@@ -5,8 +5,13 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Code2,
+  ExternalLink,
+  GitPullRequest,
   History,
   LoaderCircle,
+  Play,
+  Send,
   ShieldAlert,
   Tag,
   Ticket,
@@ -94,82 +99,335 @@ function severityVariant(severity: string): 'default' | 'secondary' | 'destructi
 
 export function TicketStatusCard({
   ticket,
-  onRefresh: _onRefresh,
+  onRefresh,
 }: {
   ticket: SupportTicket
   onRefresh?: () => void
 }) {
+  const [currentTicket, setCurrentTicket] = useState<SupportTicket>(ticket)
   const [expanded, setExpanded] = useState(false)
   const [events, setEvents] = useState<SupportTicketEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [eventsError, setEventsError] = useState<string | null>(null)
 
+  // Cockpit interactive state
+  const [dispatching, setDispatching] = useState(false)
+  const [dispatchError, setDispatchError] = useState<string | null>(null)
+  const [steerText, setSteerText] = useState('')
+  const [steering, setSteering] = useState(false)
+  const [steerFeedback, setSteerFeedback] = useState<string | null>(null)
+  const [approving, setApproving] = useState(false)
+  const [approveFeedback, setApproveFeedback] = useState<string | null>(null)
+
+  useEffect(() => {
+    setCurrentTicket(ticket)
+  }, [ticket])
+
+  const fetchEvents = async () => {
+    setLoadingEvents(true)
+    setEventsError(null)
+    try {
+      const items = await apiClient.get<SupportTicketEvent[]>(
+        `/api/admin/business-assistant/tickets/${currentTicket.id}/events`,
+      )
+      setEvents(items)
+    } catch (err) {
+      setEventsError(err instanceof Error ? err.message : 'Unable to load event timeline.')
+    } finally {
+      setLoadingEvents(false)
+    }
+  }
+
   const toggleEvents = async () => {
     if (!expanded && events.length === 0) {
-      setLoadingEvents(true)
-      setEventsError(null)
-      try {
-        const items = await apiClient.get<SupportTicketEvent[]>(
-          `/api/admin/business-assistant/tickets/${ticket.id}/events`,
-        )
-        setEvents(items)
-      } catch (err) {
-        setEventsError(err instanceof Error ? err.message : 'Unable to load event timeline.')
-      } finally {
-        setLoadingEvents(false)
-      }
+      await fetchEvents()
     }
     setExpanded(!expanded)
   }
 
+  const handleDispatchCCC = async () => {
+    setDispatching(true)
+    setDispatchError(null)
+    try {
+      const res = await apiClient.post<{
+        status: string
+        ticket_id: number
+        thread_id: string
+        turn_id?: number
+      }>(`/api/admin/business-assistant/tickets/${currentTicket.id}/dispatch-ccc`, {})
+      setCurrentTicket((prev) => ({
+        ...prev,
+        status: res.status || 'in_progress',
+        coding_task_id: res.thread_id,
+      }))
+      await fetchEvents()
+      onRefresh?.()
+    } catch (err) {
+      setDispatchError(err instanceof Error ? err.message : 'Failed to dispatch ticket to Codex Control Centre.')
+    } finally {
+      setDispatching(false)
+    }
+  }
+
+  const handleSteer = async () => {
+    const text = steerText.trim()
+    if (!text || steering) return
+    setSteering(true)
+    setSteerFeedback(null)
+    try {
+      await apiClient.post(`/api/admin/business-assistant/tickets/${currentTicket.id}/steer`, {
+        instruction: text,
+      })
+      setSteerFeedback('Steering instruction dispatched to Codex remediation worker.')
+      setSteerText('')
+      await fetchEvents()
+      onRefresh?.()
+    } catch (err) {
+      setSteerFeedback(err instanceof Error ? err.message : 'Failed to steer Codex worker.')
+    } finally {
+      setSteering(false)
+    }
+  }
+
+  const handleApproveAndMerge = async () => {
+    setApproving(true)
+    setApproveFeedback(null)
+    try {
+      const res = await apiClient.post<{
+        status: string
+        ticket: SupportTicket
+      }>(`/api/admin/business-assistant/tickets/${currentTicket.id}/verify-receipt`, {
+        receipt_state: 'approved',
+        verified: true,
+        notes: 'Remediation approved and verified via Ticket Cockpit.',
+      })
+      setCurrentTicket(res.ticket)
+      setApproveFeedback('Changes approved and merged. Ticket resolved.')
+      await fetchEvents()
+      onRefresh?.()
+    } catch (err) {
+      setApproveFeedback(err instanceof Error ? err.message : 'Failed to approve and merge changes.')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  // Filter events for clarification prompts and diffs
+  const clarificationEvent = events.find(
+    (ev) => ev.event_type === 'clarification_requested' || ev.event_type === 'approval_requested',
+  )
+  const clarificationPrompt = clarificationEvent
+    ? (clarificationEvent.safe_metadata?.consequence as string) ||
+      (clarificationEvent.safe_metadata?.command as string) ||
+      (clarificationEvent.safe_metadata?.message as string) ||
+      null
+    : null
+
+  const diffEvents = events.filter(
+    (ev) =>
+      ev.event_type === 'file_modified' ||
+      ev.event_type === 'file_change' ||
+      (ev.safe_metadata && ('diff' in ev.safe_metadata || 'diff_text' in ev.safe_metadata)),
+  )
+
   return (
     <article
       className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-xs"
-      data-testid={`ticket-card-${ticket.id}`}
-      aria-labelledby={`ticket-title-${ticket.id}`}
+      data-testid={`ticket-card-${currentTicket.id}`}
+      aria-labelledby={`ticket-title-${currentTicket.id}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Ticket className="h-4 w-4 text-primary" aria-hidden="true" />
-          <span className="font-mono text-xs text-muted-foreground">#{ticket.id}</span>
-          <Badge variant={statusVariant(ticket.status)} className="capitalize">
-            {formatStatus(ticket.status)}
+          <span className="font-mono text-xs text-muted-foreground">#{currentTicket.id}</span>
+          <Badge variant={statusVariant(currentTicket.status)} className="capitalize">
+            {formatStatus(currentTicket.status)}
           </Badge>
-          <Badge variant={severityVariant(ticket.severity)} className="capitalize">
-            {ticket.severity} severity
+          <Badge variant={severityVariant(currentTicket.severity)} className="capitalize">
+            {currentTicket.severity} severity
           </Badge>
           <Badge variant="outline" className="capitalize">
             <Tag className="mr-1 h-3 w-3" aria-hidden="true" />
-            {ticket.category}
+            {currentTicket.category}
           </Badge>
-          {ticket.requires_owner_approval && (
+          {currentTicket.requires_owner_approval && (
             <Badge variant="destructive" className="gap-1">
               <ShieldAlert className="h-3 w-3" aria-hidden="true" />
               Owner Approval Required
             </Badge>
           )}
+
+          {/* Live CCC Status Pill */}
+          {currentTicket.coding_task_id ? (
+            <div className="flex items-center gap-1.5">
+              <Badge variant="secondary" className="gap-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 text-xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-500 animate-pulse" />
+                CCC Active ({currentTicket.coding_task_id})
+              </Badge>
+              <a
+                href={`http://127.0.0.1:4500/?thread=${encodeURIComponent(currentTicket.coding_task_id)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium ml-1"
+                aria-label={`Open Codex Control Centre thread ${currentTicket.coding_task_id}`}
+              >
+                Open CCC <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </a>
+            </div>
+          ) : (
+            currentTicket.status === 'awaiting_engineering' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-6 text-xs gap-1 border-primary/40 hover:bg-primary/10"
+                disabled={dispatching}
+                onClick={() => void handleDispatchCCC()}
+              >
+                {dispatching ? (
+                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3 text-primary" />
+                )}
+                Dispatch to CCC
+              </Button>
+            )
+          )}
         </div>
-        <time className="text-xs text-muted-foreground" dateTime={ticket.created_at}>
-          {new Date(ticket.created_at).toLocaleString()}
+        <time className="text-xs text-muted-foreground" dateTime={currentTicket.created_at}>
+          {new Date(currentTicket.created_at).toLocaleString()}
         </time>
       </div>
 
+      {dispatchError && (
+        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2.5 text-xs text-destructive flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{dispatchError}</span>
+        </div>
+      )}
+
       <div>
-        <h3 id={`ticket-title-${ticket.id}`} className="text-base font-semibold text-foreground">
-          {ticket.title}
+        <h3 id={`ticket-title-${currentTicket.id}`} className="text-base font-semibold text-foreground">
+          {currentTicket.title}
         </h3>
         <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-          {ticket.description}
+          {currentTicket.description}
         </p>
       </div>
 
-      {ticket.resolution_summary && (
+      {currentTicket.resolution_summary && (
         <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
           <div className="flex items-center gap-1.5 font-semibold text-primary">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
             Resolution Summary
           </div>
-          <p className="mt-1 text-muted-foreground">{ticket.resolution_summary}</p>
+          <p className="mt-1 text-muted-foreground">{currentTicket.resolution_summary}</p>
+        </div>
+      )}
+
+      {/* Interactive Cockpit: Clarification Prompt & Steering Input */}
+      {currentTicket.coding_task_id && currentTicket.status !== 'resolved' && currentTicket.status !== 'completed' && (
+        <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+            <span className="flex items-center gap-1.5">
+              <Send className="h-3.5 w-3.5 text-primary" />
+              Steer Coding Agent / Clarification
+            </span>
+          </div>
+
+          {clarificationPrompt && (
+            <div className="rounded bg-amber-500/10 border border-amber-500/20 p-2 text-xs text-amber-800 dark:text-amber-200">
+              <span className="font-semibold">Worker Clarification Requested:</span> {clarificationPrompt}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              className="flex-1 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder="Guide agent (e.g. 'Use react-hook-form', 'Keep mobile responsive')..."
+              value={steerText}
+              onChange={(e) => setSteerText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  void handleSteer()
+                }
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={steering || !steerText.trim()}
+              onClick={() => void handleSteer()}
+            >
+              {steering ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+              Steer
+            </Button>
+          </div>
+          {steerFeedback && <p className="text-[11px] text-muted-foreground">{steerFeedback}</p>}
+        </div>
+      )}
+
+      {/* Interactive Cockpit: Diff Preview */}
+      {diffEvents.length > 0 && (
+        <div className="rounded-md border border-border/80 bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+            <span className="flex items-center gap-1.5">
+              <Code2 className="h-3.5 w-3.5 text-primary" />
+              Remediation Diff Preview ({diffEvents.length} change{diffEvents.length > 1 ? 's' : ''})
+            </span>
+          </div>
+          {diffEvents.map((ev, i) => {
+            const path = (ev.safe_metadata?.path as string) || `File ${i + 1}`
+            const diff = (ev.safe_metadata?.diff as string) || (ev.safe_metadata?.diff_text as string) || ''
+            return (
+              <div key={ev.id || i} className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                  <span>{path}</span>
+                  {ev.safe_metadata?.total_additions !== undefined && (
+                    <span className="text-green-600 dark:text-green-400">
+                      +{String(ev.safe_metadata?.total_additions)} / -{String(ev.safe_metadata?.total_deletions ?? 0)}
+                    </span>
+                  )}
+                </div>
+                {diff && (
+                  <pre className="max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[11px] text-foreground border border-border/60">
+                    {diff}
+                  </pre>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Interactive Cockpit: 1-Click Approve & Merge */}
+      {currentTicket.coding_task_id && currentTicket.status !== 'resolved' && currentTicket.status !== 'completed' && (
+        <div className="flex items-center justify-between pt-2 border-t border-border/40">
+          <span className="text-xs text-muted-foreground">
+            {currentTicket.status === 'awaiting_verification'
+              ? 'Agent remediation completed. Review diff and merge.'
+              : 'Remediation turn running in isolated worktree.'}
+          </span>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            className="h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white font-medium"
+            disabled={approving}
+            onClick={() => void handleApproveAndMerge()}
+          >
+            {approving ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <GitPullRequest className="h-3 w-3" />}
+            Approve & Merge
+          </Button>
+        </div>
+      )}
+
+      {approveFeedback && (
+        <div className="rounded-md border border-green-500/20 bg-green-500/10 p-2 text-xs text-green-700 dark:text-green-300">
+          {approveFeedback}
         </div>
       )}
 
@@ -181,7 +439,7 @@ export function TicketStatusCard({
           className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
           onClick={toggleEvents}
           aria-expanded={expanded}
-          aria-controls={`ticket-events-${ticket.id}`}
+          aria-controls={`ticket-events-${currentTicket.id}`}
         >
           {expanded ? (
             <ChevronDown className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -194,7 +452,7 @@ export function TicketStatusCard({
 
         {expanded && (
           <div
-            id={`ticket-events-${ticket.id}`}
+            id={`ticket-events-${currentTicket.id}`}
             className="mt-3 border-l-2 border-muted pl-4 space-y-3"
             role="region"
             aria-label="Ticket event timeline"

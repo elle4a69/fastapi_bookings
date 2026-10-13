@@ -39,8 +39,13 @@ from ...schemas.business_assistant import (
     SupportTicketApprovalResponse,
     SupportTicketCreate,
     SupportTicketCreateRead,
+    SupportTicketDispatchCCCResponse,
     SupportTicketEventRead,
     SupportTicketRead,
+    SupportTicketSteerRequest,
+    SupportTicketSteerResponse,
+    SupportTicketVerifyReceiptRequest,
+    SupportTicketVerifyReceiptResponse,
     BusinessAssistantToolExecutionRequest,
     BusinessAssistantToolExecutionResponse,
     BusinessRuleActivateRequest,
@@ -59,6 +64,10 @@ from ...schemas.business_assistant import (
     WebsitePublicationTokenResponse,
     WebsiteRollbackRequest,
     WebsiteRollbackResponse,
+    BusinessAssistantDiagnosticModeRead,
+    BusinessAssistantDiagnosticModeUpdate,
+    BusinessAssistantClientStatePayload,
+    AssistantErrorLogRead,
 )
 from ...services.business_assistant import (
     BusinessAssistantService,
@@ -87,7 +96,9 @@ from ...services.business_assistant import (
     BusinessAssistantRolloutRestrictionError,
     RolloutGate,
     RolloutStage,
+    ccc_bridge_service,
 )
+from ...models.business_assistant import SupportTicket
 
 router = APIRouter(prefix="/business-assistant", tags=["Business Assistant"])
 
@@ -154,6 +165,70 @@ def complete_onboarding_step(
     service = _service(db, tenant, user)
     service.complete_onboarding_step(step=payload.step)
     return _onboarding_response(service)
+
+
+@router.get("/diagnostic-mode", response_model=BusinessAssistantDiagnosticModeRead)
+def get_diagnostic_mode(
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> BusinessAssistantDiagnosticModeRead:
+    """Return the per-user, tenant-scoped diagnostic mode toggle."""
+    service = _service(db, tenant, user)
+    enabled = service.get_diagnostic_mode(user_id=user.id)
+    return BusinessAssistantDiagnosticModeRead(diagnostic_mode=enabled)
+
+
+@router.patch("/diagnostic-mode", response_model=BusinessAssistantDiagnosticModeRead)
+def update_diagnostic_mode(
+    payload: BusinessAssistantDiagnosticModeUpdate,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> BusinessAssistantDiagnosticModeRead:
+    """Toggle the per-user, tenant-scoped diagnostic mode setting."""
+    service = _service(db, tenant, user)
+    enabled = service.set_diagnostic_mode(payload.is_enabled, user_id=user.id)
+    return BusinessAssistantDiagnosticModeRead(diagnostic_mode=enabled)
+
+
+@router.get("/errors", response_model=list[AssistantErrorLogRead])
+def list_assistant_errors(
+    limit: int = Query(default=50, ge=1, le=200),
+    source: Optional[str] = Query(default=None),
+    tool_name: Optional[str] = Query(default=None),
+    conversation_id: Optional[DatabaseId] = Query(default=None),
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> list[AssistantErrorLogRead]:
+    """Retrieve tenant-scoped assistant error logs."""
+    service = _service(db, tenant, user)
+    errors = service.list_assistant_errors(
+        limit=limit,
+        source=source,
+        tool_name=tool_name,
+        conversation_id=conversation_id,
+    )
+    return [AssistantErrorLogRead.model_validate(e) for e in errors]
+
+
+@router.post("/conversations/{conversation_id}/client-state", status_code=status.HTTP_200_OK)
+def update_client_state(
+    conversation_id: DatabaseId,
+    payload: BusinessAssistantClientStatePayload,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_staff),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Record client browser page state, active executor lease, and client RPC results."""
+    service = _service(db, tenant, user)
+    service.save_client_snapshot(
+        conversation_id=conversation_id,
+        user=user,
+        payload=payload.model_dump(),
+    )
+    return {"status": "ok"}
 
 
 @router.get("/conversations", response_model=list[BusinessAssistantConversationRead])
@@ -356,6 +431,20 @@ async def exchange_realtime_sdp(
         media_type="application/sdp",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get("/realtime/xai-token")
+def get_xai_token(
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+):
+    """Return xAI Realtime token, agent ID, and WebSocket connection endpoints."""
+    return {
+        "agent_id": settings.XAI_REALTIME_AGENT_ID,
+        "url": f"{settings.XAI_REALTIME_URL}?agent_id={settings.XAI_REALTIME_AGENT_ID}",
+        "api_key": settings.XAI_API_KEY,
+        "relay_url": "/api/admin/business-assistant/voice/realtime/xai-ws",
+    }
 
 
 @router.get(
@@ -584,6 +673,129 @@ def reject_ticket_dispatch(
         ticket=SupportTicketRead.model_validate(rejected),
         action="rejected",
         status=rejected.status,
+    )
+
+
+@router.post("/tickets/{ticket_id}/dispatch-ccc", response_model=SupportTicketDispatchCCCResponse)
+async def dispatch_ticket_ccc(
+    ticket_id: DatabaseId,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> SupportTicketDispatchCCCResponse:
+    """Dispatch an awaiting support ticket to Codex Control Centre for automated remediation."""
+    _service(db, tenant, user)
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.tenant_id == tenant.id,
+        )
+        .first()
+    )
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
+
+    try:
+        res = await ccc_bridge_service.dispatch_ticket(ticket_id=ticket.id, db=db)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to dispatch ticket to CCC: {exc}",
+        ) from exc
+
+    return SupportTicketDispatchCCCResponse(
+        status=res.get("status", "in_progress"),
+        ticket_id=ticket.id,
+        thread_id=res.get("thread_id", str(ticket.id)),
+        turn_id=res.get("turn_id"),
+        workspace=res.get("workspace"),
+        already_dispatched=res.get("already_dispatched", False),
+    )
+
+
+@router.post("/tickets/{ticket_id}/steer", response_model=SupportTicketSteerResponse)
+async def steer_ticket_turn(
+    ticket_id: DatabaseId,
+    payload: SupportTicketSteerRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> SupportTicketSteerResponse:
+    """Forward steering instruction from staff/Grok to active Codex remediation worker."""
+    _service(db, tenant, user)
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.tenant_id == tenant.id,
+        )
+        .first()
+    )
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
+
+    try:
+        res = await ccc_bridge_service.steer_ticket(
+            ticket_id=ticket.id,
+            instruction=payload.instruction,
+            db=db,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to steer CCC turn: {exc}",
+        ) from exc
+
+    return SupportTicketSteerResponse(
+        status=res.get("status", "steered"),
+        ticket_id=ticket.id,
+        thread_id=ticket.coding_task_id or str(ticket.id),
+        instruction=payload.instruction,
+    )
+
+
+@router.post("/tickets/{ticket_id}/verify-receipt", response_model=SupportTicketVerifyReceiptResponse)
+def verify_ticket_ui_receipt(
+    ticket_id: DatabaseId,
+    payload: SupportTicketVerifyReceiptRequest,
+    tenant: Tenant = Depends(get_current_tenant),
+    user: User = Depends(get_current_owner),
+    db: Session = Depends(get_db),
+) -> SupportTicketVerifyReceiptResponse:
+    """Record UI verification receipt for a support ticket and update resolution state."""
+    _service(db, tenant, user)
+    ticket = (
+        db.query(SupportTicket)
+        .filter(
+            SupportTicket.id == ticket_id,
+            SupportTicket.tenant_id == tenant.id,
+        )
+        .first()
+    )
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found.")
+
+    try:
+        res = ccc_bridge_service.record_ui_verify_receipt(
+            ticket_id=ticket.id,
+            receipt_data=payload.model_dump(),
+            db=db,
+            actor_user_id=user.id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return SupportTicketVerifyReceiptResponse(
+        status=res["status"],
+        ticket=SupportTicketRead.model_validate(res["ticket"]),
+        event=SupportTicketEventRead.model_validate(res["event"]),
     )
 
 

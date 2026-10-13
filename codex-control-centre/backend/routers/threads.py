@@ -13,6 +13,7 @@ router = APIRouter(prefix="/codex/threads", tags=["threads"])
 class ThreadCreate(BaseModel):
     project_id: str
     title: str
+    id: Optional[str] = None
 
 class ThreadUpdate(BaseModel):
     title: Optional[str] = None
@@ -52,7 +53,7 @@ def create_thread(thread: ThreadCreate, db: Session = Depends(get_db)):
         actual_project_id = project.id
 
     new_thread = Thread(
-        id=str(uuid.uuid4()),
+        id=thread.id if thread.id else str(uuid.uuid4()),
         project_id=actual_project_id,
         title=thread.title
     )

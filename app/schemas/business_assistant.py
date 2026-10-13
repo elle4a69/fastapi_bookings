@@ -229,6 +229,50 @@ class SupportTicketCreateRead(BaseModel):
     confirmation_token: Optional[str] = None
 
 
+class SupportTicketDispatchCCCResponse(BaseModel):
+    """Result of dispatching a support ticket to Codex Control Centre."""
+
+    status: str
+    ticket_id: int
+    thread_id: str
+    turn_id: Optional[int] = None
+    workspace: Optional[str] = None
+    already_dispatched: Optional[bool] = False
+
+
+class SupportTicketSteerRequest(BaseModel):
+    """Steering instruction submitted to active Codex remediation worker."""
+
+    instruction: str = Field(min_length=1, max_length=2000)
+
+
+class SupportTicketSteerResponse(BaseModel):
+    """Result of steering guidance sent to Codex Control Centre."""
+
+    status: str
+    ticket_id: int
+    thread_id: str
+    instruction: str
+
+
+class SupportTicketVerifyReceiptRequest(BaseModel):
+    """UI state verification receipt submitted from staff or assistant RPC."""
+
+    receipt_state: str = Field(default="saved")
+    verified: bool = True
+    route: Optional[str] = None
+    notes: Optional[str] = None
+    details: dict = Field(default_factory=dict)
+
+
+class SupportTicketVerifyReceiptResponse(BaseModel):
+    """Response after recording UI verification receipt."""
+
+    status: str
+    ticket: SupportTicketRead
+    event: SupportTicketEventRead
+
+
 class BusinessAssistantToolExecutionRequest(BaseModel):
     """Tool invocation payload submitted for server-authorised execution."""
 
@@ -556,6 +600,70 @@ class WebsiteRollbackResponse(BaseModel):
 
     ok: bool = True
     proposal: WebsiteProposalRead
+
+
+class BusinessAssistantDiagnosticModeRead(BaseModel):
+    """Current diagnostic mode state."""
+
+    diagnostic_mode: bool
+    enabled: bool = False
+
+    def __init__(self, **data: Any):
+        if "enabled" not in data and "diagnostic_mode" in data:
+            data["enabled"] = data["diagnostic_mode"]
+        elif "diagnostic_mode" not in data and "enabled" in data:
+            data["diagnostic_mode"] = data["enabled"]
+        super().__init__(**data)
+
+
+class BusinessAssistantDiagnosticModeUpdate(BaseModel):
+    """Payload to toggle diagnostic mode."""
+
+    diagnostic_mode: Optional[bool] = None
+    enabled: Optional[bool] = None
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        if self.diagnostic_mode is not None:
+            return self.diagnostic_mode
+        return False
+
+
+class BusinessAssistantClientStatePayload(BaseModel):
+    """Client-side receipts and page state snapshot."""
+
+    client_status: Optional[str] = None
+    webrtc_state: Optional[str] = None
+    last_error: Optional[str] = None
+    metadata_json: Optional[dict[str, Any]] = None
+    route: Optional[str] = None
+    form_adapter: Optional[str] = None
+    executor_lease: Optional[str] = None
+    manual_takeover: bool = False
+    staged_fields: Optional[dict[str, Any]] = None
+    recent_tool_calls: Optional[list[dict[str, Any]]] = None
+    error: Optional[dict[str, Any]] = None
+
+
+class AssistantErrorLogRead(BaseModel):
+    """Safe read contract for an assistant error log entry."""
+
+    id: int
+    tenant_id: int
+    user_id: Optional[int] = None
+    conversation_id: Optional[int] = None
+    timestamp: datetime
+    source: str
+    tool_name: Optional[str] = None
+    error_code: Optional[str] = None
+    message: str
+    transport: Optional[str] = None
+    route: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 

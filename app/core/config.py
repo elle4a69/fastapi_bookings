@@ -211,7 +211,7 @@ class Settings(BaseSettings):
     LIVEKIT_CLOUD_API_KEY: Optional[str] = Field(None, description="LiveKit Cloud API key")
     LIVEKIT_CLOUD_API_SECRET: Optional[str] = Field(None, description="LiveKit Cloud API secret")
     LIVEKIT_DEFAULT_AGENT_NAME: str = Field("bookings-business-assistant", description="LiveKit named dispatch agent name")
-    VOICE_ASSISTANT_TRANSPORT: str = Field("direct_gpt_live", description="Default voice assistant transport: 'direct_gpt_live', 'local_livekit', or 'cloud_livekit'")
+    VOICE_ASSISTANT_TRANSPORT: str = Field("xai_grok_voice", description="Default voice assistant transport: 'xai_grok_voice', 'direct_gpt_live', 'local_livekit', or 'cloud_livekit'")
 
     # xAI Grok Voice Realtime Settings
     XAI_API_KEY: str = Field("", description="xAI API key for Grok voice and realtime")
@@ -236,6 +236,16 @@ class Settings(BaseSettings):
     )
     LIVEKIT_RECORD_BY_DEFAULT: bool = Field(
         False, description="Enable recording in LiveKit rooms. Defaults strictly to False."
+    )
+
+    # Codex Control Centre Bridge Settings
+    CODEX_CONTROL_CENTRE_URL: str = Field(
+        "http://127.0.0.1:4500",
+        description="Codex Control Centre API base URL",
+    )
+    CODEX_CONTROL_CENTRE_TOKEN: str = Field(
+        "local_secret",
+        description="Codex Control Centre API secret token",
     )
 
     # Neo4j & Graph Knowledge Settings

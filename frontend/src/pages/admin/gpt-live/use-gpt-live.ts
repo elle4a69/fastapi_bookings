@@ -426,10 +426,6 @@ export function useGPTLive({
               dataChannel.send(
                 JSON.stringify({
                   type: 'response.create',
-                  response: {
-                    instructions:
-                      'Speak the tool execution results directly and concisely to the user in Australian English.',
-                  },
                 }),
               )
               emitActivityLog('DELEGATION', 'Tool Output Dispatched -> response.create (deferred)', {
@@ -463,6 +459,12 @@ export function useGPTLive({
           if (!isAlreadyInProgress) {
             responseInProgressRef.current = false
             pendingResponseCreateRef.current = false
+          } else {
+            // On 'response_already_in_progress', reset flags after 150ms instead of permanently locking up the session
+            window.setTimeout(() => {
+              responseInProgressRef.current = false
+              pendingResponseCreateRef.current = false
+            }, 150)
           }
 
           console.error('[GPT-Live Error]', event.error)
@@ -656,38 +658,22 @@ export function useGPTLive({
           }
 
           if (hasDispatchedAnyToolOutput && dataChannel.readyState === 'open') {
-            if (responseInProgressRef.current) {
-              pendingResponseCreateRef.current = true
-              emitActivityLog('DELEGATION', 'Tool Output Dispatched -> Pending response.create', {
-                details: 'Tool outputs returned to data channel. Queued response.create awaiting active speech turn completion.',
+            pendingResponseCreateRef.current = false
+            responseInProgressRef.current = true
+            try {
+              dataChannel.send(
+                JSON.stringify({
+                  type: 'response.create',
+                }),
+              )
+              emitActivityLog('DELEGATION', 'Tool Output Dispatched -> response.create', {
+                details: 'Signalled GPT-5.6-Terra reasoning engine to continue generating with returned tool outputs.',
                 status: 'running',
                 agentLabel: 'GPT-5.6-Terra (Reasoning Engine)',
                 modelName: 'gpt-5.6-terra',
               })
-            } else {
-              pendingResponseCreateRef.current = false
-              responseInProgressRef.current = true
-              try {
-                const instructions = terminalActionInTurn
-                  ? 'The requested action or navigation has completed. Speak a concise confirmation to the user and conclude your turn without executing further tools.'
-                  : 'Speak the tool execution results directly and concisely to the user in Australian English.'
-                dataChannel.send(
-                  JSON.stringify({
-                    type: 'response.create',
-                    response: {
-                      instructions,
-                    },
-                  }),
-                )
-                emitActivityLog('DELEGATION', 'Tool Output Dispatched -> response.create', {
-                  details: 'Signalled GPT-5.6-Terra reasoning engine to continue generating with returned tool outputs.',
-                  status: 'running',
-                  agentLabel: 'GPT-5.6-Terra (Reasoning Engine)',
-                  modelName: 'gpt-5.6-terra',
-                })
-              } catch (err) {
-                console.warn('[GPT-Live] Failed to send response.create', err)
-              }
+            } catch (err) {
+              console.warn('[GPT-Live] Failed to send response.create', err)
             }
           }
           return

@@ -52,6 +52,7 @@ from .tool_registry import (
     SUPPORT_ENGINEERING_TOOLS,
     WEBSITE_BUILDER_TOOLS,
     ALL_BUSINESS_ASSISTANT_TOOLS,
+    VOICE_BUSINESS_ASSISTANT_TOOLS,
     ALL_TOOL_PACKS,
 )
 from .website_sanitiser import (
@@ -87,6 +88,7 @@ from .rollout import (
     is_staging_tenant,
     is_synthetic_tenant,
 )
+from .ccc_bridge_service import CCCBridgeService, ccc_bridge_service
 
 __all__ = [
     "BusinessAssistantRolloutRestrictionError",
