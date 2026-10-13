@@ -92,8 +92,8 @@ export const Composer: React.FC = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="p-2 sm:p-3 bg-[var(--surface-primary)] border-t border-[var(--border)] max-w-4xl mx-auto w-full">
-        <div className="border border-[var(--border)] rounded-xl bg-[var(--surface-primary)] shadow-xs focus-within:border-[var(--accent)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
+      <div className="p-2 sm:p-3 bg-slate-900 border-t border-slate-800 max-w-4xl mx-auto w-full">
+        <div className="border border-slate-700/80 rounded-xl bg-slate-950/80 shadow-xs focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
           {/* Main Textarea */}
           <textarea
             id="composer-message-input"
@@ -108,25 +108,25 @@ export const Composer: React.FC = () => {
                 : 'Give instruction to Codex... (Cmd+Enter to send, Shift+Enter for new line)'
             }
             rows={2}
-            className="w-full resize-none bg-transparent p-2.5 sm:p-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:outline-none leading-relaxed"
+            className="w-full resize-none bg-transparent p-2.5 sm:p-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none leading-relaxed"
           />
 
           {/* Bottom Toolbar & Action Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 py-2 sm:px-3 sm:py-2 border-t border-[var(--border)]/60 bg-[var(--surface-secondary)]/30 rounded-b-xl gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-2.5 py-2 sm:px-3 sm:py-2 border-t border-slate-800 bg-slate-900/60 rounded-b-xl gap-2">
             {/* Left Controls: Model, Reasoning, Permissions */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Model Selector */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
                     aria-label="Select Model"
                   >
-                    <Cpu className="w-3.5 h-3.5 text-[var(--accent)]" />
+                    <Cpu className="w-3.5 h-3.5 text-indigo-400" />
                     <span>{selectedModel}</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-52 text-xs">
+                <DropdownMenuContent align="start" className="w-52 text-xs bg-slate-900 border-slate-800 text-slate-200">
                   <DropdownMenuRadioGroup value={selectedModel} onValueChange={setSelectedModel}>
                     <DropdownMenuRadioItem value="gpt-5.6-sol">gpt-5.6-sol (Default)</DropdownMenuRadioItem>
                     <DropdownMenuRadioItem value="gpt-5.5">gpt-5.5 (Fast)</DropdownMenuRadioItem>
@@ -141,14 +141,14 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
                     aria-label="Select Reasoning Effort"
                   >
-                    <Brain className="w-3.5 h-3.5 text-[var(--accent)]" />
+                    <Brain className="w-3.5 h-3.5 text-indigo-400" />
                     <span className="capitalize">{reasoningEffort} effort</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40 text-xs">
+                <DropdownMenuContent align="start" className="w-40 text-xs bg-slate-900 border-slate-800 text-slate-200">
                   <DropdownMenuRadioGroup
                     value={reasoningEffort}
                     onValueChange={(val) => setReasoningEffort(val as ReasoningEffort)}
@@ -164,14 +164,14 @@ export const Composer: React.FC = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-[var(--surface-primary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
+                    className="min-h-[44px] flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-900 border border-slate-700 text-slate-200 hover:text-white hover:border-slate-500 transition-colors cursor-pointer"
                     aria-label="Select Permissions"
                   >
-                    <Shield className="w-3.5 h-3.5 text-[var(--accent)]" />
+                    <Shield className="w-3.5 h-3.5 text-indigo-400" />
                     <span className="capitalize">{permission.replace('_', ' ')}</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-48 text-xs">
+                <DropdownMenuContent align="start" className="w-48 text-xs bg-slate-900 border-slate-800 text-slate-200">
                   <DropdownMenuRadioGroup
                     value={permission}
                     onValueChange={(val) => setPermission(val as PermissionProfile)}

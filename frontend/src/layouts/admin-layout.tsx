@@ -20,7 +20,8 @@ export function AdminLayout() {
   const isOperationalRoute =
     location.pathname.startsWith('/admin/sms-assistant') ||
     location.pathname.startsWith('/admin/calendar') ||
-    location.pathname.startsWith('/admin/messages')
+    location.pathname.startsWith('/admin/messages') ||
+    location.pathname.startsWith('/admin/coding-cockpit')
 
   return (
     <TenantModulesProvider>

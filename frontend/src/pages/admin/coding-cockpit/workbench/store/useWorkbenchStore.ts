@@ -22,7 +22,9 @@ import {
 } from '../test/fixtures/realisticFixtures'
 import { codexApi } from '../api/codexApi'
 
-export type InspectorTab = 'changes' | 'files' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
+export type InspectorTab = 'changes' | 'files' | 'settings' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
+export type BottomDockTab = 'terminal' | 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream'
+export type BottomDockMode = 'collapsed' | 'expanded' | 'maximized'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting'
 export type AppMode = 'live' | 'demo' | 'unavailable'
 
@@ -81,6 +83,9 @@ export interface LocalUIState {
   isSidebarOpen: boolean
   isInspectorOpen: boolean
   activeInspectorTab: InspectorTab
+  isBottomDockOpen: boolean
+  activeBottomDockTab: BottomDockTab
+  bottomDockMode: BottomDockMode
   isDiffStudioOpen: boolean
   selectedDiffFileIndex: number
   isCommandPaletteOpen: boolean
@@ -133,9 +138,12 @@ export const initialLocalUIState: LocalUIState = {
   activeAgentId: 'main',
   currentActionText: undefined,
   turnElapsedSeconds: 0,
-  isSidebarOpen: true,
-  isInspectorOpen: true,
+  isSidebarOpen: getSafeLocalStorage('codex_sidebar_open', 'true') === 'true',
+  isInspectorOpen: getSafeLocalStorage('codex_inspector_open', 'false') === 'true',
   activeInspectorTab: 'changes',
+  isBottomDockOpen: getSafeLocalStorage('codex_bottom_dock_open', 'false') === 'true',
+  activeBottomDockTab: 'terminal',
+  bottomDockMode: 'expanded',
   isDiffStudioOpen: false,
   selectedDiffFileIndex: 0,
   isCommandPaletteOpen: false,
@@ -1256,6 +1264,7 @@ export function useWorkbenchStore() {
         console.error('Failed to create thread via API:', err)
       }
     }
+    return newThread
   }
 
   const renameThread = async (threadId: string, newTitle: string) => {
@@ -1465,9 +1474,10 @@ export function useWorkbenchStore() {
     }
   }
 
-  const testTelemetry = async (endpoint: string) => {
+  const testTelemetry = async (endpoint?: string) => {
+    const target = endpoint || state.telemetrySettings?.otlp_endpoint || 'http://localhost:4318'
     if (state.appMode === 'live') {
-      return await codexApi.testTelemetryEndpoint(endpoint)
+      return await codexApi.testTelemetryEndpoint(target)
     } else {
       return {
         connected: true,
@@ -1949,9 +1959,38 @@ export function useWorkbenchStore() {
     updateState(prev => reduceSSEEvent(prev, event))
   }
 
-  const setSidebarOpen = (open: boolean) => updateState({ isSidebarOpen: open })
-  const setInspectorOpen = (open: boolean) => updateState({ isInspectorOpen: open })
-  const setInspectorTab = (tab: InspectorTab) => updateState({ activeInspectorTab: tab, isInspectorOpen: true })
+  const setSidebarOpen = (open: boolean) => {
+    setSafeLocalStorage('codex_sidebar_open', String(open))
+    updateState({ isSidebarOpen: open })
+  }
+  const setInspectorOpen = (open: boolean) => {
+    setSafeLocalStorage('codex_inspector_open', String(open))
+    updateState({ isInspectorOpen: open })
+  }
+  const setBottomDockOpen = (open: boolean) => {
+    setSafeLocalStorage('codex_bottom_dock_open', String(open))
+    updateState({ isBottomDockOpen: open })
+  }
+  const setActiveBottomDockTab = (tab: BottomDockTab) => {
+    setSafeLocalStorage('codex_bottom_dock_open', 'true')
+    updateState({ activeBottomDockTab: tab, isBottomDockOpen: true })
+  }
+  const setBottomDockMode = (mode: BottomDockMode) => {
+    const isOpen = mode !== 'collapsed'
+    setSafeLocalStorage('codex_bottom_dock_open', String(isOpen))
+    updateState({ bottomDockMode: mode, isBottomDockOpen: isOpen })
+  }
+  const toggleBottomDock = () => {
+    updateState(prev => {
+      const nextOpen = !prev.isBottomDockOpen
+      setSafeLocalStorage('codex_bottom_dock_open', String(nextOpen))
+      return { isBottomDockOpen: nextOpen }
+    })
+  }
+  const setInspectorTab = (tab: InspectorTab) => {
+    setSafeLocalStorage('codex_inspector_open', 'true')
+    updateState({ activeInspectorTab: tab, isInspectorOpen: true })
+  }
   const setDiffStudioOpen = (open: boolean) => updateState({ isDiffStudioOpen: open })
   const selectDiffFile = (index: number) => updateState({ selectedDiffFileIndex: index, isDiffStudioOpen: true })
   const setCommandPaletteOpen = (open: boolean) => updateState({ isCommandPaletteOpen: open })
@@ -2074,6 +2113,10 @@ export function useWorkbenchStore() {
     setSidebarOpen,
     setInspectorOpen,
     setInspectorTab,
+    setBottomDockOpen,
+    setActiveBottomDockTab,
+    setBottomDockMode,
+    toggleBottomDock,
     setDiffStudioOpen,
     selectDiffFile,
     setCommandPaletteOpen,
