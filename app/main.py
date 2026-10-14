@@ -367,7 +367,28 @@ async def add_correlation_id_header(request, call_next):
     trace_id = "00000000000000000000000000000000"
     if current_span and current_span.get_span_context().is_valid:
         trace_id = f"{current_span.get_span_context().trace_id:032x}"
+        if current_span.is_recording():
+            try:
+                from .api.deps import _tenant_subdomain_from_host
+                raw_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or (request.url.hostname if hasattr(request.url, "hostname") else None)
+                host_sub = _tenant_subdomain_from_host(raw_host)
+                supplied_sub = request.headers.get("X-Tenant") or request.headers.get("x-tenant") or request.query_params.get("tenant")
+                subdomain = host_sub or supplied_sub
+                if subdomain:
+                    current_span.set_attribute("tenant_subdomain", str(subdomain).lower())
+                tenant_id_hdr = request.headers.get("X-Tenant-ID") or request.headers.get("x-tenant-id")
+                if tenant_id_hdr:
+                    current_span.set_attribute("tenant_id", str(tenant_id_hdr))
+            except Exception:
+                pass
     response = await call_next(request)
+    if current_span and current_span.is_recording() and hasattr(request, "state"):
+        t_id = getattr(request.state, "tenant_id", None)
+        t_sub = getattr(request.state, "tenant_subdomain", None)
+        if t_id:
+            current_span.set_attribute("tenant_id", str(t_id))
+        if t_sub:
+            current_span.set_attribute("tenant_subdomain", str(t_sub))
     response.headers["X-Request-ID"] = trace_id
     response.headers["X-Trace-ID"] = trace_id
     return response

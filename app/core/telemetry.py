@@ -45,7 +45,7 @@ _telemetry_owned_handlers: List[Tuple[logging.Logger, logging.Handler]] = []
 # Span attribute allowlist
 # ---------------------------------------------------------------------------
 SAFE_ATTRIBUTE_KEYS: FrozenSet[str] = frozenset({
-    "tenant_id", "route",
+    "tenant_id", "tenant_subdomain", "route",
     "http.method", "http.route", "http.status_code", "http.scheme",
     "http.target",
     "db.system", "db.operation",
@@ -55,6 +55,9 @@ SAFE_ATTRIBUTE_KEYS: FrozenSet[str] = frozenset({
     "frontend.component", "frontend.duration_ms", "frontend.vital_name",
     "event_code", "status", "job_type", "operation", "reason",
     "account_id",
+    "livekit.room", "livekit.agent_name", "livekit.event_type",
+    "livekit.transport", "livekit.call_status", "transport",
+    "assistant.source", "assistant.tool_name", "assistant.error_code",
 })
 
 # ---------------------------------------------------------------------------
@@ -143,7 +146,15 @@ def sanitize_url_path(url_val: str) -> str:
         return "/redacted"
 
 
-def _sanitize_attribute_value(key: str, val: Any) -> Any:
+_STANDARD_RECORD_ATTRS: FrozenSet[str] = frozenset({
+    "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+    "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+    "created", "msecs", "relativeCreated", "thread", "threadName",
+    "processName", "process", "message",
+})
+
+
+def _sanitize_attribute_value(key: str, val: Any, allow_pii: bool = False) -> Any:
     """Sanitize a single span attribute value."""
     if val is None:
         return None
@@ -152,10 +163,14 @@ def _sanitize_attribute_value(key: str, val: Any) -> Any:
     s = str(val)
     if key in ("http.route", "http.target", "frontend.route", "route"):
         return sanitize_url_path(s)
-    # Redact values that look like they contain secrets or PII
+    if allow_pii:
+        return s[:100]
+    # Redact values that look like they contain secrets, PII, notes, transcripts, or prompts
     low = s.lower()
     if any(tok in low for tok in (
-        "token=", "key=", "auth=", "secret=", "password=", "bearer ", "prompt", "completion", "sms_body", "sms-body"
+        "token=", "key=", "auth=", "secret=", "password=", "bearer ", "prompt", "completion",
+        "sms_body", "sms-body", "clinical", "note=", "transcript", "booking_detail",
+        "operator_note", "patient_note",
     )):
         return "[REDACTED]"
     if "@" in s and "." in s:          # email-like
@@ -175,20 +190,41 @@ class PrivacySafeLogFilter(logging.Filter):
     """Filter and sanitize log records destined for SigNoz OTLP log export.
 
     Redacts credentials, tokens, API keys, authorization headers, passwords,
-    cookies, secrets, webhook signatures, query strings, and customer PII
+    cookies, secrets, webhook signatures, query strings, clinical notes,
+    operator notes, booking details, audio transcripts, raw prompts, and customer PII
     from log messages, arguments, extras, and exception traces.
     """
     _SECRET_PATTERNS = [
+        # Bearer tokens
         (re.compile(r"(?i)\b(bearer\s+)[a-zA-Z0-9\-\._~\+\/]+=*", re.IGNORECASE), r"\1[REDACTED]"),
-        (re.compile(r"(?i)(authorization|api[-_]?key|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token|prompt|completion|sms[-_]?body)\s*[:=]\s*['\"]?[^\s,;'\"&]+", re.IGNORECASE), r"\1=[REDACTED]"),
-        (re.compile(r"(?i)(password|secret|token|api[-_]?key|authorization|signature|prompt|completion|sms[-_]?body)['\"]?\s*:\s*['\"][^'\"]+['\"]", re.IGNORECASE), r'\1: "[REDACTED]"'),
+        # Quoted key/value tokens, passwords, secrets, notes, transcripts, prompts (handles values with spaces)
+        (re.compile(r"(?i)\b(authorization|api[-_]?key|livekit[-_]?api[-_]?(?:key|secret)|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token|prompt|completion|sms[-_]?body|clinical[-_]?notes?|operator[-_]?notes?|internal[-_]?notes?|booking[-_]?notes?|client[-_]?notes?|patient[-_]?notes?|booking[-_]?details?|raw[-_]?transcript|audio[-_]?transcript|input[-_]?transcript|output[-_]?transcript|transcript|raw[-_]?prompt|prompt[-_]?payload)['\"]?\s*[:=]\s*(['\"])[^\r\n]*?\2", re.IGNORECASE), r"\1=[REDACTED]"),
+        # Colloquial phrases (clinical notes, operator notes, booking notes, transcripts, prompts)
+        (re.compile(r"(?i)\b(clinical notes?|operator notes?|internal notes?|booking notes?|booking details?|patient notes?|raw transcript|audio transcript|input transcript|output transcript|raw prompt|prompt payload)\s*[:=]\s*[^\r\n,;&]+", re.IGNORECASE), r"\1: [REDACTED]"),
+        # Unquoted key/value tokens, secrets, notes, transcripts, prompts
+        (re.compile(r"(?i)\b(authorization|api[-_]?key|livekit[-_]?api[-_]?(?:key|secret)|token|password|secret|cookie|signature|access[-_]?token|refresh[-_]?token|prompt|completion|sms[-_]?body|clinical[-_]?notes?|operator[-_]?notes?|internal[-_]?notes?|booking[-_]?notes?|client[-_]?notes?|patient[-_]?notes?|booking[-_]?details?|raw[-_]?transcript|audio[-_]?transcript|input[-_]?transcript|output[-_]?transcript|transcript|raw[-_]?prompt|prompt[-_]?payload)\s*[:=]\s*[^\s,;'\"&]+", re.IGNORECASE), r"\1=[REDACTED]"),
+        # Basic auth in URLs
         (re.compile(r"https?://[^:\s]+:[^@\s]+@", re.IGNORECASE), "https://[REDACTED]@"),
+        # Email addresses
         (re.compile(r"(\b[A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b)"), r"[REDACTED_EMAIL]"),
+        # Phone numbers: Australian mobile/landlines, 1300/1800/13, and international E.164
+        (re.compile(r"(?:\+?61\s*(?:\(0\))?[ .-]*|\(?0)[2-478]\)?[ .-]?(?:\d[ .-]?){7,8}\b"), r"[REDACTED_PHONE]"),
+        (re.compile(r"\b1[38]00(?:[ .-]?\d){6}\b"), r"[REDACTED_PHONE]"),
+        (re.compile(r"\b13(?:[ .-]?\d){4}\b"), r"[REDACTED_PHONE]"),
+        (re.compile(r"\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){1,4}(?:[ .-]?\d{2,4})\b"), r"[REDACTED_PHONE]"),
+        # Credit cards: 13-19 digits grouped
+        (re.compile(r"\b(?:\d{4}[ .-]?){3}\d{1,4}\b"), r"[REDACTED_CREDIT_CARD]"),
+        # Residential street addresses
+        (re.compile(r"\b(?:\d{1,5}(?:[/-]\d{1,5})?\s+)(?:[A-Z][a-zA-Z0-9'.-]+\s+){1,4}(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Close|Cl|Lane|Ln|Place|Pl|Boulevard|Blvd|Parade|Pde|Court|Ct|Way|Terrace|Tce|Crescent|Cres|Highway|Hwy|Circuit|Cct)\b\.?(?:[,\s]+(?:NSW|VIC|QLD|WA|SA|TAS|ACT|NT))?(?:\s*\b\d{4}\b)?", re.IGNORECASE), r"[REDACTED_ADDRESS]"),
     ]
     # Query string redaction in HTTP access logs, URLs, or message paths
     _HTTP_ACCESS_QUERY = re.compile(r'(?i)(["\']?\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+)([^\s\?]+)\?([^\s"\'<>]+)')
     _GENERIC_URL_QUERY = re.compile(r'(https?://[^\s\?]+)\?([^\s"\'<>]+)', re.IGNORECASE)
     _PATH_QUERY = re.compile(r'(/\b[a-zA-Z0-9_\-\./]+)\?([^\s"\'<>]+)')
+
+    def __init__(self, allow_pii: bool = False):
+        super().__init__()
+        self.allow_pii = allow_pii
 
     @classmethod
     def redact_text(cls, text: str) -> str:
@@ -198,12 +234,35 @@ class PrivacySafeLogFilter(logging.Filter):
         text = cls._HTTP_ACCESS_QUERY.sub(r"\1\2?[REDACTED]", text)
         text = cls._GENERIC_URL_QUERY.sub(r"\1?[REDACTED]", text)
         text = cls._PATH_QUERY.sub(r"\1?[REDACTED]", text)
-        # 2. Redact secret patterns
+        # 2. Redact secret and PII patterns
         for pattern, replacement in cls._SECRET_PATTERNS:
             text = pattern.sub(replacement, text)
         return text
 
+    @classmethod
+    def _redact_dict(cls, d: dict) -> dict:
+        out: Dict[str, Any] = {}
+        for k, v in d.items():
+            k_low = str(k).lower()
+            if any(s in k_low for s in (
+                "password", "secret", "token", "auth", "cookie", "key", "signature",
+                "prompt", "completion", "sms_body", "note", "clinical", "transcript",
+                "booking", "email", "phone", "address", "pii",
+            )):
+                out[k] = "[REDACTED]"
+            elif isinstance(v, str):
+                out[k] = cls.redact_text(v)
+            elif isinstance(v, dict):
+                out[k] = cls._redact_dict(v)
+            elif isinstance(v, (list, tuple)):
+                out[k] = [cls.redact_text(x) if isinstance(x, str) else x for x in v]
+            else:
+                out[k] = v
+        return out
+
     def filter(self, record: logging.LogRecord) -> bool:
+        if self.allow_pii:
+            return True
         try:
             # 1. Redact message template
             if isinstance(record.msg, str):
@@ -213,10 +272,16 @@ class PrivacySafeLogFilter(logging.Filter):
                 if isinstance(record.args, dict):
                     clean_args = {}
                     for k, v in record.args.items():
-                        if any(s in str(k).lower() for s in ("password", "secret", "token", "auth", "cookie", "key", "signature", "prompt", "completion", "sms_body")):
+                        if any(s in str(k).lower() for s in (
+                            "password", "secret", "token", "auth", "cookie", "key", "signature",
+                            "prompt", "completion", "sms_body", "note", "clinical", "transcript",
+                            "booking", "email", "phone", "address",
+                        )):
                             clean_args[k] = "[REDACTED]"
                         elif isinstance(v, str):
                             clean_args[k] = self.redact_text(v)
+                        elif isinstance(v, dict):
+                            clean_args[k] = self._redact_dict(v)
                         else:
                             clean_args[k] = v
                     record.args = clean_args
@@ -228,6 +293,21 @@ class PrivacySafeLogFilter(logging.Filter):
             # 3. Redact exception text if pre-formatted
             if record.exc_text:
                 record.exc_text = self.redact_text(record.exc_text)
+            # 4. Redact extra custom attributes attached to the LogRecord
+            for k in list(record.__dict__.keys()):
+                if k not in _STANDARD_RECORD_ATTRS:
+                    v = record.__dict__[k]
+                    k_low = str(k).lower()
+                    if any(s in k_low for s in (
+                        "password", "secret", "token", "auth", "cookie", "key", "signature",
+                        "prompt", "completion", "sms_body", "note", "clinical", "transcript",
+                        "booking", "email", "phone", "address", "pii",
+                    )):
+                        record.__dict__[k] = "[REDACTED]"
+                    elif isinstance(v, str):
+                        record.__dict__[k] = self.redact_text(v)
+                    elif isinstance(v, dict):
+                        record.__dict__[k] = self._redact_dict(v)
         except Exception:
             pass
         return True
@@ -239,14 +319,14 @@ class PrivacySafeLogFilter(logging.Filter):
 class SanitizedSpanProxy:
     """Read-only proxy wrapping a ReadableSpan; enforces attribute allowlisting."""
 
-    def __init__(self, span: ReadableSpan, allowed_keys: FrozenSet[str]):
+    def __init__(self, span: ReadableSpan, allowed_keys: FrozenSet[str], allow_pii: bool = False):
         self._span = span
 
         clean: Dict[str, Any] = {}
         if span.attributes:
             for k, v in span.attributes.items():
                 if k in allowed_keys:
-                    sv = _sanitize_attribute_value(k, v)
+                    sv = _sanitize_attribute_value(k, v, allow_pii=allow_pii)
                     if sv is not None:
                         clean[k] = sv
         self.attributes = clean
@@ -256,8 +336,9 @@ class SanitizedSpanProxy:
             for ev in span.events:
                 ea: Dict[str, Any] = {}
                 if ev.attributes:
-                    if "exception.type" in ev.attributes:
-                        ea["exception.type"] = str(ev.attributes["exception.type"])
+                    for ek, ev_val in ev.attributes.items():
+                        if ek in ("exception.type", "error.type") or (ek in allowed_keys):
+                            ea[ek] = _sanitize_attribute_value(ek, ev_val, allow_pii=allow_pii)
                 clean_events.append(
                     Event(name=ev.name, attributes=ea, timestamp=ev.timestamp)
                 )
@@ -270,13 +351,14 @@ class SanitizedSpanProxy:
 class PrivacySafeSpanExporter(SpanExporter):
     """Wraps another exporter; strips non-allowlisted attributes before export."""
 
-    def __init__(self, wrapped_exporter: SpanExporter):
+    def __init__(self, wrapped_exporter: SpanExporter, allow_pii: bool = False):
         self.wrapped_exporter = wrapped_exporter
+        self.allow_pii = allow_pii
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         global _last_export_status, _last_export_timestamp
         try:
-            sanitized = [SanitizedSpanProxy(s, SAFE_ATTRIBUTE_KEYS) for s in spans]
+            sanitized = [SanitizedSpanProxy(s, SAFE_ATTRIBUTE_KEYS, allow_pii=self.allow_pii) for s in spans]
             result = self.wrapped_exporter.export(sanitized)
             if result == SpanExportResult.SUCCESS:
                 _last_export_status = "ok"
@@ -299,6 +381,27 @@ class PrivacySafeSpanExporter(SpanExporter):
             return self.wrapped_exporter.force_flush(timeout_millis=timeout_millis)
         except Exception:
             return False
+
+
+# ---------------------------------------------------------------------------
+# Structural Scrubber Utilities
+# ---------------------------------------------------------------------------
+def scrub_telemetry_attributes(attributes: Dict[str, Any], allow_pii: bool = False) -> Dict[str, Any]:
+    """Scrub dictionary of telemetry attributes according to SAFE_ATTRIBUTE_KEYS and privacy rules."""
+    cleaned: Dict[str, Any] = {}
+    for k, v in attributes.items():
+        if k in SAFE_ATTRIBUTE_KEYS:
+            sv = _sanitize_attribute_value(k, v, allow_pii=allow_pii)
+            if sv is not None:
+                cleaned[k] = sv
+    return cleaned
+
+
+def scrub_log_payload(text: str, allow_pii: bool = False) -> str:
+    """Scrub raw text payload of credentials, PII, notes, transcripts, and prompts."""
+    if allow_pii:
+        return text
+    return PrivacySafeLogFilter.redact_text(text)
 
 
 # ---------------------------------------------------------------------------
@@ -602,13 +705,15 @@ def init_telemetry(app=None) -> None:
         "deployment.environment": settings.APP_ENV,
     })
 
+    allow_pii = getattr(settings, "OTEL_ALLOW_PII", False)
+
     # 1. Traces
     try:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
         raw = OTLPSpanExporter(endpoint=f"{base}/v1/traces", timeout=3)
-        safe = PrivacySafeSpanExporter(raw)
+        safe = PrivacySafeSpanExporter(raw, allow_pii=allow_pii)
         _tracer_provider = TracerProvider(resource=resource)
         _tracer_provider.add_span_processor(
             BatchSpanProcessor(safe, max_queue_size=2048, max_export_batch_size=512)
@@ -656,7 +761,7 @@ def init_telemetry(app=None) -> None:
             level=logging.INFO,
             logger_provider=_logger_provider,
         )
-        op_otlp_handler.addFilter(PrivacySafeLogFilter())
+        op_otlp_handler.addFilter(PrivacySafeLogFilter(allow_pii=allow_pii))
 
         # Attach to root logger for all propagating application loggers
         root_logger = logging.getLogger()
@@ -761,6 +866,7 @@ def get_telemetry_status_data() -> Dict[str, Any]:
     import os
     return {
         "telemetry_enabled": not settings.OTEL_SDK_DISABLED,
+        "allow_pii": getattr(settings, "OTEL_ALLOW_PII", False),
         "trace_exporter_active": _tracer_provider is not None,
         "metric_exporter_active": _meter_provider is not None,
         "log_exporter_active": _logger_provider is not None,
@@ -769,3 +875,47 @@ def get_telemetry_status_data() -> Dict[str, Any]:
         "last_export_status": _last_export_status,
         "last_export_timestamp": _last_export_timestamp,
     }
+
+
+def record_assistant_tool_failure(
+    *,
+    source: str,
+    tool_name: Optional[str] = None,
+    error_code: Optional[str] = None,
+    tenant_id: Optional[int] = None,
+) -> None:
+    """Record an assistant tool failure counter and trace event safely.
+
+    Never breaks execution and only uses safe low-cardinality attributes.
+    """
+    try:
+        attributes: Dict[str, Any] = {
+            "source": str(source or "unknown")[:32],
+            "tool_name": str(tool_name or "unknown")[:64],
+            "error_code": str(error_code or "tool_error")[:64],
+        }
+        if tenant_id is not None:
+            attributes["tenant_id"] = tenant_id
+
+        # Metric counter
+        counter = meter.create_counter(
+            name="assistant_tool_failures_total",
+            description="Total count of business assistant tool execution and delegation failures.",
+            unit="1",
+        )
+        counter.add(1, attributes)
+
+        # Active span event
+        current_span = trace.get_current_span()
+        if current_span and current_span.is_recording():
+            current_span.add_event(
+                "assistant_tool_failure",
+                attributes={
+                    "assistant.source": attributes["source"],
+                    "assistant.tool_name": attributes["tool_name"],
+                    "assistant.error_code": attributes["error_code"],
+                },
+            )
+    except Exception:
+        pass
+

@@ -30,6 +30,7 @@ class TestSafeAttributeKeysContract:
         """Mandatory low-cardinality structural keys must all be in the allowlist."""
         required = {
             "tenant_id",
+            "tenant_subdomain",
             "route",
             "http.status_code",
             "http.method",

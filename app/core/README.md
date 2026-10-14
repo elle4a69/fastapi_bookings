@@ -144,9 +144,13 @@ To eliminate duplicate log lines in SigNoz without losing framework output:
 - **Dedicated Structured Telemetry Logger (`fastapi_bookings.telemetry`):** Has `propagate = False` and handles structured domain events (`record_webhook_event`, `record_sms_event`, `record_ai_event`, `record_arrival_event`, `record_telemetry_log`) with strict allowlisting.
 - **Handler Lifecycle Management:** All attached handlers are tracked in `_telemetry_owned_handlers`. Repeated `init_telemetry()` and `shutdown_telemetry()` cycles safely flush, close, and detach handlers without leaking memory or leaving zombie handlers.
 
-#### 2. Strict Span Attribute Allowlisting (`SAFE_ATTRIBUTE_KEYS`)
+#### 2. Strict Span Attribute Allowlisting (`SAFE_ATTRIBUTE_KEYS`) & Tenant Attribution
 Raw spans are scrubbed by `_FilteringSpanExporter` / `SanitizedSpanProxy`:
-- **Allowlisted keys only:** `tenant_id`, `route`, `http.method`, `http.route`, `http.status_code`, `http.scheme`, `http.target`, `db.system`, `db.operation`, `error.type`, `exception.type`, `service.name`, `service.namespace`, `deployment.environment`, `frontend.*` (structural only), `event_code`, `status`, `job_type`, `operation`, `reason`, `account_id`.
+- **Allowlisted keys only:** `tenant_id`, `tenant_subdomain`, `route`, `http.method`, `http.route`, `http.status_code`, `http.scheme`, `http.target`, `db.system`, `db.operation`, `error.type`, `exception.type`, `service.name`, `service.namespace`, `deployment.environment`, `frontend.*` (structural only), `event_code`, `status`, `job_type`, `operation`, `reason`, `account_id`, `livekit.*`, `assistant.*`.
+- **Tenant Attribution Span Injection:** 
+  - `get_current_tenant` and `get_current_tenant_user` in `app/api/deps.py` automatically inject `tenant_id` and `tenant_subdomain` into the active OpenTelemetry span context when recording.
+  - Correlation ID middleware in `app/main.py` records `tenant_subdomain` and `tenant_id` early from request headers or host resolution.
+  - SigNoz Ingester (`pours/deployment/ingester/ingester.yaml`) configures `tenant_id` and `tenant_subdomain` as indexed metrics dimensions under `signozspanmetrics/delta` for multi-tenant latency and rate breakdowns.
 - **All other attributes are dropped** to strictly enforce Rule 5 of `AGENTS.md`.
 
 #### 3. Value-Level Sanitization & Privacy Redaction (`PrivacySafeLogFilter`)

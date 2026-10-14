@@ -13,6 +13,8 @@ DatabaseId = Annotated[
     Path(ge=1, le=MAX_DATABASE_ID, description="Unique positive database identifier"),
 ]
 
+from opentelemetry import trace
+
 from ..core.security import decode_access_token
 from ..core.config import settings
 from ..db.database import get_db
@@ -91,6 +93,11 @@ async def get_current_tenant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tenant '{subdomain}' not found.",
         )
+    span = trace.get_current_span()
+    if span and span.is_recording():
+        span.set_attribute("tenant_id", str(tenant.id))
+        if hasattr(tenant, "subdomain") and tenant.subdomain:
+            span.set_attribute("tenant_subdomain", str(tenant.subdomain))
     return tenant
 
 
@@ -233,6 +240,11 @@ async def get_current_tenant_user(
     tenant: Tenant = Depends(get_current_tenant),
 ) -> tuple[Tenant, User]:
     """Ensure tenant and user are authenticated and tenant-isolated."""
+    span = trace.get_current_span()
+    if span and span.is_recording():
+        span.set_attribute("tenant_id", str(tenant.id))
+        if hasattr(tenant, "subdomain") and tenant.subdomain:
+            span.set_attribute("tenant_subdomain", str(tenant.subdomain))
     return tenant, current_user
 
 

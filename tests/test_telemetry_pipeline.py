@@ -535,3 +535,61 @@ def test_operational_uvicorn_fastapi_logs_no_duplicate_propagation():
         lg = logging.getLogger(name)
         # Verify propagation is false to prevent double export to root
         assert lg.propagate is False
+
+
+@pytest.mark.asyncio
+async def test_tenant_attribution_span_injection():
+    """Verify tenant_id and tenant_subdomain are injected into active OTel spans and survive sanitization."""
+    from unittest.mock import MagicMock, patch
+    from opentelemetry.trace import SpanContext, TraceFlags
+    from app.core.telemetry import SanitizedSpanProxy, SAFE_ATTRIBUTE_KEYS
+    from app.api.deps import get_current_tenant, get_current_tenant_user
+    from app.models.tenant import Tenant
+    from app.models.user import User
+
+    # Mock Tenant
+    mock_tenant = Tenant(id=42, subdomain="simplydemo", name="Simply Demo")
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_tenant
+
+    # Mock Request
+    mock_request = MagicMock()
+    mock_request.headers = {"X-Tenant": "simplydemo"}
+    mock_request.query_params = {}
+    mock_request.state = MagicMock()
+
+    # Mock Span
+    mock_span = MagicMock()
+    mock_span.is_recording.return_value = True
+
+    with patch("opentelemetry.trace.get_current_span", return_value=mock_span):
+        resolved_tenant = await get_current_tenant(request=mock_request, db=mock_db)
+        assert resolved_tenant.id == 42
+        mock_span.set_attribute.assert_any_call("tenant_id", "42")
+        mock_span.set_attribute.assert_any_call("tenant_subdomain", "simplydemo")
+
+        mock_user = User(id=1, tenant_id=42, email="user@example.com", role="owner")
+        res_tenant, res_user = await get_current_tenant_user(current_user=mock_user, tenant=resolved_tenant)
+        assert res_tenant.id == 42
+
+    # Verify attributes survive SanitizedSpanProxy
+    ctx = SpanContext(
+        trace_id=0x11112222333344441111222233334444,
+        span_id=0x1111222233334444,
+        is_remote=False,
+        trace_flags=TraceFlags(1),
+    )
+    raw_span = ReadableSpan(
+        name="tenant_span",
+        context=ctx,
+        attributes={
+            "tenant_id": "42",
+            "tenant_subdomain": "simplydemo",
+            "http.method": "GET",
+            "secret_key": "should_be_stripped",
+        },
+    )
+    proxy = SanitizedSpanProxy(raw_span, SAFE_ATTRIBUTE_KEYS)
+    assert proxy.attributes["tenant_id"] == "42"
+    assert proxy.attributes["tenant_subdomain"] == "simplydemo"
+    assert "secret_key" not in proxy.attributes
