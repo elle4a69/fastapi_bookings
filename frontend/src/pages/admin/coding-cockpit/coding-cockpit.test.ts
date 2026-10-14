@@ -309,3 +309,56 @@ test('Coding Cockpit integrates Platform Owner Support Ticket Review Queue and C
   assert.ok(reviewModalContent.includes('internal_only'), 'ReviewModal must support internal notes')
 })
 
+test('SupportTicketManagementStation delivers full-featured Management Center with prominent authorization banners and thread jumping', () => {
+  const stationPath = fileURLToPath(new URL('./workbench/components/tools/SupportTicketManagementStation.tsx', import.meta.url))
+  const workbenchPath = fileURLToPath(new URL('./CodexWorkbenchTab.tsx', import.meta.url))
+  const sidebarPath = fileURLToPath(new URL('./workbench/components/layout/UnifiedSidebar.tsx', import.meta.url))
+  const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
+  const storePath = fileURLToPath(new URL('./workbench/store/useWorkbenchStore.ts', import.meta.url))
+
+  const stationContent = readFileSync(stationPath, 'utf8')
+  const workbenchContent = readFileSync(workbenchPath, 'utf8')
+  const sidebarContent = readFileSync(sidebarPath, 'utf8')
+  const headerContent = readFileSync(headerPath, 'utf8')
+  const storeContent = readFileSync(storePath, 'utf8')
+
+  // 1. Filter tabs with live counts
+  assert.ok(stationContent.includes("activeTab === 'needs_authorization'"), 'Station must support Needs Authorization filter tab')
+  assert.ok(stationContent.includes("activeTab === 'active_investigation'"), 'Station must support Active Investigation filter tab')
+  assert.ok(stationContent.includes("activeTab === 'waiting_on_tenant'"), 'Station must support Waiting on Tenant filter tab')
+  assert.ok(stationContent.includes("activeTab === 'resolved'"), 'Station must support Resolved filter tab')
+
+  // 2. Prominent status chips in master list
+  assert.ok(stationContent.includes('NEEDS AUTHORIZATION'), 'Must display amber NEEDS AUTHORIZATION chip')
+  assert.ok(stationContent.includes('INVESTIGATION RUNNING'), 'Must display blue INVESTIGATION RUNNING chip')
+  assert.ok(stationContent.includes('WAITING ON TENANT'), 'Must display purple WAITING ON TENANT chip')
+  assert.ok(stationContent.includes('RESOLVED'), 'Must display green RESOLVED chip')
+
+  // 3. Authorization Banner and Live Thread Switcher
+  assert.ok(stationContent.includes('Authorization Required: Tenant Reported Issue'), 'Must display high-contrast authorization banner')
+  assert.ok(stationContent.includes('Authorize & Launch Codex Investigation'), 'Must provide Authorize & Launch Codex action button')
+  assert.ok(stationContent.includes('Switch to Live Investigation Thread'), 'Must provide instant switch to live investigation thread')
+
+  // 4. Dual message composer & status shortcuts
+  assert.ok(stationContent.includes('Reply to Tenant'), 'Must have Reply to Tenant tab')
+  assert.ok(stationContent.includes('Internal Note - Invisible to Tenant'), 'Must display yellow internal note banner')
+  assert.ok(stationContent.includes('Reply & Mark Waiting on Tenant'), 'Must provide quick Reply & Mark Waiting on Tenant shortcut')
+
+  // 5. Store supports ActiveCenterView and live counters
+  assert.ok(storeContent.includes('activeCenterView'), 'Store must track activeCenterView')
+  assert.ok(storeContent.includes('supportTicketsSummary'), 'Store must track supportTicketsSummary')
+  assert.ok(storeContent.includes('fetchSupportTicketsSummary'), 'Store must provide fetchSupportTicketsSummary')
+
+  // 6. UnifiedSidebar prominent primary section & live badges
+  assert.ok(sidebarContent.includes('Support Tickets'), 'UnifiedSidebar must have prominent primary Support Tickets section')
+  assert.ok(sidebarContent.includes('needsAuth'), 'UnifiedSidebar must inspect needsAuth for live badge')
+
+  // 7. ThreadHeader live badge and center view switcher
+  assert.ok(headerContent.includes('needsAuth'), 'ThreadHeader must display live badge with needsAuth count')
+  assert.ok(headerContent.includes("setActiveCenterView('tickets')"), 'ThreadHeader must support switching to tickets center view')
+
+  // 8. CodexWorkbenchTab embeds SupportTicketManagementStation directly on Center Stage
+  assert.ok(workbenchContent.includes('SupportTicketManagementStation'), 'CodexWorkbenchTab must embed SupportTicketManagementStation')
+  assert.ok(workbenchContent.includes("state.activeCenterView === 'tickets'"), 'CodexWorkbenchTab must render tickets station on center stage')
+})
+

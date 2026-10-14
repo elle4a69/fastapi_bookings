@@ -21,6 +21,7 @@ import {
   FIXTURE_INCIDENTS
 } from '../test/fixtures/realisticFixtures'
 import { codexApi } from '../api/codexApi'
+import { getAuthenticatedAdminHeaders } from '@/lib/api'
 import {
   getLastUsedCodexModel,
   resolveCodexModel,
@@ -33,6 +34,15 @@ export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'strea
 export type BottomDockMode = 'collapsed' | 'expanded' | 'maximized'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting'
 export type AppMode = 'live' | 'demo' | 'unavailable'
+export type ActiveCenterView = 'timeline' | 'tickets'
+
+export interface SupportTicketsSummary {
+  total: number
+  needsAuth: number
+  active: number
+  waitingOnTenant: number
+  resolved: number
+}
 
 // -------------------------------------------------------------
 // Safe Environment Helpers (Node/Browser/SSR)
@@ -103,6 +113,8 @@ export interface LocalUIState {
   connectionStatus: ConnectionStatus
   lastConnectedTime: string
   liveAnnouncements: string[]
+  activeCenterView: ActiveCenterView
+  supportTicketsSummary: SupportTicketsSummary
 }
 
 export interface WorkbenchState extends ServerState, LocalUIState {
@@ -161,7 +173,11 @@ export const initialLocalUIState: LocalUIState = {
   threadStatusFilter: 'all',
   connectionStatus: isDemo ? 'connected' : 'disconnected',
   lastConnectedTime: new Date().toLocaleTimeString(),
-  liveAnnouncements: []
+  liveAnnouncements: [],
+  activeCenterView: 'timeline',
+  supportTicketsSummary: isDemo
+    ? { total: 3, needsAuth: 1, active: 1, waitingOnTenant: 1, resolved: 0 }
+    : { total: 0, needsAuth: 0, active: 0, waitingOnTenant: 0, resolved: 0 }
 }
 
 function computeIsStreaming(serverState: ServerState, activeThreadId: string | null): boolean {
@@ -1281,6 +1297,7 @@ export function useWorkbenchStore() {
       activeThreadId: thread!.id,
       activeProjectId: thread!.projectId,
       activeAgentId: 'main',
+      activeCenterView: 'timeline',
       liveAnnouncements: [`Opened thread: ${thread!.title}`]
     })
   }
@@ -2107,6 +2124,44 @@ export function useWorkbenchStore() {
     updateState({ activeToolModal: modal })
   }
 
+  const setActiveCenterView = (view: ActiveCenterView) => {
+    updateState({ activeCenterView: view })
+  }
+
+  const fetchSupportTicketsSummary = async () => {
+    if (state.appMode !== 'live') return
+    try {
+      const res = await fetch('/api/admin/support-tickets', {
+        headers: getAuthenticatedAdminHeaders('application/json')
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const summary: SupportTicketsSummary = {
+          total: data.length,
+          needsAuth: data.filter(t => t.status === 'received').length,
+          active: data.filter(t => t.status === 'queued_for_codex' || t.status === 'in_progress').length,
+          waitingOnTenant: data.filter(t => t.status === 'waiting_on_tenant').length,
+          resolved: data.filter(t => t.status === 'resolved' || t.status === 'closed').length
+        }
+        updateState({ supportTicketsSummary: summary })
+      }
+    } catch (err) {
+      console.warn('Could not fetch support tickets summary:', err)
+    }
+  }
+
+  // Periodic support tickets summary refresh in live mode
+  useEffect(() => {
+    if (state.appMode === 'live') {
+      fetchSupportTicketsSummary()
+      const interval = setInterval(() => {
+        fetchSupportTicketsSummary()
+      }, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [state.appMode])
+
   const retryConnection = () => {
     updateState({ connectionStatus: 'connecting', liveAnnouncements: ['Reconnecting to Codex Event stream...'] })
     if (state.appMode === 'live') {
@@ -2234,6 +2289,10 @@ export function useWorkbenchStore() {
     setSidebarWidth,
     setInspectorWidth,
     setActiveToolModal,
+    activeCenterView: state.activeCenterView,
+    supportTicketsSummary: state.supportTicketsSummary,
+    setActiveCenterView,
+    fetchSupportTicketsSummary,
     setThreadModel,
     retryConnection,
     setAppMode,

@@ -25,8 +25,14 @@ The Codex Engineering Cockpit provides a unified, mobile-first, production-grade
       - AST Issues Studio (`IssuesStudio.tsx`)
       - Engineering Skills Library (`SkillsBrowser.tsx`)
       - Real-time Event Stream (`EventStream.tsx`)
-      - Support Ticket Review Queue & Codex Launch Bridge (`SupportTicketsReviewModal.tsx`): Review inbound tenant escalations, inspect sanitized error context and messages, post internal notes or tenant replies, and trigger the platform owner review gate to launch isolated Codex investigations directly into active workbench threads with live SSE streaming ticker connection.
     - Opens tools as spacious full-screen modal overlays over the top using Radix Dialog/DialogContent (`w-full max-w-[96vw] md:max-w-7xl h-[94vh]`), dark slate styling, ESC to close, and an 'X' close button.
+  - **Support Ticket Management Center & Live Counters (`SupportTicketManagementStation.tsx`)**:
+    - Elevates support ticket review from a secondary modal into a prominent, first-class, full-featured Management Center accessible directly on Center Stage or via full modal overlay.
+    - **Prominent Navigation & Live Counters**: `UnifiedSidebar.tsx` and `ThreadHeader.tsx` display an amber counter badge (`⚠️ N Needs Auth`) for tickets in `received` status awaiting platform owner authorization.
+    - **Center Stage Switcher**: Operators can toggle seamlessly between `timeline` (active conversational turns) and `tickets` (the Support Ticket Management Center).
+    - **Top Action & Filter Bar**: Filter tabs with real-time counts for "All Tickets", "⚠️ Needs Authorization" (`received`), "⚡ Active Investigations" (`queued_for_codex`/`in_progress`), "💬 Waiting on Tenant" (`waiting_on_tenant`), and "✅ Resolved" (`resolved`/`closed`), plus priority selector and search.
+    - **Left Master List**: Live cards with tenant badges, category chips, urgency dots, message counts, and prominent high-contrast status chips (`NEEDS AUTHORIZATION`, `INVESTIGATION RUNNING`, `WAITING ON TENANT`, `RESOLVED`).
+    - **Right Management Station**: Detailed inspector with on-the-fly status and priority dropdowns, high-contrast Authorization Action Banner ("⚡ Authorization Required: Tenant Reported Issue") with one-click `[ Authorize & Launch Codex Investigation ]`, instant `[ Switch to Live Investigation Thread ]` button, error context inspector card, message history with yellow internal notes, and dual-tab composer with quick status transition shortcuts.
   - **Streamlined Bottom Console Dock (`BottomConsoleDock.tsx`)**:
     - Streamlined strictly to the Terminal / Live Output runner, preventing tab overflow or clipping. Features collapsible minimized (compact 38px status bar), expanded (340px), and maximized (80vh/580px) states.
   - **Unified Left Sidebar (`UnifiedSidebar.tsx`)**: Single unified left sidebar featuring project registration (`+ Project`), search & filter bar, and an expandable nested tree (using Radix Collapsible) of conversations/threads under each project.
@@ -75,6 +81,7 @@ frontend/src/pages/admin/coding-cockpit/
         ├── layout/ThreadSidebar.tsx                  # Backwards-compatible thin shim to UnifiedSidebar
         ├── dock/BottomConsoleDock.tsx                # Streamlined Terminal / Live Output runner dock
         ├── tools/SecondaryToolsModals.tsx            # Full-screen modal overlays for SRE, Fuzzer, AST, Skills, Tickets
+        ├── tools/SupportTicketManagementStation.tsx  # First-class Support Ticket Management Center & Live Station
         ├── tools/SupportTicketsReviewModal.tsx       # Platform owner support ticket review queue & Codex bridge
         ├── timeline/Timeline.tsx                     # Streaming conversation and activity timeline
         ├── timeline/SubagentTabBar.tsx               # Accessible subagent execution tab switcher

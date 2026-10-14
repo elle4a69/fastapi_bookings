@@ -71,7 +71,8 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
     fetchTelemetrySettings,
     updateTelemetrySettings,
     testTelemetry,
-    setActiveToolModal
+    setActiveToolModal,
+    setActiveCenterView
   } = useWorkbenchStore()
 
   // Expanded project tree items in local state (active project always expanded by default)
@@ -305,12 +306,21 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setActiveToolModal('support_tickets')}
-            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-foreground border-border hover:text-white cursor-pointer"
+            onClick={() => {
+              setActiveCenterView('tickets')
+              setActiveToolModal('support_tickets')
+            }}
+            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-foreground border-border hover:text-white cursor-pointer relative"
             title="Open Inbound Support Tickets Review Queue"
           >
             <Headphones className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden sm:inline">Tickets</span>
+            {state.supportTicketsSummary.needsAuth > 0 && (
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </span>
+            )}
           </Button>
 
           <Button
@@ -347,6 +357,56 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
             </button>
           )}
         </div>
+      </div>
+
+      {/* Prominent Primary Navigation Section: Support & Triage */}
+      <div className="p-2 border-b border-border/70 bg-slate-950/40 shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveCenterView('tickets')
+            onSelectThreadMobile?.()
+          }}
+          className={`w-full flex items-center justify-between p-2 rounded-lg border transition-all text-left cursor-pointer group ${
+            state.activeCenterView === 'tickets'
+              ? 'bg-indigo-600/20 border-indigo-500/50 text-foreground shadow-xs'
+              : 'bg-card/50 hover:bg-muted/70 border-border text-foreground'
+          }`}
+          title="Switch Center Stage to Support Ticket Management Center"
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors ${
+              state.supportTicketsSummary.needsAuth > 0
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover:bg-amber-500/30'
+                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+            }`}>
+              <Headphones className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-bold block truncate leading-tight">
+                Support Tickets
+              </span>
+              <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                {state.supportTicketsSummary.needsAuth > 0
+                  ? `${state.supportTicketsSummary.needsAuth} awaiting authorization`
+                  : `${state.supportTicketsSummary.total} total escalations`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0 ml-1">
+            {state.supportTicketsSummary.needsAuth > 0 ? (
+              <Badge variant="outline" className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border-amber-500/50 animate-pulse">
+                ⚠️ {state.supportTicketsSummary.needsAuth}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-800 text-muted-foreground border-border">
+                {state.supportTicketsSummary.total}
+              </Badge>
+            )}
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-transform group-hover:translate-x-0.5" />
+          </div>
+        </button>
       </div>
 
       {/* 3. Nested Tree of Projects & Conversations */}

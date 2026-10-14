@@ -8,6 +8,7 @@ import { Inspector } from './workbench/components/inspector/Inspector'
 import { BottomConsoleDock } from './workbench/components/dock/BottomConsoleDock'
 import { DiffReviewStudioModal } from './workbench/components/diff/DiffReviewStudioModal'
 import { SecondaryToolsModals } from './workbench/components/tools/SecondaryToolsModals'
+import { SupportTicketManagementStation } from './workbench/components/tools/SupportTicketManagementStation'
 import { CommandPalette } from './workbench/components/command-palette/CommandPalette'
 import type { AgentStatusData } from './types'
 
@@ -157,9 +158,11 @@ export const CodexWorkbenchTab: React.FC<CodexWorkbenchTabProps> = ({
           {/* Thread Header with Standardized h-11 Slim Height, Sticky Model Selector & Tools Launcher */}
           <ThreadHeader statusData={statusData} />
 
-          {/* Central Conversation and Streaming Activity Timeline */}
+          {/* Central Conversation Timeline OR Support Tickets Management Station */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden relative">
-            {state.appMode === 'live' && state.projects.length === 0 ? (
+            {state.activeCenterView === 'tickets' ? (
+              <SupportTicketManagementStation isCenterStage={true} />
+            ) : state.appMode === 'live' && state.projects.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center text-sm text-muted-foreground">
                 <p className="font-semibold text-foreground">No projects connected</p>
                 <p className="text-xs text-muted-foreground mt-1 max-w-sm leading-relaxed">
@@ -184,10 +187,12 @@ export const CodexWorkbenchTab: React.FC<CodexWorkbenchTabProps> = ({
             onRefreshStatus={onRefreshStatus}
           />
 
-          {/* 4. Multi-Action Fixed Composer Footer */}
-          <footer className="shrink-0 z-10 w-full max-w-full">
-            <Composer />
-          </footer>
+          {/* 4. Multi-Action Fixed Composer Footer (shown in Timeline view) */}
+          {state.activeCenterView !== 'tickets' && (
+            <footer className="shrink-0 z-10 w-full max-w-full">
+              <Composer />
+            </footer>
+          )}
         </main>
 
         {/* Right Vertical Resizer Splitter (desktop lg+ only, when inspector is open) */}

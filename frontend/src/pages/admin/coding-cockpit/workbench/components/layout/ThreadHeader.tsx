@@ -49,7 +49,8 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
     setInspectorTab,
     toggleBottomDock,
     setDiffStudioOpen,
-    setActiveToolModal
+    setActiveToolModal,
+    setActiveCenterView
   } = useWorkbenchStore()
 
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -116,7 +117,16 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
             </span>
           )}
 
-          {activeThread ? (
+          {state.activeCenterView === 'tickets' ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-medium">
+                Support Center
+              </Badge>
+              <h1 className="text-xs sm:text-sm font-semibold text-foreground truncate m-0 leading-tight">
+                Support Tickets & Triage
+              </h1>
+            </div>
+          ) : activeThread ? (
             isEditingTitle ? (
               <div className="flex items-center gap-1 flex-1 max-w-xs">
                 <input
@@ -230,17 +240,43 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
           </div>
         )}
 
-        {/* Support Tickets Review Trigger */}
+        {/* Support Tickets Review Trigger with Live Badge & View Toggle */}
         <Button
           type="button"
           size="sm"
-          variant="outline"
-          onClick={() => setActiveToolModal('support_tickets')}
-          className="h-7 px-2 text-xs gap-1.5 bg-background hover:bg-muted text-foreground border-border cursor-pointer"
+          variant={state.activeCenterView === 'tickets' ? 'secondary' : 'outline'}
+          onClick={() => {
+            if (state.activeCenterView === 'tickets') {
+              setActiveCenterView('timeline')
+            } else {
+              setActiveCenterView('tickets')
+              setActiveToolModal('support_tickets')
+            }
+          }}
+          className={`h-7 px-2 text-xs gap-1.5 cursor-pointer relative ${
+            state.activeCenterView === 'tickets'
+              ? 'bg-primary/20 text-primary border border-primary/40 font-semibold'
+              : 'bg-background hover:bg-muted text-foreground border-border'
+          }`}
           title="Open Platform Owner Support Ticket Review Queue"
         >
           <Headphones className="w-3.5 h-3.5 text-emerald-400" />
           <span className="hidden sm:inline">Tickets</span>
+          {state.supportTicketsSummary.needsAuth > 0 ? (
+            <Badge
+              variant="outline"
+              className="h-4 px-1 text-[9px] bg-amber-500/20 text-amber-400 border-amber-500/50 font-mono font-bold animate-pulse"
+            >
+              ⚠️ {state.supportTicketsSummary.needsAuth}
+            </Badge>
+          ) : (
+            <Badge
+              variant="secondary"
+              className="h-4 px-1 text-[9px] bg-slate-800 text-muted-foreground border-border font-mono"
+            >
+              {state.supportTicketsSummary.total}
+            </Badge>
+          )}
         </Button>
 
         {/* Secondary Engineering Tools Full-Screen Modal Launcher Dropdown */}
@@ -260,11 +296,21 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-card border-border text-foreground text-xs">
             <DropdownMenuItem
-              onClick={() => setActiveToolModal('support_tickets')}
-              className="flex items-center gap-2 cursor-pointer hover:bg-muted py-1.5"
+              onClick={() => {
+                setActiveCenterView('tickets')
+                setActiveToolModal('support_tickets')
+              }}
+              className="flex items-center justify-between cursor-pointer hover:bg-muted py-1.5"
             >
-              <Headphones className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Support Tickets Review</span>
+              <span className="flex items-center gap-2">
+                <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Support Tickets Review</span>
+              </span>
+              {state.supportTicketsSummary.needsAuth > 0 && (
+                <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-500/40 text-amber-400 bg-amber-500/10 font-bold">
+                  ⚠️ {state.supportTicketsSummary.needsAuth}
+                </Badge>
+              )}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setActiveToolModal('health')}
