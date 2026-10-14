@@ -5,7 +5,8 @@ The `app/services/resident_agent/` module provides persistent, autonomous codeba
 
 Key responsibilities:
 - Continuous scanning of repository integrity, route registrations, and schema boundaries.
-- Live Server-Sent Events (SSE) telemetry broadcast to the admin control panel.
+- Platform-owner-authenticated Server-Sent Events (SSE) telemetry broadcast to the admin control panel.
+- Bounded skill discovery and reads through the read-only Skills RAG service on `127.0.0.1:8008`.
 - Transactional race-condition stress fuzzing to verify zero-double-booking locking under concurrent load.
 - Remediation planning for human review; this module does not execute code changes.
 
@@ -18,7 +19,8 @@ app/services/resident_agent/
 ├── sentinel.py          # Real-time health sentinel, metrics gathering & status aggregator
 ├── fuzzer.py            # High-concurrency race condition simulator (atomic slot allocation tester)
 ├── auditor.py           # Deep static and runtime audit runner across all subsystems
-└── events.py            # Event dispatch and SSE connection manager
+├── event_broker.py      # In-memory SSE event dispatch and replay
+└── skill_library.py     # Bounded port-8008 Skills RAG client; no host-file reads
 ```
 
 ---
@@ -27,6 +29,9 @@ app/services/resident_agent/
 - **Routes Exposed**: `/api/admin/resident-agent/status`, `/api/admin/resident-agent/events`, `/api/admin/resident-agent/audit`, `/api/admin/resident-agent/fuzz-concurrency`.
 - **Database Tables**: Uses `bookings`, `booking_slot_allocations`, and `providers` for transactional lock fuzzing.
 - **Dependencies**: Uses `asyncio`, `SQLAlchemy`, and standard FastAPI background tasks.
+- **Authorization**: Every resident endpoint, including SSE, requires `require_platform_owner`. The SSE client authenticates with request headers; bearer values are never placed in query strings.
+- **Skills RAG**: `SKILLS_RAG_URL` may override the loopback default. Explicit browser searches report HTTP 503 when the daemon is unavailable; advisory background enrichment degrades to no skill context. HTTP, socket, sandbox-denial, and malformed-response failures are all normalized to the same unavailable boundary.
+- **Query Privacy**: Resident prompts, issue titles, customer text, tokens, and notes are never forwarded as Skills RAG URL parameters. The client derives at most twelve deduplicated terms from a fixed technical allowlist and uses a generic fallback when no term matches.
 
 ---
 
@@ -52,6 +57,7 @@ app/services/resident_agent/
 - Fuzzing transactions run with isolated synthetic tenant labels (`fuzz_tenant_test`).
 - All synthetic test bookings are rolled back or cleaned up immediately post-test.
 - Zero customer PII or sensitive keys are logged in audit reports or emitted over SSE.
+- Skill content is retrieved only by validated indexed identifier. Absolute paths, traversal strings, and direct filesystem reads are rejected.
 
 ---
 
@@ -59,6 +65,7 @@ app/services/resident_agent/
 - Fuzzer requires database row-level locking (`SELECT ... FOR UPDATE`) or discrete slot allocations; SQLite file locks behave differently from PostgreSQL row-level locks under extreme concurrency.
 - The remediation executor is intentionally unavailable. It publishes an `UNAVAILABLE` status and rejects execution because no isolated coding worker, verification runner, or independent-review path is connected.
 - Future work requires a separately approved worker with an isolated Git worktree, actual verification evidence, independent review, and deployment separation. Do not replace this boundary with simulated success.
+- The event broker remains process-local and platform-owner scoped; durable run-scoped replay belongs to the separately approved supervisor persistence phase.
 
 ---
 

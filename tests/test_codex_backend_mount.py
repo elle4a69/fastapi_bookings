@@ -11,7 +11,12 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 
-def _create_admin_user(db_session: Session, suffix: str = "mount") -> tuple[Tenant, User, dict[str, str]]:
+def _create_admin_user(
+    db_session: Session,
+    suffix: str = "mount",
+    *,
+    role: str = "owner",
+) -> tuple[Tenant, User, dict[str, str]]:
     tenant = Tenant(name=f"Codex Admin Tenant {suffix}", subdomain=f"codex-admin-{suffix}")
     db_session.add(tenant)
     db_session.flush()
@@ -20,7 +25,7 @@ def _create_admin_user(db_session: Session, suffix: str = "mount") -> tuple[Tena
         tenant_id=tenant.id,
         login=f"admin-{suffix}",
         password_hash="test-secret-hash",
-        role="owner",
+        role=role,
     )
     db_session.add(user)
     db_session.commit()
@@ -99,6 +104,41 @@ def test_non_admin_requests_rejected(client: TestClient, db_session: Session):
 
     res2 = client.get("/api/admin/codex/projects", headers=headers)
     assert res2.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("get", "/api/admin/codex/projects", None),
+        ("get", "/api/admin/codex/diagnostics/deep", None),
+        ("get", "/api/admin/codex/health", None),
+        (
+            "post",
+            "/api/admin/codex/events/ticket",
+            {"project_id": "default", "thread_id": "ordinary-admin"},
+        ),
+        (
+            "post",
+            "/api/admin/codex/events/publish",
+            {"project_id": "default", "thread_id": "ordinary-admin", "type": "test"},
+        ),
+    ],
+)
+def test_codex_routes_reject_non_platform_owner(
+    client: TestClient,
+    db_session: Session,
+    method: str,
+    path: str,
+    payload: dict | None,
+):
+    """Ordinary tenant administrators cannot operate the global cockpit."""
+    _, _, headers = _create_admin_user(
+        db_session,
+        suffix=f"ordinary-{method}-{path.rsplit('/', 1)[-1]}",
+        role="admin",
+    )
+    response = client.request(method.upper(), path, json=payload, headers=headers)
+    assert response.status_code == 403
 
 
 def test_get_codex_settings_boundaries(client: TestClient, db_session: Session):
@@ -206,14 +246,9 @@ def test_get_codex_threads(client: TestClient, db_session: Session):
 
 
 def test_get_codex_health_unauthenticated(client: TestClient):
-    """GET /api/admin/codex/health returns 200 OK without authentication."""
+    """Mounted diagnostic health is not exposed without platform-owner auth."""
     res = client.get("/api/admin/codex/health")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] == "healthy"
-    assert "timestamp" in data
-    assert data.get("version") == "1.0.0"
-    assert "codex_db" in data
+    assert res.status_code in (400, 401, 403)
 
 
 def test_get_codex_health_authenticated(client: TestClient, db_session: Session):
@@ -230,7 +265,7 @@ def test_get_codex_diagnostics_deep(client: TestClient, db_session: Session):
     """GET /api/admin/codex/diagnostics/deep requires auth and returns diagnostics when authenticated."""
     # Unauthenticated rejected
     res_unauth = client.get("/api/admin/codex/diagnostics/deep")
-    assert res_unauth.status_code in (401, 403)
+    assert res_unauth.status_code in (400, 401, 403)
 
     # Authenticated with admin user
     _, _, headers = _create_admin_user(db_session, suffix="diagdeep")
@@ -336,9 +371,56 @@ def test_get_codex_events_stream_and_ticket(client: TestClient, db_session: Sess
         assert stream_res.status_code == 200
         assert stream_res.headers.get("content-type", "").startswith("text/event-stream")
 
-    # 3. Stream without authentication is rejected
+    # 3. The same ticket is atomically consumed and cannot be replayed.
+    replay = client.get(
+        f"/api/admin/codex/events/stream?project_id=default&thread_id=th_stream_test&sse_ticket={ticket}&max_events=1"
+    )
+    assert replay.status_code == 401
+
+    # 4. Stream without authentication is rejected
     unauth_stream = client.get("/api/admin/codex/events/stream")
     assert unauth_stream.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "credential",
+    [
+        {"headers": {"Authorization": "Bearer local_secret"}},
+        {"headers": {"X-Token": "local_secret"}},
+        {"params": {"token": "local_secret"}},
+    ],
+)
+def test_mounted_codex_rejects_default_control_secret(
+    client: TestClient,
+    credential: dict,
+):
+    """The repository default standalone secret has no mounted authority."""
+    response = client.post(
+        "/api/admin/codex/events/ticket",
+        json={"project_id": "default", "thread_id": "default-secret"},
+        **credential,
+    )
+    assert response.status_code == 401
+
+
+def test_mounted_event_stream_rejects_bearer_and_query_tokens(
+    client: TestClient,
+    db_session: Session,
+):
+    """Only a one-use ticket can open the mounted Control Centre stream."""
+    tenant, _, headers = _create_admin_user(db_session, suffix="stream-no-bearer")
+    token = headers["X-Token"]
+
+    header_response = client.get(
+        "/api/admin/codex/events/stream?project_id=default&thread_id=no-bearer",
+        headers={"X-Tenant": tenant.subdomain, "X-Token": token},
+    )
+    query_response = client.get(
+        f"/api/admin/codex/events/stream?project_id=default&thread_id=no-query&token={token}"
+    )
+
+    assert header_response.status_code == 401
+    assert query_response.status_code == 401
 
 
 def test_codex_event_ticket_accepts_tenant_scoped_local_auth_bypass(

@@ -66,13 +66,13 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
 - **FastAPI Bookings Administrative Integration**:
-  All primary Codex routers (`projects`, `threads`, `turns`, `events`, `settings`, `models`) are mounted directly into the main FastAPI Bookings application (`app/main.py`) under `/api/admin/codex/*` with strict administrative authentication. Standard routers use `Depends(get_current_admin)`; the event router uses its shared verifier so the standalone service and mounted SSE ticket flow retain one contract.
+  All primary Codex routers are mounted directly into FastAPI Bookings under `/api/admin/codex/*`. The integrated cockpit is a global development control plane and therefore requires `require_platform_owner`; ordinary tenant administrators and managers have no authority over its projects, threads, settings, worktrees, diagnostics, governance, plugins, or skills.
   - `services/`:
     - `worker.py`: Subprocess management, stdio JSON-RPC protocol dispatch, event routing.
     - `worker_manager.py`: Thread-to-worker process pool, graceful restart and teardown.
     - `protocol.py`: JSON-RPC message normalization (`agent_message`, `reasoning`, `turn_completed`, `turn_failed`).
     - `event_service.py`: In-memory thread-scoped SSE event broker with historical replay.
-    - `sse_tickets.py`: Short-lived single-use authorization ticket store.
+    - `sse_tickets.py`: Short-lived authorization tickets atomically removed on first valid consumption.
     - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
     - `skills_context.py`: Privacy-bounded skill query derivation, top-match retrieval, content budgets, and turn context assembly.
     - `skills_rag_mcp_bridge.py`: Dependency-free stdio MCP bridge exposing native read-only `find` and `skill` tools backed by the always-on port 8008 daemon.
@@ -124,7 +124,7 @@ Set these variables in `.env` or system environment:
 | `DATABASE_URL` | `sqlite:///./codex.db` | SQLAlchemy database connection string. |
 | `HOST` | `127.0.0.1` | Host address to bind the API server. |
 | `PORT` | `4500` | Port for the API server. |
-| `TOKEN_SECRET` | `local_secret` | Bearer token secret for authentication. |
+| `TOKEN_SECRET` | `local_secret` | Standalone-only compatibility secret. It is never accepted by the FastAPI Bookings mount; standalone deployments must override the default before exposure. |
 | `SIGNOZ_URL` | `http://localhost:3301` | SigNoz telemetry collector URL (can also be dynamically managed in UI). |
 | `OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry OTLP endpoint (can also be dynamically managed in UI). |
 | `ALLOWED_BOUNDARIES` | `["<codex_dir>"]` | Comma-separated or JSON list of initial allowed workspace base boundaries. |
@@ -228,7 +228,8 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
   - `GET /api/admin/codex/events/{project_id}/{thread_id}` — Real-time SSE stream.
-- **Security Boundary**: Standard mounted endpoints use `dependencies=[Depends(get_current_admin)]`. The event ticket endpoint uses the shared control-centre verifier, which accepts either its standalone service secret, a verified tenant-scoped admin JWT, or the native `local-development-bypass` credential only while FastAPI Bookings has `LOCAL_AUTH_BYPASS=true` and the requested tenant has a real admin account. Stream connections consume short-lived single-use tickets. Unauthenticated or non-admin requests receive HTTP 401/403.
+- **Security Boundary**: Mounted endpoints require the native FastAPI Bookings platform-owner identity. The standalone `TOKEN_SECRET` (including `local_secret`) and query-string bearer tokens have no mounted authority. Event ticket minting and publication require a platform owner; stream connections accept only a short-lived, scoped SSE ticket that is atomically removed on first valid consumption. Every reconnect mints a fresh ticket. Unauthenticated callers and ordinary tenant administrators receive HTTP 401/403.
+- **Acknowledged Support Dispatch**: Normal interactive turns remain asynchronously dispatched, while the support-ticket bridge invokes the same turn-start path in acknowledgement mode and reports `queued_for_codex` only after the worker answers `turn/start`.
 - **Lifespan Integration**:
   - `app_lifespan` in `app/main.py` explicitly initialises `WorkerProcessManager` (via `WorkerManager`), sets SQLite `PRAGMA journal_mode=WAL`, seeds default workspace boundaries, and performs a startup sweep on orphaned active turns.
   - On application shutdown, active Codex worker processes and SSE subscribers are gracefully terminated.

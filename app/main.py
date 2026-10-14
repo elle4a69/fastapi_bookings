@@ -154,7 +154,7 @@ from .api.routers import (
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
 from .api.routers.voice import router as voice_router
 from .services.business_assistant.onboarding.router import router as onboarding_router
-from .api.deps import get_current_admin
+from .api.deps import require_platform_owner
 
 # Clean import integration for Codex Control Centre backend
 import sys
@@ -622,19 +622,19 @@ app.include_router(admin_support_tickets.router)
 app.include_router(
     codex_projects.router,
     prefix="/api/admin/codex/projects",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Projects"],
 )
 app.include_router(
     codex_threads.router,
     prefix="/api/admin/codex/threads",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Threads"],
 )
 app.include_router(
     codex_turns.router,
     prefix="/api/admin/codex/turns",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Turns"],
 )
 app.include_router(
@@ -645,42 +645,43 @@ app.include_router(
 app.include_router(
     codex_settings.router,
     prefix="/api/admin/codex/settings",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Settings"],
 )
 app.include_router(
     codex_models.router,
     prefix="/api/admin/codex/models",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Models"],
 )
 app.include_router(
     codex_diagnostics.router,
     prefix="/api/admin/codex",
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Diagnostics"],
 )
 app.include_router(
     codex_worktrees.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Worktrees"],
 )
 app.include_router(
     codex_governance.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Governance"],
 )
 app.include_router(
     codex_plugins.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Plugins"],
 )
 app.include_router(
     codex_skills.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Skills"],
 )
 

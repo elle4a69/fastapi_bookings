@@ -1,181 +1,178 @@
-"""RAG Skill Library Semantic Integration for Resident Autonomous Agent.
+"""Bounded Skills RAG integration for the resident development agent.
 
-Discovers, indexes, and searches the engineering skill library at C:\\Users\\Frank\\skills
-without loading full files into memory, enabling surgical token usage and contextual
-skill citations in remediation plans and AI advisory responses.
+The resident agent never scans or reads host files. Discovery and content
+retrieval are delegated to the read-only Skills RAG service on loopback port
+8008, and reads accept only indexed skill identifiers.
 """
 
+from __future__ import annotations
+
+import logging
 import os
 import re
-import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SKILLS_PATH = r"C:\Users\Frank\skills"
+_VALID_SKILL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_TECHNICAL_TERMS = {
+    "accessibility", "agent", "agents", "ai", "alembic", "api", "async",
+    "authentication", "backend", "booking", "cache",
+    "calendar", "chatwoot", "cli", "cloud", "codex", "concurrency",
+    "context", "css", "database", "debug", "docker",
+    "documentation", "embedding", "fastapi", "frontend", "git", "github",
+    "graph", "graphql", "html", "http", "index", "javascript", "jwt",
+    "latency", "livekit", "llm", "logging", "memory", "mcp", "migration",
+    "network", "oauth", "observability", "openai", "performance",
+    "permissions", "plugin", "postgres", "privacy", "prompt", "pytest",
+    "python", "rag", "react", "refactor", "retrieval", "schema", "security",
+    "semantic", "skills", "sms", "sql", "sqlite", "sse", "telemetry",
+    "tenant", "testing", "typescript", "ui", "vector", "vite", "websocket",
+    "worker",
+}
+
+
+def derive_safe_search_query(raw_text: str) -> str:
+    """Derive an allowlisted technical query without forwarding caller text."""
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{1,31}", raw_text.lower())
+    selected: list[str] = []
+    for token in tokens:
+        normalized = token.replace("_", "-")
+        if (
+            normalized in _TECHNICAL_TERMS
+            and normalized != "codex"
+            and normalized not in selected
+        ):
+            selected.append(normalized)
+        if len(selected) >= 12:
+            break
+    if not selected:
+        selected = ["software", "engineering", "implementation"]
+    return "codex " + " ".join(selected)
+
+
+class SkillsServiceError(RuntimeError):
+    """The bounded Skills RAG service could not fulfil a request."""
+
+
+class SkillNotFoundError(FileNotFoundError, SkillsServiceError):
+    """The requested identifier is not present in the live Skills RAG index."""
+
+
+class InvalidSkillIdError(ValueError):
+    """The supplied value is not an indexed skill identifier."""
 
 
 class SkillLibrary:
-    """Lightweight on-demand discovery and retrieval for engineering skills."""
+    """Small synchronous client for the read-only Skills RAG HTTP contract."""
 
-    def __init__(self, skills_dir: Optional[str] = None) -> None:
-        raw_path = skills_dir or os.getenv("SKILLS_DIR", DEFAULT_SKILLS_PATH)
-        self.skills_dir = Path(raw_path)
-        self._index_cache: Optional[List[Dict[str, Any]]] = None
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout_seconds: float | None = None,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self.base_url = (
+            base_url
+            or os.getenv("SKILLS_RAG_URL")
+            or "http://127.0.0.1:8008"
+        ).rstrip("/")
+        self.timeout_seconds = timeout_seconds or float(
+            os.getenv("SKILLS_RAG_TIMEOUT_SECONDS", "5")
+        )
+        self._transport = transport
 
-    def _ensure_index(self) -> List[Dict[str, Any]]:
-        """Index skills by scanning directories and frontmatter without reading full files."""
-        if self._index_cache is not None:
-            return self._index_cache
-
-        indexed: List[Dict[str, Any]] = []
-        if not self.skills_dir.exists() or not self.skills_dir.is_dir():
-            logger.warning("Skills directory does not exist: %s", self.skills_dir)
-            self._index_cache = []
-            return self._index_cache
-
+    def _get(self, path: str, *, params: dict[str, Any] | None = None) -> Dict[str, Any]:
         try:
-            for entry in os.scandir(self.skills_dir):
-                if entry.is_dir(follow_symlinks=False):
-                    skill_id = entry.name
-                    skill_file = Path(entry.path) / "SKILL.md"
-                    if not skill_file.exists():
-                        continue
+            with httpx.Client(
+                timeout=self.timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                response = client.get(f"{self.base_url}{path}", params=params)
+                if response.status_code == 404:
+                    raise SkillNotFoundError("Skill not found in the live index")
+                response.raise_for_status()
+                payload = response.json()
+        except SkillNotFoundError:
+            raise
+        except (httpx.HTTPError, OSError, RuntimeError, ValueError) as exc:
+            raise SkillsServiceError("Local Skills RAG service is unavailable") from exc
+        if not isinstance(payload, dict):
+            raise SkillsServiceError("Skills RAG returned an invalid response")
+        return payload
 
-                    name = skill_id
-                    description = ""
-                    tags: List[str] = []
+    @staticmethod
+    def _validate_skill_id(skill_id: str) -> str:
+        candidate = skill_id.strip()
+        if not _VALID_SKILL_ID.fullmatch(candidate):
+            raise InvalidSkillIdError("A valid indexed skill identifier is required")
+        return candidate
 
-                    # Surgically read only the frontmatter / header (first 2048 bytes)
-                    try:
-                        with open(skill_file, "r", encoding="utf-8", errors="ignore") as f:
-                            header_content = f.read(2048)
+    @staticmethod
+    def _summary(value: Any) -> Dict[str, Any]:
+        if not isinstance(value, dict):
+            raise SkillsServiceError("Skills RAG returned an invalid skill record")
+        skill_id = str(value.get("id") or value.get("name") or "")
+        if not skill_id:
+            raise SkillsServiceError("Skills RAG returned a skill without an identifier")
+        summary: Dict[str, Any] = {
+            "skill_id": skill_id,
+            "name": str(value.get("name") or skill_id),
+            "description": str(value.get("description") or ""),
+            "tags": [
+                str(tag) for tag in value.get("tags", []) if isinstance(tag, str)
+            ],
+        }
+        if isinstance(value.get("score"), (int, float)):
+            summary["score"] = float(value["score"])
+        return summary
 
-                        # Parse YAML frontmatter between --- and ---
-                        if header_content.startswith("---"):
-                            end_marker = header_content.find("---", 3)
-                            frontmatter = header_content[3:end_marker] if end_marker != -1 else header_content[:500]
-                            for line in frontmatter.splitlines():
-                                line_clean = line.strip()
-                                if line_clean.startswith("name:"):
-                                    name = line_clean.split("name:", 1)[1].strip().strip("'\"")
-                                elif line_clean.startswith("description:"):
-                                    description = line_clean.split("description:", 1)[1].strip().strip("'\"")
-                                elif line_clean.startswith("tags:"):
-                                    raw_tags = line_clean.split("tags:", 1)[1].strip().strip("[]'\"")
-                                    tags = [t.strip().strip("'\"") for t in raw_tags.split(",") if t.strip()]
-
-                        if not description:
-                            # Fallback: extract first paragraph or instructions line
-                            desc_match = re.search(r"## Purpose\s*\n+([^\n#]+)", header_content)
-                            if desc_match:
-                                description = desc_match.group(1).strip()
-                            else:
-                                description = f"Specialized skill instructions for {skill_id}."
-
-                    except Exception as parse_err:
-                        logger.debug("Could not parse header for skill %s: %s", skill_id, parse_err)
-                        description = f"Specialized engineering skill: {skill_id}."
-
-                    if not tags:
-                        # Infer tags from skill name hyphenation
-                        tags = [part for part in skill_id.split("-") if len(part) > 2]
-
-                    indexed.append({
-                        "skill_id": skill_id,
-                        "name": name or skill_id,
-                        "description": description,
-                        "tags": tags,
-                        "path": str(skill_file),
-                    })
-
-        except Exception as exc:
-            logger.error("Failed indexing skills in %s: %s", self.skills_dir, exc)
-
-        self._index_cache = indexed
-        return self._index_cache
-
-    def find_relevant_skills(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Search for top matching engineering skills based on query terms.
-        
-        Scans skill titles and SKILL.md frontmatter/descriptions without loading full
-        files into memory.
-        """
-        index = self._ensure_index()
-        if not index:
+    def find_relevant_skills(
+        self,
+        query: str,
+        top_k: int = 3,
+        *,
+        fail_open: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Search the bounded index; background advisory callers may degrade empty."""
+        try:
+            safe_query = derive_safe_search_query(query)
+            payload = self._get(
+                "/api/skills/search",
+                params={"query": safe_query},
+            )
+            results = payload.get("results")
+            if not isinstance(results, list):
+                raise SkillsServiceError("Skills RAG returned invalid search results")
+            limit = max(1, min(top_k, 15))
+            return [self._summary(item) for item in results[:limit]]
+        except SkillsServiceError:
+            if not fail_open:
+                raise
+            logger.warning(
+                "Skills RAG discovery unavailable; continuing without resident skill context"
+            )
             return []
 
-        # Tokenize query
-        tokens = [t.lower() for t in re.findall(r"\w+", query) if len(t) > 1]
-        if not tokens:
-            return index[:top_k]
-
-        scored_skills = []
-        clean_query = query.strip().lower()
-
-        for item in index:
-            score = 0.0
-            s_id = item["skill_id"].lower()
-            s_name = item["name"].lower()
-            s_desc = item["description"].lower()
-            s_tags = [t.lower() for t in item["tags"]]
-
-            # Exact query matches
-            if clean_query in s_id or clean_query in s_name:
-                score += 15.0
-
-            # Token level scoring
-            for token in tokens:
-                if token in s_id:
-                    score += 6.0
-                elif token in s_name:
-                    score += 5.0
-
-                if any(token == tag for tag in s_tags):
-                    score += 4.0
-                elif any(token in tag for tag in s_tags):
-                    score += 2.0
-
-                if token in s_desc:
-                    score += 1.5
-
-            if score > 0:
-                scored_skills.append({
-                    **item,
-                    "score": round(score, 2),
-                })
-
-        # Sort descending by score
-        scored_skills.sort(key=lambda x: x["score"], reverse=True)
-        return scored_skills[:top_k]
-
     def read_skill(self, skill_id: str) -> str:
-        """Load the specific SKILL.md on demand for surgical token usage (no context flooding!)."""
-        # Protect against path traversal
-        clean_id = os.path.basename(skill_id.strip())
-        skill_file = self.skills_dir / clean_id / "SKILL.md"
-
-        if not skill_file.exists():
-            # Check if skill_id directly matches file path
-            direct_path = Path(skill_id)
-            if direct_path.exists() and direct_path.is_file():
-                skill_file = direct_path
-            else:
-                raise FileNotFoundError(f"Skill '{skill_id}' not found in library at {self.skills_dir}.")
-
-        with open(skill_file, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
+        """Read only a skill selected by opaque identifier from the live index."""
+        safe_id = self._validate_skill_id(skill_id)
+        payload = self._get("/api/skills/read", params={"name": safe_id})
+        content = payload.get("content")
+        if not isinstance(content, str):
+            raise SkillsServiceError("Skills RAG returned invalid skill content")
+        return content
 
     def get_library_stats(self) -> Dict[str, Any]:
-        """Return summary statistics of available skills."""
-        index = self._ensure_index()
+        payload = self._get("/api/skills/stats")
         return {
-            "total_skills": len(index),
-            "skills_dir": str(self.skills_dir),
-            "is_available": self.skills_dir.exists(),
+            "total_skills": int(payload.get("total_skills") or 0),
+            "indexed_count": int(payload.get("indexed_count") or 0),
+            "is_available": True,
+            "source": self.base_url,
         }
 
 
-# Global singleton instance
 skill_library = SkillLibrary()

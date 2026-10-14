@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ...api.deps import get_current_admin
+from ...api.deps import require_platform_owner
 from ...db.database import get_db
 from ...models.user import User
 from ...services.resident_agent import (
@@ -24,6 +24,11 @@ from ...services.resident_agent import (
     alert_dispatcher,
     stress_fuzzer,
     tech_radar,
+)
+from ...services.resident_agent.skill_library import (
+    InvalidSkillIdError,
+    SkillNotFoundError,
+    SkillsServiceError,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +70,7 @@ class RaceConditionFuzzRequest(BaseModel):
 
 @router.get("/status")
 def get_resident_agent_status(
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return overall health score, latest code audit summary, telemetry baseline, and active issues."""
@@ -74,7 +79,7 @@ def get_resident_agent_status(
 
 @router.post("/audit")
 async def trigger_deep_audit(
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Trigger an immediate deep audit across Code, Telemetry, and SMS Outbox queues."""
@@ -84,9 +89,9 @@ async def trigger_deep_audit(
 @router.get("/events")
 async def stream_agent_events(
     request: Request,
-    token: Optional[str] = Query(None, description="Optional auth token for SSE EventSource clients"),
+    current_admin: User = Depends(require_platform_owner),
 ) -> StreamingResponse:
-    """Stream live agent thought tokens, audit progress, commands, and telemetry events via SSE."""
+    """Stream platform-owner events using header authentication only."""
     # Yield standard event stream
     return StreamingResponse(
         event_broker.subscribe(replay_count=25),
@@ -102,7 +107,7 @@ async def stream_agent_events(
 @router.post("/plan-fix")
 def generate_remediation_plan(
     payload: PlanFixRequest,
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Generate an automated remediation plan with RCA, diffs, and verification steps."""
@@ -120,7 +125,7 @@ def generate_remediation_plan(
 @router.post("/execute-fix")
 async def execute_remediation_fix(
     payload: ExecuteFixRequest,
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Reject code execution until a real isolated worker is available."""
@@ -157,7 +162,7 @@ async def execute_remediation_fix(
 @router.post("/advisory")
 async def consult_ai_advisory(
     payload: AdvisoryRequest,
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Conversational AI advisory endpoint with internet research and best-practice proposals."""
@@ -171,7 +176,7 @@ async def consult_ai_advisory(
 @router.post("/remote-action")
 async def execute_remote_action(
     payload: RemoteActionRequest,
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Reject remote remediation execution until a real isolated worker is available."""
@@ -219,7 +224,7 @@ async def execute_remote_action(
 @router.post("/fuzz/race-condition")
 async def run_race_condition_fuzzer(
     payload: RaceConditionFuzzRequest = RaceConditionFuzzRequest(),
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Simulate N concurrent booking attempts against the same slot to stress-test transactional lock integrity."""
@@ -228,7 +233,7 @@ async def run_race_condition_fuzzer(
 
 @router.get("/tech-radar")
 def get_competitor_tech_radar(
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
 ) -> Dict[str, Any]:
     """Return competitive market radar comparing FastAPI Bookings against industry leaders."""
     return tech_radar.get_radar_analysis()
@@ -238,31 +243,46 @@ def get_competitor_tech_radar(
 def search_skills_library(
     query: str = Query("fastapi", description="Query to search skills library"),
     top_k: int = Query(5, ge=1, le=20, description="Max skills to return"),
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
 ) -> List[Dict[str, Any]]:
-    """Search the local library of 1,600+ skills at C:\\Users\\Frank\\skills without loading full files into memory."""
-    return skill_library.find_relevant_skills(query=query, top_k=top_k)
+    """Search the bounded read-only Skills RAG service."""
+    try:
+        return skill_library.find_relevant_skills(
+            query=query,
+            top_k=top_k,
+            fail_open=False,
+        )
+    except SkillsServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/skills/{skill_id}")
 def read_skill_content(
     skill_id: str,
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
 ) -> Dict[str, Any]:
     """Load specific SKILL.md on demand for surgical token usage."""
     try:
         content = skill_library.read_skill(skill_id)
         return {"skill_id": skill_id, "content": content}
-    except FileNotFoundError:
+    except (SkillNotFoundError, InvalidSkillIdError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Skill '{skill_id}' not found in library.",
         )
+    except SkillsServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/sentinel/sweep")
 async def trigger_sentinel_sweep(
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Trigger an immediate autonomous health sweep across SMS queues, Chatwoot, and database."""
@@ -271,7 +291,7 @@ async def trigger_sentinel_sweep(
 
 @router.get("/sentinel/status")
 def get_sentinel_status(
-    current_admin: User = Depends(get_current_admin),
+    current_admin: User = Depends(require_platform_owner),
 ) -> Dict[str, Any]:
     """Return current status of the autonomous background sentinel scheduler."""
     return sentinel_scheduler.get_status()

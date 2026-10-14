@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from datetime import datetime
 from backend.routers.events import router
 from backend.services.event_service import broker, EventEnvelope
+from backend.services.sse_tickets import SseTicketStore
 from fastapi import FastAPI
 
 app = FastAPI()
@@ -100,3 +101,17 @@ def test_publish_event_endpoint():
     assert data["type"] == "api_msg"
     assert data["payload"] == {"data": 123}
     assert data["sequence"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sse_ticket_is_consumed_atomically_once():
+    store = SseTicketStore()
+    ticket, _ = await store.issue("project-one", "thread-one")
+
+    outcomes = await asyncio.gather(
+        store.consume(ticket, "project-one", "thread-one"),
+        store.consume(ticket, "project-one", "thread-one"),
+    )
+
+    assert sorted(outcomes) == [False, True]
+    assert await store.consume(ticket, "project-one", "thread-one") is False

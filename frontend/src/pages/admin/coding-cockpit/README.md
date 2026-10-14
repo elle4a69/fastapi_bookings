@@ -69,6 +69,7 @@ frontend/src/pages/admin/coding-cockpit/
 ├── SkillsBrowser.tsx                                 # Port 8008 hybrid Skills RAG search and on-demand reader
 ├── PluginManager.tsx                                 # Live Codex plugin catalog, install, and app authorization UI
 ├── EventStream.tsx                                   # Filtered SSE event stream console
+├── residentEventStream.ts                            # Header-authenticated resident stream retry/backoff transport
 ├── coding-cockpit.test.ts                            # Unit test suite verifying routing, headers, splitters, HUD
 ├── README.md                                         # This living architecture documentation
 └── workbench/
@@ -111,7 +112,8 @@ frontend/src/pages/admin/coding-cockpit/
   - Standardized `h-11 border-b border-slate-800` header styling across all three columns.
 - **Authentication**:
   - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (natively normalized via the Fetch `Headers` API to guarantee case-insensitive uniqueness and prevent duplicate `X-Tenant`/`X-Token` header emissions).
-  - When `LOCAL_AUTH_BYPASS=true`, the mounted Codex SSE ticket route accepts the native `local-development-bypass` credential only after resolving the requested tenant and a real tenant-scoped admin account. The credential remains invalid when the setting is disabled and is never accepted by the standalone control-centre merely because the string matches.
+  - The integrated cockpit is platform-owner-only. Mounted Codex ticket minting resolves the native FastAPI Bookings identity, never the standalone `TOKEN_SECRET`; the stream consumes only the returned one-use ticket.
+  - `EventStream.tsx` reads the resident SSE response with authenticated request headers and a streaming reader. It never places the admin token in a URL or query string. The transport permits only one active request, retries transient EOF/network failures with bounded exponential backoff, aborts requests/timers on unmount, and presents authorization or exhausted-retry failures as explicit terminal UI state.
 - **Runtime Services**:
   - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
 
@@ -158,7 +160,7 @@ frontend/src/pages/admin/coding-cockpit/
 
 ## 5. Data Safety & Isolation
 
-- **Tenant Scoping**: All operations inherit tenant authorization from the active administrative session.
+- **Authority Boundary**: Cockpit and resident development operations require the active platform-owner session. Ordinary tenant administrators cannot access the global development control plane.
 - **Filesystem Boundaries**: Tool executions are strictly bounded by authorized workspace boundaries configured in `SettingsInspectorTab.tsx`.
 - **Isolated Worktrees**: Autonomous turns execute in dedicated Git branches or sandboxed worktrees, preventing uncontrolled mutations.
 - **Human-in-the-Loop Approval**: Critical system mutations, command executions, and diff merges require manual operator sign-off via explicit approval cards.

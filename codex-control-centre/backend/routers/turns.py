@@ -171,6 +171,7 @@ async def _safe_dispatch_turn_start(
     wt_str: str,
     project_id: str = "default",
     db_bind: Any = None,
+    raise_on_error: bool = False,
 ):
     try:
         codex_thread_id = None
@@ -250,7 +251,8 @@ async def _safe_dispatch_turn_start(
         }
         if model is not None:
             turn_params["model"] = model
-        await worker.send_request("turn/start", turn_params)
+        acknowledgement = await worker.send_request("turn/start", turn_params)
+        return acknowledgement
 
     except Exception as e:
         logger.error(
@@ -313,11 +315,19 @@ async def _safe_dispatch_turn_start(
             broker.publish_event(completed_env)
         except Exception as broker_err:
             logger.error(f"Failed to publish error event to broker: {broker_err}")
+        if raise_on_error:
+            raise RuntimeError("Codex worker did not acknowledge turn start") from e
+        return None
 
 
 @router.post("/start")
 @router.post("/turns/start")
-async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def start_turn(
+    req: TurnStart,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    await_worker_ack: bool = False,
+):
     thread = db.query(Thread).filter(Thread.id == req.thread_id).first()
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -402,21 +412,35 @@ async def start_turn(req: TurnStart, background_tasks: BackgroundTasks, db: Sess
         raise HTTPException(status_code=400, detail=err_msg)
 
     db_bind = db.get_bind()
-    asyncio.create_task(
-        _safe_dispatch_turn_start(
-            worker=worker,
-            thread_id=req.thread_id,
-            turn_id=turn.id,
-            prompt=req.prompt,
-            model=req.model,
-            reasoning_effort=req.reasoning_effort,
-            wt_str=wt_str,
-            project_id=project_id,
-            db_bind=db_bind,
-        )
+    dispatch = _safe_dispatch_turn_start(
+        worker=worker,
+        thread_id=req.thread_id,
+        turn_id=turn.id,
+        prompt=req.prompt,
+        model=req.model,
+        reasoning_effort=req.reasoning_effort,
+        wt_str=wt_str,
+        project_id=project_id,
+        db_bind=db_bind,
+        raise_on_error=await_worker_ack,
     )
+    if await_worker_ack:
+        try:
+            await dispatch
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Codex worker did not acknowledge turn start",
+            ) from exc
+    else:
+        asyncio.create_task(dispatch)
     
-    return {"turn_id": turn.id, "status": "active", "workspace_root": wt_str}
+    return {
+        "turn_id": turn.id,
+        "status": "active",
+        "workspace_root": wt_str,
+        "worker_acknowledged": await_worker_ack,
+    }
 
 @router.post("/steer")
 @router.post("/turns/steer")
