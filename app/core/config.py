@@ -160,6 +160,10 @@ class Settings(BaseSettings):
         le=500_000,
         description="Maximum accepted SDP offer or answer size for the internal realtime voice session.",
     )
+    UI_AGENT_LIVE_MODEL: str = Field(
+        "gpt-live-1",
+        description="Configured model name for the UI Agent GPT-Live WebRTC voice session.",
+    )
 
     BUSINESS_ASSISTANT_ROLLOUT_STAGE: str = Field(
         "enabled",
@@ -200,18 +204,11 @@ class Settings(BaseSettings):
     OUTBOX_RETRY_MAX_SECONDS: float = Field(300.0, ge=1.0, description="Maximum outbox retry delay")
     OUTBOX_RETRY_JITTER_RATIO: float = Field(0.2, ge=0.0, le=1.0, description="Bounded outbox retry jitter")
 
-    # LiveKit Voice Assistant Settings
-    LIVEKIT_URL: str = Field("ws://127.0.0.1:7880", description="LiveKit server WebSocket URL")
-    LIVEKIT_API_KEY: str = Field("devkey", description="LiveKit server API key")
-    LIVEKIT_API_SECRET: str = Field("secret", description="LiveKit server API secret")
-    LIVEKIT_LOCAL_URL: str = Field("ws://127.0.0.1:7880", description="LiveKit local server WebSocket URL")
-    LIVEKIT_LOCAL_API_KEY: str = Field("devkey", description="LiveKit local API key")
-    LIVEKIT_LOCAL_API_SECRET: str = Field("secret", description="LiveKit local API secret")
-    LIVEKIT_CLOUD_URL: Optional[str] = Field(None, description="LiveKit Cloud project WebSocket URL")
-    LIVEKIT_CLOUD_API_KEY: Optional[str] = Field(None, description="LiveKit Cloud API key")
-    LIVEKIT_CLOUD_API_SECRET: Optional[str] = Field(None, description="LiveKit Cloud API secret")
-    LIVEKIT_DEFAULT_AGENT_NAME: str = Field("bookings-business-assistant", description="LiveKit named dispatch agent name")
-    VOICE_ASSISTANT_TRANSPORT: str = Field("xai_grok_voice", description="Default voice assistant transport: 'xai_grok_voice', 'direct_gpt_live', 'local_livekit', or 'cloud_livekit'")
+    # Realtime Voice Assistant Settings
+    VOICE_ASSISTANT_TRANSPORT: str = Field(
+        "xai_grok_voice",
+        description="Default voice assistant transport: 'xai_grok_voice' or 'direct_gpt_live'",
+    )
 
     # xAI Grok Voice Realtime Settings
     XAI_API_KEY: str = Field("", description="xAI API key for Grok voice and realtime")
@@ -233,9 +230,6 @@ class Settings(BaseSettings):
     )
     OTEL_ALLOW_PII: bool = Field(
         False, description="Allow PII in telemetry exports. Defaults strictly to False."
-    )
-    LIVEKIT_RECORD_BY_DEFAULT: bool = Field(
-        False, description="Enable recording in LiveKit rooms. Defaults strictly to False."
     )
 
     # Codex Control Centre Bridge Settings

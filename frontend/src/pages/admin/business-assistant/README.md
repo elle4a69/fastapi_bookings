@@ -14,11 +14,10 @@ Key capabilities owned by this module:
 - **Navigation Persistence**: Conversation state and active sessions survive route transitions between admin modules without resetting or losing drafts.
 - **Accessibility & Focus Discipline**: Standard ARIA landmarks (`role="dialog"`, `aria-label="Business Assistant"`, `aria-modal="true"`), keyboard dismissal via `Escape`, and automated focus save and restoration.
 - **Non-Obstructive Layer Discipline**: Operates on a controlled `z-40` layer, guaranteeing that critical confirmation dialogs (`z-50`), destructive warning modals, and security notifications remain unobstructed.
-- **Native LiveKit Agent Popup (`AgentPopup_01`)**: Embedded LiveKit `AgentPopup_01` block (`frontend/src/components/agents-ui/agent-popup.tsx`) with floating circular trigger bubble, expanding session popup, auto-scrolling transcript timeline, typing input ("Type something..."), animated 3-bar audio visualizer with device dropdown, camera toggle, screen share toggle, and transcript toggle.
 - **Dual Realtime Voice Engines**:
   - **OpenAI GPT-Live (`direct_gpt_live`)**: Direct browser-to-server WebRTC audio stream with server-held SDP exchange.
   - **xAI Grok Voice (`xai_grok_voice`)**: Direct WebSocket audio transport powered by `grok-voice-think-fast-2.0` (`use-xai-grok-voice.ts`), processing 16-bit PCM 24kHz audio, client-side tool execution, and activity telemetry.
-  - Configurable via `VoiceEngineSelector` inside `AssistantSettingsDialog`.
+  - Configurable via `VoiceTransportSwitcher` and `AssistantSettingsDialog`.
 - **Canonical 16-Tool Voice Schema Alignment**: Complete frontend support for the 16 canonical voice tools (`VOICE_BUSINESS_ASSISTANT_TOOLS`), executing UI automation RPCs and backend tools seamlessly while strictly omitting non-voice duplicate aliases.
 - **Single-Tab Active Executor Lease Token Forwarding**: Ensures UI automation RPCs triggered by voice models (`xai-grok-voice`, `direct-gpt-live`) automatically inherit the active tab's lease token, preventing lease validation errors while preserving multi-tab isolation.
 - **Route Normalization & Aliases**: Client-side navigation (`normalizeRoute`) resolving aliases (e.g. `/admin/services` -> `/admin/catalog/services`) and enforcing strict security allowlists (`isRouteAllowlisted`).
@@ -41,7 +40,6 @@ frontend/src/pages/admin/business-assistant/
 ├── assistant-drawer.tsx                  # Application-wide responsive slide-out drawer
 ├── business-assistant-context.tsx        # React context managing persistent conversation, voice state, and drawer
 ├── context-boundary.ts                   # Strict route and module context extraction boundary
-├── use-livekit-voice.ts                  # LiveKit WebRTC agent hook for voice sessions & RPC dispatch
 ├── use-xai-grok-voice.ts                 # xAI Grok Voice WebSocket hook (PCM audio, tool parsing, lease forwarding)
 ├── minimized-voice-controller.tsx        # Compact floating voice call controls and audio indicator
 ├── realtime-protocol.ts                  # Realtime tool parsing, output formatting, and agent activity schemas
@@ -61,9 +59,9 @@ frontend/src/pages/admin/business-assistant/
 │   ├── OnboardingStatusDock.tsx          # Real-time onboarding status dock and progress tracking
 │   ├── useFieldHighlight.ts              # Hook for smooth scrolling and highlighting form fields
 │   ├── VoiceEngineSelector.tsx           # Dual realtime engine selector (xAI Grok & OpenAI GPT-Live)
-│   ├── VoiceTransportSwitcher.tsx        # Dynamic transport switcher between Direct WebRTC, Local, and Cloud LiveKit
+│   ├── VoiceTransportSwitcher.tsx        # 2-way transport switcher between Direct GPT-Live and xAI Grok Voice
 │   └── takeover-pointer.test.ts          # Unit tests for takeover and pointer overlay
-├── rpc/                                  # Typed LiveKit RPC Subsystem & Active Executor
+├── rpc/                                  # Typed RPC Subsystem & Active Executor
 │   ├── index.ts                          # RPC subsystem exports
 │   ├── types.ts                          # RPC action models, payloads, and execution receipt schemas
 │   ├── action-catalogue.ts               # Allowlisted routes, aliases, lease validation, and execution schemas
@@ -77,7 +75,6 @@ frontend/src/pages/admin/business-assistant/
 ├── ticket-status.tsx                     # User-safe ticket status display cards and event timeline
 ├── business-assistant-presence.test.ts   # Regression tests for drawer, context boundary, voice, and tickets
 ├── business-assistant-page.test.ts       # Full-page layout and history drawer structure tests
-├── livekit-voice-ui.test.ts              # Unit tests for LiveKit voice UI and controller
 ├── gpt-live-voice-integration.test.ts    # Integration tests for xAI Grok voice and active executor leasing
 └── README.md                             # Living documentation (AGENTS.md Rule 10)
 ```
@@ -89,7 +86,6 @@ frontend/src/pages/admin/business-assistant/
 ### Runtime Dependencies
 - **React 19 & TypeScript**: Strongly typed component hierarchies, custom hooks, and state context.
 - **Lucide React**: Icons for bot, microphone, phone hangup, tickets, history, and status alerts.
-- **LiveKit Client (`livekit-client`)**: Native browser WebRTC client handling audio tracks, RPC registration, and DataChannel messaging.
 - **Web Audio API**: Browser `AudioContext`, `ScriptProcessorNode`, and `MediaStream` for 16-bit PCM 24kHz audio capture and playback in `use-xai-grok-voice.ts`.
 - **API Client (`apiClient` / `authenticatedAdminFetch`)**: Central HTTP client injecting bearer authentication and `X-Tenant` headers.
 
@@ -97,9 +93,8 @@ frontend/src/pages/admin/business-assistant/
 - Microphone permission (`getUserMedia`) required for real-time voice modes.
 - Communicates with authenticated backend endpoints:
   - Text & tickets: `/api/admin/business-assistant/*`
-  - OpenAI Realtime voice: `/api/admin/business-assistant/conversations/{id}/realtime`
+  - Direct GPT-Live WebRTC voice: `/api/admin/business-assistant/voice/conversations/{id}/session`
   - xAI Grok token & relay: `GET /api/admin/business-assistant/realtime/xai-token` and WebSocket relay `/api/admin/business-assistant/voice/realtime/xai-ws`
-  - LiveKit voice: `/api/admin/business-assistant/voice/conversations/{id}/session`
   - Onboarding plan & takeover: `/api/business-assistant/onboarding/*`
 
 ---
@@ -122,12 +117,12 @@ frontend/src/pages/admin/business-assistant/
 2. **Turn Submission**: Sends `{ content, request_key }` to `POST /conversations/{id}/messages`.
 3. **Turn Persistence**: Displays verified user and assistant turns; preserves drafts upon network or upstream failures.
 
-### 4.4 LiveKit & Direct GPT-Live WebRTC Voice
+### 4.4 Direct GPT-Live WebRTC Voice
 1. **Microphone Access**: Requests browser audio stream via `getUserMedia({ audio: true })`.
-2. **Session Token Issuance**: Posts to `/api/admin/business-assistant/voice/conversations/{id}/session` to obtain a scoped room token and participant identity.
-3. **Room Connection & RPC**: Connects to the LiveKit room, binds remote audio tracks to an HTML `<audio>` element, and registers RPC receivers via `registerAssistantRpcMethods(room, context)`.
-4. **Captions**: Displays received transcript deltas on the DataChannel grouped by session intervals.
-5. **Teardown**: Cleans up audio tracks and RPC handlers upon call hangup or unmount.
+2. **Session Negotiation**: Posts to `/api/admin/business-assistant/voice/conversations/{id}/session` to negotiate WebRTC session and establish direct SDP exchange.
+3. **Audio & Data Channel**: Establishes direct WebRTC connection with OpenAI Realtime API without intermediary servers, streaming user and assistant audio bids.
+4. **Captions**: Displays received transcript deltas on the WebRTC data channel grouped by session intervals.
+5. **Teardown**: Cleans up audio tracks and WebRTC peer connection upon call hangup or unmount.
 
 ### 4.5 xAI Grok Voice Transport & WebSocket Relay
 1. **Token Retrieval**: Fetches connection parameters from `GET /api/admin/business-assistant/realtime/xai-token` (providing agent ID, connection URL, API key, and local relay URL).
@@ -219,7 +214,6 @@ npm test
 # 2. Run focused voice and active executor lease tests
 npm test -- frontend/src/pages/admin/business-assistant/gpt-live-voice-integration.test.ts
 npm test -- frontend/src/pages/admin/business-assistant/rpc/rpc-action-receiver.test.ts
-npm test -- frontend/src/pages/admin/business-assistant/livekit-voice-ui.test.ts
 
 # 3. Run TypeScript compilation check
 npx tsc -b

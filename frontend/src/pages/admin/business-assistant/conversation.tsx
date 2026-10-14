@@ -18,6 +18,10 @@ import {
   useBusinessAssistant,
   type ConversationMessage,
 } from './business-assistant-context'
+import {
+  DiagnosticModeToggle,
+  VoiceTransportSwitcher,
+} from './components'
 
 export function ConversationMessagesList({
   messages,
@@ -158,6 +162,12 @@ export function ConversationView({
         </div>
       )}
 
+      {/* Voice Transport Switcher & Diagnostic Mode Toggle */}
+      <div className="border-b bg-card/40 px-3 py-2 flex flex-col gap-2">
+        <VoiceTransportSwitcher />
+        <DiagnosticModeToggle compact />
+      </div>
+
       {voiceState !== 'idle' && (
         <div
           className="flex flex-col border-b border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary gap-1.5"
@@ -177,8 +187,13 @@ export function ConversationView({
               </span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="hidden sm:inline-block rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary">
-                {transport === 'livekit_gpt_live' ? 'LiveKit' : 'Direct'}
+              <span
+                className="hidden sm:inline-block rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] text-primary"
+                data-testid="voice-transport-badge"
+              >
+                {transport === 'xai_grok_voice'
+                  ? 'xAI Grok Voice'
+                  : 'Direct WebRTC'}
               </span>
               {voiceState === 'live' && (
                 <Button
@@ -308,7 +323,7 @@ export function ConversationView({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                disabled={!activeConversationId || sending}
+                disabled={sending}
                 onClick={() => void startVoice()}
                 title="Start voice session"
                 aria-label="Start voice session"

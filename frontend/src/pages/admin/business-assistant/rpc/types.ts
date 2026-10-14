@@ -1,6 +1,11 @@
-import type { Room } from 'livekit-client'
+export interface RpcRoom {
+  localParticipant?: { identity?: string } | null
+  remoteParticipants?: Map<string, any> | null
+  registerRpcMethod?: (method: string, handler: (data: any) => Promise<string>) => void
+  unregisterRpcMethod?: (method: string) => void
+  [key: string]: any
+}
 
-// ── 1. RPC ACTION TYPES & ENUMS ──────────────────────────────────────────
 
 export type WebsiteRpcActionType =
   | 'route_navigation'
@@ -285,7 +290,7 @@ export interface SenderValidationOptions {
   callerIdentity: string
   expectedAgentIdentity?: string | null
   expectedAgentName?: string | null
-  room?: Room | null
+  room?: RpcRoom | null
   allowedAgentIdentities?: string[]
 }
 
@@ -295,7 +300,7 @@ export interface SenderValidationResult {
 }
 
 export interface RpcReceiverContext {
-  room?: Room | null
+  room?: RpcRoom | null
   expectedAgentIdentity?: string | null
   expectedAgentName?: string | null
   allowedAgentIdentities?: string[]

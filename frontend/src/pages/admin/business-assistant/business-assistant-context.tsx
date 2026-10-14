@@ -21,7 +21,6 @@ import {
   useGPTLive,
   type GPTLiveVoiceState,
 } from '../gpt-live/use-gpt-live'
-import { useLiveKitVoice } from './use-livekit-voice'
 import { useXAIGrokVoice } from './use-xai-grok-voice'
 import { type GPTLiveCaption } from '../gpt-live/protocol'
 import type { RpcExecutionReceipt } from './rpc'
@@ -87,19 +86,12 @@ function requestKey(): string {
 export type VoiceTransportMode =
   | 'xai_grok_voice'
   | 'direct_gpt_live'
-  | 'local_livekit'
-  | 'cloud_livekit'
-  | 'livekit_gpt_live'
 
 export type VoiceTransportDetails = {
   transport: VoiceTransportMode
   available_transports: string[]
   agent_name: string
   active_target?: string | null
-  cloud_livekit_url?: string | null
-  cloud_livekit_api_key_masked?: string | null
-  cloud_livekit_api_secret_masked?: string | null
-  cloud_configured: boolean
 }
 
 export type BusinessAssistantContextType = {
@@ -133,9 +125,6 @@ export type BusinessAssistantContextType = {
   transportDetails: VoiceTransportDetails | null
   updateTransportConfig: (params: {
     transport: VoiceTransportMode
-    cloud_livekit_url?: string
-    cloud_livekit_api_key?: string
-    cloud_livekit_api_secret?: string
   }) => Promise<void>
   lastRpcReceipt?: RpcExecutionReceipt | null
   diagnosticMode: boolean
@@ -361,29 +350,6 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
     [activeConversationId],
   )
 
-  const livekitVoice = useLiveKitVoice({
-    conversationId: activeConversationId,
-    onCaptionsChange: handleVoiceCaptionsChange,
-    onError: (msg) => {
-      setError(msg)
-      if (activeConversationId) {
-        void postClientSnapshot({
-          client_status: 'error',
-          webrtc_state: 'local_livekit',
-          last_error: msg,
-        })
-      }
-    },
-    onNavigate: (path) => navigate(path),
-    onRpcReceipt: (receipt) => {
-      setLastRpcReceipt(receipt)
-      if (activeConversationId) {
-        void loadMessages(activeConversationId)
-      }
-    },
-    onActivityLog: addActivityLog,
-  })
-
   const directVoice = useGPTLive({
     conversationId: activeConversationId,
     onCaptionsChange: handleVoiceCaptionsChange,
@@ -436,17 +402,21 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
   })
 
   const isXai = transport === 'xai_grok_voice'
-  const isDirect = transport === 'direct_gpt_live'
-  const activeVoice = isXai ? xaiVoice : isDirect ? directVoice : livekitVoice
+  const activeVoice = isXai ? xaiVoice : directVoice
 
   const voiceState = activeVoice.voiceState
   const stopVoice = useCallback(() => {
     xaiVoice.stopVoice()
-    livekitVoice.stopVoice()
     directVoice.stopVoice()
-  }, [xaiVoice, livekitVoice, directVoice])
+  }, [xaiVoice, directVoice])
   const isMuted = activeVoice.isMuted
   const toggleMute = activeVoice.toggleMute
+
+  const [audioDevices] = useState<MediaDeviceInfo[]>([])
+  const [activeAudioDeviceId, setActiveAudioDeviceId] = useState<string | null>(null)
+  const switchAudioDevice = useCallback(async (deviceId: string) => {
+    setActiveAudioDeviceId(deviceId)
+  }, [])
 
   const setTransport = useCallback(
     async (newTransport: VoiceTransportMode) => {
@@ -472,9 +442,6 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
   const updateTransportConfig = useCallback(
     async (params: {
       transport: VoiceTransportMode
-      cloud_livekit_url?: string
-      cloud_livekit_api_key?: string
-      cloud_livekit_api_secret?: string
     }) => {
       stopVoice()
       try {
@@ -505,9 +472,7 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
           setTransportDetails(res)
           if (
             savedTransport &&
-            ['xai_grok_voice', 'direct_gpt_live', 'local_livekit', 'cloud_livekit'].includes(
-              savedTransport,
-            )
+            ['xai_grok_voice', 'direct_gpt_live'].includes(savedTransport)
           ) {
             setTransportState(savedTransport as VoiceTransportMode)
           } else if (res.transport) {
@@ -758,9 +723,9 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       stopVoice,
       isMuted,
       toggleMute,
-      audioDevices: livekitVoice.audioDevices,
-      activeAudioDeviceId: livekitVoice.activeAudioDeviceId,
-      switchAudioDevice: livekitVoice.switchAudioDevice,
+      audioDevices,
+      activeAudioDeviceId,
+      switchAudioDevice,
       transport,
       setTransport,
       transportDetails,
@@ -799,9 +764,9 @@ export function BusinessAssistantProvider({ children }: { children: ReactNode })
       stopVoice,
       isMuted,
       toggleMute,
-      livekitVoice.audioDevices,
-      livekitVoice.activeAudioDeviceId,
-      livekitVoice.switchAudioDevice,
+      audioDevices,
+      activeAudioDeviceId,
+      switchAudioDevice,
       transport,
       setTransport,
       transportDetails,

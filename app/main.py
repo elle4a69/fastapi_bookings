@@ -152,7 +152,7 @@ from .api.routers import (
     admin_support_tickets,
 )
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
-from .services.business_assistant.livekit.router import router as livekit_voice_router
+from .api.routers.voice import router as voice_router
 from .services.business_assistant.onboarding.router import router as onboarding_router
 from .api.deps import get_current_admin
 
@@ -164,19 +164,19 @@ CODEX_DIR = Path(__file__).resolve().parent.parent / "codex-control-centre"
 if str(CODEX_DIR) not in sys.path:
     sys.path.insert(0, str(CODEX_DIR))
 
-from backend.routers import (
-    projects as codex_projects,
-    threads as codex_threads,
-    turns as codex_turns,
-    events as codex_events,
-    settings as codex_settings,
-    models as codex_models,
-    diagnostics as codex_diagnostics,
-    worktrees as codex_worktrees,
-    governance as codex_governance,
-    plugins as codex_plugins,
-    skills as codex_skills,
-)
+import importlib
+
+codex_projects = importlib.import_module("backend.routers.projects")
+codex_threads = importlib.import_module("backend.routers.threads")
+codex_turns = importlib.import_module("backend.routers.turns")
+codex_events = importlib.import_module("backend.routers.events")
+codex_settings = importlib.import_module("backend.routers.settings")
+codex_models = importlib.import_module("backend.routers.models")
+codex_diagnostics = importlib.import_module("backend.routers.diagnostics")
+codex_worktrees = importlib.import_module("backend.routers.worktrees")
+codex_governance = importlib.import_module("backend.routers.governance")
+codex_plugins = importlib.import_module("backend.routers.plugins")
+codex_skills = importlib.import_module("backend.routers.skills")
 
 
 
@@ -246,11 +246,20 @@ async def app_lifespan(app: FastAPI):
 
     # Codex Control Centre initialization and startup sweep
     try:
-        from backend.config import default_db_path as codex_db_path
-        from backend.database import init_db as init_codex_db, SessionLocal as CodexSessionLocal, engine as codex_engine
-        from backend.services.boundary_service import seed_default_boundaries_if_empty
-        from backend.services.worker_manager import worker_manager, WorkerProcessManager
-        from backend.models.codex import Turn
+        codex_config = importlib.import_module("backend.config")
+        codex_db_mod = importlib.import_module("backend.database")
+        codex_boundary = importlib.import_module("backend.services.boundary_service")
+        codex_worker = importlib.import_module("backend.services.worker_manager")
+        codex_models_mod = importlib.import_module("backend.models.codex")
+
+        codex_db_path = codex_config.default_db_path
+        init_codex_db = codex_db_mod.init_db
+        CodexSessionLocal = codex_db_mod.SessionLocal
+        codex_engine = codex_db_mod.engine
+        seed_default_boundaries_if_empty = codex_boundary.seed_default_boundaries_if_empty
+        worker_manager = codex_worker.worker_manager
+        WorkerProcessManager = codex_worker.WorkerProcessManager
+        Turn = codex_models_mod.Turn
         from datetime import datetime, timezone
         from sqlalchemy import text
 
@@ -305,9 +314,13 @@ async def app_lifespan(app: FastAPI):
         pass
     # Graceful shutdown for Codex worker processes, SSE streams, and database
     try:
-        from backend.services.event_service import broker as codex_broker
-        from backend.services.worker_manager import worker_manager
-        from backend.database import engine as codex_engine
+        codex_event_service = importlib.import_module("backend.services.event_service")
+        codex_worker = importlib.import_module("backend.services.worker_manager")
+        codex_db_mod = importlib.import_module("backend.database")
+
+        codex_broker = codex_event_service.broker
+        worker_manager = codex_worker.worker_manager
+        codex_engine = codex_db_mod.engine
 
         await codex_broker.close_all()
         await worker_manager.stop()
@@ -597,10 +610,9 @@ app.include_router(conversations.router, prefix="/api/admin")
 app.include_router(assistant_studio.router, prefix="/api/admin/assistant-studio", tags=["Assistant Studio"])
 app.include_router(business_assistant.router, prefix="/api/admin")
 app.include_router(gpt_live_router, prefix="/api/admin")
-app.include_router(livekit_voice_router, prefix="/api/admin")
+app.include_router(voice_router, prefix="/api/admin")
 app.include_router(onboarding_router)
 app.include_router(operator_controls.router)
-app.include_router(operator_controls.operator_alias_router)
 app.include_router(media.router)
 app.include_router(ui_agent.router, prefix="/api/admin")
 app.include_router(support_tickets.router)

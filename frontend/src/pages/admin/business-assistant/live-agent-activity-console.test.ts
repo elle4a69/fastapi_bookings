@@ -168,7 +168,8 @@ test('LiveAgentActivityConsole prominently displays distinct agent and model ide
   assert.match(consoleSource, /GPT-5\.6-Terra/)
   assert.match(consoleSource, /FastAPI Backend/)
   assert.match(consoleSource, /GPT-4o/)
-  assert.match(consoleSource, /LiveKit Cloud/)
+  assert.match(consoleSource, /OpenAI GPT-Live/)
+  assert.match(consoleSource, /xAI Grok Voice/)
   assert.match(consoleSource, /\[\{agentBadge\.tag\}\]/)
 })
 

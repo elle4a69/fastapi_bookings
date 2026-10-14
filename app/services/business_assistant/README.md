@@ -23,7 +23,6 @@ app/services/business_assistant/
 ├── website_sanitiser.py # XSS, script injection, PII sanitiser and asset domain validator
 ├── realtime.py          # Server-held SDP exchange for authenticated WebRTC voice sessions
 ├── gpt_live/            # Isolated GPT-Live WebRTC session creation and delegation boundary
-├── livekit/             # LiveKit voice assistant gateway, worker subsystem, and token dispatch
 ├── onboarding/          # Voice-first onboarding assistant, intent normalizer, plan service, and save guard
 ├── coding_worker.py     # Real isolated coding-worker connector, scope inspector & verification runner
 ├── ccc_bridge_service.py # Autonomous bridge for Codex Control Centre remediation, steering & UI verification

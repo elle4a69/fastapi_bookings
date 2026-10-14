@@ -11,6 +11,7 @@ export function MinimizedVoiceController() {
     voiceState,
     voiceCaptions,
     stopVoice,
+    transport,
   } = useBusinessAssistant()
 
   // Only show floating controller when drawer is minimized/closed and voice is active
@@ -82,6 +83,14 @@ export function MinimizedVoiceController() {
           />
           <span className="text-[11px] font-semibold text-foreground">
             {isLive ? 'Voice Active' : isConnecting ? 'Connecting…' : 'Finalising…'}
+          </span>
+          <span
+            className="rounded bg-primary/15 px-1 py-0.2 text-[9px] font-mono text-primary font-medium"
+            data-testid="minimized-voice-transport-badge"
+          >
+            {transport === 'xai_grok_voice'
+              ? 'Grok'
+              : 'Direct'}
           </span>
         </div>
         <p className="truncate text-[11px] text-muted-foreground">

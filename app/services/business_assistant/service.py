@@ -2170,7 +2170,11 @@ class BusinessAssistantService:
         step_1 = {
             "transport": op_settings.transport,
             "available_transports": op_settings.available_transports,
-            "active_target": op_settings.active_livekit_url if op_settings.transport != "direct_gpt_live" else "/api/admin/business-assistant/voice/realtime",
+            "active_target": (
+                f"wss://api.x.ai/v1/realtime?agent_id={settings.XAI_REALTIME_AGENT_ID}"
+                if op_settings.transport == "xai_grok_voice"
+                else "/api/admin/business-assistant/voice/realtime"
+            ),
             "models": {
                 "voice": "gpt-live-1",
                 "delegation": "gpt-5.6-terra",

@@ -45,12 +45,6 @@ from app.services.business_assistant.onboarding.tools import (
     ONBOARDING_AGENT_TOOLS,
     OnboardingToolPack,
 )
-from app.services.business_assistant.livekit.config import get_baseline_config
-from app.services.business_assistant.livekit.tool_gateway import (
-    LiveKitSessionContext,
-    LiveKitToolGateway,
-    ONBOARDING_TOOL_NAMES,
-)
 
 
 from sqlalchemy.pool import StaticPool
@@ -412,69 +406,3 @@ class TestOnboardingGatewayUnit:
         assert "plan_summary" in res
 
 
-class TestLiveKitToolGatewayWiring:
-    """Verifies onboarding tool registration and execution through LiveKitToolGateway."""
-
-    def test_livekit_tool_gateway_registers_onboarding_pack(self, db_factory):
-        session_ctx = LiveKitSessionContext(
-            session_id="lk-sess-1",
-            tenant_id=1,
-            user_id=1,
-            conversation_id=1,
-            lease_token="lease-lk-1",
-            control_epoch=1,
-        )
-
-        gateway = LiveKitToolGateway(
-            db_factory=db_factory,
-            session_context=session_ctx,
-            packs=("booking_availability", "onboarding"),
-        )
-
-        tools = gateway.build_agent_tools()
-        tool_names = [t.info.name for t in tools if hasattr(t, "info")]
-
-        # All core onboarding tools must be registered
-        assert "stage_fields" in tool_names
-        assert "validate_form" in tool_names
-        assert "commit_save" in tool_names
-        assert "generate_website_draft" in tool_names
-        assert "read_context" in tool_names
-        assert "pause_takeover" in tool_names
-
-    def test_livekit_tool_gateway_executes_onboarding_tool_sync(self, db_factory):
-        dispatched = []
-        session_ctx = LiveKitSessionContext(
-            session_id="lk-sess-1",
-            tenant_id=1,
-            user_id=1,
-            conversation_id=1,
-            lease_token="lease-lk-1",
-            control_epoch=1,
-        )
-
-        gateway = LiveKitToolGateway(
-            db_factory=db_factory,
-            session_context=session_ctx,
-            packs=("onboarding",),
-            rpc_dispatcher=lambda act, p: dispatched.append((act, p)),
-        )
-
-        result = gateway.execute_tool_sync(
-            "stage_fields",
-            {"step_id": "step_1_identity", "fields": {"business_name": "Bondi LK Spa"}},
-        )
-
-        assert result["status"] == "ok"
-        assert result["action"] == "fill_fields"
-        assert result["is_saved"] is False
-        assert len(dispatched) >= 1
-        assert len(gateway.last_rpc_dispatches) >= 1
-
-    def test_livekit_baseline_audio_transport_preserved(self):
-        """Invariant: LiveKit audio models, voice persona, and transport remain intact."""
-        baseline = get_baseline_config()
-        assert baseline.model == "gpt-live-1"
-        assert baseline.voice == "gleam"
-        assert baseline.delegation == "responses"
-        assert baseline.delegated_model == "gpt-5.6-terra"

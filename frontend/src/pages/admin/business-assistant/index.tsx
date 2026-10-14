@@ -1,16 +1,19 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
+  Activity,
   Bot,
-  CheckCircle2,
+  ExternalLink,
   History,
   LoaderCircle,
   Menu,
+  MessageCircle,
   MessageCirclePlus,
   Mic,
-  PhoneOff,
   RotateCcw,
-  Send,
+  Settings,
   Sparkles,
+  Terminal,
   TicketPlus,
   Volume2,
   X,
@@ -18,46 +21,29 @@ import {
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import {
-  apiClient,
-  toUserFacingApiError,
-  type UserFacingApiError,
-} from '@/lib/api'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { apiClient } from '@/lib/api'
 
 import {
-  useGPTLive,
-} from '../gpt-live/use-gpt-live'
-import { GPTLiveCaptionTimeline } from '../gpt-live/caption-timeline'
-import { type GPTLiveCaption } from '../gpt-live/protocol'
+  AssistantSettingsDialog,
+  DiagnosticModeToggle,
+  LiveAgentActivityConsole,
+} from './components'
+import {
+  useBusinessAssistant,
+  type Conversation,
+} from './business-assistant-context'
 import {
   type SupportTicket,
   type TicketCreateResponse,
 } from './ticket-status'
-
-type Conversation = {
-  id: number
-  title: string | null
-  status: string
-  created_at: string
-  updated_at: string
-}
-
-type ConversationMessage = {
-  id: number
-  conversation_id: number
-  role: 'user' | 'business_assistant' | 'system'
-  content: string
-  in_reply_to_message_id: number | null
-  created_at: string
-  channel?: 'text' | 'realtime_voice'
-}
-
-type TextTurnResponse = {
-  user_message: ConversationMessage
-  assistant_message: ConversationMessage
-  duplicate_request: boolean
-}
 
 type OnboardingResponse = {
   progress: {
@@ -84,15 +70,22 @@ function requestKey(): string {
 }
 
 export default function BusinessAssistantPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
-  const [draft, setDraft] = useState('')
-  const [pendingRequestKey, setPendingRequestKey] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [turnError, setTurnError] = useState<UserFacingApiError | null>(null)
+  const {
+    conversations,
+    activeConversationId,
+    selectConversation,
+    createConversation,
+    messages,
+    loading,
+    error,
+    setError,
+    turnError,
+    sendTurn,
+    transport,
+    voiceState,
+  } = useBusinessAssistant()
+
+  const navigate = useNavigate()
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [ticketTitle, setTicketTitle] = useState('')
   const [ticketDescription, setTicketDescription] = useState('')
@@ -100,60 +93,10 @@ export default function BusinessAssistantPage() {
   const [ticketSeverity, setTicketSeverity] = useState('normal')
   const [creatingTicket, setCreatingTicket] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showActivityConsole, setShowActivityConsole] = useState(false)
+  const [viewingConversation, setViewingConversation] = useState<Conversation | null>(null)
   const [onboarding, setOnboarding] = useState<OnboardingResponse | null>(null)
-  const [voiceCaptions, setVoiceCaptions] = useState<GPTLiveCaption[]>([])
-
-  const { voiceState, startVoice, stopVoice } = useGPTLive({
-    conversationId: activeConversationId,
-    onCaptionsChange: setVoiceCaptions,
-    onError: setError,
-  })
-
-  const stopVoiceRef = useRef(stopVoice)
-  const previousConversationIdRef = useRef<number | null>(activeConversationId)
-
-  useEffect(() => {
-    stopVoiceRef.current = stopVoice
-  }, [stopVoice])
-
-  useEffect(() => {
-    if (previousConversationIdRef.current !== activeConversationId) {
-      stopVoiceRef.current()
-      previousConversationIdRef.current = activeConversationId
-    }
-  }, [activeConversationId])
-
-  const loadMessages = async (conversationId: number) => {
-    const history = await apiClient.get<ConversationMessage[]>(
-      `/api/admin/business-assistant/conversations/${conversationId}/messages`,
-    )
-    setMessages(history)
-  }
-
-  const loadConversations = async () => {
-    setLoading(true)
-    try {
-      const items = await apiClient.get<Conversation[]>(
-        '/api/admin/business-assistant/conversations',
-      )
-      setConversations(items)
-      if (items.length > 0) {
-        const nextId =
-          activeConversationId && items.some((item) => item.id === activeConversationId)
-            ? activeConversationId
-            : items[0].id
-        setActiveConversationId(nextId)
-        await loadMessages(nextId)
-      } else {
-        setActiveConversationId(null)
-        setMessages([])
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to load conversations.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const loadTickets = async () => {
     try {
@@ -176,55 +119,9 @@ export default function BusinessAssistantPage() {
   }
 
   useEffect(() => {
-    let active = true
-    const loadInitialConversations = async () => {
-      setLoading(true)
-      try {
-        const items = await apiClient.get<Conversation[]>(
-          '/api/admin/business-assistant/conversations',
-        )
-        if (!active) return
-        setConversations(items)
-        if (items.length > 0) {
-          setActiveConversationId(items[0].id)
-          const history = await apiClient.get<ConversationMessage[]>(
-            `/api/admin/business-assistant/conversations/${items[0].id}/messages`,
-          )
-          if (active) setMessages(history)
-        }
-        await loadTickets()
-        await loadOnboarding()
-      } catch (caught) {
-        if (active) {
-          setError(caught instanceof Error ? caught.message : 'Unable to load conversations.')
-        }
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    void loadInitialConversations()
-    return () => {
-      active = false
-    }
+    void loadTickets()
+    void loadOnboarding()
   }, [])
-
-  const createConversation = async () => {
-    setError(null)
-    try {
-      const conversation = await apiClient.post<Conversation>(
-        '/api/admin/business-assistant/conversations',
-        {
-          request_key: requestKey(),
-        },
-      )
-      setConversations((current) => [conversation, ...current])
-      setActiveConversationId(conversation.id)
-      setMessages([])
-      setHistoryOpen(false)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to create a conversation.')
-    }
-  }
 
   const submitTicket = async (event: FormEvent) => {
     event.preventDefault()
@@ -262,69 +159,68 @@ export default function BusinessAssistantPage() {
     }
   }
 
-  const selectConversation = async (conversationId: number) => {
-    setError(null)
-    setActiveConversationId(conversationId)
-    setHistoryOpen(false)
-    try {
-      await loadMessages(conversationId)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to load conversation history.')
-    }
+  const handleOpenConversationTranscript = async (conversation: Conversation) => {
+    setViewingConversation(conversation)
+    await selectConversation(conversation.id)
   }
 
-  const sendTurn = async () => {
-    const content = draft.trim()
-    if (!activeConversationId || !content || sending) return
-
-    const nextRequestKey = pendingRequestKey ?? requestKey()
-    setPendingRequestKey(nextRequestKey)
-    setSending(true)
-    setTurnError(null)
-    try {
-      const result = await apiClient.post<TextTurnResponse>(
-        `/api/admin/business-assistant/conversations/${activeConversationId}/messages`,
-        { content, request_key: nextRequestKey },
-      )
-      setMessages((current) => {
-        const withoutCurrent = current.filter((message) => message.id !== result.user_message.id)
-        return [...withoutCurrent, result.user_message, result.assistant_message]
-      })
-      setDraft('')
-      setPendingRequestKey(null)
-      setTurnError(null)
-      await loadConversations()
-    } catch (caught) {
-      setTurnError(toUserFacingApiError(caught, 'The message could not be submitted.'))
-      try {
-        await loadMessages(activeConversationId)
-      } catch {
-        // Structured error retained
-      }
-    } finally {
-      setSending(false)
+  const getVoiceEngineLabel = () => {
+    switch (transport) {
+      case 'xai_grok_voice':
+        return 'xAI Grok Voice (grok-voice-think-fast-2.0)'
+      case 'direct_gpt_live':
+      default:
+        return 'Direct GPT-Live (gpt-live-1 WebRTC)'
     }
-  }
-
-  const submitTurn = (event: FormEvent) => {
-    event.preventDefault()
-    void sendTurn()
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-8">
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-5 pb-8">
       <header className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-primary">
             <Bot className="h-5 w-5" aria-hidden="true" />
             <p className="text-sm font-semibold">Business Assistant</p>
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Conversation</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Administrative Operations</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ask for product guidance by text or voice. This release cannot change business data or perform external actions.
+            Manage voice transports, inspect historical transcripts, and supervise assistant activity.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/telemetry')}
+            data-testid="nav-telemetry-console-button"
+            className="gap-1.5"
+          >
+            <Activity className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+            <span>Agent Telemetry</span>
+            <ExternalLink className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowActivityConsole((prev) => !prev)}
+            data-testid="toggle-live-console-button"
+            className="gap-1.5"
+          >
+            <Terminal className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>{showActivityConsole ? 'Hide Live Console' : 'Show Live Console'}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+            data-testid="business-assistant-settings-button"
+          >
+            <Settings className="h-4 w-4 mr-2" aria-hidden="true" />
+            Assistant Settings
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -350,43 +246,124 @@ export default function BusinessAssistantPage() {
           >
             <Menu className="h-4 w-4" aria-hidden="true" />
           </Button>
-          {voiceState === 'idle' ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!activeConversationId || sending}
-              onClick={() => void startVoice()}
-              data-testid="business-assistant-voice-start"
-            >
-              <Mic className="mr-2 h-4 w-4" aria-hidden="true" />
-              Talk by voice
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={stopVoice}
-              disabled={voiceState === 'finalising'}
-              data-testid="business-assistant-voice-stop"
-            >
-              {voiceState === 'connecting' || voiceState === 'finalising' ? (
-                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <PhoneOff className="mr-2 h-4 w-4" aria-hidden="true" />
-              )}
-              {voiceState === 'connecting'
-                ? 'Connecting voice…'
-                : voiceState === 'finalising'
-                  ? 'Finalising voice…'
-                  : 'End voice'}
-            </Button>
-          )}
-          <Button type="button" onClick={() => void createConversation()}>
+          <Button
+            type="button"
+            onClick={async () => {
+              await createConversation()
+              setHistoryOpen(false)
+            }}
+          >
             <MessageCirclePlus className="mr-2 h-4 w-4" aria-hidden="true" />
             New conversation
           </Button>
         </div>
       </header>
+
+      {/* System & Transport Status Card */}
+      <section
+        className="rounded-xl border bg-card p-4 sm:p-5 shadow-xs"
+        aria-label="System & Transport Status"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Volume2 className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-foreground">Voice Engine &amp; System Status</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="bg-primary/10 text-primary border-primary/20 px-2.5 py-0.5 font-mono text-xs"
+              data-testid="active-voice-engine-badge"
+            >
+              {getVoiceEngineLabel()}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className={`capitalize text-xs ${
+                voiceState === 'live'
+                  ? 'bg-emerald-500/15 text-emerald-600 border border-emerald-500/30'
+                  : voiceState === 'connecting'
+                    ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30'
+                    : 'text-muted-foreground'
+              }`}
+            >
+              Voice: {voiceState}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-foreground">Diagnostic Telemetry Mode</p>
+            <p className="text-[11px] text-muted-foreground">
+              Captures WebRTC states and tool calls for live inspection.
+            </p>
+            <div className="pt-1">
+              <DiagnosticModeToggle />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-foreground">Live Telemetry Console</p>
+            <p className="text-[11px] text-muted-foreground">
+              Monitor real-time events, transcript tokens, and tool actions.
+            </p>
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/admin/telemetry')}
+                className="gap-1.5 text-xs h-8"
+              >
+                <Activity className="h-3.5 w-3.5 text-emerald-500" />
+                Open Telemetry Console
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-foreground">Transport &amp; Engine Settings</p>
+            <p className="text-[11px] text-muted-foreground">
+              Switch between xAI Grok Voice and Direct OpenAI GPT-Live.
+            </p>
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="gap-1.5 text-xs h-8"
+              >
+                <Settings className="h-3.5 w-3.5 text-primary" />
+                Configure Engines
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Live Agent Activity Console if toggled */}
+      {showActivityConsole && (
+        <section
+          className="rounded-xl border bg-card p-4 sm:p-5 shadow-xs"
+          aria-label="Live Agent Activity Console"
+        >
+          <div className="flex items-center justify-between pb-3 border-b mb-3">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-primary" aria-hidden="true" />
+              <h2 className="text-sm font-semibold">Live Agent Activity &amp; WebRTC Console</h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowActivityConsole(false)}
+              className="h-7 text-xs"
+            >
+              Close
+            </Button>
+          </div>
+          <LiveAgentActivityConsole />
+        </section>
+      )}
 
       {/* Onboarding milestone banner if available */}
       {onboarding && (
@@ -402,22 +379,7 @@ export default function BusinessAssistantPage() {
                 {onboarding.progress.status.replaceAll('_', ' ')}
               </Badge>
             </div>
-            {onboarding.product_context.setup_counts && (
-              <p className="text-xs text-muted-foreground">
-                Configured catalog capacity: {onboarding.product_context.setup_counts.active_services} services · {onboarding.product_context.setup_counts.active_providers} providers · {onboarding.product_context.setup_counts.active_locations} locations
-              </p>
-            )}
           </div>
-          {onboarding.progress.completed_steps.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {onboarding.progress.completed_steps.map((step) => (
-                <Badge key={step} variant="secondary" className="gap-1 text-[10px]">
-                  <CheckCircle2 className="h-3 w-3 text-primary" aria-hidden="true" />
-                  {step.replaceAll('_', ' ')}
-                </Badge>
-              ))}
-            </div>
-          )}
         </section>
       )}
 
@@ -466,10 +428,13 @@ export default function BusinessAssistantPage() {
                       type="button"
                       variant={conversation.id === activeConversationId ? 'secondary' : 'ghost'}
                       className="h-auto justify-start px-3 py-2 text-left"
-                      onClick={() => void selectConversation(conversation.id)}
+                      onClick={() => {
+                        void handleOpenConversationTranscript(conversation)
+                        setHistoryOpen(false)
+                      }}
                     >
                       <span className="line-clamp-2 text-sm">
-                        {conversation.title || 'New conversation'}
+                        {conversation.title || `Conversation #${conversation.id}`}
                       </span>
                     </Button>
                   ))}
@@ -479,22 +444,6 @@ export default function BusinessAssistantPage() {
           </aside>
         </>
       )}
-
-      {voiceState !== 'idle' && (
-        <div
-          className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-sm"
-          role="status"
-        >
-          <Volume2 className="h-4 w-4" aria-hidden="true" />
-          {voiceState === 'connecting'
-            ? 'Connecting your microphone and private voice session…'
-            : voiceState === 'finalising'
-              ? 'Finalising the voice session…'
-            : 'Voice is live. You can interrupt naturally or end the call at any time.'}
-        </div>
-      )}
-
-      {voiceState !== 'idle' && <GPTLiveCaptionTimeline captions={voiceCaptions} />}
 
       {error && (
         <div
@@ -522,7 +471,6 @@ export default function BusinessAssistantPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={sending}
                 onClick={() => void sendTurn()}
               >
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -533,68 +481,168 @@ export default function BusinessAssistantPage() {
         </div>
       )}
 
+      {/* Recent Conversations Table (Clean Admin Archive) */}
       <section
-        className="flex min-h-[32rem] min-w-0 flex-col rounded-lg border bg-card"
+        className="flex min-w-0 flex-col rounded-xl border bg-card shadow-xs"
         aria-label="Conversation"
       >
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
-            {!activeConversationId ? (
-              <p className="text-sm text-muted-foreground">Create a conversation to send a message.</p>
-            ) : messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Your saved conversation will appear here.</p>
-            ) : (
-              messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                    message.role === 'user'
-                      ? 'ml-auto bg-primary text-primary-foreground'
-                      : 'bg-muted text-foreground'
-                  }`}
-                >
-                  <p className="mb-1 text-xs font-medium opacity-70">
-                    {message.role === 'user' ? 'You' : 'Business Assistant'}
-                  </p>
-                  {message.channel === 'realtime_voice' && (
-                    <p className="mb-1 flex items-center gap-1 text-xs opacity-70">
-                      <Mic className="h-3 w-3" aria-hidden="true" /> Voice
-                    </p>
-                  )}
-                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                </article>
-              ))
-            )}
+        <div className="flex items-center justify-between border-b px-5 py-3.5">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-primary" aria-hidden="true" />
+            <h2 className="text-base font-semibold text-foreground">Recent Conversations &amp; Transcripts</h2>
           </div>
+          <Badge variant="outline" className="text-xs">
+            {conversations.length} {conversations.length === 1 ? 'Record' : 'Records'}
+          </Badge>
+        </div>
 
-          <form className="border-t p-3" onSubmit={(event) => void submitTurn(event)}>
-            <Textarea
-              value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value)
-                setPendingRequestKey(null)
-                setTurnError(null)
-              }}
-              placeholder="Ask how to use FastAPI Bookings…"
-              disabled={!activeConversationId || sending}
-              rows={3}
-              maxLength={20_000}
-              aria-label="Message"
-            />
-            <div className="mt-2 flex justify-end">
-              <Button type="submit" disabled={!activeConversationId || !draft.trim() || sending}>
-                {sending ? (
-                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-                )}
-                Send
-              </Button>
+        <div className="overflow-x-auto">
+          {conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-8 text-center text-sm text-muted-foreground">
+              <Bot className="h-8 w-8 text-muted-foreground/40 mb-2" />
+              <p>No conversation history found.</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                Interact with the floating Business Assistant widget to start your first session.
+              </p>
             </div>
-          </form>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="border-b bg-muted/40 font-medium text-muted-foreground">
+                <tr>
+                  <th className="py-2.5 px-4 w-16">ID</th>
+                  <th className="py-2.5 px-4">Title / Summary</th>
+                  <th className="py-2.5 px-4 w-32">Status</th>
+                  <th className="py-2.5 px-4 w-44">Last Updated</th>
+                  <th className="py-2.5 px-4 w-32 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {conversations.map((conv) => (
+                  <tr
+                    key={conv.id}
+                    className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => void handleOpenConversationTranscript(conv)}
+                  >
+                    <td className="py-3 px-4 font-mono text-muted-foreground">#{conv.id}</td>
+                    <td className="py-3 px-4 font-medium text-foreground">
+                      <div className="flex items-center gap-2">
+                        <span>{conv.title || `Conversation #${conv.id}`}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <Badge variant="outline" className="capitalize text-[10px]">
+                        {conv.status || 'active'}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
+                      {new Date(conv.updated_at || conv.created_at).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleOpenConversationTranscript(conv)
+                        }}
+                        className="text-primary hover:text-primary hover:bg-primary/10"
+                      >
+                        Review
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
+      {/* Read-Only Historical Transcript Dialog */}
+      <Dialog
+        open={Boolean(viewingConversation)}
+        onOpenChange={(open) => {
+          if (!open) setViewingConversation(null)
+        }}
+      >
+        <DialogContent className="max-h-[85vh] sm:max-w-2xl flex flex-col">
+          <DialogHeader className="border-b pb-3">
+            <div className="flex items-center justify-between pr-6">
+              <div className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                <DialogTitle className="text-base font-semibold">
+                  {viewingConversation?.title || `Conversation #${viewingConversation?.id}`}
+                </DialogTitle>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                ID: {viewingConversation?.id}
+              </Badge>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Read-only transcript archive. Live voice and text actions run through the floating assistant.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[55vh]">
+            {loading ? (
+              <div className="flex items-center justify-center p-8 gap-2 text-xs text-muted-foreground">
+                <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
+                Loading messages…
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center p-8 text-xs text-muted-foreground">
+                No archived messages found for this conversation.
+              </div>
+            ) : (
+              messages.map((message) => {
+                const isUser = message.role === 'user'
+                return (
+                  <article
+                    key={message.id}
+                    className={`max-w-[85%] rounded-lg p-3 text-xs ${
+                      isUser
+                        ? 'ml-auto bg-primary text-primary-foreground'
+                        : 'mr-auto bg-muted text-foreground border border-border/60'
+                    }`}
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2 text-[10px] opacity-75 font-medium">
+                      <span>{isUser ? 'You' : 'Business Assistant'}</span>
+                      {message.channel === 'realtime_voice' && (
+                        <span className="flex items-center gap-0.5">
+                          <Mic className="h-3 w-3" /> Voice
+                        </span>
+                      )}
+                    </div>
+                    <p className="whitespace-pre-wrap break-words leading-relaxed">
+                      {message.content}
+                    </p>
+                    <div className="mt-1 text-[9px] opacity-50 text-right">
+                      {new Date(message.created_at).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  </article>
+                )
+              })
+            )}
+          </div>
+
+          <div className="border-t pt-3 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setViewingConversation(null)}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Support Tickets Section */}
       <section
         className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_20rem]"
         aria-labelledby="support-ticket-heading"
@@ -694,6 +742,11 @@ export default function BusinessAssistantPage() {
           )}
         </div>
       </section>
+
+      <AssistantSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </section>
   )
 }

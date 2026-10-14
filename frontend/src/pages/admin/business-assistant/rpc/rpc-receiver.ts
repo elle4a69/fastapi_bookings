@@ -1,5 +1,3 @@
-import type { Room, RpcInvocationData } from 'livekit-client'
-
 import { executeRpcAction } from './action-catalogue.ts'
 import { executorCoordinator } from './executor-coordinator.ts'
 import { validateAssistantRpcSender } from './sender-validation.ts'
@@ -7,7 +5,15 @@ import type {
   RpcExecutionReceipt,
   RpcReceiverContext,
   RpcRegistration,
+  RpcRoom,
 } from './types.ts'
+
+export type RpcInvocationData = {
+  callerIdentity: string
+  payload: string
+  requestId?: string
+  [key: string]: unknown
+}
 
 export const REGISTERED_RPC_METHODS = [
   'assistant_ui_action',
@@ -88,7 +94,7 @@ export function resolveActionName(method: string, payload: Record<string, unknow
 export function createAssistantRpcHandler(context: RpcReceiverContext) {
   return async (method: string, data: RpcInvocationData): Promise<string> => {
     const callerIdentity = data.callerIdentity || ''
-    const requestId = data.requestId || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const requestId: string = (data.requestId as string) || `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const timestamp = new Date().toISOString()
 
     // 1. Sender validation: ensure invocation comes from a verified assistant participant
@@ -147,7 +153,7 @@ export function createAssistantRpcHandler(context: RpcReceiverContext) {
     }
 
     const actionName = resolveActionName(method, parsedPayload)
-    const actionId =
+    const actionId: string =
       (parsedPayload.action_id as string) ||
       (parsedPayload.command_id as string) ||
       (parsedPayload.id as string) ||
@@ -262,7 +268,7 @@ export function createAssistantRpcHandler(context: RpcReceiverContext) {
  * Returns an unregister handle for clean teardown.
  */
 export function registerAssistantRpcMethods(
-  room: Room,
+  room: RpcRoom,
   context: Omit<RpcReceiverContext, 'room'> = {},
   methods: readonly string[] = REGISTERED_RPC_METHODS,
 ): RpcRegistration {
@@ -307,7 +313,7 @@ export function registerAssistantRpcMethods(
  * Registers all assistant RPC methods (including all onboarding methods) on an active LiveKit Room instance.
  */
 export function registerAllAssistantRpcMethods(
-  room: Room,
+  room: RpcRoom,
   context: Omit<RpcReceiverContext, 'room'> = {},
 ): RpcRegistration {
   return registerAssistantRpcMethods(room, context, ALL_RPC_METHODS)
