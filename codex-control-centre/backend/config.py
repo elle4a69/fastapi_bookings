@@ -1,3 +1,5 @@
+import json
+import sys
 from pathlib import Path
 from typing import Optional
 from pydantic import field_validator
@@ -9,6 +11,7 @@ codex_dir = Path(__file__).resolve().parent.parent
 repo_root = codex_dir
 default_db_path = codex_dir / "codex.db"
 default_worktrees_dir = codex_dir / "worktrees"
+skills_rag_mcp_bridge_path = codex_dir / "backend" / "services" / "skills_rag_mcp_bridge.py"
 
 class Settings(BaseSettings):
     database_url: str = f"sqlite:///{default_db_path.as_posix()}"
@@ -35,6 +38,13 @@ class Settings(BaseSettings):
     codex_app_server_args: list[str] = [
         "app-server",
         "-c", "mcp_servers.mcp-skillset.enabled=false",
+        # Register the lightweight native tool surface without importing the
+        # heavyweight index stack. The bridge delegates to the hot HTTP daemon.
+        "-c", f"mcp_servers.skills-rag.command={json.dumps(sys.executable)}",
+        "-c", f"mcp_servers.skills-rag.args={json.dumps([str(skills_rag_mcp_bridge_path)])}",
+        "-c", "mcp_servers.skills-rag.enabled=true",
+        "-c", "mcp_servers.skills-rag.startup_timeout_sec=10.0",
+        "-c", "mcp_servers.skills-rag.tool_timeout_sec=30.0",
         "-c", "mcp_servers.main-context-document.enabled=false",
         "-c", "mcp_servers.livekit-docs.enabled=false",
         "-c", "mcp_servers.playwright.enabled=false",
