@@ -63,7 +63,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
 - **FastAPI Bookings Administrative Integration**:
-  All primary Codex routers (`projects`, `threads`, `turns`, `events`, `settings`, `models`) are mounted directly into the main FastAPI Bookings application (`app/main.py`) under `/api/admin/codex/*` with strict administrative authentication (`Depends(get_current_admin)`).
+  All primary Codex routers (`projects`, `threads`, `turns`, `events`, `settings`, `models`) are mounted directly into the main FastAPI Bookings application (`app/main.py`) under `/api/admin/codex/*` with strict administrative authentication. Standard routers use `Depends(get_current_admin)`; the event router uses its shared verifier so the standalone service and mounted SSE ticket flow retain one contract.
   - `services/`:
     - `worker.py`: Subprocess management, stdio JSON-RPC protocol dispatch, event routing.
     - `worker_manager.py`: Thread-to-worker process pool, graceful restart and teardown.
@@ -197,7 +197,7 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
   - `GET /api/admin/codex/events/{project_id}/{thread_id}` — Real-time SSE stream.
-- **Security Boundary**: Every endpoint is guarded with `dependencies=[Depends(get_current_admin)]`, requiring an active administrative bearer token and verified tenant context (`X-Tenant`). Unauthenticated or non-admin requests receive HTTP 401/403.
+- **Security Boundary**: Standard mounted endpoints use `dependencies=[Depends(get_current_admin)]`. The event ticket endpoint uses the shared control-centre verifier, which accepts either its standalone service secret, a verified tenant-scoped admin JWT, or the native `local-development-bypass` credential only while FastAPI Bookings has `LOCAL_AUTH_BYPASS=true` and the requested tenant has a real admin account. Stream connections consume short-lived single-use tickets. Unauthenticated or non-admin requests receive HTTP 401/403.
 - **Lifespan Integration**:
   - `app_lifespan` in `app/main.py` explicitly initialises `WorkerProcessManager` (via `WorkerManager`), sets SQLite `PRAGMA journal_mode=WAL`, seeds default workspace boundaries, and performs a startup sweep on orphaned active turns.
   - On application shutdown, active Codex worker processes and SSE subscribers are gracefully terminated.

@@ -2,6 +2,7 @@
 
 import pytest
 from sqlalchemy.orm import Session
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.security import create_access_token
@@ -283,6 +284,85 @@ def test_get_codex_events_stream_and_ticket(client: TestClient, db_session: Sess
     # 3. Stream without authentication is rejected
     unauth_stream = client.get("/api/admin/codex/events/stream")
     assert unauth_stream.status_code == 401
+
+
+def test_codex_event_ticket_accepts_tenant_scoped_local_auth_bypass(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The mounted event ticket route shares the native local admin boundary."""
+    from app.core.config import settings as app_settings
+
+    tenant, _, _ = _create_admin_user(db_session, suffix="local-bypass-events")
+    monkeypatch.setattr(app_settings, "LOCAL_AUTH_BYPASS", True)
+
+    response = client.post(
+        "/api/admin/codex/events/ticket",
+        json={"project_id": "default", "thread_id": "th_local_bypass"},
+        headers={
+            "X-Tenant": tenant.subdomain,
+            "X-Token": "local-development-bypass",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ticket"]
+
+
+def test_codex_event_ticket_rejects_local_auth_bypass_when_disabled(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The development credential remains invalid when its explicit gate is off."""
+    from app.core.config import settings as app_settings
+
+    tenant, _, _ = _create_admin_user(db_session, suffix="disabled-local-bypass-events")
+    monkeypatch.setattr(app_settings, "LOCAL_AUTH_BYPASS", False)
+
+    response = client.post(
+        "/api/admin/codex/events/ticket",
+        json={"project_id": "default", "thread_id": "th_disabled_local_bypass"},
+        headers={
+            "X-Tenant": tenant.subdomain,
+            "X-Token": "local-development-bypass",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_codex_local_auth_bypass_is_rejected_outside_native_app(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The standalone control-centre cannot inherit the native bypass."""
+    from starlette.requests import Request
+
+    from app.core.config import settings as app_settings
+    from backend.middleware.auth import _verify_local_development_bypass
+
+    monkeypatch.setattr(app_settings, "LOCAL_AUTH_BYPASS", True)
+    standalone_app = FastAPI()
+    request = Request(
+        {
+            "type": "http",
+            "app": standalone_app,
+            "method": "POST",
+            "path": "/codex/events/ticket",
+            "headers": [],
+            "query_string": b"",
+            "server": ("127.0.0.1", 4500),
+            "client": ("127.0.0.1", 50000),
+            "scheme": "http",
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _verify_local_development_bypass(request, "local-development-bypass")
+
+    assert exc_info.value.status_code == 401
 
 
 def test_get_codex_worktrees_and_governance(client: TestClient, db_session: Session):

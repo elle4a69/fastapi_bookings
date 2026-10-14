@@ -97,6 +97,7 @@ frontend/src/pages/admin/coding-cockpit/
   - Standardized `h-11 border-b border-slate-800` header styling across all three columns.
 - **Authentication**:
   - Uses the same-origin admin session bearer and tenant headers retrieved via `getAuthenticatedAdminHeaders()` and `getAdminAccessToken()` from `src/lib/api.ts` (natively normalized via the Fetch `Headers` API to guarantee case-insensitive uniqueness and prevent duplicate `X-Tenant`/`X-Token` header emissions).
+  - When `LOCAL_AUTH_BYPASS=true`, the mounted Codex SSE ticket route accepts the native `local-development-bypass` credential only after resolving the requested tenant and a real tenant-scoped admin account. The credential remains invalid when the setting is disabled and is never accepted by the standalone control-centre merely because the string matches.
 - **Runtime Services**:
   - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
 
