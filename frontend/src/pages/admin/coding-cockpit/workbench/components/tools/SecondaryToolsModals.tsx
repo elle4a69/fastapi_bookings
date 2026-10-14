@@ -5,6 +5,7 @@ import {
   Wrench,
   BookOpen,
   Radio,
+  Headphones,
   X
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../ui/dialog'
@@ -15,6 +16,7 @@ import { StressFuzzer } from '../../../StressFuzzer'
 import { IssuesStudio } from '../../../IssuesStudio'
 import { SkillsBrowser } from '../../../SkillsBrowser'
 import { EventStream } from '../../../EventStream'
+import { SupportTicketsReviewModal } from './SupportTicketsReviewModal'
 import type { AgentStatusData } from '../../../types'
 
 interface SecondaryToolsModalsProps {
@@ -28,13 +30,20 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
   loadingStatus,
   onRefreshStatus
 }) => {
-  const { state, setActiveToolModal, selectThread } = useWorkbenchStore()
+  const { state, setActiveToolModal, selectThread, openThreadById } = useWorkbenchStore()
   const activeTool = state.activeToolModal
 
   if (!activeTool) return null
 
   const getToolMeta = () => {
     switch (activeTool) {
+      case 'support_tickets':
+        return {
+          title: 'Support Ticket Review Queue',
+          subtitle: 'Inbound customer & tenant escalations, triage queue, and Codex autonomous investigation launch',
+          icon: <Headphones className="w-4 h-4 text-emerald-400" />,
+          badge: null
+        }
       case 'health':
         return {
           title: 'SRE Health Sentinels',
@@ -166,6 +175,22 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
           {activeTool === 'stream' && (
             <div className="max-w-6xl mx-auto">
               <EventStream />
+            </div>
+          )}
+
+          {activeTool === 'support_tickets' && (
+            <div className="max-w-6xl mx-auto h-full">
+              <SupportTicketsReviewModal
+                onClose={() => setActiveToolModal(null)}
+                onLaunchCodexSuccess={(ticketId, threadId) => {
+                  setActiveToolModal(null)
+                  if (openThreadById) {
+                    openThreadById(threadId, undefined, `Investigation: Ticket #${ticketId.slice(0, 8)}`)
+                  } else {
+                    selectThread(threadId)
+                  }
+                }}
+              />
             </div>
           )}
         </div>

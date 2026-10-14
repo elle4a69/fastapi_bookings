@@ -24,6 +24,7 @@ The Codex Engineering Cockpit provides a unified, mobile-first, production-grade
       - AST Issues Studio (`IssuesStudio.tsx`)
       - Engineering Skills Library (`SkillsBrowser.tsx`)
       - Real-time Event Stream (`EventStream.tsx`)
+      - Support Ticket Review Queue & Codex Launch Bridge (`SupportTicketsReviewModal.tsx`): Review inbound tenant escalations, inspect sanitized error context and messages, post internal notes or tenant replies, and trigger the platform owner review gate to launch isolated Codex investigations directly into active workbench threads with live SSE streaming ticker connection.
     - Opens tools as spacious full-screen modal overlays over the top using Radix Dialog/DialogContent (`w-full max-w-[96vw] md:max-w-7xl h-[94vh]`), dark slate styling, ESC to close, and an 'X' close button.
   - **Streamlined Bottom Console Dock (`BottomConsoleDock.tsx`)**:
     - Streamlined strictly to the Terminal / Live Output runner, preventing tab overflow or clipping. Features collapsible minimized (compact 38px status bar), expanded (340px), and maximized (80vh/580px) states.
@@ -71,7 +72,8 @@ frontend/src/pages/admin/coding-cockpit/
         ├── layout/ProjectRail.tsx                    # Backwards-compatible thin shim to UnifiedSidebar
         ├── layout/ThreadSidebar.tsx                  # Backwards-compatible thin shim to UnifiedSidebar
         ├── dock/BottomConsoleDock.tsx                # Streamlined Terminal / Live Output runner dock
-        ├── tools/SecondaryToolsModals.tsx            # Full-screen modal overlays for SRE, Fuzzer, AST, Skills
+        ├── tools/SecondaryToolsModals.tsx            # Full-screen modal overlays for SRE, Fuzzer, AST, Skills, Tickets
+        ├── tools/SupportTicketsReviewModal.tsx       # Platform owner support ticket review queue & Codex bridge
         ├── timeline/Timeline.tsx                     # Streaming conversation and activity timeline
         ├── timeline/SubagentTabBar.tsx               # Accessible subagent execution tab switcher
         ├── timeline/LiveActivityPulse.tsx            # Pulsing beacon and interrupt control

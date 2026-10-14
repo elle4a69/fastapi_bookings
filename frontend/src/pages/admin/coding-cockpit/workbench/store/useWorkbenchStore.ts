@@ -24,7 +24,7 @@ import { codexApi } from '../api/codexApi'
 
 export type InspectorTab = 'changes' | 'files' | 'settings' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
 export type BottomDockTab = 'terminal' | 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream'
-export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream' | null
+export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream' | 'support_tickets' | null
 export type BottomDockMode = 'collapsed' | 'expanded' | 'maximized'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting'
 export type AppMode = 'live' | 'demo' | 'unavailable'
@@ -1216,6 +1216,70 @@ export function useWorkbenchStore() {
     }
   }
 
+  const openThreadById = async (threadId: string, projectId?: string, title?: string) => {
+    let thread = state.threads.find(t => t.id === threadId)
+    if (!thread) {
+      try {
+        const remoteThread = await codexApi.getThread(threadId)
+        if (remoteThread) {
+          thread = {
+            id: remoteThread.id,
+            projectId: remoteThread.project_id || projectId || state.activeProjectId || 'default',
+            title: remoteThread.title || title || 'Investigation Thread',
+            module: 'Support Investigation',
+            status: (remoteThread.status as any) || 'active',
+            branch: 'main',
+            worktree: `wt-${remoteThread.id}`,
+            model: 'gpt-5.6-sol',
+            reasoningEffort: 'medium',
+            permissionProfile: 'workspace_write',
+            contextCompactionState: 'healthy',
+            subAgentCount: 0,
+            approvalCount: 0,
+            createdAt: 'Just now',
+            updatedAt: 'Just now',
+            isPinned: remoteThread.is_pinned ?? false,
+            isArchived: remoteThread.is_archived ?? false,
+            turns: []
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch thread from server, creating local entry:', err)
+      }
+      if (!thread) {
+        thread = {
+          id: threadId,
+          projectId: projectId || state.activeProjectId || 'default',
+          title: title || 'Investigation Thread',
+          module: 'Support Investigation',
+          status: 'active',
+          branch: 'main',
+          worktree: `wt-${threadId}`,
+          model: 'gpt-5.6-sol',
+          reasoningEffort: 'medium',
+          permissionProfile: 'workspace_write',
+          contextCompactionState: 'healthy',
+          subAgentCount: 0,
+          approvalCount: 0,
+          createdAt: 'Just now',
+          updatedAt: 'Just now',
+          turns: []
+        }
+      }
+    }
+
+    const exists = state.threads.some(t => t.id === thread!.id)
+    const newThreads = exists ? state.threads : [thread!, ...state.threads]
+
+    updateState({
+      threads: newThreads,
+      activeThreadId: thread!.id,
+      activeProjectId: thread!.projectId,
+      activeAgentId: 'main',
+      liveAnnouncements: [`Opened thread: ${thread!.title}`]
+    })
+  }
+
   const isThreadStreaming = (threadId: string): boolean => {
     return Boolean(state.streamingTurnIdByThread[threadId])
   }
@@ -2130,6 +2194,7 @@ export function useWorkbenchStore() {
     toggleTheme,
     selectProject,
     selectThread,
+    openThreadById,
     createProject,
     createThread,
     deleteThread,

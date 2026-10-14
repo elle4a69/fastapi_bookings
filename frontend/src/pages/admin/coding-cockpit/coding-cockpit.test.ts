@@ -229,3 +229,39 @@ test('ThreadHeader and useWorkbenchStore guard against null thread and undefined
   assert.ok(storeContent.includes('if (!threadId) {'), 'sendUserMessage must auto-create thread if null')
 })
 
+test('Coding Cockpit integrates Platform Owner Support Ticket Review Queue and Codex Launch Bridge', () => {
+  const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
+  const sidebarPath = fileURLToPath(new URL('./workbench/components/layout/UnifiedSidebar.tsx', import.meta.url))
+  const modalsPath = fileURLToPath(new URL('./workbench/components/tools/SecondaryToolsModals.tsx', import.meta.url))
+  const reviewModalPath = fileURLToPath(new URL('./workbench/components/tools/SupportTicketsReviewModal.tsx', import.meta.url))
+  const storePath = fileURLToPath(new URL('./workbench/store/useWorkbenchStore.ts', import.meta.url))
+
+  const headerContent = readFileSync(headerPath, 'utf8')
+  const sidebarContent = readFileSync(sidebarPath, 'utf8')
+  const modalsContent = readFileSync(modalsPath, 'utf8')
+  const reviewModalContent = readFileSync(reviewModalPath, 'utf8')
+  const storeContent = readFileSync(storePath, 'utf8')
+
+  // 1. ThreadHeader has support_tickets trigger and icon
+  assert.ok(headerContent.includes("setActiveToolModal('support_tickets')"), 'ThreadHeader must trigger support_tickets modal')
+  assert.ok(headerContent.includes('Headphones'), 'ThreadHeader must import and display Headphones icon for tickets')
+
+  // 2. UnifiedSidebar has support_tickets trigger
+  assert.ok(sidebarContent.includes("setActiveToolModal('support_tickets')"), 'UnifiedSidebar must trigger support_tickets modal')
+
+  // 3. Store supports support_tickets modal and openThreadById helper
+  assert.ok(storeContent.includes("'support_tickets'"), 'ActiveToolModal must include support_tickets')
+  assert.ok(storeContent.includes('openThreadById'), 'useWorkbenchStore must export openThreadById')
+
+  // 4. SecondaryToolsModals renders SupportTicketsReviewModal
+  assert.ok(modalsContent.includes('SupportTicketsReviewModal'), 'SecondaryToolsModals must embed SupportTicketsReviewModal')
+  assert.ok(modalsContent.includes("case 'support_tickets':"), 'SecondaryToolsModals must handle support_tickets case')
+
+  // 5. ReviewModal has required controls: API calls, launch codex, error context, messages
+  assert.ok(reviewModalContent.includes('/api/admin/support-tickets'), 'ReviewModal must call admin support tickets endpoint')
+  assert.ok(reviewModalContent.includes('/launch-codex'), 'ReviewModal must call launch-codex endpoint')
+  assert.ok(reviewModalContent.includes('Launch Codex Investigation'), 'ReviewModal must display Launch Codex Investigation action')
+  assert.ok(reviewModalContent.includes('error_context'), 'ReviewModal must inspect error_context')
+  assert.ok(reviewModalContent.includes('internal_only'), 'ReviewModal must support internal notes')
+})
+

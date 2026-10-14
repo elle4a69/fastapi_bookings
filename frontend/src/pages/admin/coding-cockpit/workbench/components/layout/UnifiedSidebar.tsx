@@ -14,6 +14,7 @@ import {
   Loader2,
   PanelLeftClose,
   MoreVertical,
+  Headphones,
   X
 } from 'lucide-react'
 import { useWorkbenchStore } from '../../store/useWorkbenchStore'
@@ -64,7 +65,8 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
     removeBoundary,
     fetchTelemetrySettings,
     updateTelemetrySettings,
-    testTelemetry
+    testTelemetry,
+    setActiveToolModal
   } = useWorkbenchStore()
 
   // Expanded project tree items in local state (active project always expanded by default)
@@ -291,6 +293,18 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
           >
             <Plus className="w-3.5 h-3.5 text-primary" />
             <span className="hidden sm:inline">Project</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setActiveToolModal('support_tickets')}
+            className="h-7 px-2 text-xs gap-1 bg-slate-800 hover:bg-slate-700 text-foreground border-border hover:text-white cursor-pointer"
+            title="Open Inbound Support Tickets Review Queue"
+          >
+            <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Tickets</span>
           </Button>
 
           <Button

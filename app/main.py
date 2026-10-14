@@ -149,6 +149,7 @@ from .api.routers import (
     operator_controls,
     ui_agent,
     support_tickets,
+    admin_support_tickets,
 )
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
 from .services.business_assistant.livekit.router import router as livekit_voice_router
@@ -580,6 +581,7 @@ app.include_router(operator_controls.operator_alias_router)
 app.include_router(media.router)
 app.include_router(ui_agent.router, prefix="/api/admin")
 app.include_router(support_tickets.router)
+app.include_router(admin_support_tickets.router)
 
 # Codex Control Centre Admin Routers
 app.include_router(

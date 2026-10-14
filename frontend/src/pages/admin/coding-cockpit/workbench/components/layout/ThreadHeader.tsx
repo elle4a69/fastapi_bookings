@@ -15,7 +15,8 @@ import {
   Activity,
   Zap,
   BookOpen,
-  Radio
+  Radio,
+  Headphones
 } from 'lucide-react'
 import { useWorkbenchStore, getSafeLocalStorage, setSafeLocalStorage } from '../../store/useWorkbenchStore'
 import { Button } from '../ui/button'
@@ -241,6 +242,19 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
           </div>
         )}
 
+        {/* Support Tickets Review Trigger */}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setActiveToolModal('support_tickets')}
+          className="h-7 px-2 text-xs gap-1.5 bg-background hover:bg-muted text-foreground border-border cursor-pointer"
+          title="Open Platform Owner Support Ticket Review Queue"
+        >
+          <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden sm:inline">Tickets</span>
+        </Button>
+
         {/* Secondary Engineering Tools Full-Screen Modal Launcher Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -257,6 +271,13 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-card border-border text-foreground text-xs">
+            <DropdownMenuItem
+              onClick={() => setActiveToolModal('support_tickets')}
+              className="flex items-center gap-2 cursor-pointer hover:bg-muted py-1.5"
+            >
+              <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Support Tickets Review</span>
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setActiveToolModal('health')}
               className="flex items-center justify-between gap-2 cursor-pointer hover:bg-muted py-1.5"
