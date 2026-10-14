@@ -7,6 +7,7 @@ This module contains the core business logic and external service integrations f
 - `agent_runner.py`: Implements the end-to-end background execution of an AI agent's turn. Orchestrates database retrieval, dialogue graph progression, and dispatching responses back to Chatwoot.
 - `chatwoot_provisioner.py`: Manages the Multi-Tenant Chatwoot ⇄ FastAPI Booking Engine Synchronization (Work Package 2). Connects to Chatwoot's Platform and App APIs.
 - `contact_sync.py`: Implements the Contact Projection Synchronization Worker (Work Package 3). Synchronizes FastAPI client records to Chatwoot contacts with `client_id`, `street_address`, `suburb`, and `postcode` embedded in `custom_attributes`.
+- `media_service.py`: Implements durable tenant-scoped media file persistence, MIME validation, path traversal prevention, public website eligibility toggle, soft deletion with binary purging, and safe assistant media context projection.
 - The configuration for these services leverages `app/core/config.py` for API tokens, base URLs, and other necessary integrations parameters.
 
 ## Core Workflows & Contracts
@@ -25,12 +26,19 @@ This module contains the core business logic and external service integrations f
 5. Enforces provider `max_char_limit` truncation constraint.
 6. Dispatches the outbound bot reply to Chatwoot conversation REST API via `send_bot_message`.
 
+### Media Asset Lifecycle & Assistant Projection Flow
+1. Media upload via `MediaService.save_upload`: enforces MIME type allowlist, checks forbidden script/executable extensions, streams chunks up to 25MB, writes into isolated `tenant_{tenant_id}/` storage, and creates DB record with `is_deleted=False`.
+2. Public website eligibility toggle via `MediaService.update_eligibility`: sets `is_public_website_eligible` flag.
+3. Assistant media context projection via `MediaService.get_assistant_media_context`: strictly filters for `is_public_website_eligible=True` and excludes internal/clinical notes to prevent private details from being exposed to assistant prompts or tools.
+4. Soft deletion via `MediaService.delete_media`: flags `is_deleted=True` and removes the physical binary file from disk.
+
 ## Setup, Configuration & Dependencies
 Ensure the following configuration variables are set in your environment or `app/core/config.py`:
 - `CHATWOOT_BASE_URL` (default: `http://localhost:4000`)
 - `CHATWOOT_PLATFORM_ACCESS_TOKEN` (or `CHATWOOT_PLATFORM_API_TOKEN`)
 - `CHATWOOT_WEBHOOK_SECRET`
 - `AGENT_WEBHOOK_URL` (default: `http://localhost:8000/api/v1/chatwoot/webhook`)
+- `MEDIA_UPLOAD_DIR` (default: `uploads/media`)
 
 These require the `httpx` module for making API calls.
 
@@ -39,6 +47,7 @@ These require the `httpx` module for making API calls.
 - When setting up webhooks or handling messages, operations strictly enforce tenant boundaries by utilizing the specific `chatwoot_account_id` provided during the provisioning flow.
 - In `agent_runner.py`, queries strictly constrain lookups to the bound `tenant_id` and `provider_id`.
 - Access tokens are never logged or leaked. The services module respects the strictest data isolation principles and handles configuration secrets securely through `app/core/config.py`.
+- In `media_service.py`, filesystem directories are partitioned by tenant (`uploads/media/tenant_{tenant_id}`) with path traversal prevention asserting that resolved destination paths remain within the upload root. Confidential clinical and booking notes are completely stripped from assistant context projections.
 
 ## Known Issues, Edge Cases & Outstanding Work
 - Network timeouts or platform API degradations will raise `ChatwootProvisionError`, meaning tenant creation should be handled gracefully by calling services (potentially via a retry queue or dead-letter mechanism).
@@ -50,4 +59,5 @@ These require the `httpx` module for making API calls.
 python -m pytest tests/test_chatwoot_provisioner.py -v
 python -m pytest tests/test_contact_sync.py -v
 python -m pytest tests/test_agent_runner.py -v
+python -m pytest tests/test_media_backend.py -v
 ```

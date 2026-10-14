@@ -50,7 +50,10 @@ alembic/
     ├── h8j0k2m4n6p8_reconcile_business_assistant_schema.py
     ├── j1k2m3n4p5q6_add_pgvector_extension_and_hnsw_index.py
     ├── k2m3n4p5q6r7_add_sms_bootcamp_message_status.py
-    └── m3n4p5q6r7s8_reconcile_missing_domain_tables.py
+    ├── m3n4p5q6r7s8_reconcile_missing_domain_tables.py
+    ├── y0z1a2b3c4d5_add_media_items_table.py
+    ├── z1a2b3c4d5e6_add_onboarding_workflow_tables.py
+    └── 10251fbf7103_create_support_ticket_tables.py
 ```
 
 ### Empty Database Bootstrap Pattern (`alembic/env.py:59-72`):

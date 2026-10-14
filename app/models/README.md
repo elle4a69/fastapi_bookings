@@ -5,7 +5,7 @@
 The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schema for **FastAPI Bookings**.
 
 ### Primary Domain Entities:
-- **Tenancy & Core Identity**: `Tenant`, `TenantWebsite`, `User` (roles: `owner`, `manager`, `provider`), `TenantTranslation`.
+- **Tenancy, Media & Core Identity**: `Tenant`, `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`), `TenantTranslation`.
 - **Catalog & Facilities**: `Service`, `Provider`, `Location`, `Category`, `AddOn`, `Product`, `Package`, `Resource`, `LocationProvider`, `LocationService`.
 - **Operations & Scheduling**: `Booking`, `BookingSlotAllocation`, `CalendarNote`, `Client`, `ClientDispute`, `WaitlistEntry`, `BlockedTime`, `ReservedTime`.
 - **Messaging & Omnichannel**: `Conversation`, `Message`, `ChannelAccount`, `MessageStyleExample`, `SmsAccount`, `SmsConversation`, `SmsMessage`, `SmsOutboundJob`, `SmsAiJob`, `SmsConversationEvent`, `SmsNote`, `SmsChatwootBinding`, `SmsQuickTool`.
@@ -23,6 +23,7 @@ app/models/
 ├── __init__.py               # Re-exports all models and populates Base.metadata
 ├── tenant.py                 # Multi-tenant account, tiers ('starter', 'growth', 'unlimited'), addon quotas, policy
 ├── tenant_website.py         # Single-page website builder configurations and template data
+├── media.py                  # Durable media assets, public website eligibility, notes, tenant storage
 ├── user.py                   # User authentication, hashed passwords, roles ('owner', 'manager', 'provider')
 ├── provider.py               # Staff practitioners, bios, in-call/out-call travel configuration
 ├── service.py                # Treatments, durations, pricing, buffer rules, in-call/out-call flags
@@ -104,6 +105,7 @@ app/models/
 6. **Bootcamp Message Status Invariant**: `sms_bootcamp_messages.status` enforces `nullable=False`, `default="pending"`, and `server_default="pending"`, ensuring structural integrity across simulations and migrations.
 7. **Cryptographic Token Cipher Isolation (IDOR-08)**: `SmsChatwootBinding` and `SmsAccount` derive Fernet cryptographic ciphers strictly from `settings.SECRET_KEY` (never from `PUBLIC_API_KEY`), ensuring sensitive carrier credentials and Chatwoot access tokens cannot be decrypted using public widget credentials.
 8. **Support Ticket Idempotency & Creator Scoping**: `support_tickets` enforces `UniqueConstraint('tenant_id', 'idempotency_key', name='uq_support_tickets_tenant_idempotency')` and indexes `('tenant_id', 'status')`. All ticket audit records and messages are cascade-deleted when the parent ticket is purged.
+9. **Media Asset Partitioning & Context Isolation**: `media_items` strictly partitions by `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`). Physical storage paths are scoped to `tenant_{tenant_id}`. Ingestion into Business Assistant context (`MediaService.get_assistant_media_context`) strictly filters on `is_public_website_eligible=True` and completely strips the confidential `notes` field to prevent sensitive clinical or staff notes from leaking into AI or public surfaces.
 
 ---
 
@@ -136,6 +138,9 @@ python -m alembic heads
 
 # Verify schema and row parity between primary and test databases
 .\.venv\Scripts\python.exe scripts/verify_db_parity.py
+
+# Run media backend tests
+.\.venv\Scripts\python.exe -m pytest tests/test_media_backend.py -v
 
 # Run support ticket models verification suite
 .\.venv\Scripts\python.exe -m pytest tests/test_support_ticket_models.py -v
