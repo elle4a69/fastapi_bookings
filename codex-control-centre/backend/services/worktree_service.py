@@ -1,3 +1,5 @@
+import os
+import stat
 import subprocess
 import shutil
 import logging
@@ -5,6 +7,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger("codex.worktree_service")
+
+def _handle_remove_readonly(func, path, exc_info):
+    """Clear the read-only bit and retry the operation on Windows."""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception:
+        pass
 
 def validate_worktree_name(name: str):
     if ".." in name or "/" in name or "\\" in name:
@@ -170,6 +180,20 @@ def remove_worktree(repo_path: str, worktree_name: str, force: bool = False) -> 
         
     if not target_path.exists():
         raise ValueError(f"Worktree {worktree_name} does not exist at {target_path}")
+
+    # If a worker process is active for this thread worktree, terminate it to release file locks on Windows
+    if worktree_name.startswith("wt-"):
+        thread_id = worktree_name[3:]
+        try:
+            from backend.services.worker_manager import worker_manager
+            worker = worker_manager.workers.get(thread_id)
+            if worker:
+                if worker.process:
+                    worker._kill_process_group()
+                worker_manager.workers.pop(thread_id, None)
+                worker_manager.clear_thread_mapping(thread_id)
+        except Exception as w_err:
+            logger.debug(f"Could not release worker for worktree {worktree_name}: {w_err}")
         
     # Dirty check: git status --porcelain in the worktree
     status_result = subprocess.run(["git", "status", "--porcelain"], cwd=str(target_path), capture_output=True, text=True, timeout=5)
@@ -186,14 +210,18 @@ def remove_worktree(repo_path: str, worktree_name: str, force: bool = False) -> 
         
     result = subprocess.run(cmd, cwd=cwd_str, capture_output=True, text=True, timeout=10)
     if result.returncode != 0:
-        raise RuntimeError(f"Failed to remove worktree: {result.stderr}")
+        # Fall back to shutil.rmtree on Windows if git worktree remove encountered file locking or permissions
+        if target_path.exists():
+            shutil.rmtree(target_path, onerror=_handle_remove_readonly)
+        else:
+            raise RuntimeError(f"Failed to remove worktree: {result.stderr}")
         
-    # Cleanup empty dir
-    if target_path.exists() and not any(target_path.iterdir()):
-        target_path.rmdir()
+    # Cleanup target dir if still exists
+    if target_path.exists():
+        shutil.rmtree(target_path, onerror=_handle_remove_readonly)
         
     # Prune
-    subprocess.run(["git", "worktree", "prune"], cwd=cwd_str, check=True, capture_output=True, timeout=5)
+    subprocess.run(["git", "worktree", "prune"], cwd=cwd_str, check=False, capture_output=True, timeout=5)
     
     return {"status": "success", "worktree": worktree_name}
 

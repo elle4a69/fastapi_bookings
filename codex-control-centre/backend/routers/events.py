@@ -89,6 +89,7 @@ async def stream_events(
     last_event_id: Optional[str] = Header(None, alias="Last-Event-ID"),
     query_last_event_id: Optional[str] = Query(None, alias="last_event_id"),
     sse_ticket: Optional[str] = Query(None),
+    max_events: Optional[int] = Query(None),
 ):
     resolved_thread_id = thread_id or query_thread_id or "default"
     await verify_sse_ticket(
@@ -116,6 +117,7 @@ async def stream_events(
 
     async def event_generator():
         queue = broker.subscribe(resolved_thread_id)
+        yielded_count = 0
         try:
             # 1. Replay missed backlog
             missed = broker.get_history(resolved_thread_id, actual_last_id)
@@ -124,6 +126,9 @@ async def stream_events(
                     break
                 data = json.dumps(event.payload)
                 yield f"id: {event.id}\nevent: {event.type}\ndata: {data}\n\n"
+                yielded_count += 1
+                if max_events is not None and yielded_count >= max_events:
+                    return
             
             while True:
                 if await is_req_disconnected():
@@ -134,8 +139,14 @@ async def stream_events(
                         break
                     data = json.dumps(event.payload)
                     yield f"id: {event.id}\nevent: {event.type}\ndata: {data}\n\n"
+                    yielded_count += 1
+                    if max_events is not None and yielded_count >= max_events:
+                        break
                 except asyncio.TimeoutError:
                     yield "event: ping\ndata: {}\n\n"
+                    yielded_count += 1
+                    if max_events is not None and yielded_count >= max_events:
+                        break
                 except (asyncio.CancelledError, GeneratorExit):
                     break
         except (asyncio.CancelledError, GeneratorExit):

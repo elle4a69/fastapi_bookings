@@ -279,6 +279,13 @@ class WorkerProcess:
                     try:
                         msg = json.loads(raw_msg)
                     except Exception:
+                        log_env = EventEnvelope(
+                            project_id="default",
+                            thread_id=self.thread_id or "",
+                            type="worker_log",
+                            payload={"stream": "stdout", "message": raw_msg},
+                        )
+                        broker.publish_event(log_env)
                         continue
 
                 if "id" in msg and ("result" in msg or "error" in msg):
@@ -335,7 +342,7 @@ class WorkerProcess:
         thread_id = self.resolve_thread_id(raw_thread_id)
         if not thread_id:
             with SessionLocal() as db:
-                active_turn = db.query(Turn).filter(Turn.status == "active").order_by(Turn.id.desc()).first()
+                active_turn = db.query(Turn).filter(Turn.status.in_(["active", "running"])).order_by(Turn.id.desc()).first()
                 if active_turn:
                     thread_id = active_turn.thread_id
                 else:
@@ -394,6 +401,14 @@ class WorkerProcess:
                     self.stderr_lines.append(raw_line)
                     if len(self.stderr_lines) > 100:
                         self.stderr_lines.pop(0)
+
+                    log_env = EventEnvelope(
+                        project_id="default",
+                        thread_id=self.thread_id or "",
+                        type="worker_log",
+                        payload={"stream": "stderr", "message": raw_line},
+                    )
+                    broker.publish_event(log_env)
             except Exception as e:
                 if not self.running:
                     break
@@ -440,7 +455,7 @@ class WorkerProcess:
                     with SessionLocal() as db:
                         turn = (
                             db.query(Turn)
-                            .filter(Turn.thread_id == thread_id, Turn.status == "active")
+                            .filter(Turn.thread_id == thread_id, Turn.status.in_(["active", "running"]))
                             .order_by(Turn.turn_number.desc())
                             .first()
                         )
@@ -476,10 +491,21 @@ class WorkerProcess:
                         if not target_thread_id:
                             return
 
-                        if norm_env.type == "turn_completed":
+                        if norm_env.type in ("turn_started", "turn/started"):
                             turn = (
                                 db.query(Turn)
                                 .filter(Turn.thread_id == target_thread_id, Turn.status == "active")
+                                .order_by(Turn.turn_number.desc())
+                                .first()
+                            )
+                            if turn:
+                                turn.status = "running"
+                                db.commit()
+
+                        elif norm_env.type == "turn_completed":
+                            turn = (
+                                db.query(Turn)
+                                .filter(Turn.thread_id == target_thread_id, Turn.status.in_(["active", "running"]))
                                 .order_by(Turn.turn_number.desc())
                                 .first()
                             )
@@ -518,10 +544,10 @@ class WorkerProcess:
                                         turn_id=turn.id,
                                         item_type="error",
                                         content={
-                                            "error_category": "upstream",
-                                            "summary": failure_message,
-                                            "details": failure_details,
-                                            "can_retry": True,
+                                             "error_category": "upstream",
+                                             "summary": failure_message,
+                                             "details": failure_details,
+                                             "can_retry": True,
                                         },
                                         sequence=sequence,
                                     ))
@@ -552,7 +578,7 @@ class WorkerProcess:
                         elif norm_env.type == "turn_failed":
                             turn = (
                                 db.query(Turn)
-                                .filter(Turn.thread_id == target_thread_id, Turn.status == "active")
+                                .filter(Turn.thread_id == target_thread_id, Turn.status.in_(["active", "running"]))
                                 .order_by(Turn.turn_number.desc())
                                 .first()
                             )
@@ -585,7 +611,7 @@ class WorkerProcess:
                         elif norm_env.type == "agent_message" and norm_env.payload.get("is_streaming") is False:
                             turn = (
                                 db.query(Turn)
-                                .filter(Turn.thread_id == target_thread_id, Turn.status == "active")
+                                .filter(Turn.thread_id == target_thread_id, Turn.status.in_(["active", "running"]))
                                 .order_by(Turn.turn_number.desc())
                                 .first()
                             )
@@ -618,7 +644,7 @@ class WorkerProcess:
                         elif norm_env.type in ("command", "tool_call", "tool_result"):
                             turn = (
                                 db.query(Turn)
-                                .filter(Turn.thread_id == target_thread_id, Turn.status == "active")
+                                .filter(Turn.thread_id == target_thread_id, Turn.status.in_(["active", "running"]))
                                 .order_by(Turn.turn_number.desc())
                                 .first()
                             )

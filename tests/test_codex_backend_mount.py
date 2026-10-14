@@ -184,3 +184,123 @@ def test_get_codex_diagnostics_deep(client: TestClient, db_session: Session):
     assert "status" in data
     assert "subsystems" in data
 
+
+def test_post_codex_projects(client: TestClient, db_session: Session):
+    """POST /api/admin/codex/projects creates or updates a project."""
+    _, _, headers = _create_admin_user(db_session, suffix="postproj")
+    from backend.config import settings as codex_settings
+
+    payload = {
+        "name": "Mounted Audit Project",
+        "repo_path": str(codex_settings.repo_root),
+        "default_branch": "main",
+    }
+    res = client.post("/api/admin/codex/projects", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "id" in data
+    assert data["name"] == "Mounted Audit Project"
+    assert data["default_branch"] == "main"
+
+
+def test_post_codex_threads(client: TestClient, db_session: Session):
+    """POST /api/admin/codex/threads creates a new execution thread."""
+    _, _, headers = _create_admin_user(db_session, suffix="postthread")
+
+    payload = {
+        "project_id": "default",
+        "title": "Audit Thread 1",
+    }
+    res = client.post("/api/admin/codex/threads", json=payload, headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "id" in data
+    assert data["title"] == "Audit Thread 1"
+    assert data["status"] == "active"
+
+
+def test_post_codex_turns_start(client: TestClient, db_session: Session):
+    """POST /api/admin/codex/turns/start initializes a turn, binds worktree sandbox, and logs record."""
+    _, _, headers = _create_admin_user(db_session, suffix="postturns")
+
+    # 1. Create a thread
+    thread_res = client.post(
+        "/api/admin/codex/threads",
+        json={"project_id": "default", "title": "Turn Execution Thread"},
+        headers=headers,
+    )
+    assert thread_res.status_code == 200
+    thread_id = thread_res.json()["id"]
+
+    # 2. Start a turn
+    turn_payload = {
+        "thread_id": thread_id,
+        "prompt": "Inspect codebase architecture and status",
+    }
+    turn_res = client.post("/api/admin/codex/turns/start", json=turn_payload, headers=headers)
+    assert turn_res.status_code == 200
+    data = turn_res.json()
+    assert "turn_id" in data
+    assert data["status"] == "active"
+    assert "workspace_root" in data
+
+
+def test_get_codex_settings_telemetry(client: TestClient, db_session: Session):
+    """GET /api/admin/codex/settings/telemetry returns telemetry connectivity and settings."""
+    _, _, headers = _create_admin_user(db_session, suffix="telemetry")
+
+    res = client.get("/api/admin/codex/settings/telemetry", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert "signoz_url" in data
+    assert "otlp_endpoint" in data
+    assert "enabled" in data
+
+
+def test_get_codex_events_stream_and_ticket(client: TestClient, db_session: Session):
+    """Mints an SSE ticket and verifies GET /api/admin/codex/events/stream connects cleanly."""
+    _, _, headers = _create_admin_user(db_session, suffix="eventsstream")
+
+    # 1. Mint single-use ticket
+    ticket_res = client.post(
+        "/api/admin/codex/events/ticket",
+        json={"project_id": "default", "thread_id": "th_stream_test"},
+        headers=headers,
+    )
+    assert ticket_res.status_code == 200
+    ticket = ticket_res.json()["ticket"]
+    assert ticket
+
+    # 2. Connect with ticket via query parameter on stream route using streaming context manager
+    with client.stream(
+        "GET",
+        f"/api/admin/codex/events/stream?project_id=default&thread_id=th_stream_test&sse_ticket={ticket}&max_events=1",
+    ) as stream_res:
+        # The endpoint accepts ticket and sets media type text/event-stream
+        assert stream_res.status_code == 200
+        assert stream_res.headers.get("content-type", "").startswith("text/event-stream")
+
+    # 3. Stream without authentication is rejected
+    unauth_stream = client.get("/api/admin/codex/events/stream")
+    assert unauth_stream.status_code == 401
+
+
+def test_get_codex_worktrees_and_governance(client: TestClient, db_session: Session):
+    """Verifies worktrees and governance routes mounted under /api/admin."""
+    _, _, headers = _create_admin_user(db_session, suffix="worktreesgov")
+    from backend.config import settings as codex_settings
+
+    # Worktrees listing
+    wt_res = client.get(
+        f"/api/admin/codex/worktrees?repo_path={codex_settings.repo_root}",
+        headers=headers,
+    )
+    assert wt_res.status_code == 200
+    assert isinstance(wt_res.json(), list)
+
+    # Governance pending approvals
+    gov_res = client.get("/api/admin/codex/governance/approvals/pending", headers=headers)
+    assert gov_res.status_code == 200
+    assert isinstance(gov_res.json(), list)
+
+

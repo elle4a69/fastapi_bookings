@@ -170,6 +170,8 @@ from backend.routers import (
     settings as codex_settings,
     models as codex_models,
     diagnostics as codex_diagnostics,
+    worktrees as codex_worktrees,
+    governance as codex_governance,
 )
 
 
@@ -348,9 +350,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/codex/turns/steer")
-async def steer():
-    return {"message": "Success"}
 # Initialize OpenTelemetry instrumentation
 init_telemetry(app)
 
@@ -602,7 +601,6 @@ app.include_router(
 app.include_router(
     codex_events.router,
     prefix="/api/admin/codex/events",
-    dependencies=[Depends(get_current_admin)],
     tags=["Codex Events"],
 )
 app.include_router(
@@ -621,6 +619,18 @@ app.include_router(
     codex_diagnostics.router,
     prefix="/api/admin/codex",
     tags=["Codex Diagnostics"],
+)
+app.include_router(
+    codex_worktrees.router,
+    prefix="/api/admin",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Worktrees"],
+)
+app.include_router(
+    codex_governance.router,
+    prefix="/api/admin",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Governance"],
 )
 
 
