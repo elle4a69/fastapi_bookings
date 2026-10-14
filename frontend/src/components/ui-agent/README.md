@@ -23,6 +23,7 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
     - Settings panel (`SettingsPanel.tsx`) for voice selection, wake phrase editing, sleep timeout, diagnostic mode toggle, and agent speed.
   - Streaming SSE communication (`stream.ts`) communicating with `/api/admin/ui-agent/chat/stream`.
   - RPC bridge (`operate_app`) connecting the Business Assistant and Grok Voice tool runners to live UI automation.
+  - Support ticket intake integration (`create_support_ticket`) submitting PII-scrubbed context to `/api/support/tickets` and displaying reassuring ticket receipts.
 - **What it deliberately avoids**:
   - Direct database mutations (all backend state alterations must go through authoritative authenticated API routes).
   - Bypassing tenant security or administrative authentication boundaries.
@@ -30,7 +31,7 @@ The **UI Agent DOM Automation, Ghost Cursor & Voice Delegation Suite** provides 
 
 ## 2. Architecture & Key Files
 - `scanner.ts`: Scans interactive elements (`a`, `button`, `input`, `select`, `textarea`, `role="combobox"`, etc.), assigns stable reference keys (`data-agent-ref` or `data-testid`), resolves accessible labels, and generates structured page snapshots.
-- `executor.ts`: Dispatches pointer and keyboard events using native prototype descriptor property setters (supporting React controlled inputs), Radix UI popover menus, and calendar navigation.
+- `executor.ts`: Dispatches pointer and keyboard events using native prototype descriptor property setters (supporting React controlled inputs), Radix UI popover menus, calendar navigation, and support ticket creation (`create_support_ticket`) with client-side PII scrubbing (`scrubClientPII`).
 - `GhostCursor.tsx`: Renders spring-physics cursor pointer and highlighting borders using `framer-motion` and `lucide-react`, with automatic fallback to `useAgentOptional()`.
 - `AgentControlBanner.tsx`: Top-center floating takeover indicator (`● Agent in Control — Please wait while automated actions complete`) with soft slow red pulse animation active during DOM execution.
 - `stream.ts`: Consumes server-sent events (SSE) from `/api/admin/ui-agent/chat/stream`, emitting deltas and executing final action arrays.

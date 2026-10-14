@@ -180,6 +180,24 @@ async def get_current_owner(
     return current_user
 
 
+async def require_platform_owner(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Ensure the user is a platform owner or superuser.
+
+    Checks current_user.role == 'owner' or current_user.is_superuser.
+    Rejects any non-owner with 403 Forbidden.
+    """
+    is_owner = (getattr(current_user, "role", "") or "").lower() == "owner"
+    is_superuser = bool(getattr(current_user, "is_superuser", False))
+    if not (is_owner or is_superuser):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Platform owner privilege required",
+        )
+    return current_user
+
+
 async def get_current_manager_or_owner(
     current_user: User = Depends(require_role(["owner", "manager"])),
 ) -> User:

@@ -58,7 +58,8 @@ graph TD
 - [travel.py](file:///F:/Projects/fastapi_bookings/app/api/routers/travel.py): Public and outcall travel calculations: address standardization (`GET /api/public/travel/addresses`), suburb typeahead (`GET /api/public/travel/suburbs`), centroid fee estimates (`POST /estimate`), exact address quotes (`POST /quote`), and operational transit segments (`POST /transit`).
 - [discovery.py](file:///F:/Projects/fastapi_bookings/app/api/routers/discovery.py): Multi-tenant Discovery Map API: geocoded business pins with real-time slot availability indicators (`GET /api/discovery/map`), service catalog options (`GET /api/discovery/services`), and manual admin geocode trigger (`POST /api/admin/business-profile/geocode`).
 - [locations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/locations.py): Administrative CRUD and relationship syncing for physical business locations (`/locations`, `/locations/{id}`).
-- [deps.py](file:///F:/Projects/fastapi_bookings/app/api/deps.py): Core dependency injection functions: `get_current_tenant`, `get_current_user`, `require_role`, `get_current_client`.
+- [support_tickets.py](file:///F:/Projects/fastapi_bookings/app/api/routers/support_tickets.py): Tenant Support Ticket Intake API: tenant-scoped ticket creation (`POST /api/support/tickets`), idempotency key deduplication (`X-Idempotency-Key`), ticket retrieval (`GET /api/support/tickets/{ticket_id}`), tenant replies (`POST /api/support/tickets/{ticket_id}/reply`), internal note protection (`POST /api/support/tickets/{ticket_id}/internal-note`), PII scrubbing, and platform owner privilege checks (`require_platform_owner`).
+- [deps.py](file:///F:/Projects/fastapi_bookings/app/api/deps.py): Core dependency injection functions: `get_current_tenant`, `get_current_user`, `require_role`, `require_platform_owner`, `get_current_tenant_user`, `get_current_client`.
 
 ---
 

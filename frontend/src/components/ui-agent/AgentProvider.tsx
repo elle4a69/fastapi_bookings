@@ -261,6 +261,16 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({
             log(r.ok ? r.result || "Action succeeded" : `${a.type} failed: ${r.error}`, r.ok);
             setActionHistory((prev) => [...prev.slice(-99), r]);
             results.push(r);
+            if (a.type === "create_support_ticket" && r.ok && r.result) {
+              setMessages((m) => [
+                ...m,
+                {
+                  id: `${Date.now()}-ticket`,
+                  role: "agent",
+                  text: r.result!,
+                },
+              ]);
+            }
           }
 
           if (!data.continue && results.every((r) => r.ok)) {

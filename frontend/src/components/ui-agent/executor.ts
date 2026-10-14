@@ -1,4 +1,20 @@
 import { findByRef, labelFor } from "./scanner.ts";
+import { authenticatedAdminFetch } from "../../lib/api.ts";
+
+export const scrubClientPII = (val: string): string => {
+  if (!val) return "";
+  return val
+    // credit cards
+    .replace(/\b(?:\d[ -]?){13,19}\b/g, "[REDACTED_CARD]")
+    // emails
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[REDACTED_EMAIL]")
+    // phones: Australian and international
+    .replace(/(?:\+?61\s*|0)[2-478](?:[ -]?\d){7,8}\b/g, "[REDACTED_PHONE]")
+    .replace(/\b(?:\+?1[-.]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, "[REDACTED_PHONE]")
+    .replace(/(?<!\w)\+\d[\d\s().-]{7,}\d(?!\w)/g, "[REDACTED_PHONE]")
+    // bearer / api keys
+    .replace(/\b(?:Bearer\s+[A-Za-z0-9._~+\-/]+=*|sk-[A-Za-z0-9_-]{12,}|(?:api[_-]?key|secret|password|token)\s*[:=]\s*\S+)\b/gi, "[REDACTED_SECRET]");
+};
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -272,6 +288,47 @@ export const createExecutor = ({ ui, navigate }: CreateExecutorOptions) => {
     wait: async ({ ms = 500 }) => {
       await sleep(Math.min(ms, 5000));
       return `Waited ${ms}ms`;
+    },
+    create_support_ticket: async (action) => {
+      ui.status("FILING TICKET");
+      const title = scrubClientPII(
+        (action.title as string) ||
+        `Onboarding assistance requested on ${typeof window !== "undefined" ? window.location.pathname : "portal"}`
+      );
+      const description = scrubClientPII(
+        (action.description as string) ||
+        (action.reason as string) ||
+        (typeof action.error === "string" ? action.error : "User requested support assistance during onboarding session.")
+      );
+      const category = (action.category as string) || "general";
+      const rawContext = (action.error_context as Record<string, unknown>) || {};
+      const error_context = {
+        route: typeof rawContext.route === "string" ? scrubClientPII(rawContext.route) : (typeof window !== "undefined" ? window.location.pathname : undefined),
+        action_attempted: typeof rawContext.action_attempted === "string" ? scrubClientPII(rawContext.action_attempted) : ((action.action_attempted as string) || undefined),
+        error_code: typeof rawContext.error_code === "string" ? scrubClientPII(rawContext.error_code) : ((action.error_code as string) || undefined),
+        error_message: typeof rawContext.error_message === "string" ? scrubClientPII(rawContext.error_message) : scrubClientPII((action.error_message as string) || (typeof action.error === "string" ? action.error : "")),
+        client_timestamp: (rawContext.client_timestamp as string) || new Date().toISOString(),
+      };
+
+      const res = await authenticatedAdminFetch("/api/support/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          error_context,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Failed to submit support ticket (${res.status})`);
+      }
+
+      const data = await res.json();
+      const ticketId = data.id || "created";
+      return `Support ticket #${ticketId} created. Don't worry, our team has received your ticket and is investigating it.`;
     },
   };
 

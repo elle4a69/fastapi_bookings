@@ -119,6 +119,59 @@ test("executor createExecutor correctly handles wait and unknown actions", async
   assert.match(unknownRes.error || "", /Unknown action/);
 });
 
+test("executor createExecutor handles create_support_ticket with scrubbed context and returns reassurance", async () => {
+  const logs: string[] = [];
+  const mockUI = {
+    point: () => {},
+    clickPulse: () => {},
+    hide: () => {},
+    status: (s: string) => logs.push(s),
+    speed: () => 0.01,
+    aborted: () => false,
+  };
+  const mockNavigate = () => {};
+
+  let capturedBody: any = null;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, opts: any) => {
+    if (String(url).includes("/api/support/tickets")) {
+      capturedBody = JSON.parse(opts.body);
+      return {
+        ok: true,
+        status: 201,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({ id: "ticket-uuid-1234", tenant_status: "Received" }),
+      };
+    }
+    return origFetch(url, opts);
+  }) as any;
+
+  try {
+    const exec = createExecutor({ ui: mockUI, navigate: mockNavigate });
+    const res = await exec({
+      type: "create_support_ticket",
+      title: "Error on page for user@example.com",
+      description: "Call me at +61 412 345 678, error connecting to db",
+      category: "bug",
+      error_context: {
+        route: "/admin/onboarding",
+        error_code: "500_INTERNAL",
+        error_message: "Failed for user@example.com",
+      },
+    });
+
+    assert.equal(res.ok, true);
+    assert.match(res.result || "", /Support ticket #ticket-uuid-1234 created/);
+    assert.match(res.result || "", /team has received/);
+    assert.ok(capturedBody !== null);
+    // Assert PII scrubbing occurred on client
+    assert.ok(!capturedBody.title.includes("user@example.com"));
+    assert.ok(!capturedBody.description.includes("+61 412 345 678"));
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
 test("streamChat parses delta events and terminal result from SSE chunks", async () => {
   const ssePayload =
     'data: {"type": "delta", "text": "Clicking"}\n\n' +
