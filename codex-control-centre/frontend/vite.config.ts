@@ -6,8 +6,19 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5180,
-    host: true
+    port: 4600,
+    host: true,
+    proxy: {
+      '/codex': {
+        target: 'http://127.0.0.1:4500',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/health': {
+        target: 'http://127.0.0.1:4500',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 400,

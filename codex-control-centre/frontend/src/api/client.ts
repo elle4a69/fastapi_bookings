@@ -27,9 +27,9 @@ export class ApiClient {
   private defaultTimeoutMs: number
 
   constructor(config: ApiClientConfig = {}) {
-    this.baseUrl = (config.baseUrl || 'http://127.0.0.1:8100').replace(/\/$/, '')
+    this.baseUrl = (config.baseUrl || 'http://127.0.0.1:4500').replace(/\/$/, '')
     this.token = config.token || 'local_secret'
-    this.defaultTimeoutMs = config.defaultTimeoutMs ?? 15000
+    this.defaultTimeoutMs = config.defaultTimeoutMs ?? 60000
   }
 
   setToken(token: string) {

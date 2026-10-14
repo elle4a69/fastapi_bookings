@@ -406,17 +406,20 @@ class WorkerProcess:
         if method == "thread/started":
             thread = params.get("thread") if isinstance(params, dict) else None
             codex_thread_id = thread.get("id") if isinstance(thread, dict) else None
-            if codex_thread_id and self.thread_id:
-                self.register_thread_mapping(self.thread_id, str(codex_thread_id))
-                # A dedicated worker has only one bootstrap operation at a
-                # time. Resolve it from the notification when the matching
-                # app-server version does not send a prompt request result.
-                for request_id in tuple(self._thread_start_request_ids):
-                    future = self.pending_requests.pop(request_id, None)
-                    self._thread_start_request_ids.discard(request_id)
-                    if future and not future.done():
-                        future.set_result({"thread": thread})
-                    break
+            if codex_thread_id:
+                if self.thread_id:
+                    self.register_thread_mapping(self.thread_id, str(codex_thread_id))
+                else:
+                    self.codex_thread_id = str(codex_thread_id)
+            # A dedicated worker has only one bootstrap operation at a
+            # time. Resolve it from the notification when the matching
+            # app-server version does not send a prompt request result.
+            for request_id in tuple(self._thread_start_request_ids):
+                future = self.pending_requests.pop(request_id, None)
+                self._thread_start_request_ids.discard(request_id)
+                if future and not future.done():
+                    future.set_result({"thread": thread})
+                break
 
         if method == "notification/event":
             raw_thread_id = params.get("thread_id") or params.get("threadId")

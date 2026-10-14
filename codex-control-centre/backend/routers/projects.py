@@ -28,6 +28,25 @@ IGNORED_DIRS = {
     "worktrees",
     ".idea",
     ".vscode",
+    "allure-results",
+    "allure-report",
+    "signoz",
+    "playwright_session",
+    "coverage",
+    ".coverage",
+    "htmlcov",
+    "artifacts",
+    "uploads",
+    "backups",
+    "target",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    "tmp",
+    ".tmp",
+    "vendor",
+    "storage",
 }
 
 TYPE_MAP = {
@@ -69,14 +88,15 @@ def format_size(size_bytes: int) -> str:
 
 def count_lines(filepath: Path) -> int:
     try:
-        if filepath.stat().st_size > 5 * 1024 * 1024:
+        st = filepath.stat()
+        # Skip empty files or files over 256KB for line counting in explorer view
+        if st.st_size == 0 or st.st_size > 256 * 1024:
             return 0
         with open(filepath, "rb") as f:
-            chunk = f.read(1024)
-            if b"\0" in chunk:
-                return 0
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-            return sum(1 for _ in f)
+            buf = f.read()
+        if b"\0" in buf[:1024]:
+            return 0
+        return buf.count(b"\n") + (1 if buf and not buf.endswith(b"\n") else 0)
     except Exception:
         return 0
 
@@ -214,9 +234,10 @@ def get_project_files(project_id: str, subpath: Optional[str] = None, db: Sessio
         scan_root = requested
 
     files_list: List[ProjectFileEntry] = []
+    MAX_FILES = 500
 
     def scan_dir(curr_dir: Path, depth: int):
-        if depth > 4:
+        if depth > 4 or len(files_list) >= MAX_FILES:
             return
         try:
             entries = sorted(curr_dir.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
@@ -224,6 +245,8 @@ def get_project_files(project_id: str, subpath: Optional[str] = None, db: Sessio
             return
 
         for entry in entries:
+            if len(files_list) >= MAX_FILES:
+                break
             name = entry.name
             if name.startswith(".") and name not in [".env", ".gitignore"]:
                 continue
@@ -231,9 +254,10 @@ def get_project_files(project_id: str, subpath: Optional[str] = None, db: Sessio
                 continue
 
             try:
-                resolved = entry.resolve()
-                if not resolved.is_relative_to(repo_root):
-                    continue
+                if entry.is_symlink():
+                    resolved = entry.resolve()
+                    if not resolved.is_relative_to(repo_root):
+                        continue
             except (OSError, ValueError):
                 continue
 

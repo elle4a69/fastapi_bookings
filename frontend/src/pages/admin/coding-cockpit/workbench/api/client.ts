@@ -31,7 +31,7 @@ export class ApiClient {
   constructor(config: ApiClientConfig = {}) {
     this.baseUrl = (config.baseUrl || '/api/admin/codex').replace(/\/$/, '')
     this.token = config.token || ''
-    this.defaultTimeoutMs = config.defaultTimeoutMs ?? 15000
+    this.defaultTimeoutMs = config.defaultTimeoutMs ?? 60000
   }
 
   setToken(token: string) {

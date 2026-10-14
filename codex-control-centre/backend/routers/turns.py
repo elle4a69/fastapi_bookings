@@ -183,6 +183,8 @@ async def _safe_dispatch_turn_start(
                 codex_thread_id = thread_id
             elif _should_initialize_thread(worker, thread_id):
                 try:
+                    if hasattr(worker, "thread_id") and not worker.thread_id:
+                        worker.thread_id = thread_id
                     res = await worker.send_request("thread/start", {"cwd": wt_str})
                     if isinstance(res, dict):
                         th_obj = res.get("thread")

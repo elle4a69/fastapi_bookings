@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         "app-server",
         "-c", "mcp_servers.mcp-skillset.enabled=false",
         "-c", "mcp_servers.main-context-document.enabled=false",
+        "-c", "mcp_servers.livekit-docs.enabled=false",
+        "-c", "mcp_servers.playwright.enabled=false",
+        "-c", "mcp_servers.agent-context.enabled=false",
+        "-c", "mcp_servers.node_repl.enabled=false",
     ]
     codex_worker_timeout_seconds: int = 60
     codex_api_key: Optional[str] = None
