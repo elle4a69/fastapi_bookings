@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { apiClient } from '@/lib/api'
 import { codexApi } from './workbench/api/codexApi'
+import { getLastUsedCodexModel } from './workbench/modelCatalog'
 import { useWorkbenchStore } from './workbench/store/useWorkbenchStore'
 import type { AgentIssue, RemediationPlan, AgentStatusData } from './types'
 
@@ -120,7 +121,7 @@ export const IssuesStudio: React.FC<IssuesStudioProps> = ({
       await codexApi.startTurn({
         thread_id: thread.id,
         prompt: remediationPrompt,
-        model: 'gpt-4o',
+        model: getLastUsedCodexModel(),
         reasoning_effort: 'high',
       })
 

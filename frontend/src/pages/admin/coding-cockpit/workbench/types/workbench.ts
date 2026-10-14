@@ -9,7 +9,7 @@ export type ThreadStatus =
   | 'completed'
   | 'archived'
 
-export type ReasoningEffort = 'low' | 'medium' | 'high'
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra'
 
 export type PermissionProfile = 'read_only' | 'workspace_write' | 'managed' | 'elevated'
 

@@ -138,7 +138,21 @@ def test_get_codex_models(client: TestClient, db_session: Session):
     assert len(payload["data"]) > 0
 
     model_ids = [m["id"] for m in payload["data"]]
-    assert "gpt-4o" in model_ids
+    assert model_ids == [
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ]
+    assert all(not model_id.startswith("gpt-4") for model_id in model_ids)
+    assert [m["id"] for m in payload["data"] if m["isDefault"]] == ["gpt-6.1-sol"]
+    assert payload["data"][0]["supportedReasoningEfforts"][-1]["reasoningEffort"] == "ultra"
+
+    legacy_res = client.get("/api/admin/codex/models/gpt-4o", headers=headers)
+    assert legacy_res.status_code == 404
 
 
 def test_get_codex_threads(client: TestClient, db_session: Session):

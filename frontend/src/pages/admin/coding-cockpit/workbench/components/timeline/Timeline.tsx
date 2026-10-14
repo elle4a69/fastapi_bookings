@@ -23,6 +23,7 @@ import { FailureItem } from './items/FailureItem'
 import { InterruptionItem } from './items/InterruptionItem'
 import { CompletionSummaryItem } from './items/CompletionSummaryItem'
 import { Button } from '../ui/button'
+import { getLastUsedCodexModel } from '../../modelCatalog'
 
 interface TimelineProps {
   thread: Thread | null
@@ -162,7 +163,7 @@ export const Timeline: React.FC<TimelineProps> = ({ thread }) => {
                 role: item.role,
                 objective: item.objective,
                 status: item.status,
-                model: 'gpt-5.6-sol',
+                model: getLastUsedCodexModel(),
                 reasoningEffort: 'medium',
                 scope: 'workspace_write',
                 startedAt: 'Just now',

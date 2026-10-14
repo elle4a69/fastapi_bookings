@@ -77,7 +77,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
   - `src/components/layout/ThreadSidebar.tsx`: Thread search, thread creation, pinned and archived thread lists.
   - `src/components/layout/ThreadHeader.tsx`: Responsive header with mobile hamburger trigger, truncated breadcrumbs, compaction gauge, and inspector toggle.
   - `src/components/inspector/Inspector.tsx`: Adaptive panel (in-flow on desktop >1024px, slide-over overlay on tablet 768px-1023px, full-width sheet on mobile <768px).
-  - `src/components/composer/Composer.tsx`: Prompt input, model selector (`gpt-5.6-sol`, `o3-mini`), reasoning controls, responsive wrapping toolbar with 44px tap targets.
+  - `src/components/composer/Composer.tsx`: Prompt input, model selector, reasoning controls, responsive wrapping toolbar with 44px tap targets. The FastAPI-mounted cockpit owns the current shared catalog and sticky preference.
   - `src/components/timeline/Timeline.tsx`: Virtualized event timeline with unique React keys, subagent filtering, and mobile horizontal containment.
   - `src/components/timeline/SubagentTabBar.tsx`: Horizontal interactive tab strip placed at the top of the timeline for switching between Main Orchestrator and child subagents with live status badges.
   - `src/components/timeline/LiveActivityPulse.tsx`: Pinned execution pulse beacon above the composer displaying active action, elapsed seconds, and an inline Stop / Interrupt button.
@@ -157,7 +157,7 @@ Set these variables in `.env` or system environment:
    - The Telemetry tab in the Inspector dynamically routes SigNoz trace links to the configured SigNoz URL.
 
 ### 3. Turn Lifecycle & Optimistic Reconciliation
-1. **User Submits Instruction**: `Composer` sends user prompt with selected model (`gpt-5.6-sol`) and reasoning effort via `POST /codex/turns/start`.
+1. **User Submits Instruction**: `Composer` sends the prompt with the validated sticky model and selected reasoning effort via `POST /codex/turns/start`. If a direct client omits the model, the backend resolves it to `gpt-6.1-sol`.
 2. **Optimistic Store Entry**: The frontend generates an optimistic turn and renders a pending timeline node.
 3. **Turn Started Event**: Backend assigns integer turn ID (`turn_id`) and emits `turn_started`. The frontend reconciles the optimistic turn ID with the API turn ID without creating duplicate turn cards.
 4. **Streaming Deltas**: As Codex generates tokens, stdio `item/agentMessage/delta` and `turn/reasoningDelta` notifications are translated to `agent_message` and `reasoning` SSE events and streamed to the UI.
@@ -192,7 +192,7 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 - **Mounted Endpoints**:
   - `GET /api/admin/codex/settings/boundaries` — Workspace boundary configuration.
   - `GET /api/admin/codex/projects` — Registered projects list.
-  - `GET /api/admin/codex/models` — Supported model catalog (`gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`, `claude-3-5-sonnet`).
+  - `GET /api/admin/codex/models` — Supported model catalog (`gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) with supported reasoning variants. GPT-4-era entries are intentionally unavailable.
   - `GET /api/admin/codex/threads/{project_id}` — Active threads per project.
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
@@ -218,7 +218,7 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
-- **ChatGPT Account Model Compatibility**: When Codex CLI is authenticated via a ChatGPT subscription account (rather than direct OpenAI API platform key), legacy models like `gpt-4o` and `gpt-6.1-sol` are rejected by the upstream CLI. Default model is locked to `gpt-5.6-sol`.
+- **Model Availability Drift**: The mounted catalog reflects the current models enabled for this Codex environment. Runtime account entitlements can still reject a model that is not enabled for the signed-in account; catalog updates must keep the backend endpoint and integrated frontend `modelCatalog.ts` in parity.
 - **Hanging External MCP Servers**: External MCP plugins configured in `~/.codex/config.toml` that fail to respond (e.g. `mcp-skillset`, `main-context-document`) can delay initial worker startup. Backend passes flags to disable failing MCPs during worker launch.
 - **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
 

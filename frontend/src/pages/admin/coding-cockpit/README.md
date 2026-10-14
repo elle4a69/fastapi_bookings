@@ -15,8 +15,9 @@ The Codex Engineering Cockpit provides a unified, mobile-first, production-grade
     - Vertical resizer splitter handles between Left Sidebar and Center Stage (resizes `sidebarWidth`, clamped between 220px and 480px, `cursor-col-resize`) and between Center Stage and Right Inspector (resizes `inspectorWidth`, clamped between 260px and 600px, `cursor-col-resize`).
     - Smooth visual feedback while dragging and persistent width storage in `localStorage` (`codex_sidebar_width`, `codex_inspector_width`) and `useWorkbenchStore`.
   - **Interactive Model Selector with Sticky Last-Used Default**:
-    - Dropdown in `ThreadHeader.tsx` listing available models: `gpt-5.6-sol`, `gpt-4o`, `gpt-4o-mini`, `o3-mini`, `o1`, `claude-3-5-sonnet`.
-    - Automatically syncs and persists selected model in `localStorage` (`codex_last_used_model`), with initialization in `useWorkbenchStore` defaulting new threads and composer to the sticky last-used model.
+    - All integrated selectors share the current catalog: `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`. Retired GPT-4 and unsupported third-party entries are excluded.
+    - `modelCatalog.ts` validates and persists the selected model in `localStorage` (`codex_last_used_model`). Header, composer, new-thread dialog, automated remediation, turn dispatch, and live fallback rendering all use that same preference, so navigating between threads cannot silently replace it.
+    - Reasoning selectors expose the variants supported by the chosen model (`low` through `ultra`, with Luna models capped at `max`).
   - **Full-Screen Modal Overlays for Secondary Tools (`SecondaryToolsModals.tsx`)**:
     - Clean launcher dropdown in `ThreadHeader.tsx` for secondary engineering tools:
       - SRE Health Sentinels (`HealthSentinels.tsx`)
@@ -64,6 +65,7 @@ frontend/src/pages/admin/coding-cockpit/
 └── workbench/
     ├── api/client.ts                                 # Same-origin /api/admin/codex API client with admin tokens
     ├── api/codexApi.ts                               # Typed API methods for threads, turns, diffs, approvals
+    ├── modelCatalog.ts                               # Current model variants and validated sticky preference
     ├── store/useWorkbenchStore.ts                    # Reactive store (projects, threads, dock, modals, widths)
     ├── types/workbench.ts                            # State contracts and event envelope interfaces
     └── components/
@@ -116,9 +118,9 @@ frontend/src/pages/admin/coding-cockpit/
    - Clicking **"+"** on any project row creates a new conversation under that project.
    - **Empty Thread Composer Fallback**: Submitting a message in `useWorkbenchStore.sendUserMessage` when `activeThreadId` is null automatically provisions a new conversation under the selected project with the sticky model, preventing dropped inputs or silent state failures.
 3. **Sticky Model Selection**:
-   - The interactive Model Selector in `ThreadHeader.tsx` defaults to `gpt-5.6-sol` or the last chosen model from `localStorage` (`codex_last_used_model`).
-   - Fully reactive dropdown with local state ensures immediate UI feedback even prior to thread hydration.
-   - Changing the model immediately updates the active thread's model policy and persists it for all subsequent turns.
+   - On first use, the Model Selector defaults to `gpt-6.1-sol`. Every later explicit selection becomes the application default through `localStorage` (`codex_last_used_model`).
+   - A shared browser event keeps the header and composer synchronized immediately, while thread navigation and hydration do not overwrite the preference.
+   - Invalid or retired saved values are migrated back to `gpt-6.1-sol`; every turn sends the resolved model explicitly to the FastAPI Codex endpoint.
 4. **Resilient Real-Time SSE Stream Architecture (`connectThreadEvents`)**:
    - Query-based streaming routing: Supports `GET /stream?thread_id={id}` and `GET /events/stream?thread_id={id}`.
    - **Single-Use Ticket Renegotiation**: Because standard browser `EventSource` cannot pass custom `Authorization: Bearer` headers, `codexApi.ts` fetches a scoped, single-use ticket from `/api/admin/codex/events/ticket`.
@@ -154,6 +156,7 @@ frontend/src/pages/admin/coding-cockpit/
 - **Daemon Offline Handling**: When Codex Control Centre daemon (`port 4500`) is offline, the header connection status displays a reconnect banner with a retry trigger.
 - **Mobile Keyboard Adjustment**: On small mobile viewports, opening the virtual keyboard shifts the sticky composer up; `env(safe-area-inset-bottom)` is enforced to avoid viewport cutoffs.
 - **Local Skills Indexing**: Interactive search across 1,600+ skills at `C:\Users\Frank\skills` uses in-browser fuzzy indexing; server-side embedding search is scheduled for upcoming releases.
+- **Model Catalog Maintenance**: The catalog reflects the model variants enabled for the current Codex application environment. When the runtime adds or retires a family, update the shared frontend catalog and mounted backend catalog together and retain the regression parity checks.
 
 ---
 

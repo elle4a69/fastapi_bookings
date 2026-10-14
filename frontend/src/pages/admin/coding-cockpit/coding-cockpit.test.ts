@@ -8,6 +8,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { navigation, filterNavigationByModules } from '../../../components/navigation.ts'
 import { ApiClient } from './workbench/api/client.ts'
+import {
+  CODEX_MODELS,
+  DEFAULT_CODEX_MODEL,
+  getLastUsedCodexModel,
+  resolveCodexModel,
+  setLastUsedCodexModel,
+} from './workbench/modelCatalog.ts'
 
 test('Navigation menu consolidates Resident Agent and Coding Studio into Engineering Cockpit', () => {
   const complianceSection = navigation.find((s) => s.label === 'Compliance & System')
@@ -130,15 +137,52 @@ test('ThreadHeader features Active Agent HUD, secondary tools launcher, and stic
   assert.ok(content.includes('Skills Library'), 'Must include Skills Library')
   assert.ok(content.includes('Event Stream'), 'Must include Event Stream')
 
-  // Sticky Model Selector dropdown
-  assert.ok(content.includes('gpt-5.6-sol'), 'Must list gpt-5.6-sol')
-  assert.ok(content.includes('gpt-4o'), 'Must list gpt-4o')
-  assert.ok(content.includes('gpt-4o-mini'), 'Must list gpt-4o-mini')
-  assert.ok(content.includes('o3-mini'), 'Must list o3-mini')
-  assert.ok(content.includes('o1'), 'Must list o1')
-  assert.ok(content.includes('claude-3-5-sonnet'), 'Must list claude-3-5-sonnet')
-  assert.ok(content.includes('codex_last_used_model'), 'Must persist model to localStorage')
+  // Sticky Model Selector dropdown uses the shared current catalog.
+  assert.ok(content.includes('CODEX_MODELS'), 'Must render the shared current model catalog')
+  assert.ok(content.includes('useCodexModelPreference'), 'Must use the shared sticky model preference')
   assert.equal(content.includes('GPT-4 over 0.0'), false, 'Must not contain stale model strings')
+})
+
+test('Codex model catalog exposes all current variants and rejects retired GPT-4 selections', () => {
+  assert.deepEqual(CODEX_MODELS.map(model => model.id), [
+    'gpt-6.1-sol',
+    'gpt-6-astra',
+    'gpt-6-sol',
+    'gpt-6-luna',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
+  ])
+  assert.equal(CODEX_MODELS.some(model => model.id.startsWith('gpt-4')), false)
+  assert.equal(resolveCodexModel('gpt-6-astra'), 'gpt-6-astra')
+  assert.equal(resolveCodexModel('gpt-4o'), DEFAULT_CODEX_MODEL)
+  assert.ok(CODEX_MODELS.find(model => model.id === 'gpt-6.1-sol')?.supportedReasoningEfforts.includes('ultra'))
+  assert.equal(CODEX_MODELS.find(model => model.id === 'gpt-6-luna')?.supportedReasoningEfforts.includes('ultra'), false)
+})
+
+test('last selected Codex model remains the validated default across workflows', () => {
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  const values = new Map<string, string>()
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    },
+  })
+
+  try {
+    assert.equal(setLastUsedCodexModel('gpt-6-astra'), 'gpt-6-astra')
+    assert.equal(getLastUsedCodexModel(), 'gpt-6-astra')
+    values.set('codex_last_used_model', 'gpt-4o')
+    assert.equal(getLastUsedCodexModel(), DEFAULT_CODEX_MODEL)
+  } finally {
+    if (originalStorage) {
+      Object.defineProperty(globalThis, 'localStorage', originalStorage)
+    } else {
+      delete (globalThis as { localStorage?: unknown }).localStorage
+    }
+  }
 })
 
 test('Standardized h-11 slim headers align across UnifiedSidebar, ThreadHeader, and Inspector', () => {

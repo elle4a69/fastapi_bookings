@@ -398,7 +398,7 @@ class Protocol:
     def build_turn_start_request(
         thread_id: str,
         prompt: str,
-        model: str = "gpt-4o",
+        model: str = "gpt-6.1-sol",
         reasoning_effort: Optional[str] = None,
         workspace_root: Optional[str] = None,
         cwd: Optional[str] = None,

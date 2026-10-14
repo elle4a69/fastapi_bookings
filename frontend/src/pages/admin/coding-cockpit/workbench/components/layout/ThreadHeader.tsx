@@ -18,7 +18,8 @@ import {
   Radio,
   Headphones
 } from 'lucide-react'
-import { useWorkbenchStore, getSafeLocalStorage, setSafeLocalStorage } from '../../store/useWorkbenchStore'
+import { useWorkbenchStore } from '../../store/useWorkbenchStore'
+import { CODEX_MODELS, useCodexModelPreference } from '../../modelCatalog'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import {
@@ -34,15 +35,6 @@ import type { AgentStatusData } from '../../../types'
 interface ThreadHeaderProps {
   statusData?: AgentStatusData | null
 }
-
-const AVAILABLE_MODELS = [
-  { value: 'gpt-5.6-sol', label: 'gpt-5.6-sol (Default)' },
-  { value: 'gpt-4o', label: 'gpt-4o' },
-  { value: 'gpt-4o-mini', label: 'gpt-4o-mini' },
-  { value: 'o3-mini', label: 'o3-mini (Reasoning)' },
-  { value: 'o1', label: 'o1 (Deep Reasoning)' },
-  { value: 'claude-3-5-sonnet', label: 'claude-3-5-sonnet' }
-]
 
 export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
   const {
@@ -77,15 +69,11 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
     setIsEditingTitle(false)
   }
 
-  const [selectedStickyModel, setSelectedStickyModel] = useState<string>(() =>
-    getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol')
-  )
-
-  const currentModel = activeThread?.model || selectedStickyModel
+  const [selectedStickyModel, selectStickyModel] = useCodexModelPreference()
+  const currentModel = selectedStickyModel
 
   const handleSelectModel = (model: string) => {
-    setSelectedStickyModel(model)
-    setSafeLocalStorage('codex_last_used_model', model)
+    selectStickyModel(model)
     if (activeThread) {
       setThreadModel(activeThread.id, model)
     }
@@ -180,9 +168,9 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-52 bg-card border-border text-foreground text-xs">
               <DropdownMenuRadioGroup value={currentModel} onValueChange={handleSelectModel}>
-                {AVAILABLE_MODELS.map((m) => (
-                  <DropdownMenuRadioItem key={m.value} value={m.value} className="cursor-pointer">
-                    {m.label}
+                {CODEX_MODELS.map((model) => (
+                  <DropdownMenuRadioItem key={model.id} value={model.id} className="cursor-pointer">
+                    {model.label}
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>

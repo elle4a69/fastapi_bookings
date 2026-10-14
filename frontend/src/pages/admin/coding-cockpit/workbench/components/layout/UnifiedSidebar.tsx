@@ -40,6 +40,11 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { Thread } from '../../types/workbench'
+import {
+  CODEX_MODELS,
+  getLastUsedCodexModel,
+  setLastUsedCodexModel,
+} from '../../modelCatalog'
 
 interface UnifiedSidebarProps {
   onSelectThreadMobile?: () => void
@@ -90,7 +95,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
   const [isNewThreadOpen, setIsNewThreadOpen] = useState(false)
   const [targetProjectIdForThread, setTargetProjectIdForThread] = useState<string>('')
   const [newThreadTitle, setNewThreadTitle] = useState('')
-  const [newThreadModel, setNewThreadModel] = useState('gpt-5.6-sol')
+  const [newThreadModel, setNewThreadModel] = useState(getLastUsedCodexModel)
   const [newThreadError, setNewThreadError] = useState('')
 
   const [isRenameThreadOpen, setIsRenameThreadOpen] = useState(false)
@@ -118,6 +123,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
     e?.stopPropagation()
     setTargetProjectIdForThread(projectId)
     setNewThreadTitle('')
+    setNewThreadModel(getLastUsedCodexModel())
     setNewThreadError('')
     setIsNewThreadOpen(true)
   }
@@ -690,13 +696,12 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({ onSelectThreadMo
               </label>
               <select
                 value={newThreadModel}
-                onChange={(e) => setNewThreadModel(e.target.value)}
+                onChange={(e) => setNewThreadModel(setLastUsedCodexModel(e.target.value))}
                 className="w-full h-9 rounded-md bg-slate-950 border border-border text-foreground text-xs px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
-                <option value="gpt-5.6-sol">GPT-5.6 Sol (Autonomous Architecture & Code)</option>
-                <option value="gpt-4o">GPT-4o (Production Multimodal Default)</option>
-                <option value="claude-3-7-sonnet">Claude 3.7 Sonnet (Deep Thinking & Verification)</option>
-                <option value="o3-mini">o3-mini (High-Speed Code Synthesis)</option>
+                {CODEX_MODELS.map(model => (
+                  <option key={model.id} value={model.id}>{model.label} — {model.description}</option>
+                ))}
               </select>
             </div>
 

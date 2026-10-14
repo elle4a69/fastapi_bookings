@@ -23,7 +23,7 @@ router = APIRouter(prefix="", tags=["turns"])
 class TurnStart(BaseModel):
     thread_id: str
     prompt: str
-    model: Optional[str] = None
+    model: str = "gpt-6.1-sol"
     reasoning_effort: Optional[str] = None
 
     @model_validator(mode="before")

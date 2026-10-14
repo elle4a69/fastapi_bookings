@@ -21,6 +21,11 @@ import {
   FIXTURE_INCIDENTS
 } from '../test/fixtures/realisticFixtures'
 import { codexApi } from '../api/codexApi'
+import {
+  getLastUsedCodexModel,
+  resolveCodexModel,
+  setLastUsedCodexModel,
+} from '../modelCatalog'
 
 export type InspectorTab = 'changes' | 'files' | 'settings' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
 export type BottomDockTab = 'terminal' | 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream'
@@ -200,7 +205,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
       status: 'active',
       branch: 'main',
       worktree: 'wt-main',
-      model: 'gpt-4o',
+      model: getLastUsedCodexModel(),
       reasoningEffort: 'medium',
       permissionProfile: 'workspace_write',
       contextCompactionState: 'healthy',
@@ -753,7 +758,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         role,
         objective: payload.objective || payload.goal || 'Assist engineering workflow',
         status: (payload.status as any) || 'running',
-        model: payload.model || 'gpt-4o',
+        model: resolveCodexModel(payload.model || getLastUsedCodexModel()),
         reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || 'medium',
         scope: payload.scope || 'workspace_write',
         branch: payload.branch,
@@ -814,7 +819,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         role,
         objective: payload.objective || existing?.objective || 'Assist engineering workflow',
         status: updatedStatus,
-        model: payload.model || existing?.model || 'gpt-4o',
+        model: resolveCodexModel(payload.model || existing?.model || getLastUsedCodexModel()),
         reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || existing?.reasoningEffort || 'medium',
         scope: payload.scope || existing?.scope || 'workspace_write',
         branch: payload.branch || existing?.branch,
@@ -869,7 +874,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         role,
         objective: payload.objective || existing?.objective || 'Assist engineering workflow',
         status: completedStatus,
-        model: payload.model || existing?.model || 'gpt-4o',
+        model: resolveCodexModel(payload.model || existing?.model || getLastUsedCodexModel()),
         reasoningEffort: payload.reasoning_effort || payload.reasoningEffort || existing?.reasoningEffort || 'medium',
         scope: payload.scope || existing?.scope || 'workspace_write',
         branch: payload.branch || existing?.branch,
@@ -918,7 +923,7 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         role: payload.role || 'Subagent Worker',
         objective: payload.objective || payload.name || 'Assist engineering workflow',
         status: payload.status || 'running',
-        model: payload.model || 'gpt-4o',
+        model: resolveCodexModel(payload.model || getLastUsedCodexModel()),
         reasoningEffort: payload.reasoningEffort || 'medium',
         scope: payload.scope || 'workspace_write',
         startedAt: eventTime,
@@ -1108,7 +1113,7 @@ export function useWorkbenchStore() {
               status: (t.status as any) || 'active',
               branch: 'main',
               worktree: 'wt-main',
-              model: 'gpt-4o',
+              model: getLastUsedCodexModel(),
               reasoningEffort: 'medium',
               permissionProfile: 'workspace_write',
               contextCompactionState: 'healthy',
@@ -1135,7 +1140,7 @@ export function useWorkbenchStore() {
               lastActivity: 'Just now',
               writeRoots: [p.repo_path || 'frontend/'],
               authMode: 'chatgpt_managed',
-              modelPolicy: 'gpt-4o default',
+              modelPolicy: `${getLastUsedCodexModel()} default`,
               description: p.repo_path
             }))
           } else if (mappedThreads.length > 0) {
@@ -1151,7 +1156,7 @@ export function useWorkbenchStore() {
                 lastActivity: 'Just now',
                 writeRoots: ['frontend/', 'backend/'],
                 authMode: 'chatgpt_managed',
-                modelPolicy: 'gpt-4o default'
+                modelPolicy: `${getLastUsedCodexModel()} default`
               }
             ]
           }
@@ -1230,7 +1235,7 @@ export function useWorkbenchStore() {
             status: (remoteThread.status as any) || 'active',
             branch: 'main',
             worktree: `wt-${remoteThread.id}`,
-            model: 'gpt-5.6-sol',
+            model: getLastUsedCodexModel(),
             reasoningEffort: 'medium',
             permissionProfile: 'workspace_write',
             contextCompactionState: 'healthy',
@@ -1255,7 +1260,7 @@ export function useWorkbenchStore() {
           status: 'active',
           branch: 'main',
           worktree: `wt-${threadId}`,
-          model: 'gpt-5.6-sol',
+          model: getLastUsedCodexModel(),
           reasoningEffort: 'medium',
           permissionProfile: 'workspace_write',
           contextCompactionState: 'healthy',
@@ -1286,10 +1291,11 @@ export function useWorkbenchStore() {
 
   const createThread = async (
     title: string,
-    model: string = getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol'),
+    model: string = getLastUsedCodexModel(),
     reasoning: ReasoningEffort = 'medium',
     permission: PermissionProfile = 'workspace_write'
   ) => {
+    const resolvedModel = setLastUsedCodexModel(model)
     const newThreadId = `th_${Date.now()}`
     const targetProjId = state.activeProjectId || 'proj_codex'
 
@@ -1301,7 +1307,7 @@ export function useWorkbenchStore() {
       status: 'active',
       branch: 'main',
       worktree: 'wt-main',
-      model,
+      model: resolvedModel,
       reasoningEffort: reasoning,
       permissionProfile: permission,
       contextCompactionState: 'healthy',
@@ -1350,15 +1356,15 @@ export function useWorkbenchStore() {
   }
 
   const setThreadModel = async (threadId: string, model: string) => {
-    setSafeLocalStorage('codex_last_used_model', model)
+    const resolvedModel = setLastUsedCodexModel(model)
     updateState(prev => ({
-      threads: prev.threads.map(t => t.id === threadId ? { ...t, model } : t),
-      liveAnnouncements: [`Changed model to: ${model}`]
+      threads: prev.threads.map(t => t.id === threadId ? { ...t, model: resolvedModel } : t),
+      liveAnnouncements: [`Changed model to: ${resolvedModel}`]
     }))
 
     if (state.appMode === 'live') {
       try {
-        await codexApi.updateThread(threadId, { model })
+        await codexApi.updateThread(threadId, { model: resolvedModel })
       } catch (err) {
         console.error('Failed to update thread model on API:', err)
       }
@@ -1443,7 +1449,7 @@ export function useWorkbenchStore() {
         lastActivity: 'Just now',
         writeRoots: [created.repo_path],
         authMode: 'chatgpt_managed',
-        modelPolicy: 'gpt-4o default',
+        modelPolicy: `${getLastUsedCodexModel()} default`,
         description: created.repo_path
       }
     } else {
@@ -1459,7 +1465,7 @@ export function useWorkbenchStore() {
         lastActivity: 'Just now',
         writeRoots: [repository || 'frontend/'],
         authMode: 'chatgpt_managed',
-        modelPolicy: 'gpt-4o default'
+        modelPolicy: `${getLastUsedCodexModel()} default`
       }
     }
 
@@ -1800,12 +1806,13 @@ export function useWorkbenchStore() {
 
     let threadId = state.activeThreadId
     if (!threadId) {
-      const modelToUse = options?.model || getSafeLocalStorage('codex_last_used_model', 'gpt-5.6-sol')
+      const modelToUse = resolveCodexModel(options?.model || getLastUsedCodexModel())
       const title = text.trim().slice(0, 45) || 'New Investigation'
       const created = await createThread(title, modelToUse, options?.reasoningEffort || 'medium')
       threadId = created.id
     }
 
+    const modelToUse = setLastUsedCodexModel(options?.model || getLastUsedCodexModel())
     const newTurnId = `turn_${Date.now()}`
     const userItem: TimelineItem = {
       id: `usr_${Date.now()}`,
@@ -1859,7 +1866,7 @@ export function useWorkbenchStore() {
         const turnRes = await codexApi.startTurn({
           thread_id: threadId,
           prompt: text,
-          model: options?.model,
+          model: modelToUse,
           reasoning_effort: options?.reasoningEffort,
         })
         if (turnRes?.turn_id) {
