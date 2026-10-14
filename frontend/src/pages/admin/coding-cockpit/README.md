@@ -24,6 +24,7 @@ The Codex Engineering Cockpit provides a unified, mobile-first, production-grade
       - Concurrency Stress Fuzzer (`StressFuzzer.tsx`)
       - AST Issues Studio (`IssuesStudio.tsx`)
       - Engineering Skills Library (`SkillsBrowser.tsx`)
+      - Codex Plugin Manager (`PluginManager.tsx`)
       - Real-time Event Stream (`EventStream.tsx`)
     - Opens tools as spacious full-screen modal overlays over the top using Radix Dialog/DialogContent (`w-full max-w-[96vw] md:max-w-7xl h-[94vh]`), dark slate styling, ESC to close, and an 'X' close button.
   - **Support Ticket Management Center & Live Counters (`SupportTicketManagementStation.tsx`)**:
@@ -40,6 +41,7 @@ The Codex Engineering Cockpit provides a unified, mobile-first, production-grade
     - Live HUD: Top bar indicator displaying real-time agent status (`● Working on: ...` or `● Thinking...`), live ticking elapsed timer `(14s)`, and an inline stop/interrupt trigger.
     - Subagent Tab Switcher: Radix tab strip switching between `[ 👑 Main Agent ]` and child subagents `[ 🤖 Subagent: DB Worker ]` with status badges.
   - **Streamlined Timeline & Approvals**: Renders user instructions, live streaming responses, collapsible tool calls, reasoning process accordions, and one-click Approval cards (`once` / `session` scopes).
+  - **Plugin Installation & Authorization**: `PluginManager.tsx` renders the live app-server catalog, prioritizes Codex Security, installs only catalog-resolved plugin identities, and exposes provider authorization links returned by `plugin/install`. Timeline input cards send real JSON-RPC responses for tool questions, MCP forms/URL flows, and permission requests instead of changing UI state locally.
   - **One-Click Diff Review Studio (`DiffReviewStudioModal.tsx`)**: Native file diff inspection and verdict recording modal with zero iframes.
   - **Mobile-First Responsiveness**: 100% screen width on mobile (< 768px down to 320px) for center chat, fixed/sticky composer with min 44px tap targets, zero horizontal scroll, and zero layout squishing.
 - **What it Deliberately Avoids**:
@@ -65,12 +67,13 @@ frontend/src/pages/admin/coding-cockpit/
 ├── StressFuzzer.tsx                                  # Concurrency race-condition load testing suite
 ├── IssuesStudio.tsx                                  # AST diagnostics & isolated sandbox fix executor
 ├── SkillsBrowser.tsx                                 # C:\Users\Frank\skills interactive catalog
+├── PluginManager.tsx                                 # Live Codex plugin catalog, install, and app authorization UI
 ├── EventStream.tsx                                   # Filtered SSE event stream console
 ├── coding-cockpit.test.ts                            # Unit test suite verifying routing, headers, splitters, HUD
 ├── README.md                                         # This living architecture documentation
 └── workbench/
     ├── api/client.ts                                 # Same-origin /api/admin/codex API client with admin tokens
-    ├── api/codexApi.ts                               # Typed API methods for threads, turns, diffs, approvals
+    ├── api/codexApi.ts                               # Typed API methods for threads, turns, approvals, plugins, interactions
     ├── modelCatalog.ts                               # Current model variants and validated sticky preference
     ├── store/useWorkbenchStore.ts                    # Reactive store (projects, threads, dock, modals, widths)
     ├── types/workbench.ts                            # State contracts and event envelope interfaces
@@ -136,7 +139,7 @@ frontend/src/pages/admin/coding-cockpit/
 5. **Defensive Streaming Property Guards**:
    - All timeline and inspector components (`CommandExecutionItem`, `ReasoningSummaryItem`, `AgentMessageItem`, `FileChangeItem`, `PlanItem`, `SubAgentCard`, `TestRunItem`, `WebResearchItem`, `UserInputFormItem`, `FailureItem`, `TerminalTab`, `LiveActivityPulse`, `Timeline`) defensively guard against `undefined`, `null`, non-string, and empty array inputs during streaming state transitions.
 6. **Secondary Tool Modals**:
-   - Operator accesses secondary tools (SRE Health, Concurrency Stress Fuzzer, AST Issues Studio, Skills Library, Event Stream) via the "Tools" dropdown in `ThreadHeader.tsx`.
+   - Operator accesses secondary tools (SRE Health, Concurrency Stress Fuzzer, AST Issues Studio, Skills Library, Plugin Manager, Event Stream) via the "Tools" dropdown in `ThreadHeader.tsx`.
    - Clicking any tool opens a spacious, full-screen dialog overlay (`SecondaryToolsModals.tsx`) with ESC and 'X' close handling.
 7. **Streamlined Terminal Runner**:
    - The bottom dock is strictly dedicated to the Terminal / Live Output runner, avoiding cramped tab strips or UI clipping.
@@ -146,6 +149,10 @@ frontend/src/pages/admin/coding-cockpit/
 9. **Diff Review Studio**:
    - Changed files are indexed in `Inspector.tsx` (Changes tab).
    - Clicking **"Diffs"** opens `DiffReviewStudioModal.tsx` for side-by-side hunk review and operator verdict approval.
+10. **Plugin Installation and Authorization**:
+   - Open **Tools → Plugin Manager**, search for **Codex Security**, review its apps and skills, and select **Install plugin**.
+   - The browser calls the authenticated `/api/admin/codex/plugins/*` endpoints; the backend resolves the exact catalog entry and sends `plugin/install` to the local Codex app-server.
+   - Any returned `appsNeedingAuth` entries become explicit **Connect** links. The plugin detail also retains its provider connection links after a page reload so an interrupted authorization can be resumed. In-turn `item/tool/requestUserInput`, `mcpServer/elicitation/request`, and `item/permissions/requestApproval` requests render in the timeline and send their response to the originating worker before being marked complete.
 
 ---
 
@@ -155,6 +162,8 @@ frontend/src/pages/admin/coding-cockpit/
 - **Filesystem Boundaries**: Tool executions are strictly bounded by authorized workspace boundaries configured in `SettingsInspectorTab.tsx`.
 - **Isolated Worktrees**: Autonomous turns execute in dedicated Git branches or sandboxed worktrees, preventing uncontrolled mutations.
 - **Human-in-the-Loop Approval**: Critical system mutations, command executions, and diff merges require manual operator sign-off via explicit approval cards.
+- **Plugin Path Isolation**: The browser never supplies local marketplace paths. It submits a catalog plugin ID, and the backend derives the trusted marketplace selector from the app-server catalog while stripping local paths from API responses.
+- **Secret Input Handling**: Secret question values remain component-local, are sent only to the originating app-server request, are cleared after submission, and are not included in SSE resolution events.
 
 ---
 
@@ -164,6 +173,7 @@ frontend/src/pages/admin/coding-cockpit/
 - **Mobile Keyboard Adjustment**: On small mobile viewports, opening the virtual keyboard shifts the sticky composer up; `env(safe-area-inset-bottom)` is enforced to avoid viewport cutoffs.
 - **Local Skills Indexing**: Interactive search across 1,600+ skills at `C:\Users\Frank\skills` uses in-browser fuzzy indexing; server-side embedding search is scheduled for upcoming releases.
 - **Model Catalog Maintenance**: The catalog reflects the model variants enabled for the current Codex application environment. When the runtime adds or retires a family, update the shared frontend catalog and mounted backend catalog together and retain the regression parity checks.
+- **Plugin API Stability**: OpenAI currently labels app-server `plugin/list`, `plugin/read`, and `plugin/install` as under development. The manager displays that status and the backend validates/sanitizes every response, but a future Codex CLI schema change may require an adapter update.
 
 ---
 

@@ -156,13 +156,15 @@ def evaluate_tool_risk(
 
 # Pending approval RPC trackers: maps tool_call_id and approval_id -> RPC dict
 _pending_rpc_registry: Dict[str, Dict[str, Any]] = {}
+_pending_interaction_registry: Dict[str, Dict[str, Any]] = {}
 
 
 def register_pending_rpc(
     tool_call_id: str,
     resp_id: Any,
     worker: Any,
-    approval_id: Optional[str] = None
+    approval_id: Optional[str] = None,
+    method: Optional[str] = None,
 ):
     """
     Registers a pending tool approval RPC mapping so resolution can dispatch
@@ -172,7 +174,8 @@ def register_pending_rpc(
         "tool_call_id": tool_call_id,
         "resp_id": resp_id,
         "worker": worker,
-        "approval_id": approval_id
+        "approval_id": approval_id,
+        "method": method,
     }
     if tool_call_id:
         _pending_rpc_registry[tool_call_id] = entry
@@ -203,7 +206,9 @@ def dispatch_approval_rpc(
     resp_id: Any,
     worker: Any,
     approved: bool,
-    feedback: Optional[str] = None
+    feedback: Optional[str] = None,
+    method: Optional[str] = None,
+    scope: str = "once",
 ):
     """
     Dispatches the JSON-RPC response packet back to the Codex App-Server worker:
@@ -212,13 +217,19 @@ def dispatch_approval_rpc(
     if not worker or resp_id is None:
         return
 
-    response_payload = {
-        "jsonrpc": "2.0",
-        "id": resp_id,
-        "result": {"approved": approved}
-    }
-    if feedback:
-        response_payload["result"]["feedback"] = feedback
+    if method in {
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval",
+    }:
+        decision = "acceptForSession" if approved and scope == "session" else "accept" if approved else "decline"
+        result: Dict[str, Any] = {"decision": decision}
+    else:
+        # Legacy control-centre workers used the pre-v2 approval envelope.
+        result = {"approved": approved}
+        if feedback:
+            result["feedback"] = feedback
+
+    response_payload = {"jsonrpc": "2.0", "id": resp_id, "result": result}
 
     msg_str = json.dumps(response_payload)
     if hasattr(worker, "send_raw"):
@@ -306,7 +317,8 @@ def resolve_approval(
     approval_id: str,
     approved: bool,
     db: Session,
-    feedback: Optional[str] = None
+    feedback: Optional[str] = None,
+    scope: str = "once",
 ) -> ToolApproval:
     """
     Resolves an approval request, updates status and timestamp, broadcasts resolution events,
@@ -333,6 +345,7 @@ def resolve_approval(
         "approved": approved,
         "status": approval.status,
         "feedback": feedback,
+        "scope": scope,
         "resolved_at": approval.resolved_at.isoformat() if approval.resolved_at else None
     }
 
@@ -357,10 +370,138 @@ def resolve_approval(
             resp_id=rpc_entry["resp_id"],
             worker=rpc_entry.get("worker"),
             approved=approved,
-            feedback=feedback
+            feedback=feedback,
+            method=rpc_entry.get("method"),
+            scope=scope,
         )
 
     return approval
+
+
+def register_pending_interaction(
+    *,
+    resp_id: Any,
+    worker: Any,
+    method: str,
+    thread_id: str,
+    project_id: str,
+    turn_id: Optional[str],
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Register an app-server initiated request that requires operator input."""
+    interaction_id = f"interaction_{uuid.uuid4().hex[:12]}"
+    entry = {
+        "id": interaction_id,
+        "resp_id": resp_id,
+        "worker": worker,
+        "method": method,
+        "thread_id": thread_id,
+        "project_id": project_id,
+        "turn_id": turn_id,
+        "params": params,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _pending_interaction_registry[interaction_id] = entry
+    return entry
+
+
+def list_pending_interactions(thread_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return pending interaction metadata without worker handles or user answers."""
+    interactions = []
+    for entry in _pending_interaction_registry.values():
+        if thread_id and entry.get("thread_id") != thread_id:
+            continue
+        interactions.append({
+            "id": entry["id"],
+            "method": entry["method"],
+            "thread_id": entry["thread_id"],
+            "project_id": entry["project_id"],
+            "turn_id": entry.get("turn_id"),
+            "params": entry.get("params", {}),
+            "created_at": entry["created_at"],
+        })
+    return interactions
+
+
+def _normalize_tool_answers(value: Any) -> Dict[str, Dict[str, List[str]]]:
+    if not isinstance(value, dict):
+        raise ValueError("Answers are required for this Codex request")
+    normalized: Dict[str, Dict[str, List[str]]] = {}
+    for question_id, answer in value.items():
+        if isinstance(answer, dict):
+            answer = answer.get("answers")
+        if isinstance(answer, str):
+            answers = [answer]
+        elif isinstance(answer, list):
+            answers = [str(item) for item in answer if str(item).strip()]
+        else:
+            answers = []
+        normalized[str(question_id)] = {"answers": answers}
+    return normalized
+
+
+def _build_interaction_result(entry: Dict[str, Any], action: str, response: Dict[str, Any]) -> Dict[str, Any]:
+    method = entry["method"]
+    if method in {"item/tool/requestUserInput", "tool/requestUserInput"}:
+        return {"answers": _normalize_tool_answers(response.get("answers"))}
+
+    if method == "mcpServer/elicitation/request":
+        if action not in {"accept", "decline", "cancel"}:
+            raise ValueError("Unsupported MCP elicitation action")
+        return {
+            "action": action,
+            "content": response.get("content") if action == "accept" else None,
+        }
+
+    if method == "item/permissions/requestApproval":
+        requested = entry.get("params", {}).get("permissions")
+        permissions = response.get("permissions", requested) if action == "accept" else {}
+        if not isinstance(permissions, dict):
+            raise ValueError("Permissions must be an object")
+        scope = response.get("scope", "turn")
+        if scope not in {"turn", "session"}:
+            raise ValueError("Permission scope must be 'turn' or 'session'")
+        return {"permissions": permissions, "scope": scope}
+
+    raise ValueError(f"Unsupported interaction method '{method}'")
+
+
+async def resolve_pending_interaction(
+    interaction_id: str,
+    *,
+    action: str,
+    response: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Reply to the exact app-server JSON-RPC request and clear it on success."""
+    entry = _pending_interaction_registry.get(interaction_id)
+    if not entry:
+        raise ValueError(f"Interaction request '{interaction_id}' not found")
+    result = _build_interaction_result(entry, action, response)
+    worker = entry.get("worker")
+    if not worker or entry.get("resp_id") is None:
+        raise RuntimeError("The Codex worker for this request is no longer available")
+    await worker.send_raw(json.dumps({
+        "jsonrpc": "2.0",
+        "id": entry["resp_id"],
+        "result": result,
+    }))
+    _pending_interaction_registry.pop(interaction_id, None)
+    broker.publish_event(EventEnvelope(
+        project_id=entry["project_id"],
+        thread_id=entry["thread_id"],
+        type="user_input_resolved",
+        payload={
+            "request_id": interaction_id,
+            "requestId": interaction_id,
+            "action": action,
+            "status": "submitted" if action == "accept" else "declined",
+        },
+    ))
+    return {
+        "id": interaction_id,
+        "status": "submitted" if action == "accept" else "declined",
+        "action": action,
+    }
 
 
 def list_pending_approvals(db: Session, thread_id: Optional[str] = None) -> List[ToolApproval]:

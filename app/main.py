@@ -174,6 +174,7 @@ from backend.routers import (
     diagnostics as codex_diagnostics,
     worktrees as codex_worktrees,
     governance as codex_governance,
+    plugins as codex_plugins,
 )
 
 
@@ -656,6 +657,12 @@ app.include_router(
     prefix="/api/admin",
     dependencies=[Depends(get_current_admin)],
     tags=["Codex Governance"],
+)
+app.include_router(
+    codex_plugins.router,
+    prefix="/api/admin",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Plugins"],
 )
 
 

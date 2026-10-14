@@ -28,6 +28,13 @@ APPROVAL_METHODS = {
     "item/fileChange/requestApproval",
 }
 
+INTERACTION_METHODS = {
+    "item/tool/requestUserInput",
+    "tool/requestUserInput",
+    "mcpServer/elicitation/request",
+    "item/permissions/requestApproval",
+}
+
 # Codex notifications can carry large diffs, command output, or compacted
 # history.  asyncio's default 64 KiB stream limit makes readline() raise
 # LimitOverrunError, which silently prevents all subsequent JSON-RPC replies
@@ -191,6 +198,8 @@ class WorkerProcess:
             "capabilities": {
                 "streaming": True,
                 "approvals": True,
+                "experimentalApi": True,
+                "mcpServerOpenaiFormElicitation": True,
             },
         }
         response = await self.send_request("initialize", params=params, timeout=timeout, req_id=1)
@@ -304,6 +313,8 @@ class WorkerProcess:
                     method = msg.get("method")
                     if method in APPROVAL_METHODS:
                         await self._handle_tool_approval(msg)
+                    elif method in INTERACTION_METHODS:
+                        await self._handle_interaction_request(msg)
                     elif "id" not in msg:
                         if self.notification_handler:
                             asyncio.create_task(self.notification_handler(msg))
@@ -362,7 +373,14 @@ class WorkerProcess:
             # LOW risk -> Auto-approve if permitted by policy
             logger.info(f"Auto-approving LOW risk command '{command}' (tool_call_id={tool_call_id})")
             if resp_id is not None:
-                res_msg = Protocol.build_response(resp_id, {"approved": True})
+                if msg.get("method") in {
+                    "item/commandExecution/requestApproval",
+                    "item/fileChange/requestApproval",
+                }:
+                    result = {"decision": "accept"}
+                else:
+                    result = {"approved": True}
+                res_msg = Protocol.build_response(resp_id, result)
                 await self.send_raw(res_msg)
             return
 
@@ -383,8 +401,98 @@ class WorkerProcess:
             tool_call_id=tool_call_id,
             resp_id=resp_id,
             worker=self,
-            approval_id=approval.id
+            approval_id=approval.id,
+            method=msg.get("method"),
         )
+
+    async def _handle_interaction_request(self, msg: dict):
+        """Surface app-server user input, permission, and MCP auth requests."""
+        from backend.services import governance_service
+
+        params = msg.get("params", {}) or {}
+        method = str(msg.get("method") or "")
+        resp_id = msg.get("id")
+        raw_thread_id = params.get("threadId") or params.get("thread_id") or self.thread_id
+        thread_id = self.resolve_thread_id(raw_thread_id)
+        if not thread_id:
+            thread_id = self.thread_id or "default"
+        turn_id = params.get("turnId") or params.get("turn_id")
+        project_id = "default"
+        with SessionLocal() as db:
+            thread = db.query(Thread).filter(Thread.id == thread_id).first()
+            if thread and thread.project_id:
+                project_id = thread.project_id
+        interaction = governance_service.register_pending_interaction(
+            resp_id=resp_id,
+            worker=self,
+            method=method,
+            thread_id=thread_id,
+            project_id=project_id,
+            turn_id=str(turn_id) if turn_id is not None else None,
+            params=params,
+        )
+
+        payload: Dict[str, Any] = {
+            "request_id": interaction["id"],
+            "requestId": interaction["id"],
+            "method": method,
+            "turn_id": turn_id,
+            "turnId": turn_id,
+            "status": "pending",
+            "auto_resolution_ms": params.get("autoResolutionMs"),
+        }
+
+        if method in {"item/tool/requestUserInput", "tool/requestUserInput"}:
+            questions = params.get("questions") if isinstance(params.get("questions"), list) else []
+            schema = []
+            for question in questions:
+                if not isinstance(question, dict):
+                    continue
+                options = question.get("options") if isinstance(question.get("options"), list) else []
+                schema.append({
+                    "id": question.get("id"),
+                    "label": question.get("header") or question.get("question") or "Response",
+                    "question": question.get("question"),
+                    "type": "radio" if options else "password" if question.get("isSecret") else "text",
+                    "options": [option.get("label") for option in options if isinstance(option, dict)],
+                    "optionDescriptions": {
+                        str(option.get("label")): option.get("description")
+                        for option in options
+                        if isinstance(option, dict) and option.get("label")
+                    },
+                    "allowOther": bool(question.get("isOther")),
+                    "required": True,
+                })
+            payload.update({
+                "kind": "tool_user_input",
+                "question": questions[0].get("question") if questions and isinstance(questions[0], dict) else "Codex needs your input",
+                "schema": schema,
+            })
+        elif method == "mcpServer/elicitation/request":
+            mode = params.get("mode")
+            payload.update({
+                "kind": "mcp_url" if mode == "url" else "mcp_form",
+                "question": params.get("message") or "An app needs authorization",
+                "server_name": params.get("serverName"),
+                "url": params.get("url") if mode == "url" else None,
+                "requested_schema": params.get("requestedSchema") if mode != "url" else None,
+                "schema": [],
+            })
+        else:
+            payload.update({
+                "kind": "permissions",
+                "question": params.get("reason") or "Codex is requesting additional permissions",
+                "permissions": params.get("permissions") or {},
+                "cwd": params.get("cwd"),
+                "schema": [],
+            })
+
+        broker.publish_event(EventEnvelope(
+            project_id=project_id,
+            thread_id=thread_id,
+            type="user_input_request",
+            payload=payload,
+        ))
 
     async def _read_stderr(self):
         if not self.process or not self.process.stderr:

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.services import governance_service
-from backend.services.worker_manager import worker_manager
 
 router = APIRouter(prefix="/codex/governance", tags=["governance"])
 
@@ -41,6 +40,12 @@ class CreateApprovalRequest(BaseModel):
 class ResolveApprovalRequest(BaseModel):
     approved: bool
     feedback: Optional[str] = None
+    scope: str = "once"
+
+
+class ResolveInteractionRequest(BaseModel):
+    action: str = "accept"
+    response: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SubAgentResponse(BaseModel):
@@ -149,21 +154,34 @@ async def resolve_approval_endpoint(
             approval_id=approval_id,
             approved=req.approved,
             db=db,
-            feedback=req.feedback
+            feedback=req.feedback,
+            scope=req.scope,
         )
-        try:
-            worker = await worker_manager.get_worker()
-            if worker and worker.running:
-                await worker.send_request("approval/respond", {
-                    "toolCallId": approval.tool_call_id,
-                    "approved": req.approved,
-                    "feedback": req.feedback
-                })
-        except Exception:
-            pass
         return approval
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/interactions/pending")
+def get_pending_interactions(
+    thread_id: Optional[str] = Query(None, description="Optional thread ID filter"),
+):
+    return governance_service.list_pending_interactions(thread_id=thread_id)
+
+
+@router.post("/interactions/{interaction_id}/resolve")
+async def resolve_interaction_endpoint(interaction_id: str, req: ResolveInteractionRequest):
+    try:
+        return await governance_service.resolve_pending_interaction(
+            interaction_id,
+            action=req.action,
+            response=req.response,
+        )
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 # -------------------------------------------------------------

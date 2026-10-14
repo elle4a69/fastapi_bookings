@@ -41,7 +41,7 @@ export const CodingCockpitPage: React.FC<CodingCockpitPageProps> = ({ initialTab
   // Map incoming URL tab parameter (e.g. ?tab=issues or ?tab=health) to full-screen tool modals
   useEffect(() => {
     const tabParam = searchParams.get('tab') || initialTab
-    if (tabParam && ['health', 'fuzzer', 'issues', 'skills', 'stream'].includes(tabParam)) {
+    if (tabParam && ['health', 'fuzzer', 'issues', 'skills', 'plugins', 'stream'].includes(tabParam)) {
       setActiveToolModal(tabParam as any)
     }
   }, [searchParams, initialTab, setActiveToolModal])

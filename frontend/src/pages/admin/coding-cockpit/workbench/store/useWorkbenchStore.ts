@@ -30,7 +30,7 @@ import {
 
 export type InspectorTab = 'changes' | 'files' | 'settings' | 'subagents' | 'tests' | 'terminal' | 'telemetry' | 'details'
 export type BottomDockTab = 'terminal' | 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream'
-export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'stream' | 'support_tickets' | null
+export type ActiveToolModal = 'health' | 'fuzzer' | 'issues' | 'skills' | 'plugins' | 'stream' | 'support_tickets' | null
 export type BottomDockMode = 'collapsed' | 'expanded' | 'maximized'
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'reconnecting'
 export type AppMode = 'live' | 'demo' | 'unavailable'
@@ -587,6 +587,74 @@ export function reduceSSEEvent(prevState: WorkbenchState, event: SSEEventEnvelop
         })
       }))
 
+      if (mutated) {
+        targetThread.approvalCount = Math.max(0, (targetThread.approvalCount || 0) - 1)
+        if (targetThread.approvalCount === 0 && targetThread.status === 'needs_approval') {
+          targetThread.status = 'active'
+        }
+      }
+      break
+    }
+
+    case 'user_input_request': {
+      const turnId = String(payload.turn_id || payload.turnId || nextStreamingTurns[threadId] || (targetThread.turns[targetThread.turns.length - 1]?.id ?? 'turn_0'))
+      const requestId = String(payload.request_id || payload.requestId || payload.id || `input_${Date.now()}`)
+      const exists = targetThread.turns.some(turn =>
+        turn.items.some(item => item.type === 'user_input_request' && item.requestId === requestId)
+      )
+      if (!exists) {
+        const inputItem: TimelineItem = {
+          id: `item_${requestId}`,
+          turnId,
+          type: 'user_input_request',
+          timestamp: eventTime,
+          requestId,
+          method: payload.method,
+          kind: payload.kind || 'tool_user_input',
+          question: payload.question || 'Codex needs your input',
+          schema: Array.isArray(payload.schema) ? payload.schema : [],
+          serverName: payload.server_name || payload.serverName,
+          url: payload.url,
+          requestedSchema: payload.requested_schema || payload.requestedSchema,
+          permissions: payload.permissions,
+          workingDirectory: payload.cwd,
+          autoResolutionMs: payload.auto_resolution_ms ?? payload.autoResolutionMs,
+          status: 'pending'
+        }
+        if (targetThread.turns.length === 0) {
+          targetThread.turns = [{
+            id: turnId,
+            threadId,
+            turnNumber: 1,
+            status: 'in_progress',
+            startedAt: eventTime,
+            items: [inputItem]
+          }]
+        } else {
+          const lastTurn = targetThread.turns[targetThread.turns.length - 1]
+          targetThread.turns = targetThread.turns.map(turn =>
+            turn.id === lastTurn.id ? { ...turn, items: [...turn.items, inputItem] } : turn
+          )
+        }
+        targetThread.approvalCount = (targetThread.approvalCount || 0) + 1
+        targetThread.status = 'needs_approval'
+      }
+      break
+    }
+
+    case 'user_input_resolved': {
+      const requestId = String(payload.request_id || payload.requestId || payload.id || '')
+      let mutated = false
+      targetThread.turns = targetThread.turns.map(turn => ({
+        ...turn,
+        items: turn.items.map(item => {
+          if (item.type === 'user_input_request' && item.requestId === requestId && item.status === 'pending') {
+            mutated = true
+            return { ...item, status: payload.status === 'declined' ? 'declined' as const : 'submitted' as const }
+          }
+          return item
+        })
+      }))
       if (mutated) {
         targetThread.approvalCount = Math.max(0, (targetThread.approvalCount || 0) - 1)
         if (targetThread.approvalCount === 0 && targetThread.status === 'needs_approval') {
@@ -1714,7 +1782,7 @@ export function useWorkbenchStore() {
 
     if (state.appMode === 'live') {
       try {
-        await codexApi.resolveApproval(approvalId, true, feedback)
+        await codexApi.resolveApproval(approvalId, true, feedback, scope)
       } catch (err) {
         console.error('Failed to resolve approval on backend:', err)
       }
@@ -1764,6 +1832,50 @@ export function useWorkbenchStore() {
         console.error('Failed to decline approval on backend:', err)
       }
     }
+  }
+
+  const resolveUserInputRequest = async (
+    requestId: string,
+    action: 'accept' | 'decline' | 'cancel',
+    response: Record<string, any>,
+    targetThreadId?: string
+  ) => {
+    const owningThreadId = targetThreadId || state.threads.find(thread =>
+      thread.turns.some(turn => turn.items.some(item => item.type === 'user_input_request' && item.requestId === requestId))
+    )?.id || state.activeThreadId
+    if (!owningThreadId) throw new Error('Unable to identify the thread for this request')
+
+    if (state.appMode === 'live') {
+      await codexApi.resolveInteraction(requestId, action, response)
+    }
+
+    updateState(prev => ({
+      threads: prev.threads.map(thread => {
+        if (thread.id !== owningThreadId) return thread
+        let found = false
+        const turns = thread.turns.map(turn => ({
+          ...turn,
+          items: turn.items.map(item => {
+            if (item.type === 'user_input_request' && item.requestId === requestId && item.status === 'pending') {
+              found = true
+              return {
+                ...item,
+                status: action === 'accept' ? 'submitted' as const : 'declined' as const
+              }
+            }
+            return item
+          })
+        }))
+        const approvalCount = found ? Math.max(0, (thread.approvalCount || 0) - 1) : thread.approvalCount
+        return {
+          ...thread,
+          turns,
+          approvalCount,
+          status: found && approvalCount === 0 && thread.status === 'needs_approval' ? 'active' : thread.status
+        }
+      }),
+      liveAnnouncements: [`Codex request ${requestId} ${action === 'accept' ? 'answered' : action}`]
+    }))
   }
 
   const recordDiffVerdict = (verdict: string) => {
@@ -2289,6 +2401,7 @@ export function useWorkbenchStore() {
     setSidebarWidth,
     setInspectorWidth,
     setActiveToolModal,
+    resolveUserInputRequest,
     activeCenterView: state.activeCenterView,
     supportTicketsSummary: state.supportTicketsSummary,
     setActiveCenterView,

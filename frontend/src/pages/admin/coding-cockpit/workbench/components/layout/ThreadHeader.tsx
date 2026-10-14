@@ -15,6 +15,7 @@ import {
   Activity,
   Zap,
   BookOpen,
+  PlugZap,
   Radio,
   Headphones
 } from 'lucide-react'
@@ -348,6 +349,14 @@ export const ThreadHeader: React.FC<ThreadHeaderProps> = ({ statusData }) => {
                   {statusData?.active_issues?.length}
                 </span>
               )}
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              onClick={() => setActiveToolModal('plugins')}
+              className="flex items-center gap-2 cursor-pointer hover:bg-muted py-1.5"
+            >
+              <PlugZap className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Plugin Manager</span>
             </DropdownMenuItem>
 
             <DropdownMenuItem

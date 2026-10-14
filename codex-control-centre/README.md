@@ -12,6 +12,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
   - Multi-tenant thread and turn lifecycle management with resilient start, steer, and interrupt operations.
   - Real-time Server-Sent Events (SSE) streaming with event buffering, single-use ticket dispatch, and optimistic turn reconciliation.
   - Human-in-the-loop tool execution approval gates with risk-tier evaluation (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+  - Authenticated plugin catalog discovery, plugin installation, provider authorization handoff, and app-server initiated input/permission request handling.
   - Git worktree sandboxing ensuring all tool calls and edits occur in isolated worktrees (`worktrees/wt-<thread_id>`).
   - Telemetry pipeline exporting spans, metrics, and logs to SigNoz / OpenTelemetry collectors.
 - **Explicit Non-Goals**:
@@ -60,6 +61,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `events.py`: SSE endpoints (`/codex/events/{project_id}/{thread_id}`), single-use tickets, broker bridge.
     - `models.py`: Supported model catalog enumeration (`/models`, `/codex/models`).
     - `governance.py`: Approvals, risk tiering, subagent registration, concurrency enforcement.
+    - `plugins.py`: Sanitized app-server plugin catalog, detail, and install bridge.
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
 - **FastAPI Bookings Administrative Integration**:
@@ -177,6 +179,14 @@ Set these variables in `.env` or system environment:
    - `HIGH` / `CRITICAL`: Enqueued as pending `ToolApproval` record and rendered as interactive approval gate in UI.
 3. **Operator Resolution**: Operator approves or declines $\to$ backend dispatches JSON-RPC response to worker.
 
+### 6. Plugin and Interactive Authorization Flow
+1. `GET /codex/plugins` calls app-server `plugin/list` and returns a sanitized catalog without marketplace filesystem paths.
+2. `GET /codex/plugins/{plugin_id}` resolves the ID against that catalog before calling `plugin/read`; `POST /codex/plugins/{plugin_id}/install` applies the same resolution before `plugin/install`.
+3. The install response exposes only allowlisted app metadata and HTTPS provider setup links from `appsNeedingAuth`.
+4. App-server initiated `item/tool/requestUserInput`, `mcpServer/elicitation/request`, and `item/permissions/requestApproval` requests are registered against their originating worker and emitted as `user_input_request` SSE events.
+5. `POST /codex/governance/interactions/{interaction_id}/resolve` sends the method-specific JSON-RPC result to that worker. Resolution events contain status only; answers and secret values are not rebroadcast.
+6. V2 command/file approvals use `{decision: accept|acceptForSession|decline}` so the UI's once/session choice matches the installed app-server contract.
+
 ### 6. Responsive Viewport Architecture & WCAG 2.2 AA Reflow Compliance
 1. **Desktop Viewport (> 1024px)**: Full 3-pane workbench displaying Project Rail + Thread Sidebar, Central Timeline/Composer column, and in-flow Inspector panel with flexible horizontal layout.
 2. **Tablet Viewport (768px - 1023px)**: Two-pane layout with persistent navigation rail and sidebar. The Inspector operates as a slide-over overlay drawer with a backdrop (`bg-black/60 z-40 lg:hidden backdrop-blur-xs`), preserving conversational focus.
@@ -193,6 +203,9 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
   - `GET /api/admin/codex/settings/boundaries` — Workspace boundary configuration.
   - `GET /api/admin/codex/projects` — Registered projects list.
   - `GET /api/admin/codex/models` — Supported model catalog (`gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) with supported reasoning variants. GPT-4-era entries are intentionally unavailable.
+  - `GET /api/admin/codex/plugins` — Sanitized live plugin catalog.
+  - `GET /api/admin/codex/plugins/{plugin_id}` — Plugin apps, skills, and capability details.
+  - `POST /api/admin/codex/plugins/{plugin_id}/install` — Install the catalog-resolved plugin and return required app authorization links.
   - `GET /api/admin/codex/threads/{project_id}` — Active threads per project.
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
@@ -212,6 +225,8 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 - **Destructive Deletion Guard**: Deleting a worktree requires explicit `?force=true` if uncommitted modifications exist. Root directories and active branches cannot be deleted.
 - **Local Loopback Security**: Backend strictly binds to `127.0.0.1`. CORS is locked down to authorized local origins with credentials enabled.
 - **Secret Scrubbing**: API tokens, private keys, and sensitive environment variables are masked in telemetry and logs.
+- **Plugin Catalog Trust Boundary**: Install calls accept only a plugin ID already present in the app-server catalog. Browser clients cannot provide local marketplace paths, and API projections omit those paths.
+- **Interactive Secret Isolation**: User answers are delivered only in the JSON-RPC response to the originating worker and never copied into resolution events or logs.
 - **WCAG 2.2 AA Accessibility & Reflow Isolation**: Touch target sizing (min 44px) and zero horizontal overflow (`w-screen max-w-full overflow-x-hidden`) prevent responsive layout clipping down to 320px viewports.
 
 ---
@@ -221,6 +236,7 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 - **Model Availability Drift**: The mounted catalog reflects the current models enabled for this Codex environment. Runtime account entitlements can still reject a model that is not enabled for the signed-in account; catalog updates must keep the backend endpoint and integrated frontend `modelCatalog.ts` in parity.
 - **Hanging External MCP Servers**: External MCP plugins configured in `~/.codex/config.toml` that fail to respond (e.g. `mcp-skillset`, `main-context-document`) can delay initial worker startup. Backend passes flags to disable failing MCPs during worker launch.
 - **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
+- **Preview Plugin Protocol**: App-server plugin list/read/install methods are currently documented by OpenAI as under development. The bridge fails closed with 502/503 responses on malformed or unavailable protocol results.
 
 ---
 
@@ -237,6 +253,9 @@ python -m pytest tests/test_boundaries_and_settings.py -v
 
 # Run Codex App-Server integration suite
 python -m pytest tests/test_codex_app_server.py -v
+
+# Run plugin installation and interactive authorization contract tests
+python -m pytest tests/test_plugins_and_interactions.py -v
 
 # Run End-to-End smoke suite
 python -m pytest tests/test_e2e_smoke.py -v

@@ -190,8 +190,11 @@ export interface ApprovalRequestItem extends BaseTimelineItem {
 export interface FormFieldSchema {
   id: string
   label: string
-  type: 'text' | 'select' | 'checkbox' | 'radio'
+  question?: string
+  type: 'text' | 'password' | 'select' | 'checkbox' | 'radio' | 'number'
   options?: string[]
+  optionDescriptions?: Record<string, string>
+  allowOther?: boolean
   defaultValue?: any
   description?: string
   required?: boolean
@@ -200,8 +203,16 @@ export interface FormFieldSchema {
 export interface UserInputRequestItem extends BaseTimelineItem {
   type: 'user_input_request'
   requestId: string
+  method?: string
+  kind: 'tool_user_input' | 'mcp_form' | 'mcp_url' | 'permissions'
   question: string
   schema: FormFieldSchema[]
+  serverName?: string
+  url?: string
+  requestedSchema?: Record<string, any>
+  permissions?: Record<string, any>
+  workingDirectory?: string
+  autoResolutionMs?: number | null
   status: 'pending' | 'submitted' | 'declined'
   response?: Record<string, any>
 }
@@ -441,6 +452,73 @@ export interface ToolApprovalResponse {
 export interface ResolveApprovalPayload {
   approved: boolean
   feedback?: string
+  scope?: 'once' | 'session'
+}
+
+export interface PluginInterface {
+  displayName?: string | null
+  shortDescription?: string | null
+  longDescription?: string | null
+  developerName?: string | null
+  category?: string | null
+  capabilities: string[]
+  websiteUrl?: string | null
+  privacyPolicyUrl?: string | null
+  termsOfServiceUrl?: string | null
+  defaultPrompt: string[]
+  brandColor?: string | null
+  logoUrl?: string | null
+  logoUrlDark?: string | null
+  composerIconUrl?: string | null
+}
+
+export interface PluginSummary {
+  id: string
+  name: string
+  version?: string | null
+  localVersion?: string | null
+  installed: boolean
+  enabled: boolean
+  installPolicy?: string | null
+  installPolicySource?: string | null
+  authPolicy?: string | null
+  availability?: string | null
+  keywords: string[]
+  interface?: PluginInterface | null
+  marketplace: { name: string; displayName?: string | null; remote: boolean }
+}
+
+export interface PluginCatalogResponse {
+  plugins: PluginSummary[]
+  featuredPluginIds: string[]
+  marketplaceLoadErrors: Array<Record<string, any>>
+  apiStatus: 'under_development'
+}
+
+export interface PluginApp {
+  id: string
+  name: string
+  description?: string | null
+  category?: string | null
+  installUrl?: string | null
+}
+
+export interface PluginDetailResponse {
+  summary: PluginSummary
+  description?: string | null
+  shareUrl?: string | null
+  skills: Array<{ name: string; description?: string; shortDescription?: string; enabled: boolean }>
+  apps: PluginApp[]
+  mcpServers: string[]
+  hooks: Array<Record<string, any>>
+}
+
+export interface PluginInstallResponse {
+  pluginId: string
+  installed: boolean
+  alreadyInstalled: boolean
+  authPolicy?: string | null
+  appsNeedingAuth: PluginApp[]
 }
 
 export interface CreateWorktreePayload {

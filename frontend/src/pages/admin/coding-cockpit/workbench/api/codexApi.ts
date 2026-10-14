@@ -15,7 +15,10 @@ import type {
   DeepDiagnosticsResponse,
   WorkspaceBoundary,
   TelemetrySettings,
-  TelemetryTestResult
+  TelemetryTestResult,
+  PluginCatalogResponse,
+  PluginDetailResponse,
+  PluginInstallResponse,
 } from '../types/workbench'
 
 export class CodexApi {
@@ -125,13 +128,37 @@ export class CodexApi {
   async resolveApproval(
     approvalId: string,
     approved: boolean,
-    feedback?: string
+    feedback?: string,
+    scope: 'once' | 'session' = 'once'
   ): Promise<ToolApprovalResponse> {
-    const payload: ResolveApprovalPayload = { approved, feedback }
+    const payload: ResolveApprovalPayload = { approved, feedback, scope }
     return this.client.post<ToolApprovalResponse>(
       `/codex/governance/approvals/${approvalId}/resolve`,
       payload
     )
+  }
+
+  async resolveInteraction(
+    requestId: string,
+    action: 'accept' | 'decline' | 'cancel',
+    response: Record<string, any>
+  ): Promise<{ id: string; status: 'submitted' | 'declined'; action: string }> {
+    return this.client.post(`/codex/governance/interactions/${encodeURIComponent(requestId)}/resolve`, {
+      action,
+      response,
+    })
+  }
+
+  async listPlugins(): Promise<PluginCatalogResponse> {
+    return this.client.get<PluginCatalogResponse>('/codex/plugins')
+  }
+
+  async readPlugin(pluginId: string): Promise<PluginDetailResponse> {
+    return this.client.get<PluginDetailResponse>(`/codex/plugins/${encodeURIComponent(pluginId)}`)
+  }
+
+  async installPlugin(pluginId: string): Promise<PluginInstallResponse> {
+    return this.client.post<PluginInstallResponse>(`/codex/plugins/${encodeURIComponent(pluginId)}/install`)
   }
 
   // Worktrees

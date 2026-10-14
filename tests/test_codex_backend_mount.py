@@ -1,6 +1,7 @@
 """Tests for Codex Control Centre backend routers mounted directly into FastAPI Bookings."""
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -153,6 +154,28 @@ def test_get_codex_models(client: TestClient, db_session: Session):
 
     legacy_res = client.get("/api/admin/codex/models/gpt-4o", headers=headers)
     assert legacy_res.status_code == 404
+
+
+def test_get_codex_plugins_is_admin_scoped_and_uses_mounted_app_server_route(
+    client: TestClient,
+    db_session: Session,
+):
+    unauthenticated = client.get("/api/admin/codex/plugins")
+    assert unauthenticated.status_code in (400, 401, 403)
+
+    _, _, headers = _create_admin_user(db_session, suffix="plugins")
+    worker = AsyncMock()
+    worker.running = True
+    worker.send_request.return_value = {
+        "marketplaces": [],
+        "marketplaceLoadErrors": [],
+        "featuredPluginIds": [],
+    }
+    with patch("backend.routers.plugins.worker_manager.get_worker", AsyncMock(return_value=worker)):
+        response = client.get("/api/admin/codex/plugins", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["plugins"] == []
 
 
 def test_get_codex_threads(client: TestClient, db_session: Session):

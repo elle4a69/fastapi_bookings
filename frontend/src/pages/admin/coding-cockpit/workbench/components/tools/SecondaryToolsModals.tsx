@@ -4,6 +4,7 @@ import {
   Zap,
   Wrench,
   BookOpen,
+  PlugZap,
   Radio,
   Headphones,
   X
@@ -15,6 +16,7 @@ import { HealthSentinels } from '../../../HealthSentinels'
 import { StressFuzzer } from '../../../StressFuzzer'
 import { IssuesStudio } from '../../../IssuesStudio'
 import { SkillsBrowser } from '../../../SkillsBrowser'
+import { PluginManager } from '../../../PluginManager'
 import { EventStream } from '../../../EventStream'
 import { SupportTicketsReviewModal } from './SupportTicketsReviewModal'
 import type { AgentStatusData } from '../../../types'
@@ -79,6 +81,13 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
           subtitle: 'Searchable repository of vetted coding directives, architectural patterns, and capabilities',
           icon: <BookOpen className="w-4 h-4 text-purple-400" />,
           badge: null
+        }
+      case 'plugins':
+        return {
+          title: 'Codex Plugin Manager',
+          subtitle: 'Discover, install, and finish authorization for plugins available to this Codex account',
+          icon: <PlugZap className="w-4 h-4 text-emerald-400" />,
+          badge: <Badge variant="outline" className="text-[10px] h-4 px-1.5">App Server preview</Badge>
         }
       case 'stream':
         return {
@@ -169,6 +178,12 @@ export const SecondaryToolsModals: React.FC<SecondaryToolsModalsProps> = ({
           {activeTool === 'skills' && (
             <div className="max-w-6xl mx-auto">
               <SkillsBrowser />
+            </div>
+          )}
+
+          {activeTool === 'plugins' && (
+            <div className="max-w-7xl mx-auto">
+              <PluginManager />
             </div>
           )}
 
