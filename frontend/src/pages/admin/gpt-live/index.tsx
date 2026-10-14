@@ -4,7 +4,8 @@ import { LoaderCircle, Mic, PhoneOff, Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { apiClient, toUserFacingApiError } from '@/lib/api'
 
-import { formatCaptionInterval, type GPTLiveCaption } from './protocol'
+import { GPTLiveCaptionTimeline } from './caption-timeline'
+import { type GPTLiveCaption } from './protocol'
 import { useGPTLive } from './use-gpt-live'
 
 type Conversation = { id: number }
@@ -72,21 +73,7 @@ export default function GPTLivePage() {
         {error && <p className="mt-4 rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p>}
       </section>
 
-      <section className="rounded-lg border bg-card p-5" aria-live="polite" aria-label="Live captions">
-        <h2 className="font-semibold">Live captions</h2>
-        {captions.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">Captions will appear when speech is transcribed.</p>
-        ) : (
-          <ol className="mt-4 space-y-3">
-            {captions.map((caption, index) => (
-              <li key={`${caption.speaker}-${caption.startMs}-${caption.endMs}-${index}`} className="rounded border p-3 text-sm">
-                <div className="mb-1 flex gap-2 text-xs text-muted-foreground"><span className="font-medium">{caption.speaker === 'user' ? 'You' : 'Assistant'}</span><span>{formatCaptionInterval(caption.startMs, caption.endMs)}</span></div>
-                <p className="whitespace-pre-wrap">{caption.text}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+      <GPTLiveCaptionTimeline captions={captions} className="p-5" />
     </main>
   )
 }

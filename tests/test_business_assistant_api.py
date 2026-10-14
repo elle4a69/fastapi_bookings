@@ -71,7 +71,7 @@ def test_text_request_uses_completion_token_limit_without_network_io():
 
     # gpt-5 models that require reasoning_effort="none" receive it
     gpt5_runtime = BusinessAssistantTextRuntime(
-        model_name="gpt-5.6-terra",
+        model_name="gpt-5",
         api_key="configured",
         max_history_messages=20,
         max_output_tokens=600,
@@ -85,6 +85,25 @@ def test_text_request_uses_completion_token_limit_without_network_io():
         include_tools=True,
     )
     assert gpt5_options["reasoning_effort"] == "none"
+
+    # gpt-5.6-terra / luna delegation models safely fall back to gpt-4o for chat completions
+    for delegation_model in ("gpt-5.6-terra", "gpt-5.6-luna", "5.6-luna"):
+        terra_runtime = BusinessAssistantTextRuntime(
+            model_name=delegation_model,
+            api_key="configured",
+            max_history_messages=20,
+            max_output_tokens=600,
+            timeout_seconds=30,
+            max_tool_rounds=3,
+            client_factory=BusinessAssistantTextRuntime,
+        )
+        terra_options = terra_runtime._chat_request_options(
+            messages=[],
+            tools=({"type": "function", "function": {"name": "read_product_help"}},),
+            include_tools=True,
+        )
+        assert terra_options["model"] == "gpt-4o"
+        assert "reasoning_effort" not in terra_options
 
 
 def test_text_runtime_constructs_openai_client_with_keyword_api_key_without_network_io():

@@ -36,6 +36,38 @@ export interface OnboardingFormAdapter {
   set_subtab?(subtab: string): boolean | Promise<boolean>
 }
 
+const ADAPTER_STEP_ALIASES: Record<string, string> = {
+  step_1_identity: 'business_settings',
+  step_1: 'business_settings',
+  identity: 'business_settings',
+  business: 'business_settings',
+  profile: 'business_settings',
+  business_profile: 'business_settings',
+  step_2_team: 'team_roster',
+  step_2: 'team_roster',
+  team: 'team_roster',
+  step_3_services: 'catalog_services',
+  step_3: 'catalog_services',
+  services: 'catalog_services',
+  service_catalog: 'catalog_services',
+  catalog: 'catalog_services',
+  step_4_hours: 'operating_hours',
+  step_4: 'operating_hours',
+  hours: 'operating_hours',
+  step_5_policies: 'booking_policies',
+  step_5: 'booking_policies',
+  policies: 'booking_policies',
+  step_6_payments: 'payment_settings',
+  step_6: 'payment_settings',
+  payments: 'payment_settings',
+  step_7_communications: 'notifications',
+  step_7: 'notifications',
+  communications: 'notifications',
+  step_8_website: 'website_builder',
+  step_8: 'website_builder',
+  website: 'website_builder',
+}
+
 /**
  * Registry holding active and registered onboarding form adapters.
  * Manages route and form_id lookups with support for graceful fallbacks.
@@ -77,8 +109,14 @@ export class FormAdapterRegistry {
     if (this.adapters.has(formId)) return this.adapters.get(formId)
     if (this.adapters.has(clean)) return this.adapters.get(clean)
 
+    const aliased = ADAPTER_STEP_ALIASES[clean]
+    if (aliased && this.adapters.has(aliased)) {
+      return this.adapters.get(aliased)
+    }
+
     for (const [id, adapter] of this.adapters.entries()) {
-      if (id.toLowerCase().replace(/-/g, '_') === clean) {
+      const normalizedId = id.toLowerCase().replace(/-/g, '_')
+      if (normalizedId === clean || (aliased && normalizedId === aliased)) {
         return adapter
       }
     }

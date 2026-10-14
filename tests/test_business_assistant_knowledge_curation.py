@@ -327,6 +327,7 @@ def test_business_knowledge_tool_pack_execution(db_session):
         "draft_business_rule",
         "get_business_rule",
         "activate_business_rule",
+        "confirm_business_rule",
         "resolve_curator_question",
     }
 

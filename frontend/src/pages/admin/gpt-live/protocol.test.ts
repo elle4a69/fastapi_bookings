@@ -26,3 +26,34 @@ test('GPT-Live captions keep speakers and separated timestamp intervals independ
   assert.equal(output[0].text, 'Hello ')
   assert.equal(formatCaptionInterval(1_000, 1_200), '1.0–1.2s')
 })
+
+test('GPT-Live captions accumulate streaming deltas without splitting words into separate bubbles', () => {
+  // Test sequential streaming words with normal speech pauses (gap of 50-100ms)
+  let captions = appendTranscriptDelta([], {
+    type: 'response.audio_transcript.delta', delta: 'The', start_ms: 100, end_ms: 250,
+  })
+  captions = appendTranscriptDelta(captions, {
+    type: 'response.audio_transcript.delta', delta: ' dashboard', start_ms: 300, end_ms: 550,
+  })
+  captions = appendTranscriptDelta(captions, {
+    type: 'response.audio_transcript.delta', delta: ' is', start_ms: 600, end_ms: 700,
+  })
+  captions = appendTranscriptDelta(captions, {
+    type: 'response.audio_transcript.delta', delta: ' ready', start_ms: 750, end_ms: 900,
+  })
+
+  // All 4 words must accumulate into 1 single caption turn, not 4 separate bubbles
+  assert.equal(captions.length, 1)
+  assert.equal(captions[0].speaker, 'assistant')
+  assert.equal(captions[0].text, 'The dashboard is ready')
+  assert.equal(captions[0].endMs, 900)
+})
+
+test('GPT-Live captions update full transcript on completion events', () => {
+  let captions = appendTranscriptDelta([], {
+    type: 'input_audio_transcription.completed', transcript: 'Can you show me my services?',
+  })
+  assert.equal(captions.length, 1)
+  assert.equal(captions[0].speaker, 'user')
+  assert.equal(captions[0].text, 'Can you show me my services?')
+})

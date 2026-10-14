@@ -101,6 +101,45 @@ def test_inspect_website_state_initial(db_session):
     assert state["recent_proposals"] == []
 
 
+def test_onboarding_completion_creates_one_private_fact_only_website_draft(db_session):
+    """The onboarding hook creates a private starter but never a live site or fake reviews."""
+    from app.models.service import Service
+
+    tenant, owner, _ = _tenant_and_users(db_session, "onboarding-site")
+    tenant.phone = "+61 2 5555 0100"
+    tenant.logo_url = "https://tenant.example.test/media/logo.png"
+    db_session.add(
+        Service(
+            tenant_id=tenant.id,
+            name="Initial consultation",
+            duration=30,
+            active=True,
+            is_visible=True,
+            image="https://tenant.example.test/media/consultation.jpg",
+        )
+    )
+    db_session.commit()
+
+    service = BusinessAssistantService(db_session, tenant.id, owner.id)
+    for step in ("review_product_context", "review_catalog_readiness", "prepare_product_question"):
+        progress = service.complete_onboarding_step(step=step)
+    assert progress.status == "completed"
+
+    site = db_session.query(TenantWebsite).filter(TenantWebsite.tenant_id == tenant.id).one()
+    assert site.is_published is False
+    assert site.sections_data["hero"]["bg_image_url"] == tenant.logo_url
+    assert site.sections_data["about"]["image_url"] == "https://tenant.example.test/media/consultation.jpg"
+    assert site.sections_data["testimonials"]["enabled"] is False
+
+    # Completion can be retried; it cannot replace a private owner change.
+    from sqlalchemy.orm.attributes import flag_modified
+    site.sections_data["hero"]["headline"] = "Owner's website headline"
+    flag_modified(site, "sections_data")
+    db_session.commit()
+    service.complete_onboarding_step(step="prepare_product_question")
+    assert db_session.query(TenantWebsite).filter(TenantWebsite.tenant_id == tenant.id).one().sections_data["hero"]["headline"] == "Owner's website headline"
+
+
 def test_inspect_website_state_with_published_and_draft(db_session):
     tenant, owner, _ = _tenant_and_users(db_session, "pub-draft")
     service = BusinessAssistantService(db_session, tenant.id, owner.id)
@@ -446,18 +485,26 @@ def test_website_builder_tool_pack_dispatch(db_session):
     )
 
     tool_names = {t["function"]["name"] for t in registry.schemas}
+    assert "ensure_initial_website_draft" in tool_names
     assert "inspect_website_state" in tool_names
     assert "propose_website_edit" in tool_names
     assert "preview_website_edit" in tool_names
     assert "request_website_publication" in tool_names
     assert "rollback_website_version" in tool_names
 
-    # 1. inspect_website_state
+    # 1. The assistant can ensure a private, fact-only starting draft.
+    initial_res = registry.execute("ensure_initial_website_draft", {})
+    assert initial_res["status"] == "ok"
+    assert initial_res["created"] is True
+    assert initial_res["website"]["is_published"] is False
+    assert registry.execute("ensure_initial_website_draft", {})["created"] is False
+
+    # 2. inspect_website_state
     inspect_res = registry.execute("inspect_website_state", {})
     assert inspect_res["status"] == "ok"
     assert inspect_res["website_state"]["is_published"] is False
 
-    # 2. propose_website_edit
+    # 3. propose_website_edit
     propose_res = registry.execute(
         "propose_website_edit",
         {
@@ -469,19 +516,19 @@ def test_website_builder_tool_pack_dispatch(db_session):
     proposal_id = propose_res["proposal"]["id"]
     assert propose_res["proposal"]["status"] == "draft"
 
-    # 3. preview_website_edit
+    # 4. preview_website_edit
     preview_res = registry.execute("preview_website_edit", {"proposal_id": proposal_id})
     assert preview_res["status"] == "ok"
     assert preview_res["proposal_status"] == "preview"
     assert preview_res["preview"]["theme_id"] == "royal_indigo"
 
-    # 4. request_website_publication
+    # 5. request_website_publication
     req_pub_res = registry.execute("request_website_publication", {"proposal_id": proposal_id})
     assert req_pub_res["status"] == "ok"
     assert "confirmation_token" in req_pub_res
     assert "Automatic publication from conversational confirmation alone is prohibited" in req_pub_res["instructions"]
 
-    # 5. Rollback tool execution after publication
+    # 6. Rollback tool execution after publication
     service.publish_website_proposal(proposal_id=proposal_id, confirmation_token=req_pub_res["confirmation_token"])
     rollback_res = registry.execute(
         "rollback_website_version",

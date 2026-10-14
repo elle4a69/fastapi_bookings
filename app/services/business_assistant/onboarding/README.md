@@ -76,6 +76,33 @@ The subsystem is backed by Alembic migration `z1a2b3c4d5e6_add_onboarding_workfl
 4. The backend validates and consumes the nonce, executes the database transaction, advances the plan to the next domain, and returns a `saved` receipt with the committed entity ID.
 5. Any replay of the consumed nonce is strictly rejected with `NonceAlreadyUsedError`.
 
+### 5. Canonical Voice Tool Schema Alignment (`VOICE_BUSINESS_ASSISTANT_TOOLS`)
+During voice-driven onboarding sessions (across OpenAI Realtime, GPT-Live delegation, and xAI Grok Voice), the assistant is bound strictly to the canonical 16-tool voice schema. Onboarding-specific voice tools include:
+- `stage_fields`: Batches gathered facts into frontend form adapters without committing to the database (`staged_fields != saved`).
+- `validate_form`: Validates staged values against target field definitions.
+- `request_save_authorization`: Requests a single-use HMAC nonce for consequential saves.
+- `commit_save`: Authoritatively persists validated values after user confirmation.
+- `ask_clarification`: Handles ambiguity in spoken English without hallucinating defaults.
+- `pause_takeover`: Safely halts assistant execution when the user initiates manual interaction.
+- `get_onboarding_status`: Inquires about current domain progress, remaining facts, and active step IDs.
+- `highlight_field`: Visually highlights the active input control in the UI.
+
+Duplicate aliases (`prepare_fields`, `fill_form`, `save_form`, `navigate_show`, `read_context`, `read_status`) are strictly excluded from voice schemas to prevent model confusion while remaining accessible in text chat.
+
+### 6. Single-Tab Active Executor Lease Token Forwarding
+1. Multi-tab concurrency is protected by the `LeaseTokenManager`. Only the active browser tab holds the valid executor lease token.
+2. When a voice assistant (`xai-grok-voice`, `direct-gpt-live`, `realtime-voice`) calls UI automation tools (`navigate_route`, `stage_fields`, `highlight_field`), the LLM does not generate a client lease token.
+3. The action executor automatically detects authorized voice callers and forwards the active tab's lease token (`leaseMgr.getActiveLease().token`), preventing spurious lease rejection while ensuring background tabs cannot execute rogue mutations.
+
+### 7. Route Normalization & Alias Architecture for Step Navigation
+1. Step transitions automatically navigate users to target administrative screens using `normalizeRoute`.
+2. Resolves friendly aliases to canonical paths:
+   - Domain 1 (Business Profile): `/admin/settings/business` (aliased from `settings`, `onboarding`)
+   - Domain 3 (Services Catalog): `/admin/catalog/services` (aliased from `services`, `catalog`, `/admin/services`)
+   - Domain 7 (Website Builder): `/admin/website` (aliased from `website`, `website_editor`)
+   - Domain 8 (Media Assets): `/admin/media` (aliased from `media`)
+3. Path safety: All routes are verified against `isRouteAllowlisted`, strictly rejecting protocol wrappers (`javascript:`, `http:`, `//`) and directory traversal attacks (`..`).
+
 ---
 
 ## Data Safety & Isolation

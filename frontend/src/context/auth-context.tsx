@@ -29,7 +29,7 @@ interface AuthContextValue {
   refreshUser: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null)
+export const AuthContext = createContext<AuthContextValue | null>(null)
 
 function parseJwt(token: string): { sub?: string; role?: string; provider_id?: number } | null {
   try {

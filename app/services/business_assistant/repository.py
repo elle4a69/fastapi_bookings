@@ -147,6 +147,39 @@ class BusinessAssistantRepository:
         self._db.flush()
         return message
 
+    def create_message(
+        self,
+        *,
+        conversation_id: int,
+        role: str,
+        content: str,
+        channel: str = "text",
+        request_key: Optional[str] = None,
+        request_payload_hash: Optional[str] = None,
+        realtime_session_id: Optional[str] = None,
+        realtime_item_id: Optional[str] = None,
+        in_reply_to_message_id: Optional[int] = None,
+        generation_status: Optional[str] = None,
+        generation_started_at: Optional[datetime] = None,
+    ) -> BusinessAssistantMessage:
+        """Create and append a message by conversation ID within authenticated scope."""
+        conversation = self.get_conversation(conversation_id)
+        if not conversation:
+            raise LookupError("Conversation was not found in the authenticated scope.")
+        return self.append_message(
+            conversation=conversation,
+            role=role,
+            content=content,
+            request_key=request_key,
+            request_payload_hash=request_payload_hash,
+            channel=channel,
+            realtime_session_id=realtime_session_id,
+            realtime_item_id=realtime_item_id,
+            in_reply_to_message_id=in_reply_to_message_id,
+            generation_status=generation_status,
+            generation_started_at=generation_started_at,
+        )
+
     def get_message_by_request_key(
         self,
         *,

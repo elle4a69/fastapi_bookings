@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-
 import { authenticatedAdminFetch } from '@/lib/api'
-
+import {
+  executeRpcAction,
+  executorCoordinator,
+  type RpcExecutionReceipt,
+  defaultLeaseManager,
+} from './rpc'
 import {
   formatRealtimeSessionUpdate,
   formatRealtimeToolOutput,
@@ -37,6 +41,8 @@ export type RealtimeVoiceOptions = {
   conversationId: number | null
   onTurnPersisted: (turn: PersistedVoiceTurn) => void
   onError: (message: string) => void
+  onNavigate?: (path: string) => void
+  onRpcReceipt?: (receipt: RpcExecutionReceipt) => void
 }
 
 function newSessionId(): string {
@@ -108,6 +114,7 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
     usersRef.current = []
     assistantsRef.current = []
     seenTerminalEventsRef.current.clear()
+    executorCoordinator.releaseActiveExecutor()
     setState('idle')
   }, [setState])
 
@@ -176,9 +183,47 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
 
       const toolCall = parseRealtimeToolCall(payload)
       if (toolCall) {
-        const conversationId = optionsRef.current.conversationId
-        if (conversationId && dataChannelRef.current?.readyState === 'open') {
-          try {
+        try {
+          const clientReceipt = await executeRpcAction(
+            toolCall.name,
+            toolCall.arguments,
+            {
+              callerIdentity: 'realtime-voice',
+              context: {
+                onNavigate: optionsRef.current.onNavigate,
+                activeLeaseToken: defaultLeaseManager.getActiveLease().token ?? undefined,
+              },
+            },
+          )
+          optionsRef.current.onRpcReceipt?.(clientReceipt)
+
+          if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(
+              new CustomEvent('assistant-rpc:action', {
+                detail: { name: toolCall.name, arguments: toolCall.arguments, receipt: clientReceipt },
+              }),
+            )
+            if (toolCall.name === 'stage_fields' || toolCall.name === 'fill_fields') {
+              window.dispatchEvent(
+                new CustomEvent('assistant-rpc:fill-fields', {
+                  detail: {
+                    fields: (toolCall.arguments as Record<string, unknown>).fields || toolCall.arguments,
+                    receipt: clientReceipt,
+                  },
+                }),
+              )
+            } else if (toolCall.name === 'save_form' || toolCall.name === 'commit_save') {
+              window.dispatchEvent(
+                new CustomEvent('assistant-rpc:save-form', {
+                  detail: { receipt: clientReceipt },
+                }),
+              )
+            }
+          }
+
+          const conversationId = optionsRef.current.conversationId
+          let serverResult: Record<string, unknown> = clientReceipt as unknown as Record<string, unknown>
+          if (conversationId && dataChannelRef.current?.readyState === 'open') {
             const response = await authenticatedAdminFetch(
               `/api/admin/business-assistant/conversations/${conversationId}/realtime/tools`,
               {
@@ -190,18 +235,24 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
                 }),
               },
             )
-            const result = response.ok ? ((await response.json()) as Record<string, unknown>) : { status: 'error' }
-            const toolOutputEvent = formatRealtimeToolOutput(toolCall.callId, result)
+            if (response.ok) {
+              const sData = (await response.json()) as Record<string, unknown>
+              serverResult = (sData.result || sData) as Record<string, unknown>
+            }
+          }
+
+          if (dataChannelRef.current?.readyState === 'open') {
+            const toolOutputEvent = formatRealtimeToolOutput(toolCall.callId, serverResult)
             dataChannelRef.current.send(JSON.stringify(toolOutputEvent))
             dataChannelRef.current.send(JSON.stringify({ type: 'response.create' }))
-          } catch {
-            const errorOutput = formatRealtimeToolOutput(toolCall.callId, {
-              status: 'unavailable',
-              reason: 'Tool execution failed in this voice session.',
-            })
-            dataChannelRef.current?.send(JSON.stringify(errorOutput))
-            dataChannelRef.current?.send(JSON.stringify({ type: 'response.create' }))
           }
+        } catch {
+          const errorOutput = formatRealtimeToolOutput(toolCall.callId, {
+            status: 'unavailable',
+            reason: 'Tool execution failed in this voice session.',
+          })
+          dataChannelRef.current?.send(JSON.stringify(errorOutput))
+          dataChannelRef.current?.send(JSON.stringify({ type: 'response.create' }))
         }
         return
       }
@@ -317,6 +368,7 @@ export function useRealtimeVoice(options: RealtimeVoiceOptions) {
       if (!answerSdp.trim()) throw new Error('Realtime voice returned an empty session answer.')
       if (generationRef.current !== generation) return
       await peerConnection.setRemoteDescription({ type: 'answer', sdp: answerSdp })
+      executorCoordinator.claimActiveExecutor()
       if (dataChannelRef.current?.readyState === 'open') {
         void sendSessionUpdate(dataChannelRef.current)
       }

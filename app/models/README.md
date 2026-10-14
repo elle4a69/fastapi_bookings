@@ -11,7 +11,8 @@ The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schem
 - **Messaging & Omnichannel**: `Conversation`, `Message`, `ChannelAccount`, `MessageStyleExample`, `SmsAccount`, `SmsConversation`, `SmsMessage`, `SmsOutboundJob`, `SmsAiJob`, `SmsConversationEvent`, `SmsNote`, `SmsChatwootBinding`, `SmsQuickTool`.
 - **Commercial & Financial**: `Invoice`, `InvoiceLine`, `Payment`, `PaymentProcessorConfig`, `TaxRate`, `PromotionCode`, `Tip`.
 - **Intelligence, Bootcamp & Epistemic Memory**: `CuratedMemory` (with pgvector embedding), `KnowledgeProposal`, `KnowledgeGraphProjection`, `LearningEvent`, `SmsBootcampSettings`, `SmsBootcampRun`, `SmsBootcampConversation`, `SmsBootcampMessage`, `AuditLog`.
-- **Business Assistant**: `BusinessAssistantConversation`, `BusinessAssistantMessage`, `BusinessAssistantToolRun`, `BusinessAssistantMemory`, `BusinessAssistantOnboardingProgress`, `SupportTicket`, `SupportTicketDeduplicationClaim`, `SupportTicketEvent`.
+- **Business Assistant**: `BusinessAssistantConversation`, `BusinessAssistantMessage`, `BusinessAssistantToolRun`, `BusinessAssistantMemory`, `BusinessAssistantOnboardingProgress`, `SupportTicketDeduplicationClaim`, `SupportTicketEvent`, `AssistantErrorLog`.
+- **Support Tickets**: `SupportTicket`, `SupportTicketMessage`, `SupportTicketAuditEvent` (tenant-scoped support tickets with threaded messages, append-only audit events, triage priority, idempotency, error context, and external codex thread coordination).
 
 ---
 
@@ -40,6 +41,7 @@ app/models/
 ├── sms_outbox.py             # Outbound SMS jobs, AI jobs, conversation events, notes
 ├── sms_bootcamp.py           # Bootcamp runs, simulated conversations, and settings
 ├── business_assistant.py     # Native business assistant conversations, tool runs, tickets, and onboarding
+├── support_ticket.py         # SupportTicket, SupportTicketMessage, SupportTicketAuditEvent (UUID PKs)
 ├── checkout.py               # Commercial invoicing, lines, payments, and processor configs
 └── general_systems.py        # Plugin states and GDPR consent tracking
 ```
@@ -57,6 +59,12 @@ app/models/
   * Outbox ledger tracking synchronization status (`pending`, `processing`, `projected`, `retry`, `dead_letter`) to Graphiti.
 - [`SmsBootcampMessage`](file:///f:/Projects/fastapi_bookings/app/models/sms_bootcamp.py#L77):
   * `status = Column(String(32), nullable=False, default="pending", server_default="pending")`: Real database column backed by linear migration `k2m3n4p5q6r7`, superseding previous property hack.
+- [`SupportTicket`](file:///f:/Projects/fastapi_bookings/app/models/support_ticket.py#L32):
+  * Primary keys: 36-character standard UUID (`id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))`).
+  * Tenancy & Creator Scoping: Partitioned by `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`) and `created_by_user_id` (`ForeignKey('users.id', ondelete='CASCADE')`).
+  * Idempotency & Triage: Unique constraint on `('tenant_id', 'idempotency_key')`, triage priority (`normal`, `high`, `urgent`), and compound index on `('tenant_id', 'status')`.
+  * External CCC Thread Reference: `codex_thread_id` (String(64)) reference to external Codex thread without hard cross-database foreign key.
+  * Child Tables: `support_ticket_messages` (with sender type and tenant/internal visibility) and `support_ticket_audit_events` (immutable lifecycle audit logging), both featuring cascading deletion from `support_tickets`.
 
 ---
 
@@ -95,6 +103,7 @@ app/models/
 5. **Bootcamp Settings Scoping**: `sms_bootcamp_settings` enforces `UniqueConstraint('tenant_id', 'provider_id', name='uq_sms_bootcamp_settings_tenant_provider')`.
 6. **Bootcamp Message Status Invariant**: `sms_bootcamp_messages.status` enforces `nullable=False`, `default="pending"`, and `server_default="pending"`, ensuring structural integrity across simulations and migrations.
 7. **Cryptographic Token Cipher Isolation (IDOR-08)**: `SmsChatwootBinding` and `SmsAccount` derive Fernet cryptographic ciphers strictly from `settings.SECRET_KEY` (never from `PUBLIC_API_KEY`), ensuring sensitive carrier credentials and Chatwoot access tokens cannot be decrypted using public widget credentials.
+8. **Support Ticket Idempotency & Creator Scoping**: `support_tickets` enforces `UniqueConstraint('tenant_id', 'idempotency_key', name='uq_support_tickets_tenant_idempotency')` and indexes `('tenant_id', 'status')`. All ticket audit records and messages are cascade-deleted when the parent ticket is purged.
 
 ---
 
@@ -104,10 +113,13 @@ app/models/
    - Previously unmigrated models (`TenantWebsite` in `tenant_websites`, `ClientDispute` in `client_disputes`, `SmsQuickTool` in `sms_quick_tools`, and `GdprConsent` in `gdpr_consents`) are now fully reconciled into the linear Alembic ledger via migration `m3n4p5q6r7s8_reconcile_missing_domain_tables.py`.
    - The migration uses idempotent `inspect(op.get_bind()).get_table_names()` guards ensuring clean execution on fresh databases as well as databases bootstrapped with `create_all()`.
    - `SmsBootcampMessage.status` is migrated via linear Alembic migration `k2m3n4p5q6r7`.
-2. **pgvector HNSW Vector Indexing**:
+2. **Support Ticket Persistence Infrastructure**:
+   - Migration `10251fbf7103_create_support_ticket_tables.py` establishes real database tables for `support_tickets`, `support_ticket_messages`, and `support_ticket_audit_events`.
+   - 36-char UUID primary keys are generated client-side by default with PostgreSQL string persistence.
+3. **pgvector HNSW Vector Indexing**:
    - `CuratedMemory.embedding` is defined as `Column(Vector(1536), nullable=True)`.
    - Migration `j1k2m3n4p5q6` adds the PostgreSQL HNSW index `ix_curated_memories_embedding_hnsw` on `curated_memories USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)`. Full sequential scans are eliminated for vector similarity queries on PostgreSQL.
-3. **SQLite Dialect Incompatibilities**:
+4. **SQLite Dialect Incompatibilities**:
    - SQLite does not support `Vector(1536)` vector arithmetic or distance operators (`<=>`, `<->`). When running under SQLite (unit testing), cosine distance is simulated in Python.
    - Partial index definitions diverge between dialects (`sqlite_where` vs `postgresql_where`) in [`app/models/booking.py`](file:///f:/Projects/fastapi_bookings/app/models/booking.py#L34).
 
@@ -124,6 +136,9 @@ python -m alembic heads
 
 # Verify schema and row parity between primary and test databases
 .\.venv\Scripts\python.exe scripts/verify_db_parity.py
+
+# Run support ticket models verification suite
+.\.venv\Scripts\python.exe -m pytest tests/test_support_ticket_models.py -v
 
 # Run model constraint and vector audit test suite
 .\.venv\Scripts\python.exe -m pytest tests/test_track1_vector_audit.py tests/test_concurrency.py -v

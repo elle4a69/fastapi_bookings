@@ -1,4 +1,4 @@
-import { BellIcon, BookOpenCheckIcon, Bot, Compass, Download, Menu } from "lucide-react"
+import { BellIcon, BookOpenCheckIcon, Bot, Compass, Download, Menu, Mic } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -34,7 +34,7 @@ function getPageLabel(pathname: string) {
 export function AppHeader({ unreadCount = 0 }: { unreadCount?: number }) {
   const { pathname } = useLocation()
   const { canInstall, isIOS, showIosInstructions, setShowIosInstructions, install } = usePwaInstall()
-  const { toggleDrawer, drawerOpen } = useBusinessAssistant()
+  const { toggleDrawer, drawerOpen, voiceState } = useBusinessAssistant()
 
   const handleInstallClick = async () => {
     if (isIOS) {
@@ -83,15 +83,40 @@ export function AppHeader({ unreadCount = 0 }: { unreadCount?: number }) {
           variant="outline"
           size="sm"
           onClick={toggleDrawer}
-          className="h-8 gap-1.5 border-primary/30 bg-primary/5 px-2.5 text-xs font-semibold text-primary shadow-xs hover:bg-primary/15"
+          className={`h-8 gap-1.5 px-2.5 text-xs font-semibold shadow-xs transition-colors ${
+            voiceState === 'live'
+              ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+              : voiceState === 'connecting'
+                ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20'
+                : 'border-primary/30 bg-primary/5 text-primary hover:bg-primary/15'
+          }`}
           title="Open Business Assistant"
           aria-label="Open Business Assistant"
           aria-expanded={drawerOpen}
           aria-controls="business-assistant-drawer"
           data-testid="business-assistant-header-button"
         >
-          <Bot className="h-3.5 w-3.5 text-primary" />
-          <span className="hidden sm:inline">Assistant</span>
+          {voiceState === 'live' ? (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              <Mic className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+              <span className="hidden sm:inline">Voice Live</span>
+            </>
+          ) : voiceState === 'connecting' ? (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              <Mic className="h-3.5 w-3.5 text-amber-600 animate-pulse" aria-hidden="true" />
+              <span className="hidden sm:inline">Connecting…</span>
+            </>
+          ) : (
+            <>
+              <Bot className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden sm:inline">Assistant</span>
+            </>
+          )}
         </Button>
         {canInstall && (
           <Button

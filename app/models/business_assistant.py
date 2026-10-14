@@ -288,10 +288,10 @@ class SupportTicket(Base):
     user = relationship("User")
     conversation = relationship("BusinessAssistantConversation")
     events = relationship(
-        "SupportTicketEvent",
+        "app.models.business_assistant.SupportTicketEvent",
         back_populates="ticket",
         cascade="all, delete-orphan",
-        order_by="SupportTicketEvent.created_at",
+        order_by="app.models.business_assistant.SupportTicketEvent.created_at",
     )
 
 
@@ -321,7 +321,7 @@ class SupportTicketDeduplicationClaim(Base):
     deduplication_key = Column(String(64), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
-    ticket = relationship("SupportTicket")
+    ticket = relationship("app.models.business_assistant.SupportTicket")
     tenant = relationship("Tenant")
     user = relationship("User")
 
@@ -345,7 +345,7 @@ class SupportTicketEvent(Base):
     safe_metadata = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
-    ticket = relationship("SupportTicket", back_populates="events")
+    ticket = relationship("app.models.business_assistant.SupportTicket", back_populates="events")
     tenant = relationship("Tenant")
     actor_user = relationship("User")
 
@@ -452,4 +452,78 @@ class BusinessAssistantWebsiteProposal(Base):
     tenant = relationship("Tenant")
     created_by_user = relationship("User", foreign_keys=[created_by_user_id])
     published_by_user = relationship("User", foreign_keys=[published_by_user_id])
+
+
+
+class BusinessAssistantDiagnosticSetting(Base):
+    """Per-user, tenant-scoped Diagnostic Mode toggle for the Business Assistant."""
+
+    __tablename__ = "business_assistant_diagnostic_settings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_ba_diagnostic_settings_scope"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    diagnostic_mode = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class BusinessAssistantClientSnapshot(Base):
+    """Latest sanitized browser-state snapshot and tool-call log for one conversation."""
+
+    __tablename__ = "business_assistant_client_snapshots"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", "conversation_id", name="uq_ba_client_snapshots_scope"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey("business_assistant_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    snapshot = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class AssistantErrorLog(Base):
+    """Sanitized assistant tool, delegation, and client execution error audit record.
+
+    STRICT PRIVACY: Never stores raw arguments, customer PII, phone numbers,
+    prompts, or secrets.
+    """
+
+    __tablename__ = "assistant_error_logs"
+    __table_args__ = (
+        Index("ix_assistant_error_logs_tenant_timestamp", "tenant_id", "timestamp"),
+        Index("ix_assistant_error_logs_conversation", "conversation_id", "timestamp"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    conversation_id = Column(
+        Integer,
+        ForeignKey("business_assistant_conversations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+    source = Column(String(32), nullable=False, index=True)  # 'voice_webrtc', 'voice_livekit', 'text', 'client_rpc'
+    tool_name = Column(String(96), nullable=True, index=True)
+    error_code = Column(String(64), nullable=True, index=True)
+    message = Column(String(500), nullable=False)
+    transport = Column(String(32), nullable=True)
+    route = Column(String(256), nullable=True)
+
+    tenant = relationship("Tenant")
+    user = relationship("User")
+    conversation = relationship("BusinessAssistantConversation")
 

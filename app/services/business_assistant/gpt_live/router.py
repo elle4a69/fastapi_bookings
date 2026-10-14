@@ -13,6 +13,7 @@ from .runtime import (
     GPTLiveInvalidSdpError,
     GPTLiveProviderUnavailableError,
     GPTLiveRuntime,
+    build_gpt_live_session_config,
 )
 
 router = APIRouter(prefix="/gpt-live", tags=["GPT-Live"])
@@ -56,8 +57,22 @@ def create_gpt_live_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.") from exc
 
     try:
-        created = get_gpt_live_runtime().create_session(payload.sdp)
+        diag_mode = service.get_diagnostic_mode()
+        session_config = build_gpt_live_session_config(diagnostic_mode=diag_mode)
+        runtime = get_gpt_live_runtime()
+        try:
+            created = runtime.create_session(payload.sdp, session_config=session_config)
+        except TypeError:
+            created = runtime.create_session(payload.sdp)
     except GPTLiveConfigurationError as exc:
+        service.record_assistant_error(
+            source="voice_webrtc",
+            user_id=user.id,
+            conversation_id=conversation_id,
+            error_code="GPT_LIVE_CONFIGURATION_REQUIRED",
+            message=str(exc),
+            transport="direct_gpt_live",
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -66,6 +81,14 @@ def create_gpt_live_session(
             },
         ) from exc
     except GPTLiveInvalidSdpError as exc:
+        service.record_assistant_error(
+            source="voice_webrtc",
+            user_id=user.id,
+            conversation_id=conversation_id,
+            error_code="GPT_LIVE_INVALID_SDP",
+            message=str(exc),
+            transport="direct_gpt_live",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -74,11 +97,25 @@ def create_gpt_live_session(
             },
         ) from exc
     except GPTLiveProviderUnavailableError as exc:
+        details = {}
+        if exc.provider_status is not None:
+            details["provider_status"] = exc.provider_status
+        if exc.provider_code is not None:
+            details["provider_code"] = exc.provider_code
+        service.record_assistant_error(
+            source="voice_webrtc",
+            user_id=user.id,
+            conversation_id=conversation_id,
+            error_code="GPT_LIVE_PROVIDER_UNAVAILABLE",
+            message=str(exc),
+            transport="direct_gpt_live",
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={
                 "error_code": "GPT_LIVE_PROVIDER_UNAVAILABLE",
                 "message": "The voice provider could not start the session. Please try again later or continue in text.",
+                "details": details,
             },
         ) from exc
 

@@ -88,6 +88,7 @@ from .knowledge_projection import KnowledgeGraphProjection
 
 # Tenant Website model
 from .tenant_website import TenantWebsite, init_website_tables
+from .media import Media, init_media_tables
 
 # Client Dispute model
 from .client_dispute import ClientDispute, init_dispute_tables
@@ -119,14 +120,27 @@ from .business_assistant import (
     BusinessAssistantConversation,
     BusinessAssistantMessage,
     BusinessAssistantToolRun,
+    BusinessAssistantDiagnosticSetting,
+    BusinessAssistantClientSnapshot,
     BusinessAssistantMemory,
     BusinessAssistantOnboardingProgress,
     BusinessAssistantMessageDraft,
     BusinessAssistantCampaignProposal,
     BusinessAssistantWebsiteProposal,
-    SupportTicket,
+    SupportTicket as BusinessAssistantSupportTicket,
     SupportTicketDeduplicationClaim,
     SupportTicketEvent,
+    AssistantErrorLog,
+)
+from .support_ticket import (
+    SupportTicket,
+    SupportTicketMessage,
+    SupportTicketAuditEvent,
+)
+from .onboarding import (
+    OnboardingPlan,
+    OnboardingStep,
+    OnboardingAuditLog,
 )
 
 __all__ = [
@@ -209,6 +223,8 @@ __all__ = [
     "KnowledgeGraphProjection",
     "TenantWebsite",
     "init_website_tables",
+    "Media",
+    "init_media_tables",
     "ClientDispute",
     "init_dispute_tables",
     "LearningEvent",
@@ -230,14 +246,23 @@ __all__ = [
     "BusinessAssistantConversation",
     "BusinessAssistantMessage",
     "BusinessAssistantToolRun",
+    "BusinessAssistantDiagnosticSetting",
+    "BusinessAssistantClientSnapshot",
     "BusinessAssistantMemory",
     "BusinessAssistantOnboardingProgress",
     "BusinessAssistantMessageDraft",
     "BusinessAssistantCampaignProposal",
     "BusinessAssistantWebsiteProposal",
+    "BusinessAssistantSupportTicket",
     "SupportTicket",
+    "SupportTicketMessage",
+    "SupportTicketAuditEvent",
     "SupportTicketDeduplicationClaim",
     "SupportTicketEvent",
+    "AssistantErrorLog",
     "ProviderKnowledge",
+    "OnboardingPlan",
+    "OnboardingStep",
+    "OnboardingAuditLog",
 ]
 

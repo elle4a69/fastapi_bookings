@@ -2,13 +2,14 @@
 
 ## Purpose & scope
 
-This isolated admin page starts and closes the native GPT-Live Business Assistant voice experience. It owns browser WebRTC media, event-channel captions, and close finalisation feedback. It does not hold API keys, alter bookings, send SMS, or replace the existing Realtime voice page.
+This module starts and closes the native GPT-Live Business Assistant voice experience. Its shared browser WebRTC hook and caption renderer are used by the direct admin page and the Business Assistant drawer/full-page voice controls. It does not hold API keys, alter bookings, send SMS, or change text or ticket behaviour.
 
 ## Architecture & key files
 
 - `index.tsx` creates a real authenticated Business Assistant conversation and renders its live caption timeline.
 - `use-gpt-live.ts` negotiates WebRTC, plays the remote audio track, waits for `session.started`, and retains transport until `session.closed`.
 - `protocol.ts` appends exact transcript deltas into timestamp-based speaker intervals.
+- `caption-timeline.tsx` renders those intervals for every GPT-Live voice surface.
 
 ## Setup, configuration & dependencies
 
@@ -24,7 +25,7 @@ No OpenAI credential enters browser code. Captions remain in component memory fo
 
 ## Known issues, edge cases & outstanding work
 
-The page is intentionally reachable directly at `/admin/gpt-live` while it remains isolated and is not added to the main navigation. Browser autoplay policies can require the user to permit remote audio playback. If the terminal `session.closed` event is not delivered within ten seconds, the page explicitly reports incomplete finalisation.
+The page remains directly reachable at `/admin/gpt-live` and is not added to the main navigation. The same hook is now used by the Business Assistant voice controls. Browser autoplay policies can require the user to permit remote audio playback. If the terminal `session.closed` event is not delivered within ten seconds, the UI explicitly reports incomplete finalisation.
 
 ## Verification & testing commands
 

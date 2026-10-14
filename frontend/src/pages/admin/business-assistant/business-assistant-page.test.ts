@@ -18,3 +18,10 @@ test('conversation is primary and history is an explicitly opened drawer', () =>
   assert.doesNotMatch(page, /Guided onboarding|Enabled modules:|active services/)
   assert.ok(page.indexOf('aria-label="Conversation"') < page.indexOf('support-ticket-heading'))
 })
+
+test('business assistant page provides prominent Assistant Settings gear and dialog', () => {
+  assert.match(page, /data-testid="business-assistant-settings-button"/)
+  assert.match(page, /Assistant Settings/)
+  assert.match(page, /AssistantSettingsDialog/)
+  assert.match(page, /const \[settingsOpen, setSettingsOpen\] = useState\(false\)/)
+})

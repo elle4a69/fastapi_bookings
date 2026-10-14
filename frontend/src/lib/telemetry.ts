@@ -52,11 +52,36 @@ function extractErrorClass(err: unknown): string {
   return 'UnknownError';
 }
 
+/** Helper to detect whether an error or stack originated from browser extensions */
+export function isBrowserExtensionSource(source?: string | null): boolean {
+  if (!source) return false;
+  return (
+    source.startsWith('chrome-extension://') ||
+    source.startsWith('moz-extension://') ||
+    source.startsWith('safari-web-extension://') ||
+    source.includes('chrome-extension://') ||
+    source.includes('moz-extension://') ||
+    source.includes('safari-web-extension://') ||
+    source.includes('contentScript')
+  );
+}
+
 /** Register global error and unhandled rejection listeners */
 export function initFrontendTelemetry(): void {
   if (typeof window === 'undefined') return;
 
   window.addEventListener('error', (event: ErrorEvent) => {
+    const filename = event.filename || '';
+    if (
+      filename.startsWith('chrome-extension://') ||
+      filename.startsWith('moz-extension://') ||
+      filename.startsWith('safari-web-extension://') ||
+      filename.includes('contentScript') ||
+      (event.error instanceof Error && isBrowserExtensionSource(event.error.stack))
+    ) {
+      return;
+    }
+
     sendTelemetry({
       event_type: 'js_error',
       error_class: extractErrorClass(event.error),
@@ -65,6 +90,22 @@ export function initFrontendTelemetry(): void {
   });
 
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    const reason = event.reason;
+    if (reason && typeof reason === 'object') {
+      const reasonObj = reason as { stack?: unknown; fileName?: unknown; message?: unknown };
+      if (typeof reasonObj.stack === 'string' && isBrowserExtensionSource(reasonObj.stack)) {
+        return;
+      }
+      if (typeof reasonObj.fileName === 'string' && isBrowserExtensionSource(reasonObj.fileName)) {
+        return;
+      }
+      if (typeof reasonObj.message === 'string' && isBrowserExtensionSource(reasonObj.message)) {
+        return;
+      }
+    } else if (typeof reason === 'string' && isBrowserExtensionSource(reason)) {
+      return;
+    }
+
     sendTelemetry({
       event_type: 'unhandled_rejection',
       error_class: extractErrorClass(event.reason),

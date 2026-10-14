@@ -112,10 +112,13 @@ test('normalizeRoute resolves canonical routes and friendly aliases', () => {
   assert.equal(normalizeRoute('catalog'), '/admin/catalog/services')
   assert.equal(normalizeRoute('/admin/catalog'), '/admin/catalog/services')
   assert.equal(normalizeRoute('onboarding'), '/admin/settings/business')
+  assert.equal(normalizeRoute('/admin/onboarding'), '/admin/settings/business')
+  assert.equal(normalizeRoute('admin/onboarding'), '/admin/settings/business')
   assert.equal(normalizeRoute('settings'), '/admin/settings/business')
   assert.equal(normalizeRoute('/admin/settings'), '/admin/settings/business')
   assert.equal(normalizeRoute('bookings'), '/admin/bookings')
   assert.equal(normalizeRoute('/admin/website?tab=sections'), '/admin/website')
+  assert.equal(normalizeRoute('/admin/settings/hours'), '/admin/schedule/workdays')
 })
 
 test('isRouteAllowlisted strictly allows approved admin routes and rejects unsafe paths', () => {
@@ -125,6 +128,8 @@ test('isRouteAllowlisted strictly allows approved admin routes and rejects unsaf
   assert.equal(isRouteAllowlisted('/admin/catalog'), true)
   assert.equal(isRouteAllowlisted('/admin/settings/business'), true)
   assert.equal(isRouteAllowlisted('/admin/settings'), true)
+  assert.equal(isRouteAllowlisted('/admin/settings/hours'), true)
+  assert.equal(isRouteAllowlisted('/admin/onboarding'), true)
   assert.equal(isRouteAllowlisted('catalog'), true)
   assert.equal(isRouteAllowlisted('settings'), true)
   assert.equal(isRouteAllowlisted('website'), true)
