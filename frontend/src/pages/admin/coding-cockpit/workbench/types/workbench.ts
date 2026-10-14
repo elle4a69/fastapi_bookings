@@ -521,6 +521,30 @@ export interface PluginInstallResponse {
   appsNeedingAuth: PluginApp[]
 }
 
+export interface SkillSearchResult {
+  id: string
+  name: string
+  description: string
+  category: string
+  tags: string[]
+  score?: number
+}
+
+export interface SkillDetail extends SkillSearchResult {
+  content: string
+  version?: string | null
+  author?: string | null
+}
+
+export interface SkillsStats {
+  totalSkills: number
+  indexedCount: number
+  graphNodes: number
+  graphEdges: number
+  lastIndexed?: string | null
+  status: 'available'
+}
+
 export interface CreateWorktreePayload {
   repo_path: string
   branch: string

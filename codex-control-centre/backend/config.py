@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     codex_worker_timeout_seconds: int = 60
     codex_api_key: Optional[str] = None
 
+    # Local hybrid Skills RAG service. Retrieved skill content is bounded before
+    # it is attached to a Codex turn so the full library never enters context.
+    skills_rag_url: str = "http://127.0.0.1:8008"
+    skills_rag_enabled: bool = True
+    skills_rag_timeout_seconds: float = 10.0
+    skills_rag_top_k: int = 3
+    skills_rag_max_skill_chars: int = 6000
+    skills_rag_max_context_chars: int = 16000
+
     @field_validator("database_url", mode="before")
     @classmethod
     def _validate_database_url(cls, v: object) -> str:

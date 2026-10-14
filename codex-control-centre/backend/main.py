@@ -10,7 +10,7 @@ from backend.services.event_service import broker
 from backend.services.worker_manager import worker_manager
 from backend.middleware.logging import CorrelationLoggingMiddleware, RedactingFilter
 from backend.middleware.auth import verify_auth
-from backend.routers import events, threads, turns, worktrees, governance, diagnostics, projects, settings as settings_router, models, plugins
+from backend.routers import events, threads, turns, worktrees, governance, diagnostics, projects, settings as settings_router, models, plugins, skills
 from backend.services.telemetry import init_telemetry, shutdown_telemetry
 
 # Configure root logger with RedactingFilter to ensure secrets are never leaked
@@ -144,6 +144,7 @@ app.include_router(projects.router, prefix="/codex/projects", dependencies=[Depe
 app.include_router(settings_router.router, prefix="/codex/settings", dependencies=[Depends(verify_auth)])
 app.include_router(models.router, prefix="/codex/models", dependencies=[Depends(verify_auth)])
 app.include_router(plugins.router, dependencies=[Depends(verify_auth)])
+app.include_router(skills.router, dependencies=[Depends(verify_auth)])
 app.include_router(diagnostics.router)
 
 

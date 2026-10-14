@@ -175,6 +175,7 @@ from backend.routers import (
     worktrees as codex_worktrees,
     governance as codex_governance,
     plugins as codex_plugins,
+    skills as codex_skills,
 )
 
 
@@ -663,6 +664,12 @@ app.include_router(
     prefix="/api/admin",
     dependencies=[Depends(get_current_admin)],
     tags=["Codex Plugins"],
+)
+app.include_router(
+    codex_skills.router,
+    prefix="/api/admin",
+    dependencies=[Depends(get_current_admin)],
+    tags=["Codex Skills"],
 )
 
 

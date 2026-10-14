@@ -178,6 +178,24 @@ def test_get_codex_plugins_is_admin_scoped_and_uses_mounted_app_server_route(
     assert response.json()["plugins"] == []
 
 
+def test_get_codex_skills_is_admin_scoped_and_uses_mounted_rag_route(
+    client: TestClient,
+    db_session: Session,
+):
+    unauthenticated = client.get("/api/admin/codex/skills/stats")
+    assert unauthenticated.status_code in (400, 401, 403)
+
+    _, _, headers = _create_admin_user(db_session, suffix="skills")
+    with patch(
+        "backend.routers.skills.skills_context_service.stats",
+        AsyncMock(return_value={"totalSkills": 1692, "indexedCount": 1692, "status": "available"}),
+    ):
+        response = client.get("/api/admin/codex/skills/stats", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["indexedCount"] == 1692
+
+
 def test_get_codex_threads(client: TestClient, db_session: Session):
     """GET /api/admin/codex/threads returns 200 OK with thread list."""
     _, _, headers = _create_admin_user(db_session, suffix="threads")

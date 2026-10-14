@@ -66,7 +66,7 @@ frontend/src/pages/admin/coding-cockpit/
 ├── HealthSentinels.tsx                               # SRE health sentinels, OTel metrics, queue monitoring
 ├── StressFuzzer.tsx                                  # Concurrency race-condition load testing suite
 ├── IssuesStudio.tsx                                  # AST diagnostics & isolated sandbox fix executor
-├── SkillsBrowser.tsx                                 # C:\Users\Frank\skills interactive catalog
+├── SkillsBrowser.tsx                                 # Port 8008 hybrid Skills RAG search and on-demand reader
 ├── PluginManager.tsx                                 # Live Codex plugin catalog, install, and app authorization UI
 ├── EventStream.tsx                                   # Filtered SSE event stream console
 ├── coding-cockpit.test.ts                            # Unit test suite verifying routing, headers, splitters, HUD
@@ -171,7 +171,7 @@ frontend/src/pages/admin/coding-cockpit/
 
 - **Daemon Offline Handling**: When Codex Control Centre daemon (`port 4500`) is offline, the header connection status displays a reconnect banner with a retry trigger.
 - **Mobile Keyboard Adjustment**: On small mobile viewports, opening the virtual keyboard shifts the sticky composer up; `env(safe-area-inset-bottom)` is enforced to avoid viewport cutoffs.
-- **Local Skills Indexing**: Interactive search across 1,600+ skills at `C:\Users\Frank\skills` uses in-browser fuzzy indexing; server-side embedding search is scheduled for upcoming releases.
+- **Skills RAG Availability**: Skills discovery and automatic turn context require the loopback service at `http://127.0.0.1:8008`. If unavailable, the browser reports the service failure and Codex turns continue without injected skill context rather than cascading into 500 errors.
 - **Model Catalog Maintenance**: The catalog reflects the model variants enabled for the current Codex application environment. When the runtime adds or retires a family, update the shared frontend catalog and mounted backend catalog together and retain the regression parity checks.
 - **Plugin API Stability**: OpenAI currently labels app-server `plugin/list`, `plugin/read`, and `plugin/install` as under development. The manager displays that status and the backend validates/sanitizes every response, but a future Codex CLI schema change may require an adapter update.
 

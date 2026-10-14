@@ -15,6 +15,7 @@ from backend.services.worker_manager import worker_manager
 from backend.services.worktree_service import ensure_thread_worktree
 from backend.services.event_service import broker, EventEnvelope
 from backend.services import governance_service
+from backend.services.skills_context import skills_context_service
 
 logger = logging.getLogger(__name__)
 
@@ -220,10 +221,28 @@ async def _safe_dispatch_turn_start(
                 if hasattr(worker, "codex_thread_id"):
                     worker.codex_thread_id = codex_thread_id
 
+        skill_context = {"status": "skipped", "query": None, "skills": [], "context": ""}
+        if not _is_mock(worker):
+            skill_context = await skills_context_service.build_turn_context(prompt)
+        effective_prompt = skills_context_service.attach_to_prompt(prompt, skill_context["context"])
+
+        broker.publish_event(EventEnvelope(
+            project_id=project_id,
+            thread_id=thread_id,
+            type="skills_context",
+            payload={
+                "turn_id": turn_id,
+                "turnId": turn_id,
+                "status": skill_context["status"],
+                "query": skill_context["query"],
+                "skills": skill_context["skills"],
+            },
+        ))
+
         turn_params: dict[str, Any] = {
             "threadId": codex_thread_id,
-            "prompt": prompt,
-            "input": [{"type": "text", "text": prompt}],
+            "prompt": effective_prompt,
+            "input": [{"type": "text", "text": effective_prompt}],
             "effort": reasoning_effort,
             "reasoningEffort": reasoning_effort,
             "workspaceRoot": wt_str,

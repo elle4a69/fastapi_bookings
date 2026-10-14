@@ -62,6 +62,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `models.py`: Supported model catalog enumeration (`/models`, `/codex/models`).
     - `governance.py`: Approvals, risk tiering, subagent registration, concurrency enforcement.
     - `plugins.py`: Sanitized app-server plugin catalog, detail, and install bridge.
+    - `skills.py`: Authenticated proxy for port 8008 hybrid skill search, statistics, and on-demand reads.
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
 - **FastAPI Bookings Administrative Integration**:
@@ -73,6 +74,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `event_service.py`: In-memory thread-scoped SSE event broker with historical replay.
     - `sse_tickets.py`: Short-lived single-use authorization ticket store.
     - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
+    - `skills_context.py`: Privacy-bounded skill query derivation, top-match retrieval, content budgets, and turn context assembly.
 - `frontend/`:
   - `src/App.tsx`: Root responsive 3-pane workbench container with mobile off-canvas drawer navigation and tablet/mobile overlay backdrops.
   - `src/components/layout/ProjectRail.tsx`: Project switcher, theme toggle, and settings triggers with touch-first tap targets.
@@ -130,6 +132,11 @@ Set these variables in `.env` or system environment:
 | `CODEX_APP_SERVER_ARGS` | `["app-server"]` | Command line arguments passed when launching the Codex App-Server subprocess. |
 | `CODEX_TRANSPORT` | `stdio` | Transport protocol used for communication with the worker process (`stdio`). |
 | `CODEX_WORKER_TIMEOUT_SECONDS` | `60` | Default timeout in seconds for JSON-RPC requests sent to the worker process. |
+| `SKILLS_RAG_URL` | `http://127.0.0.1:8008` | Loopback Skills RAG and hybrid vector/graph search service. |
+| `SKILLS_RAG_ENABLED` | `true` | Enables automatic bounded skill retrieval for real Codex turns. |
+| `SKILLS_RAG_TOP_K` | `3` | Maximum skills read and attached to each turn. |
+| `SKILLS_RAG_MAX_SKILL_CHARS` | `6000` | Per-skill character budget. |
+| `SKILLS_RAG_MAX_CONTEXT_CHARS` | `16000` | Total retrieved context character budget per turn. |
 
 ---
 
@@ -160,10 +167,11 @@ Set these variables in `.env` or system environment:
 
 ### 3. Turn Lifecycle & Optimistic Reconciliation
 1. **User Submits Instruction**: `Composer` sends the prompt with the validated sticky model and selected reasoning effort via `POST /codex/turns/start`. If a direct client omits the model, the backend resolves it to `gpt-6.1-sol`.
-2. **Optimistic Store Entry**: The frontend generates an optimistic turn and renders a pending timeline node.
-3. **Turn Started Event**: Backend assigns integer turn ID (`turn_id`) and emits `turn_started`. The frontend reconciles the optimistic turn ID with the API turn ID without creating duplicate turn cards.
-4. **Streaming Deltas**: As Codex generates tokens, stdio `item/agentMessage/delta` and `turn/reasoningDelta` notifications are translated to `agent_message` and `reasoning` SSE events and streamed to the UI.
-5. **Completion or Failure**: When Codex emits `turn/completed`, any upstream error is extracted and displayed as a structured `FailureItem` with retry options.
+2. **Bounded Skills Retrieval**: A low-cardinality technical query is derived without forwarding the raw prompt, then port 8008 performs hybrid vector/graph search. At most three full skills are loaded on demand under per-skill and total context budgets. Retrieval failure is fail-open and does not fail the turn.
+3. **Optimistic Store Entry**: The frontend generates an optimistic turn and renders a pending timeline node.
+4. **Turn Started Event**: Backend assigns integer turn ID (`turn_id`) and emits `turn_started`. The frontend reconciles the optimistic turn ID with the API turn ID without creating duplicate turn cards.
+5. **Streaming Deltas**: As Codex generates tokens, stdio `item/agentMessage/delta` and `turn/reasoningDelta` notifications are translated to `agent_message` and `reasoning` SSE events and streamed to the UI.
+6. **Completion or Failure**: When Codex emits `turn/completed`, any upstream error is extracted and displayed as a structured `FailureItem` with retry options.
 
 ### 4. Operator Interruption & Cascade Cancellation
 1. **Stop Request**: Operator clicks "Stop" button in UI $\to$ `POST /codex/turns/interrupt` with `thread_id` and `turn_id`.
@@ -206,6 +214,9 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
   - `GET /api/admin/codex/plugins` — Sanitized live plugin catalog.
   - `GET /api/admin/codex/plugins/{plugin_id}` — Plugin apps, skills, and capability details.
   - `POST /api/admin/codex/plugins/{plugin_id}/install` — Install the catalog-resolved plugin and return required app authorization links.
+  - `GET /api/admin/codex/skills/stats` — Sanitized hybrid-index status and counts.
+  - `GET /api/admin/codex/skills/search` — Hybrid semantic/graph search through port 8008.
+  - `GET /api/admin/codex/skills/{skill_id}` — Full on-demand skill read without exposing source filesystem paths.
   - `GET /api/admin/codex/threads/{project_id}` — Active threads per project.
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
@@ -234,7 +245,7 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
 - **Model Availability Drift**: The mounted catalog reflects the current models enabled for this Codex environment. Runtime account entitlements can still reject a model that is not enabled for the signed-in account; catalog updates must keep the backend endpoint and integrated frontend `modelCatalog.ts` in parity.
-- **Hanging External MCP Servers**: External MCP plugins configured in `~/.codex/config.toml` that fail to respond (e.g. `mcp-skillset`, `main-context-document`) can delay initial worker startup. Backend passes flags to disable failing MCPs during worker launch.
+- **Skills RAG Process Dependency**: The direct `mcp-skillset` worker integration remains disabled to prevent worker startup hangs. Skills are retrieved through the independently managed loopback service on port 8008; unavailable retrieval degrades to the original prompt and emits no raw prompt content to Skills RAG request logs.
 - **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
 - **Preview Plugin Protocol**: App-server plugin list/read/install methods are currently documented by OpenAI as under development. The bridge fails closed with 502/503 responses on malformed or unavailable protocol results.
 
@@ -256,6 +267,9 @@ python -m pytest tests/test_codex_app_server.py -v
 
 # Run plugin installation and interactive authorization contract tests
 python -m pytest tests/test_plugins_and_interactions.py -v
+
+# Run Skills RAG search, bounds, fail-open, and turn-injection tests
+python -m pytest tests/test_skills_context.py -v
 
 # Run End-to-End smoke suite
 python -m pytest tests/test_e2e_smoke.py -v

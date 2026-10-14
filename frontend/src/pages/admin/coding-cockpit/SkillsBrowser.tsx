@@ -1,45 +1,43 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { BookOpen, Search, ExternalLink, Sparkles } from 'lucide-react'
+import { BookOpen, Search, ExternalLink, Sparkles, Network } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { apiClient } from '@/lib/api'
-import type { SkillItem } from './types'
+import { codexApi } from './workbench/api/codexApi'
+import type { SkillDetail, SkillSearchResult, SkillsStats } from './workbench/types/workbench'
 
 export const SkillsBrowser: React.FC = () => {
   const [skillsQuery, setSkillsQuery] = useState<string>('fastapi concurrency')
-  const [skillsList, setSkillsList] = useState<SkillItem[]>([])
+  const [skillsList, setSkillsList] = useState<SkillSearchResult[]>([])
   const [loadingSkills, setLoadingSkills] = useState<boolean>(false)
-  const [selectedSkillContent, setSelectedSkillContent] = useState<{ skill_id: string; content: string } | null>(null)
+  const [selectedSkillContent, setSelectedSkillContent] = useState<SkillDetail | null>(null)
+  const [stats, setStats] = useState<SkillsStats | null>(null)
   const [skillModalOpen, setSkillModalOpen] = useState<boolean>(false)
 
-  const handleSearchSkills = useCallback(async (overrideQuery?: string) => {
-    const q = (overrideQuery !== undefined ? overrideQuery : skillsQuery).trim()
+  const runSearch = useCallback(async (query: string) => {
+    const q = query.trim()
     if (!q) return
 
     try {
       setLoadingSkills(true)
-      const res = await apiClient.get<SkillItem[]>(
-        `/api/admin/resident-agent/skills?query=${encodeURIComponent(q)}&top_k=12`
-      )
-      const data = (res as any)?.data ?? res
-      setSkillsList(Array.isArray(data) ? data : [])
+      const res = await codexApi.searchSkills(q, 12)
+      setSkillsList(res.results)
     } catch (err: any) {
       toast.error('Failed querying skills: ' + (err.message || 'Unknown error'))
     } finally {
       setLoadingSkills(false)
     }
-  }, [skillsQuery])
+  }, [])
+
+  const handleSearchSkills = useCallback(async (overrideQuery?: string) => {
+    await runSearch(overrideQuery !== undefined ? overrideQuery : skillsQuery)
+  }, [runSearch, skillsQuery])
 
   const handleViewSkill = async (skillId: string) => {
     try {
-      const res = await apiClient.get<{ skill_id: string; content: string }>(
-        `/api/admin/resident-agent/skills/${encodeURIComponent(skillId)}`
-      )
-      const data = (res as any)?.data ?? res
-      setSelectedSkillContent(data)
+      setSelectedSkillContent(await codexApi.readSkill(skillId))
       setSkillModalOpen(true)
     } catch (err: any) {
       toast.error('Failed loading skill details: ' + (err.message || 'Error'))
@@ -47,8 +45,11 @@ export const SkillsBrowser: React.FC = () => {
   }
 
   useEffect(() => {
-    handleSearchSkills('fastapi concurrency')
-  }, [handleSearchSkills])
+    void runSearch('fastapi concurrency')
+    void codexApi.getSkillsStats().then(setStats).catch(() => {
+      toast.error('Skills RAG service on port 8008 is unavailable')
+    })
+  }, [runSearch])
 
   return (
     <div className="space-y-6">
@@ -58,14 +59,17 @@ export const SkillsBrowser: React.FC = () => {
             <div>
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-primary shrink-0" />
-                <span>Local Skills & Engineering Blueprints Browser</span>
+                <span>Skills RAG & Engineering Blueprints</span>
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Direct access to 1,600+ vetted skills and architectural playbooks at{' '}
-                <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground text-[11px]">
-                  C:\Users\Frank\skills
-                </code>
+                Hybrid semantic retrieval from the live vector and knowledge-graph index on port 8008.
               </p>
+              {stats && (
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1"><Sparkles className="h-3 w-3 text-amber-500" /> {stats.indexedCount.toLocaleString()} indexed skills</span>
+                  <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1"><Network className="h-3 w-3 text-primary" /> {stats.graphNodes.toLocaleString()} nodes · {stats.graphEdges.toLocaleString()} edges</span>
+                </div>
+              )}
             </div>
 
             {/* Search Input Bar */}
@@ -125,7 +129,7 @@ export const SkillsBrowser: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {skillsList.map((skill) => (
                 <div
-                  key={skill.skill_id}
+                  key={skill.id}
                   className="p-3.5 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-all text-left flex flex-col justify-between gap-3 group"
                 >
                   <div className="space-y-1.5">
@@ -137,12 +141,16 @@ export const SkillsBrowser: React.FC = () => {
                     <p className="text-[11px] text-muted-foreground line-clamp-3 leading-relaxed">
                       {skill.description}
                     </p>
+                    <div className="flex flex-wrap gap-1">
+                      {typeof skill.score === 'number' && <span className="text-[10px] rounded-full bg-primary/10 px-2 py-0.5 text-primary">relevance {(skill.score * 100).toFixed(1)}%</span>}
+                      {skill.category && <span className="text-[10px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{skill.category}</span>}
+                    </div>
                   </div>
 
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleViewSkill(skill.skill_id)}
+                    onClick={() => handleViewSkill(skill.id)}
                     className="h-7 text-[11px] text-primary hover:text-primary font-medium w-full gap-1"
                   >
                     <ExternalLink className="w-3 h-3" /> View SKILL.md
@@ -161,11 +169,11 @@ export const SkillsBrowser: React.FC = () => {
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-primary" />
               <DialogTitle className="text-base font-semibold font-mono">
-                {selectedSkillContent?.skill_id}
+                {selectedSkillContent?.name}
               </DialogTitle>
             </div>
             <DialogDescription className="text-xs text-muted-foreground">
-              Engineering skill blueprint loaded on-demand from local library at C:\Users\Frank\skills
+              Full skill content loaded on demand from the port 8008 hybrid index; turn context loads only the top bounded matches.
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-y-auto max-h-[60vh] p-4 bg-muted/40 rounded-lg text-xs font-mono whitespace-pre-wrap leading-relaxed border mt-2">

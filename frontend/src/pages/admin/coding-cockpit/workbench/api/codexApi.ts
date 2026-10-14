@@ -19,6 +19,9 @@ import type {
   PluginCatalogResponse,
   PluginDetailResponse,
   PluginInstallResponse,
+  SkillSearchResult,
+  SkillDetail,
+  SkillsStats,
 } from '../types/workbench'
 
 export class CodexApi {
@@ -159,6 +162,18 @@ export class CodexApi {
 
   async installPlugin(pluginId: string): Promise<PluginInstallResponse> {
     return this.client.post<PluginInstallResponse>(`/codex/plugins/${encodeURIComponent(pluginId)}/install`)
+  }
+
+  async getSkillsStats(): Promise<SkillsStats> {
+    return this.client.get<SkillsStats>('/codex/skills/stats')
+  }
+
+  async searchSkills(query: string, topK: number = 12): Promise<{ results: SkillSearchResult[] }> {
+    return this.client.get<{ results: SkillSearchResult[] }>('/codex/skills/search', { query, top_k: topK })
+  }
+
+  async readSkill(skillId: string): Promise<SkillDetail> {
+    return this.client.get<SkillDetail>(`/codex/skills/${encodeURIComponent(skillId)}`)
   }
 
   // Worktrees

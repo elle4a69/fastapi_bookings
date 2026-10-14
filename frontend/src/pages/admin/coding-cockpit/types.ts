@@ -71,13 +71,6 @@ export interface StreamEvent {
   title?: string
 }
 
-export interface SkillItem {
-  skill_id: string
-  name: string
-  description: string
-  tags?: string[]
-}
-
 export interface RaceConditionFuzzResult {
   test_id: string
   concurrency_tested: number

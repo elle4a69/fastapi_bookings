@@ -118,6 +118,20 @@ test('Full-screen modal overlays house secondary tools (SRE Health, Fuzzer, AST 
   assert.ok(content.includes('DialogContent'), 'Must render within Radix DialogContent')
 })
 
+test('Skills Browser uses the port 8008 hybrid RAG bridge instead of the legacy filesystem scanner', () => {
+  const browserPath = fileURLToPath(new URL('./SkillsBrowser.tsx', import.meta.url))
+  const browserContent = readFileSync(browserPath, 'utf8')
+  const apiPath = fileURLToPath(new URL('./workbench/api/codexApi.ts', import.meta.url))
+  const apiContent = readFileSync(apiPath, 'utf8')
+
+  assert.ok(browserContent.includes('codexApi.searchSkills'), 'Skills Browser must use the authenticated Codex skills bridge')
+  assert.ok(browserContent.includes('codexApi.getSkillsStats'), 'Skills Browser must display live hybrid-index statistics')
+  assert.ok(browserContent.includes('codexApi.readSkill'), 'Full skill content must load only on demand')
+  assert.ok(!browserContent.includes('/resident-agent/skills'), 'Legacy direct filesystem scanning must not remain in the cockpit')
+  assert.ok(apiContent.includes("'/codex/skills/search'"), 'API client must expose hybrid skill search')
+  assert.ok(apiContent.includes("'/codex/skills/stats'"), 'API client must expose live index statistics')
+})
+
 test('ThreadHeader features Active Agent HUD, secondary tools launcher, and sticky Model Selector', () => {
   const headerPath = fileURLToPath(new URL('./workbench/components/layout/ThreadHeader.tsx', import.meta.url))
   const content = readFileSync(headerPath, 'utf8')
