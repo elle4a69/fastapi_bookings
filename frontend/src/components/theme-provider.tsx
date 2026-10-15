@@ -1,35 +1,16 @@
 import { createContext, useContext, useEffect, useState, type ComponentProps } from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
-export type ColorTheme = "crimson" | "midnight" | "emerald";
+import {
+  type ColorTheme,
+  type ColorThemeOption,
+  COLOR_THEMES,
+  COLOR_THEME_STORAGE_KEY,
+  isValidColorTheme,
+} from "./theme-constants";
 
-export interface ColorThemeOption {
-  id: ColorTheme;
-  name: string;
-  description: string;
-  previewColor: string;
-}
-
-export const COLOR_THEMES: ColorThemeOption[] = [
-  {
-    id: "midnight",
-    name: "Midnight Slate",
-    description: "Deep Navy & Electric Blue",
-    previewColor: "#3b82f6",
-  },
-  {
-    id: "emerald",
-    name: "Emerald Luxe",
-    description: "Obsidian Base & Vibrant Emerald",
-    previewColor: "#10b981",
-  },
-  {
-    id: "crimson",
-    name: "BookMe Crimson",
-    description: "Velvet Magenta & Modern Crimson",
-    previewColor: "#c2185b",
-  },
-];
+export type { ColorTheme, ColorThemeOption };
+export { COLOR_THEMES };
 
 interface ColorThemeContextType {
   colorTheme: ColorTheme;
@@ -39,13 +20,11 @@ interface ColorThemeContextType {
 
 const ColorThemeContext = createContext<ColorThemeContextType | undefined>(undefined);
 
-const COLOR_THEME_STORAGE_KEY = "bookme_color_theme";
-
 export function ThemeProvider({ children, ...props }: ComponentProps<typeof NextThemesProvider>) {
   const [colorTheme, setColorThemeState] = useState<ColorTheme>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(COLOR_THEME_STORAGE_KEY);
-      if (stored === "midnight" || stored === "emerald" || stored === "crimson") {
+      if (isValidColorTheme(stored)) {
         return stored;
       }
     }
@@ -67,9 +46,11 @@ export function ThemeProvider({ children, ...props }: ComponentProps<typeof Next
       "theme-crimson",
       "theme-midnight",
       "theme-emerald",
+      "theme-logto",
       "crimson",
       "midnight",
-      "emerald"
+      "emerald",
+      "logto"
     );
     // Apply selected theme class and data-theme
     root.classList.add(`theme-${colorTheme}`, colorTheme);

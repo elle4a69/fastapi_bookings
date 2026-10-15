@@ -96,6 +96,7 @@ VITE_MAPBOX_TOKEN=pk.eyJ1I...
 - **Midnight Executive (`midnight`)**: Deep navy-slate background (`oklch(0.12 0.025 258)`), cold slate cards, electric blue accents (`#3b82f6`).
 - **Emerald Luxe (`emerald`)**: Obsidian black base with dark forest undertones, cold obsidian-slate cards, vibrant jewel emerald accents (`oklch(0.66 0.20 155)`).
 - **BookMe Crimson (`crimson`)**: Velvet crimson and magenta styling (`oklch(0.52 0.24 350)` light / `oklch(0.62 0.24 350)` dark).
+- **Logto Violet (`logto`)**: Signature Electric Purple & Obsidian Dark aesthetic inspired by Logto (`#6c47ff` / `oklch(0.58 0.26 278)` light / `oklch(0.66 0.25 278)` dark, cool paper light base `oklch(0.985 0.005 278)`, deep obsidian slate dark mode `oklch(0.12 0.02 278)`, sleek dark card surfaces `oklch(0.16 0.025 278)`).
 - **Glassmorphic Utilities**: `.glass-panel` (16px backdrop blur, subtle borders), `.glass-card` (12px blur), `.glass-surface` (translucent background).
 
 ### 4.3 Modular Tenant Feature Controls (`/admin/settings/modules`)
