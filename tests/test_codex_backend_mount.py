@@ -1,6 +1,8 @@
 """Tests for Codex Control Centre backend routers mounted directly into FastAPI Bookings."""
 
 import pytest
+from pathlib import Path
+import uuid
 from unittest.mock import AsyncMock, patch
 from sqlalchemy.orm import Session
 from fastapi import FastAPI, HTTPException
@@ -11,12 +13,30 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _migrate_isolated_codex_database():
+    """Assert root conftest migrated the isolated CCC database before import."""
+    from backend.database import engine as codex_engine
+
+    with codex_engine.connect() as connection:
+        revisions = connection.exec_driver_sql(
+            "SELECT version_num FROM alembic_version"
+        ).fetchall()
+    assert revisions == [("003",)]
+    yield
+    import gc
+
+    codex_engine.dispose()
+    gc.collect()
+
+
 def _create_admin_user(
     db_session: Session,
     suffix: str = "mount",
     *,
     role: str = "owner",
     is_platform_owner: bool = True,
+    is_active: bool = True,
 ) -> tuple[Tenant, User, dict[str, str]]:
     tenant = Tenant(name=f"Codex Admin Tenant {suffix}", subdomain=f"codex-admin-{suffix}")
     db_session.add(tenant)
@@ -28,6 +48,7 @@ def _create_admin_user(
         password_hash="test-secret-hash",
         role=role,
         is_platform_owner=is_platform_owner,
+        is_active=is_active,
     )
     db_session.add(user)
     db_session.commit()
@@ -524,5 +545,292 @@ def test_get_codex_worktrees_and_governance(client: TestClient, db_session: Sess
     gov_res = client.get("/api/admin/codex/governance/approvals/pending", headers=headers)
     assert gov_res.status_code == 200
     assert isinstance(gov_res.json(), list)
+
+
+def test_supervisor_v2_auth_errors_are_safe_and_precede_ccc_access(
+    client: TestClient,
+    db_session: Session,
+):
+    operations = [
+        ("get", "/api/admin/codex/v2/bootstrap"),
+        ("get", "/api/admin/codex/v2/operations/readiness"),
+        ("get", "/api/admin/codex/v2/operations/cutover-mode"),
+        ("get", "/api/admin/codex/v2/projects"),
+        ("post", "/api/admin/codex/v2/projects/not-valid/claim"),
+    ]
+    for method, path in operations:
+        unauthenticated = client.request(method, path, content=b"not-json")
+        assert unauthenticated.status_code == 401
+        assert unauthenticated.json()["error"]["code"] == "authentication_required"
+        assert unauthenticated.headers["cache-control"] == "no-store"
+        assert unauthenticated.headers["x-request-id"].startswith("req_")
+        assert unauthenticated.headers["x-request-id"] == unauthenticated.json()["meta"]["request_id"]
+
+    _, _, ordinary_headers = _create_admin_user(
+        db_session,
+        suffix="v2-ordinary-owner",
+        role="owner",
+        is_platform_owner=False,
+    )
+    for method, path in operations:
+        forbidden = client.request(method, path, headers=ordinary_headers, content=b"not-json")
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "forbidden"
+
+    _, _, inactive_headers = _create_admin_user(
+        db_session,
+        suffix="v2-inactive-platform-owner",
+        role="owner",
+        is_platform_owner=True,
+        is_active=False,
+    )
+    for method, path in operations:
+        inactive = client.request(method, path, headers=inactive_headers, content=b"not-json")
+        assert inactive.status_code == 403
+        assert inactive.json()["error"]["code"] == "forbidden"
+
+
+def test_supervisor_v2_claim_and_exact_replay_are_mounted_end_to_end(
+    client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from backend.config import settings as codex_settings
+    from backend.database import SessionLocal as CodexSessionLocal
+    from backend.models.codex import Project
+
+    repository = tmp_path / "configured-repository"
+    repository.mkdir()
+    public_id = "prj_abcdef1234567890"
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_id", public_id)
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_root", str(repository))
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_name", "FastAPI Bookings")
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_default_branch", "develop")
+
+    _, _, headers = _create_admin_user(db_session, suffix="v2-claim")
+    bootstrap = client.get("/api/admin/codex/v2/bootstrap", headers=headers)
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["data"]["project_resolution"]["state"] == "claim_required"
+    assert bootstrap.json()["data"]["capabilities"]["can_claim_project"] is True
+    assert str(repository) not in bootstrap.text
+
+    idempotency_key = str(uuid.uuid4())
+    claim_headers = {
+        **headers,
+        "Idempotency-Key": idempotency_key,
+        "If-Match": '"project-0"',
+    }
+    body = {
+        "action": "claim_project",
+        "registry_version": "0.1",
+        "expected_version": 0,
+        "confirmation": True,
+    }
+    first = client.post(
+        f"/api/admin/codex/v2/projects/{public_id}/claim",
+        headers=claim_headers,
+        json=body,
+    )
+    assert first.status_code == 200
+    assert first.headers["etag"] == '"project-1"'
+    assert first.headers["x-request-id"] == first.json()["meta"]["request_id"]
+    assert str(repository) not in first.text
+
+    replay = client.post(
+        f"/api/admin/codex/v2/projects/{public_id}/claim",
+        headers=claim_headers,
+        json=body,
+    )
+    assert replay.status_code == first.status_code
+    assert replay.content == first.content
+    assert replay.headers["idempotency-replayed"] == "true"
+    assert replay.headers["x-request-id"] == first.headers["x-request-id"]
+
+    with CodexSessionLocal() as codex_db:
+        internal_id = codex_db.query(Project.id).filter(Project.public_id == public_id).scalar()
+    guarded = client.post(
+        "/api/admin/codex/projects",
+        headers=headers,
+        json={
+            "id": internal_id,
+            "name": "Attempted v1 mutation",
+            "repo_path": str(repository),
+            "default_branch": "other",
+        },
+    )
+    assert guarded.status_code == 409
+    assert guarded.json()["error"]["code"] == "supervisor_owned"
+
+
+def test_supervisor_v2_malformed_project_id_is_rejected_before_reservation(
+    client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from backend.config import settings as codex_settings
+    from backend.database import SessionLocal as CodexSessionLocal
+    from backend.models.codex import IdempotencyRecord
+
+    repository = tmp_path / "malformed-id-repository"
+    repository.mkdir()
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_id", "prj_1234567890abcdef")
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_root", str(repository))
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_name", "FastAPI Bookings")
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_default_branch", "develop")
+    _, _, headers = _create_admin_user(db_session, suffix="v2-malformed-id")
+    with CodexSessionLocal() as codex_db:
+        before = codex_db.query(IdempotencyRecord).count()
+    response = client.post(
+        "/api/admin/codex/v2/projects/not-valid/claim",
+        headers={
+            **headers,
+            "Idempotency-Key": str(uuid.uuid4()),
+            "If-Match": '"project-0"',
+        },
+        json={
+            "action": "claim_project",
+            "registry_version": "0.1",
+            "expected_version": 0,
+            "confirmation": True,
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_failed"
+    assert "etag" not in response.headers
+    assert "idempotency-replayed" not in response.headers
+    with CodexSessionLocal() as codex_db:
+        assert codex_db.query(IdempotencyRecord).count() == before
+
+
+def test_supervisor_v2_cross_scope_exact_root_is_hidden_and_claim_returns_404(
+    client: TestClient,
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from datetime import datetime, timezone
+    from backend.config import settings as codex_settings
+    from backend.database import SessionLocal as CodexSessionLocal
+    from backend.models.codex import Project
+    from backend.services.legacy_adoption_service import (
+        load_configured_project,
+        root_identity_for_path,
+    )
+
+    repository = tmp_path / "hidden-root-repository"
+    repository.mkdir()
+    public_id = "prj_9999999999999999"
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_id", public_id)
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_root", str(repository))
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_project_name", "FastAPI Bookings")
+    monkeypatch.setattr(codex_settings, "codex_supervisor_configured_default_branch", "develop")
+    configured = load_configured_project().project
+    assert configured is not None
+    hidden_id = f"hidden_{uuid.uuid4().hex}"
+    unrelated_root = tmp_path / "hidden-unrelated-root"
+    unrelated_root.mkdir()
+    unrelated_identity = root_identity_for_path(unrelated_root)
+    assert unrelated_identity is not None
+    try:
+        _, _, headers = _create_admin_user(db_session, suffix="v2-hidden-root")
+        baseline_bootstrap = client.get(
+            "/api/admin/codex/v2/bootstrap", headers=headers
+        )
+        baseline_projects = client.get("/api/admin/codex/v2/projects", headers=headers)
+        assert baseline_bootstrap.status_code == 200
+        assert baseline_projects.status_code == 200
+
+        unrelated = [
+            {
+                "id": f"hidden-volume-api-{index:05d}",
+                "name": f"Hidden API {index}",
+                "repo_path": str(unrelated_root),
+                "root_identity_digest": unrelated_identity[1],
+                "default_branch": "develop",
+                "public_id": f"prj_{index:016x}",
+                "tenant_id": 1_000_000 + index,
+                "owner_user_id": 2_000_000 + index,
+                "scope_state": "claimed",
+                "control_plane": "legacy",
+                "configured_fingerprint": f"{index:064x}",
+                "claimed_at": datetime.now(timezone.utc),
+                "version": 1,
+            }
+            for index in range(10_001)
+        ]
+        conflict = {
+            "id": hidden_id,
+            "name": "Hidden Other Scope",
+            "repo_path": configured.canonical_root,
+            "root_identity_digest": configured.root_identity_digest,
+            "default_branch": "other",
+            "public_id": "prj_8888888888888888",
+            "tenant_id": 987654,
+            "owner_user_id": 987654,
+            "scope_state": "claimed",
+            "control_plane": "legacy",
+            "configured_fingerprint": "d" * 64,
+            "claimed_at": datetime.now(timezone.utc),
+            "version": 1,
+        }
+        with CodexSessionLocal() as codex_db:
+            codex_db.execute(Project.__table__.insert(), [*unrelated, conflict])
+            codex_db.commit()
+
+        bootstrap = client.get("/api/admin/codex/v2/bootstrap", headers=headers)
+        assert bootstrap.status_code == 200
+        assert bootstrap.json()["data"] == baseline_bootstrap.json()["data"]
+        assert bootstrap.headers["etag"] == baseline_bootstrap.headers["etag"]
+        assert bootstrap.json()["data"]["project_resolution"] == {
+            "state": "claim_required",
+            "reason_codes": [],
+        }
+        assert bootstrap.json()["data"]["capabilities"]["can_claim_project"] is True
+        public_project = bootstrap.json()["data"]["project"]
+        assert public_project["project_id"] == public_id
+        assert public_project["state"] == "claim_required"
+        assert public_project["version"] == 0
+        assert public_project["claim_action"]["action"] == "claim_project"
+        projects = client.get("/api/admin/codex/v2/projects", headers=headers)
+        assert projects.status_code == 200
+        assert projects.json()["data"] == baseline_projects.json()["data"]
+        assert projects.headers["etag"] == baseline_projects.headers["etag"]
+        assert projects.json()["data"]["projects"] == [public_project]
+
+        claim_headers = {
+            **headers,
+            "Idempotency-Key": str(uuid.uuid4()),
+            "If-Match": '"project-0"',
+        }
+        body = {
+            "action": "claim_project",
+            "registry_version": "0.1",
+            "expected_version": 0,
+            "confirmation": True,
+        }
+        denied = client.post(
+            f"/api/admin/codex/v2/projects/{public_id}/claim",
+            headers=claim_headers,
+            json=body,
+        )
+        assert denied.status_code == 404
+        assert denied.json()["error"]["code"] == "resource_not_found"
+        replay = client.post(
+            f"/api/admin/codex/v2/projects/{public_id}/claim",
+            headers=claim_headers,
+            json=body,
+        )
+        assert replay.status_code == 404
+        assert replay.content == denied.content
+        assert replay.headers["idempotency-replayed"] == "true"
+    finally:
+        with CodexSessionLocal() as codex_db:
+            codex_db.query(Project).filter(Project.id == hidden_id).delete()
+            codex_db.query(Project).filter(
+                Project.id.like("hidden-volume-api-%")
+            ).delete(synchronize_session=False)
+            codex_db.commit()
 
 

@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -26,6 +27,8 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_APP_TEST_DATABASE.as_posix()}"
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_DATABASES = (
     _REPOSITORY_ROOT / "fastapi_bookings.db",
+    _REPOSITORY_ROOT / "fastapi_bookings.db-wal",
+    _REPOSITORY_ROOT / "fastapi_bookings.db-shm",
     _REPOSITORY_ROOT / "codex-control-centre" / "codex.db",
     _REPOSITORY_ROOT / "codex-control-centre" / "codex.db-wal",
     _REPOSITORY_ROOT / "codex-control-centre" / "codex.db-shm",
@@ -52,6 +55,34 @@ from fastapi.testclient import TestClient
 # database before importing the mounted application.
 from app.db.database import Base, engine as application_engine, get_db
 os.environ["database_url"] = f"sqlite:///{_CODEX_TEST_DATABASE.as_posix()}"
+
+# Production startup deliberately performs no CCC DDL.  Root tests that mount
+# CCC routes therefore migrate only their process-unique temporary CCC database
+# before importing app.main or any nested backend module.
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+
+_CODEX_ROOT = _REPOSITORY_ROOT / "codex-control-centre"
+_CODEX_ALEMBIC_ROOT = (_CODEX_ROOT / "alembic").resolve()
+_codex_alembic_config = AlembicConfig(str((_CODEX_ROOT / "alembic.ini").resolve()))
+_codex_alembic_config.set_main_option("script_location", str(_CODEX_ALEMBIC_ROOT))
+_codex_alembic_config.set_main_option(
+    "sqlalchemy.url", f"sqlite:///{_CODEX_TEST_DATABASE.as_posix()}"
+)
+if Path(_codex_alembic_config.get_main_option("script_location")).resolve() != _CODEX_ALEMBIC_ROOT:
+    raise RuntimeError("isolated_ccc_migration_script_location_invalid")
+alembic_command.upgrade(_codex_alembic_config, "head")
+_codex_revision_connection = sqlite3.connect(_CODEX_TEST_DATABASE)
+try:
+    _codex_revisions = _codex_revision_connection.execute(
+        "SELECT version_num FROM alembic_version"
+    ).fetchall()
+finally:
+    _codex_revision_connection.close()
+del _codex_revision_connection
+if _codex_revisions != [("003",)]:
+    raise RuntimeError("isolated_ccc_migration_revision_invalid")
+
 from app.main import app as fastapi_app
 import app.models  # Crucial: imports all models to register them on Base.metadata
 from tests.fixtures.channel_fixtures import (  # noqa: F401

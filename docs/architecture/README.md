@@ -12,7 +12,7 @@ It deliberately does not provide executable routes, database models, migrations,
 
 ## 2. Architecture & Key Files
 
-- `ADR_CODEX_SUPERVISOR_V2_FACADE.md` freezes the future Codex Supervisor v2 facade, ownership, cutover, action-registry, disclosure, worker and external-framework decisions.
+- `ADR_CODEX_SUPERVISOR_V2_FACADE.md` freezes the Codex Supervisor v2 target and records the implemented WP-UI-01A-v6 five-route `0.1` project-claim foundation while keeping UI and activation work deferred.
 - [`../../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md`](../../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md) is the detailed accepted source contract.
 - [`../../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md`](../../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md) records its independent acceptance.
 
@@ -30,7 +30,17 @@ Architecture records are Markdown and have no runtime dependency. They must be r
 4. Implement the decision in a separately authorized package with focused tests.
 5. Independently review the exact candidate commit before release.
 
-For WP-UI-00, the only new architectural record is the Codex Supervisor v2 facade ADR. All v2 runtime contracts remain prerequisites for WP-UI-01 and later packages.
+WP-UI-01A-v6 implements only the migration/readiness/configured-project claim
+slice. Readiness attests exact schema and migration state rather than object-name
+presence. Claim validates the opaque route identity before reservation, applies
+Git-equivalent branch validation, and uses a phase-two outer transaction with a
+nested savepoint so deterministic failure can be terminalized without preserving
+project or event writes. An indexed physical-root digest keeps identity lookup
+bounded without scanning hidden rows. Hidden cross-scope rows are never counted
+or classified and remain absence-equivalent on reads, while a targeted mutation
+returns only 404.
+Later packages remain responsible for the ground-up UI, supervisor domain
+workflows, worker control, and active cutover.
 
 ## 5. Data Safety & Isolation
 
@@ -38,7 +48,7 @@ Architecture records must preserve tenant and actor isolation, avoid secrets and
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
-- The Codex Supervisor v2 persistence, API facade and replacement UI are not implemented by WP-UI-00.
+- The five-route v2 claim foundation is implemented; the replacement UI, writable cutover transition, and broader supervisor domain are not.
 - The current cockpit remains the operational v1 interface during the controlled cutover.
 - The closed action registry and future OpenAPI mutation mapping require conformance tests when implemented.
 - Optional presentation adapters remain blocked until the durable native run contracts and comparative spike prerequisites are accepted.

@@ -88,7 +88,7 @@ flowchart TD
 ### Documentation Suite Catalog & Key Files:
 - [ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md): Comprehensive system architecture covering multi-tenancy, concurrency, SMS, Chatwoot, and telemetry.
 - [architecture/README.md](architecture/README.md): Living index for binding architecture decision records.
-- [architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md](architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md): Accepted contract freeze for the future Codex Supervisor v2 facade, control plane, cutover, idempotency, action registry, disclosure, native worker ownership, and canonical frontend. It explicitly does not claim v2 runtime implementation.
+- [architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md](architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md): Accepted Codex Supervisor v2 contract and implementation status. WP-UI-01A-v6 provides the authenticated five-route `0.1` project-claim foundation with exact readiness attestation, indexed physical-root identity, pre-reservation identity validation, Git-equivalent branch checks, hidden cross-scope isolation, and atomic phase-two failure handling; replacement UI, workflow domains, workers, and active cutover remain deferred.
 - [MODULE_INDEX.md](file:///F:/Projects/fastapi_bookings/docs/MODULE_INDEX.md): Master inventory of all modules, domain boundaries, entrypoints, and test commands.
 - [AGENT_BOOT_SNAPSHOT.md](file:///F:/Projects/fastapi_bookings/docs/AGENT_BOOT_SNAPSHOT.md): Autonomous agent boot snapshot containing compact system status and orientation instructions.
 - [module_manifest.json](file:///F:/Projects/fastapi_bookings/docs/module_manifest.json): Machine-readable documentation metadata and Rule 10 compliance ledger.
@@ -101,6 +101,7 @@ flowchart TD
 The versioned records under [`../artifacts/codex-supervisor/`](../artifacts/codex-supervisor/) are design, audit and implementation-control evidence. The accepted foundation specification is authoritative where the shorter ADR links to detailed schemas.
 
 - [WP-UI-00 implementation brief](../artifacts/codex-supervisor/WP_UI_00_IMPLEMENTATION_BRIEF.md)
+- [WP-UI-01A-v6 implementation brief](../artifacts/codex-supervisor/WP_UI_01A_V2_IMPLEMENTATION_BRIEF.md)
 - [Architecture blueprint](../artifacts/codex-supervisor/CCC_ARCHITECTURE_BLUEPRINT.md)
 - [Security baseline](../artifacts/codex-supervisor/CCC_SECURITY_BASELINE.md)
 - [UX contract](../artifacts/codex-supervisor/CCC_UX_CONTRACT.md)

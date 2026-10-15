@@ -1,6 +1,6 @@
 # ADR: Codex Supervisor v2 Facade and Control-Plane Contract
 
-- **Status:** Accepted contract; runtime not implemented
+- **Status:** Accepted; WP-UI-01A-v6 foundation implemented, activation deferred
 - **Date:** 2026-10-15 (Australia/Sydney)
 - **Work package:** WP-UI-00
 - **P0 ancestor:** `170f6f7eb62278bc029d39caaeda8637d4c99c59`
@@ -11,7 +11,10 @@
 
 FastAPI Bookings already mounts the P0-hardened Codex Control Centre and exposes the current cockpit at `/admin/coding-cockpit`. The durable development-supervisor domain and replacement interface do not yet exist. Incrementally extending the current cockpit would preserve fragmented ownership and state conventions, so the accepted design requires a ground-up v2 surface behind a single FastAPI-owned facade.
 
-This record freezes that future contract. It does not claim or create an executable v2 route, OpenAPI operation, model, migration, dependency, feature flag or UI.
+This record freezes the complete target contract. WP-UI-01A-v6 implements only
+the authenticated five-route `0.1` project-claim foundation described below; it
+does not activate a replacement UI, mission/work/brief/run domains, worker
+control, or a writable cutover transition.
 
 ## Decision
 
@@ -33,7 +36,7 @@ Native authenticated REST snapshots are durable truth. Ticketed SSE is passive i
 
 Deployment configuration supplies the one permitted repository root and an opaque project identity server-side. The browser never supplies or receives a host path. Existing pre-ownership Control Centre projects migrate to `unclaimed` or `quarantined` and remain absent from ordinary mission queries.
 
-Mission creation is blocked until an authenticated platform owner transactionally claims the configured project with the server-returned `claim_project` descriptor, expected project version and idempotency key. The server validates the configured root, record fingerprint, actor, current claim state and conflicting ownership. `unconfigured`, `quarantined` and `migration_required` states fail closed and provide only authorized recovery controls. Negative tests must cover guessed IDs, cross-tenant and non-owner claims, concurrent/repeated claims, configured-root mismatch, quarantined rows and browser-supplied paths.
+Mission creation is blocked until an authenticated platform owner transactionally claims the configured project with the server-returned `claim_project` descriptor, expected project version and idempotency key. The server validates the opaque `prj_` route identity before fingerprinting or reserving the key, validates the configured default branch with Git-equivalent branch-name rules, and then verifies the configured root, record fingerprint, actor, current claim state and conflicting ownership. A persisted, indexed, non-public physical-root digest binds the normalized resolved path and positive filesystem device/inode identity, allowing bounded candidate queries followed by canonical/same-file verification. Cross-scope rows are removed before candidate classification: they are never counted, described, quarantined, adopted, or mutated. Hidden collisions remain read-indistinguishable from absence (`claim_required`, version-0 summary/action, `can_claim_project=true`) while a targeted mutation returns only `404 resource_not_found`. `unconfigured`, `quarantined` and `migration_required` states fail closed and provide only authorized recovery controls. Negative tests must cover malformed and guessed IDs, cross-tenant and non-owner claims, concurrent/repeated claims, configured-root mismatch, Git-invalid branches, quarantined rows and browser-supplied paths.
 
 ## Cutover contract
 
@@ -73,6 +76,7 @@ Every create, transition/action, approval, dispatch, retry, claim, checkpoint, d
 - One logical submission creates one in-memory UUIDv4 key. Every retry preserves the identical method, normalized path, canonical JSON body, authenticated actor, scope and expected version.
 - The server fingerprints `actor_id + tenant_id + method + normalized_path + canonical_json_sha256 + expected_resource_version`; credentials are never fingerprinted or stored. Keys are actor/route scoped and retained for 24 hours after terminal completion.
 - The server transactionally reserves the key before its first side effect. The same key and fingerprint returns `202` plus original request ID while `in_progress`, or replays the original terminal safe success/error with `Idempotency-Replayed: true`. A different fingerprint returns `409 idempotency_conflict`.
+- Phase two uses one outer immediate transaction and a nested savepoint around project and event writes. A deterministic safe failure rolls back the savepoint and terminalizes the failed reservation before committing that same outer transaction; it never opens a third write transaction. An unexpected failure rolls back the outer transaction completely, leaves the committed reservation `in_progress`, and relies on bounded lease expiry and reclaim.
 - Expired or missing keys may begin new processing only after durable uniqueness/state checks exclude an existing operation or resource. A confirmed terminal failure requires an explicit new operator action and new key; an unresolved operation never offers a new attempt.
 - On response loss, the UI freezes conflicting controls and replays the exact request/key at most three automatic checks using 0/1/3-second waits. It shows the original request ID. Terminal replay reconciles by resource ID/version and refetches REST truth.
 - After checks are exhausted, the only choices are `Check again`, `Copy request ID`, and `Return to read-only view`. `409 idempotency_conflict` is a blocking integrity failure; the buffer is preserved and no new key is silently generated.
@@ -137,8 +141,27 @@ defer_intake, decline_intake, mark_intake_duplicate
 
 ## Implementation status and consequences
 
-WP-UI-00 records contracts only. It creates no `/api/admin/codex/v2` route, OpenAPI operation, supervisor model/table/repository/service, migration, dependency, shell, screen, fixture, runtime adapter or cutover setting. The current v1 cockpit remains operational under its P0 platform-owner boundary.
+WP-UI-00 recorded the complete target contract. WP-UI-01A-v6 now supplies the
+first durable backend slice: native active-platform-owner authority, independent
+CCC Alembic revisions `002` and `003`, exact read-only readiness attestation,
+exact-root configured-project resolution and claim, committed idempotency reservations,
+append-only claim evidence, a fixed persisted `v1_only` cutover posture, and
+exactly five `/api/admin/codex/v2` operations. Claimed projects reject legacy v1
+mutation, but retain `control_plane='legacy'` in this slice.
 
-WP-UI-01 must implement and conformance-test the frozen project-claim, persistence, bootstrap, idempotency, cutover and first-slice facade contracts before any v2 screen is enabled. Later packages own the replacement shell, workflows, runs, evidence and audit. No optional adapter is permitted until the separately approved comparative spike prerequisites pass.
+Exact readiness requires both the migration-script head and database ledger to
+match revision `003`, plus the complete expected columns and their type,
+nullability, default and key properties; constraints; ordered index definitions;
+normalized trigger SQL; and the fixed singleton row/state. Same-name or partial
+objects, including a no-op trigger with an expected name, fail closed.
+
+The implemented `0.1` registry contains only `claim_project`; it does not claim
+the later 72-action registry `1.0`. The current v1 cockpit remains operational.
+No replacement screen, mission/work-package/brief/run endpoint, worker adapter,
+cutover activation, or general legacy API redesign is enabled by 01A.
+
+Later packages own the replacement shell, workflow domains, active cutover,
+runs, evidence and audit. No optional presentation adapter is permitted until
+the separately approved comparative spike prerequisites pass.
 
 Rollback of this documentation package is an ordinary reviewed revert. P0 security controls are not silently reverted.

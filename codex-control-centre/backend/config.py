@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     allowed_boundaries: list[str] = [str(codex_dir)]
     sse_ticket_ttl_seconds: int = 60
 
+    # Supervisor v2 deployment binding.  These values are deliberately
+    # server-owned and have no browser/request equivalent.
+    codex_supervisor_configured_project_id: Optional[str] = None
+    codex_supervisor_configured_project_root: Optional[str] = None
+    codex_supervisor_configured_project_name: Optional[str] = None
+    codex_supervisor_configured_default_branch: Optional[str] = None
+
     # Codex App-Server Configuration (CAS-01)
     codex_bin_path: str = "codex"
     codex_transport: str = "stdio"

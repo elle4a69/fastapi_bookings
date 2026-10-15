@@ -15,7 +15,7 @@ if its isolated temporary storage cannot be removed.
 
 Codex Control Centre is the main coordination, telemetry, and governance hub for multi-agent workflows. It provides real-time event streaming, thread management, tool approval gating, subagent supervision, and isolated git worktrees.
 
-> **WP-UI-00 ownership and freeze:** The canonical browser application is the repository-root `frontend/`. The duplicate `codex-control-centre/frontend/` tree is frozen as reference/decommission-only and must receive no new product features. The current `/admin/coding-cockpit` remains the operational v1 interface during controlled migration. The future `/api/admin/codex/v2` facade, durable supervisor domain and replacement interface are specified but not implemented; see [`../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md).
+> **Supervisor foundation:** The canonical browser application is the repository-root `frontend/`. The duplicate `codex-control-centre/frontend/` tree is frozen as reference/decommission-only. WP-UI-01A-v6 implements the five-route `/api/admin/codex/v2` project-claim foundation; it does not activate a replacement UI, a writable cutover transition, or any later supervisor domain. See [`../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md).
 
 ---
 
@@ -110,6 +110,21 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
 
 ## 3. Setup, Configuration & Dependencies
 
+The supervisor foundation requires four server-only settings:
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_ID`,
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_ROOT`,
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_NAME`, and
+`CODEX_SUPERVISOR_CONFIGURED_DEFAULT_BRANCH`. The root is never accepted from or
+returned to a browser. CCC migrations are independent of the root application:
+run the CCC Alembic ledger to revision `003`. Production startup performs no
+`create_all`. Unversioned legacy databases require the offline, dry-run-first
+`python -m backend.services.legacy_adoption_service` workflow and explicit
+confirmation before an `001` stamp; normal Alembic upgrade follows separately.
+Runtime readiness is read-only and fail-closed. It attests the migration-script
+head and database ledger revision, the complete expected column definitions,
+constraints, ordered index definitions, normalized trigger bodies, and the
+fixed cutover singleton/state. A matching object name alone is not sufficient.
+
 ### Prerequisites
 - **Python**: 3.11+
 - **Node.js**: 20+
@@ -163,6 +178,34 @@ disabled to prevent duplicate models, graph deserialization, and SQLite locks.
 ---
 
 ## 4. Core Workflows & Contracts
+
+### Supervisor v2 `0.1` foundation
+
+- Four reads expose bootstrap, readiness, fixed cutover posture, and the single
+  configured project; `claim_project` is the only mutation/action descriptor.
+- Native `require_platform_owner` authority resolves before CCC inspection or
+  request-body parsing.
+- Claim validates the opaque `prj_` route identity and complete request contract
+  before fingerprinting or reserving an idempotency key. The configured default
+  branch is accepted only when it satisfies Git-equivalent branch-name rules.
+- Claim uses a read-first idempotency decision, a committed 30-second lease, and
+  one phase-two outer transaction. Project and event writes run inside a nested
+  savepoint: deterministic safe failure rolls the savepoint back and terminalizes
+  the failed reservation in that same outer transaction; unexpected failure
+  rolls the outer transaction back and leaves the lease for bounded recovery.
+  Terminal success and safe deterministic failure replay exact stored bytes for
+  24 hours.
+- Same-scope exact-root legacy rows may be adopted. A non-public, indexed
+  `root_identity_digest` binds the normalized resolved path and positive filesystem
+  device/inode identity; migration aborts before schema changes if any legacy root
+  cannot be proven. Cross-scope rows are filtered before classification and are
+  never counted, described, quarantined, adopted, or mutated. Even when an indexed
+  hidden collision blocks mutation, reads remain absence-equivalent:
+  `claim_required`, the version-0 configured summary/action, and
+  `can_claim_project=true`; a targeted claim returns only `404 resource_not_found`.
+  Ambiguous or conflicting same-scope state is quarantined read-only.
+- Cutover remains fixed at `v1_only`; claimed state stays legacy-controlled and
+  v1 mutation guards prevent identity/ownership drift.
 
 ### 1. Dynamic Workspace Boundaries & Project Registration
 1. **Dynamic Multi-Folder Boundaries**: Allowed root boundaries (`WorkspaceBoundary`) are persisted in SQLite and managed via REST endpoints:
@@ -267,6 +310,12 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
+- The `0.1` facade is backend foundation only. There is no new supervisor UI,
+  mission/work/brief/run model, active cutover transition, or coding-worker
+  activation in this package.
+- SQLite is the only CCC database dialect supported by these migrations; other
+  dialects fail closed.
+
 - **Model Availability Drift**: The mounted catalog reflects the current models enabled for this Codex environment. Runtime account entitlements can still reject a model that is not enabled for the signed-in account; catalog updates must keep the backend endpoint and integrated frontend `modelCatalog.ts` in parity.
 - **Skills RAG Process Dependency**: The heavyweight `mcp-skillset` worker integration remains disabled to prevent worker startup hangs. Automatic context and the native `skills-rag` MCP tools both delegate to the independently managed loopback service on port 8008. If unavailable, automatic retrieval degrades to the original prompt, while explicit `find` or `skill` calls return a recoverable tool error. Neither path places the raw user prompt in Skills RAG request logs.
 - **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
@@ -286,6 +335,18 @@ Run the inherited P0 boundary suites from the repository root and the Control Ce
 
 # From codex-control-centre/
 ..\.venv\Scripts\python.exe -m pytest tests/test_security.py tests/test_events.py -v
+```
+
+### WP-UI-01A-v6 supervisor foundation
+
+```powershell
+# From codex-control-centre/
+python -m pytest tests/test_supervisor_identity.py tests/test_supervisor_bootstrap_claim.py tests/test_supervisor_idempotency.py tests/test_supervisor_events.py tests/test_migrations.py -q
+
+# From the repository root
+python -m pytest tests/test_codex_backend_mount.py -q
+python scripts/verify_zero_console_errors.py
+python scripts/verify_living_docs.py --path codex-control-centre/README.md
 ```
 
 ### Backend Verification

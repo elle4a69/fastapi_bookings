@@ -10,6 +10,14 @@ import tempfile
 import pytest
 
 
+# The accepted supervisor tests exercise the mounted native authority dependency,
+# so the signed command must resolve both this package and the repository app when
+# pytest is launched from codex-control-centre/.
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
+
 _TEST_DATABASE_DIR = Path(tempfile.mkdtemp(prefix="codex-control-centre-pytest-"))
 _TEST_DATABASE = _TEST_DATABASE_DIR / "codex-control-centre.db"
 os.environ["database_url"] = f"sqlite:///{_TEST_DATABASE.as_posix()}"

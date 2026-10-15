@@ -17,9 +17,6 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
-
 def get_db():
     db = SessionLocal()
     try:
