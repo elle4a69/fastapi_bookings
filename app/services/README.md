@@ -8,6 +8,7 @@ This module contains the core business logic and external service integrations f
 - `chatwoot_provisioner.py`: Manages the Multi-Tenant Chatwoot ⇄ FastAPI Booking Engine Synchronization (Work Package 2). Connects to Chatwoot's Platform and App APIs.
 - `contact_sync.py`: Implements the Contact Projection Synchronization Worker (Work Package 3). Synchronizes FastAPI client records to Chatwoot contacts with `client_id`, `street_address`, `suburb`, and `postcode` embedded in `custom_attributes`.
 - `media_service.py`: Implements durable tenant-scoped media file persistence, MIME validation, path traversal prevention, public website eligibility toggle, soft deletion with binary purging, and safe assistant media context projection.
+- `website_initial_draft.py`: Assembles factual, deterministic initial public website starter drafts from authoritative tenant records (services, schedules, providers, and approved durable media assets) with zero hallucinated copy or synthetic reviews.
 - The configuration for these services leverages `app/core/config.py` for API tokens, base URLs, and other necessary integrations parameters.
 
 ## Core Workflows & Contracts
@@ -31,6 +32,11 @@ This module contains the core business logic and external service integrations f
 2. Public website eligibility toggle via `MediaService.update_eligibility`: sets `is_public_website_eligible` flag.
 3. Assistant media context projection via `MediaService.get_assistant_media_context`: strictly filters for `is_public_website_eligible=True` and excludes internal/clinical notes to prevent private details from being exposed to assistant prompts or tools.
 4. Soft deletion via `MediaService.delete_media`: flags `is_deleted=True` and removes the physical binary file from disk.
+
+### Initial Website Draft Flow
+1. Generates deterministic website draft from existing tenant data: active services, opening hours, provider details, and durable public-eligible Media records.
+2. Idempotent draft creation (`ensure_initial_website_draft`) ensures private starter creation without overwriting existing live or customized websites.
+3. Strict filtering prevents confidential clinical or internal operational notes from being included in public copy or gallery metadata.
 
 ## Setup, Configuration & Dependencies
 Ensure the following configuration variables are set in your environment or `app/core/config.py`:
@@ -60,4 +66,5 @@ python -m pytest tests/test_chatwoot_provisioner.py -v
 python -m pytest tests/test_contact_sync.py -v
 python -m pytest tests/test_agent_runner.py -v
 python -m pytest tests/test_media_backend.py -v
+python -m pytest tests/test_website_initial_draft_service.py -v
 ```

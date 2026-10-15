@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api';
+import { LiveAgentActivityConsole } from './business-assistant/components';
 
 interface TelemetryStatus {
   telemetry_enabled: boolean;
@@ -179,6 +180,24 @@ export default function TelemetryPage() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* Live Agent Activity & WebRTC Console */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              Live Agent Activity &amp; WebRTC Console
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Real-time inspection of OpenAI Realtime &amp; LiveKit session events, WebRTC data channels, tool execution RPCs, and model transcripts.
+            </p>
+          </div>
+        </div>
+        <div className="h-[520px] w-full">
+          <LiveAgentActivityConsole title="Live Agent Activity Console (Telemetry Ingress)" maxHeight="520px" />
+        </div>
       </div>
 
       {/* Telemetry Pipeline State Cards */}
