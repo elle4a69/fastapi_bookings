@@ -22,10 +22,21 @@ CODEX_DIR = Path(__file__).resolve().parents[3] / "codex-control-centre"
 if str(CODEX_DIR) not in sys.path:
     sys.path.insert(0, str(CODEX_DIR))
 
-from backend.database import SessionLocal as CodexSessionLocal
-from backend.models.codex import Project as CodexProject, Thread as CodexThread, Turn as CodexTurn
-from backend.routers.threads import ThreadCreate, create_thread
-from backend.routers.turns import TurnStart, start_turn
+import importlib
+
+codex_database = importlib.import_module("backend.database")
+codex_models = importlib.import_module("backend.models.codex")
+codex_threads_router = importlib.import_module("backend.routers.threads")
+codex_turns_router = importlib.import_module("backend.routers.turns")
+
+CodexSessionLocal = codex_database.SessionLocal
+CodexProject = codex_models.Project
+CodexThread = codex_models.Thread
+CodexTurn = codex_models.Turn
+ThreadCreate = codex_threads_router.ThreadCreate
+create_thread = codex_threads_router.create_thread
+TurnStart = codex_turns_router.TurnStart
+start_turn = codex_turns_router.start_turn
 
 from ...db.database import get_db
 from ...models.support_ticket import SupportTicket, SupportTicketAuditEvent, SupportTicketMessage

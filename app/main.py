@@ -458,6 +458,7 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
         status_code=exc.status_code,
         content={
             "ok": False,
+            "detail": message,
             "error": {
                 "code": code,
                 "message": message,

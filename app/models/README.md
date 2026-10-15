@@ -5,7 +5,7 @@
 The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schema for **FastAPI Bookings**.
 
 ### Primary Domain Entities:
-- **Tenancy, Media & Core Identity**: `Tenant`, `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`), `TenantTranslation`.
+- **Tenancy, Media & Core Identity**: `Tenant` (with `status`, `suspended_at`, `suspension_reason`), `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`, `platform_owner`; flags: `is_platform_owner`, `is_superuser`), `TenantInvitation` (single-use tokens, status lifecycle), `TenantTranslation`.
 - **Catalog & Facilities**: `Service`, `Provider`, `Location`, `Category`, `AddOn`, `Product`, `Package`, `Resource`, `LocationProvider`, `LocationService`.
 - **Operations & Scheduling**: `Booking`, `BookingSlotAllocation`, `CalendarNote`, `Client`, `ClientDispute`, `WaitlistEntry`, `BlockedTime`, `ReservedTime`.
 - **Messaging & Omnichannel**: `Conversation`, `Message`, `ChannelAccount`, `MessageStyleExample`, `SmsAccount`, `SmsConversation`, `SmsMessage`, `SmsOutboundJob`, `SmsAiJob`, `SmsConversationEvent`, `SmsNote`, `SmsChatwootBinding`, `SmsQuickTool`.
@@ -21,10 +21,11 @@ The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schem
 ```text
 app/models/
 ├── __init__.py               # Re-exports all models and populates Base.metadata
-├── tenant.py                 # Multi-tenant account, tiers ('starter', 'growth', 'unlimited'), addon quotas, policy
+├── tenant.py                 # Multi-tenant account, tiers ('starter', 'growth', 'unlimited'), status ('active', 'suspended'), suspension reason
 ├── tenant_website.py         # Single-page website builder configurations and template data
 ├── media.py                  # Durable media assets, public website eligibility, notes, tenant storage
-├── user.py                   # User authentication, hashed passwords, roles ('owner', 'manager', 'provider')
+├── user.py                   # User authentication, hashed passwords, roles, is_platform_owner, is_superuser, nullable tenant_id
+├── invitation.py             # TenantInvitation model, single-use tokens, roles, and status lifecycle ('pending', 'accepted', 'revoked', 'expired')
 ├── provider.py               # Staff practitioners, bios, in-call/out-call travel configuration
 ├── service.py                # Treatments, durations, pricing, buffer rules, in-call/out-call flags
 ├── location.py               # Physical clinics and composite mappings (location_providers, location_services)
@@ -73,7 +74,7 @@ app/models/
 
 - **SQLAlchemy 2.0**: Declarative ORM base defined in [`app/db/database.py`](file:///f:/Projects/fastapi_bookings/app/db/database.py#L45).
 - **pgvector**: `from pgvector.sqlalchemy import Vector` provides vector column type binding for PostgreSQL.
-- **Alembic Migrations**: Linear version history rooted through `j1k2m3n4p5q6`, `k2m3n4p5q6r7` to head `m3n4p5q6r7s8` (`m3n4p5q6r7s8_reconcile_missing_domain_tables.py`).
+- **Alembic Migrations**: Linear version history rooted through `j1k2m3n4p5q6`, `k2m3n4p5q6r7`, `m3n4p5q6r7s8` to head `a2b3c4d5e6f8` (`a2b3c4d5e6f8_wp0_platform_ownership_and_tenant_lifecycle.py`).
 - **Metadata Discovery**: Importing `app.models` in [`app/models/__init__.py`](file:///f:/Projects/fastapi_bookings/app/models/__init__.py#L1) guarantees that all models register onto `Base.metadata`.
 
 ---
@@ -106,6 +107,7 @@ app/models/
 7. **Cryptographic Token Cipher Isolation (IDOR-08)**: `SmsChatwootBinding` and `SmsAccount` derive Fernet cryptographic ciphers strictly from `settings.SECRET_KEY` (never from `PUBLIC_API_KEY`), ensuring sensitive carrier credentials and Chatwoot access tokens cannot be decrypted using public widget credentials.
 8. **Support Ticket Idempotency & Creator Scoping**: `support_tickets` enforces `UniqueConstraint('tenant_id', 'idempotency_key', name='uq_support_tickets_tenant_idempotency')` and indexes `('tenant_id', 'status')`. All ticket audit records and messages are cascade-deleted when the parent ticket is purged.
 9. **Media Asset Partitioning & Context Isolation**: `media_items` strictly partitions by `tenant_id` (`ForeignKey('tenants.id', ondelete='CASCADE')`). Physical storage paths are scoped to `tenant_{tenant_id}`. Ingestion into Business Assistant context (`MediaService.get_assistant_media_context`) strictly filters on `is_public_website_eligible=True` and completely strips the confidential `notes` field to prevent sensitive clinical or staff notes from leaking into AI or public surfaces.
+10. **Platform Ownership, Tenant Suspension & Cryptographic Invitations (WP0)**: `users.is_platform_owner` and `users.is_superuser` decouple global control-plane rights from tenant `role='owner'`. `users.tenant_id` is nullable for cross-tenant operators. `tenants.status` (`active` | `suspended`), `tenants.suspended_at`, and `tenants.suspension_reason` enforce absolute data-plane suspension containment. Single-use `tenant_invitations` enforce token uniqueness, expiration (7-day lifecycle), and explicit email-matching onboarding.
 
 ---
 

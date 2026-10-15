@@ -272,7 +272,18 @@ def test_update_tenant_tier_and_quota(client, starter_tenant_and_owner):
     """Test updating tenant tier from starter to growth."""
     tenant, owner, headers = starter_tenant_and_owner
 
-    # Upgrade to growth
+    # Tenant owner attempting tier upgrade receives 403 Forbidden
+    res_forbidden = client.put(
+        "/api/admin/tenant/modules/tier",
+        json={"tier": "growth"},
+        headers=headers,
+    )
+    assert res_forbidden.status_code == status.HTTP_403_FORBIDDEN
+
+    # Platform owner upgrades to growth -> 200 OK
+    owner.is_platform_owner = True
+    owner.is_superuser = True
+
     res_tier = client.put(
         "/api/admin/tenant/modules/tier",
         json={"tier": "growth"},

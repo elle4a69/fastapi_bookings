@@ -50,7 +50,7 @@ graph TD
 - [sms_conversations.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_conversations.py): SMS conversation thread view, message history, manual triage, human takeover toggle, and quick tools management. Unreachable legacy `/seed-scenarios` route purged from production router.
 - [sms_webhooks.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_webhooks.py): Inbound webhook receiver for ClickSend and external SMS carriers.
 - [sms_chatwoot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/sms_chatwoot.py): Canonical Chatwoot mirror webhook intake, provider-scoped `SmsChatwootBinding` CRUD, token/secret masking, 1-to-1 Tenant mapping enforcement, and admin automated provisioning trigger (`POST /provision`). Now supports full Same-Tenancy Binding Security Lockdown & Manual Override UI.
-- [tenants.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenants.py): Tenant creation and retrieval router with automated Chatwoot multi-tenant provisioning lifecycle hook (`CHATWOOT_AUTO_PROVISION`).
+- [tenants.py](file:///F:/Projects/fastapi_bookings/app/api/routers/tenants.py): Multi-tenant lifecycle and control-plane router. Creation (`POST /api/tenants`) is strictly gated by `require_platform_owner`, generating cryptographically secure owner invitations. Includes suspension (`POST /{id}/suspend`), reactivation (`POST /{id}/reactivate`), staff/owner invitation generation (`POST /{id}/invitations`), and IDOR-safe tenant inspection (`GET /{id}`) restricted to platform owners or tenant members. Supports automated Chatwoot provisioning lifecycle hook (`CHATWOOT_AUTO_PROVISION`).
 - [chatwoot_agentbot.py](file:///F:/Projects/fastapi_bookings/app/api/routers/chatwoot_agentbot.py): Chatwoot AgentBot webhook integration with automated de-confliction ignoring mirror-bound inboxes to prevent duplicate replies.
 - [resident_agent.py](file:///F:/Projects/fastapi_bookings/app/api/routers/resident_agent.py): Operational health checks, deep audit trigger, and fuzzer controls.
 - [assistant_studio.py](file:///F:/Projects/fastapi_bookings/app/api/routers/assistant_studio.py): Assistant Studio administration endpoints: 10-tier policy management (`Tenant.assistant_policy`), procedural style example CRUD, curator proposal management, simulation sandbox, cryptographic dataset importer, and evaluation suite with uniform `validate_tenant_provider` cross-tenant scoping and platform seed read-only lockdown.
@@ -264,5 +264,32 @@ This slice provides the HTTP REST API layer for bi-directional Chatwoot synchron
   - Before handling an incoming message, checks whether `conversation.inbox_id` is registered with an active `SmsChatwootBinding`.
   - If bound to the canonical mirror path, AgentBot returns `{"status": "ignored", "reason": "inbox_managed_by_canonical_mirror_webhook"}` without executing duplicate AI turns or sending duplicate responses.
   - Verifies that the Chatwoot account belongs to the resolved tenant, rejecting tenant spoofing or hijacking attempts.
+
+---
+
+## 10. Platform Ownership, Tenant Lifecycle & Control-Plane Security Boundary (WP0)
+
+### 10.1 Control-Plane vs Data-Plane Architecture
+- **Control-Plane Endpoints**:
+  - Gated by `require_platform_owner` (backed by `get_current_platform_owner`).
+  - Strict enforcement: caller must have `is_platform_owner=True`, `is_superuser=True`, or `role='platform_owner'`. Tenant-level owners (`role='owner'`) receive `403 Forbidden`.
+  - Do not require an `X-Tenant` header or resolved tenant subdomain.
+  - Endpoints:
+    - `POST /api/tenants`: Create tenant, auto-generate single-use cryptographic invitation for initial owner, log audit event.
+    - `POST /api/tenants/{tenant_id}/suspend`: Suspend tenant with mandatory `reason`.
+    - `POST /api/tenants/{tenant_id}/reactivate`: Reactivate suspended tenant.
+    - `PUT /api/tenants/{tenant_id}/tier`: Mutate subscription tier (`starter`, `growth`, `unlimited`).
+    - `GET /api/admin/support-tickets/*`: Review cross-tenant support tickets and launch Codex threads.
+- **Data-Plane Isolation & Suspension Containment**:
+  - All data-plane endpoints rely on `get_current_tenant`.
+  - When `tenant.status == 'suspended'`, `get_current_tenant` immediately aborts with `HTTP 403 Forbidden` (`{"detail": "Tenant is suspended: <reason>"}`).
+  - Normal tenant users cannot authenticate or execute any requests against a suspended tenant.
+- **Invitation-Based Onboarding**:
+  - Auto-provisioning via Google OAuth is eliminated. Uninvited Google OAuth logins receive `403 Forbidden`.
+  - Invitations are issued via `POST /api/tenants/{tenant_id}/invitations` or auto-issued during `POST /api/tenants`.
+  - Accepted via `POST /api/auth/invitations/accept` with `{"token": "...", "login": "...", "password": "..."}`, creating the user, marking invitation `accepted`, and issuing authentication tokens.
+- **Cross-Tenant IDOR Guard**:
+  - `GET /api/tenants/{tenant_id}` verifies that `current_user` is either a verified platform owner or a user belonging to `tenant_id`. Unrelated tenant users receive `403 Forbidden`.
+
 
 

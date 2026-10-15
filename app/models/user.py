@@ -16,10 +16,12 @@ class User(Base):
     __table_args__ = (UniqueConstraint("tenant_id", "login", name="uq_users_tenant_login"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     login = Column(String, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="owner", nullable=False)
+    is_platform_owner = Column(Boolean, default=False, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
     email = Column(String, index=True, nullable=True)
     google_sub = Column(String, index=True, nullable=True)
     chatwoot_user_id = Column(Integer, index=True, nullable=True)

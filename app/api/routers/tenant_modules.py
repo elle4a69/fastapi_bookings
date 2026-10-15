@@ -364,11 +364,16 @@ def update_tenant_tier(
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> TenantModulesResponse:
-    """Update subscription tier and quota (for owner / testing)."""
-    if current_user.role != "owner":
+    """Update subscription tier and quota (restricted to platform owner)."""
+    is_platform = (
+        bool(getattr(current_user, "is_platform_owner", False))
+        or bool(getattr(current_user, "is_superuser", False))
+        or (getattr(current_user, "role", "") or "").lower() == "platform_owner"
+    )
+    if not is_platform:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only business owners have permission to manage subscription tiers.",
+            detail="Forbidden: Platform owner privilege required to manage subscription tiers.",
         )
 
     tier = payload.tier.lower()
@@ -406,6 +411,16 @@ def put_tenant_modules(
         )
 
     if payload.tier:
+        is_platform = (
+            bool(getattr(current_user, "is_platform_owner", False))
+            or bool(getattr(current_user, "is_superuser", False))
+            or (getattr(current_user, "role", "") or "").lower() == "platform_owner"
+        )
+        if not is_platform:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Platform owner privilege required to modify subscription tiers.",
+            )
         tier = payload.tier.lower()
         if tier not in {"starter", "growth", "unlimited"}:
             raise HTTPException(

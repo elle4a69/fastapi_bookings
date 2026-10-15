@@ -19,7 +19,13 @@ from app.models.tenant import Tenant
 from app.models.user import User
 
 
-def _create_user(db_session: Session, suffix: str, role: str = "owner", tenant: Tenant | None = None) -> tuple[Tenant, User, dict[str, str]]:
+def _create_user(
+    db_session: Session,
+    suffix: str,
+    role: str = "owner",
+    tenant: Tenant | None = None,
+    is_platform_owner: bool = False,
+) -> tuple[Tenant, User, dict[str, str]]:
     if tenant is None:
         tenant = Tenant(name=f"Admin Test Tenant {suffix}", subdomain=f"adm-test-{suffix}")
         db_session.add(tenant)
@@ -30,6 +36,8 @@ def _create_user(db_session: Session, suffix: str, role: str = "owner", tenant: 
         login=f"user-{role}-{suffix}",
         password_hash="fake-hash",
         role=role,
+        is_platform_owner=is_platform_owner or (role == "platform_owner"),
+        is_superuser=is_platform_owner or (role == "platform_owner"),
     )
     db_session.add(user)
     db_session.commit()
@@ -45,7 +53,8 @@ def test_platform_owner_gate_enforcement(client: TestClient, db_session: Session
     """Endpoints reject unauthenticated and non-owner callers with 401/403."""
     tenant, _, client_headers = _create_user(db_session, "gate-client", role="client")
     _, _, provider_headers = _create_user(db_session, "gate-provider", role="provider", tenant=tenant)
-    _, _, owner_headers = _create_user(db_session, "gate-owner", role="owner", tenant=tenant)
+    _, _, tenant_owner_headers = _create_user(db_session, "gate-tenant-owner", role="owner", tenant=tenant)
+    _, _, platform_owner_headers = _create_user(db_session, "gate-plat-owner", role="platform_owner", is_platform_owner=True)
 
     # 1. Unauthenticated -> 401
     res_unauth = client.get("/api/admin/support-tickets", headers={"X-Tenant": tenant.subdomain})
@@ -59,8 +68,12 @@ def test_platform_owner_gate_enforcement(client: TestClient, db_session: Session
     res_provider = client.get("/api/admin/support-tickets", headers=provider_headers)
     assert res_provider.status_code == 403
 
-    # 4. Platform Owner -> 200
-    res_owner = client.get("/api/admin/support-tickets", headers=owner_headers)
+    # 4. Tenant Owner (not platform owner) -> 403
+    res_tenant_owner = client.get("/api/admin/support-tickets", headers=tenant_owner_headers)
+    assert res_tenant_owner.status_code == 403
+
+    # 5. Platform Owner -> 200
+    res_owner = client.get("/api/admin/support-tickets", headers=platform_owner_headers)
     assert res_owner.status_code == 200
 
 
@@ -68,7 +81,7 @@ def test_list_tickets_cross_tenant_and_filtering(client: TestClient, db_session:
     """Platform owner can view tickets across multiple tenants, with filtering and message count."""
     tenant_a, user_a, _ = _create_user(db_session, "t-a", role="owner")
     tenant_b, user_b, _ = _create_user(db_session, "t-b", role="owner")
-    _, platform_owner, owner_headers = _create_user(db_session, "t-boss", role="owner")
+    _, platform_owner, owner_headers = _create_user(db_session, "t-boss", role="platform_owner", is_platform_owner=True)
 
     ticket_a = SupportTicket(
         tenant_id=tenant_a.id,
@@ -134,7 +147,7 @@ def test_list_tickets_cross_tenant_and_filtering(client: TestClient, db_session:
 def test_get_ticket_detail_with_messages_and_audit(client: TestClient, db_session: Session):
     """GET /api/admin/support-tickets/{ticket_id} returns all messages (including internal) and audit log."""
     tenant, user, _ = _create_user(db_session, "detail-t", role="owner")
-    _, owner, owner_headers = _create_user(db_session, "detail-boss", role="owner")
+    _, owner, owner_headers = _create_user(db_session, "detail-boss", role="platform_owner", is_platform_owner=True)
 
     ticket = SupportTicket(
         tenant_id=tenant.id,
@@ -194,7 +207,7 @@ def test_get_ticket_detail_with_messages_and_audit(client: TestClient, db_sessio
 def test_patch_ticket_status_and_priority(client: TestClient, db_session: Session):
     """Platform owner can update ticket status and priority with audit trails."""
     tenant, user, _ = _create_user(db_session, "status-t", role="owner")
-    _, _, owner_headers = _create_user(db_session, "status-boss", role="owner")
+    _, _, owner_headers = _create_user(db_session, "status-boss", role="platform_owner", is_platform_owner=True)
 
     ticket = SupportTicket(
         tenant_id=tenant.id,
@@ -249,7 +262,7 @@ def test_patch_ticket_status_and_priority(client: TestClient, db_session: Sessio
 def test_post_internal_note_and_tenant_reply(client: TestClient, db_session: Session):
     """Platform owner can post internal notes (internal_only) and tenant replies (tenant_visible)."""
     tenant, user, _ = _create_user(db_session, "msg-t", role="owner")
-    _, _, owner_headers = _create_user(db_session, "msg-boss", role="owner")
+    _, _, owner_headers = _create_user(db_session, "msg-boss", role="platform_owner", is_platform_owner=True)
 
     ticket = SupportTicket(
         tenant_id=tenant.id,
@@ -300,7 +313,7 @@ def test_post_internal_note_and_tenant_reply(client: TestClient, db_session: Ses
 def test_launch_codex_investigation(client: TestClient, db_session: Session):
     """Platform owner can launch Codex investigation, creating a thread and turn, and updating ticket status."""
     tenant, user, _ = _create_user(db_session, "codex-t", role="owner")
-    _, _, owner_headers = _create_user(db_session, "codex-boss", role="owner")
+    _, _, owner_headers = _create_user(db_session, "codex-boss", role="platform_owner", is_platform_owner=True)
 
     ticket = SupportTicket(
         tenant_id=tenant.id,

@@ -66,6 +66,11 @@ class Tenant(Base):
     subdomain = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+    # Lifecycle & Status
+    status = Column(String, default="active", nullable=False)
+    suspended_at = Column(DateTime(timezone=True), nullable=True)
+    suspension_reason = Column(Text, nullable=True)
+
     # Entitlements & Subscription Tiers
     subscription_tier = Column(String, default="starter", nullable=False)
     addon_quota = Column(Integer, default=0, nullable=False)

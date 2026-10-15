@@ -5,7 +5,7 @@ administrative and public access. Administrative tokens include the
 user's ID and role, while public tokens encode only the tenant subdomain.
 """
 
-from datetime import timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,8 +21,10 @@ from ...core.security import (
 )
 from ...models.user import User
 from ...models.tenant import Tenant
+from ...models.invitation import TenantInvitation
 from ...models.provider import Provider
 from ...schemas.user import UserCreate, UserResponse
+from ...schemas.invitation import InvitationAccept
 
 
 router = APIRouter()
@@ -102,6 +104,14 @@ async def admin_login(
     }
 
 
+def _is_expired(dt: datetime | None) -> bool:
+    if dt is None:
+        return False
+    if dt.tzinfo is not None:
+        return dt < datetime.now(timezone.utc)
+    return dt < datetime.utcnow()
+
+
 @router.post("/admin/auth/google", response_model=TokenResponse, tags=["auth"])
 async def google_login(
     body: GoogleAuthRequest,
@@ -144,8 +154,30 @@ async def google_login(
     )
 
     if not user:
-        user_count = db.query(User).filter(User.tenant_id == tenant.id).count()
-        role = "owner" if user_count == 0 else "admin"
+        invitation = (
+            db.query(TenantInvitation)
+            .filter(
+                TenantInvitation.tenant_id == tenant.id,
+                TenantInvitation.email == email.lower(),
+                TenantInvitation.status == "pending",
+            )
+            .first()
+        )
+        if not invitation:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: No account or pending invitation found for '{email}' in tenant '{tenant.subdomain}'."
+            )
+        now_utc = datetime.now(timezone.utc)
+        if _is_expired(invitation.expires_at):
+            invitation.status = "expired"
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invitation has expired. Please request a new invitation."
+            )
+
+        role = invitation.role
         name_parts = (claims.get("name") or "").split(" ", 1)
         first_name = claims.get("given_name") or (name_parts[0] if name_parts else "")
         last_name = claims.get("family_name") or (name_parts[1] if len(name_parts) > 1 else "")
@@ -162,6 +194,8 @@ async def google_login(
             is_active=True,
         )
         db.add(user)
+        invitation.status = "accepted"
+        invitation.accepted_at = now_utc
         db.commit()
         db.refresh(user)
     else:
@@ -369,4 +403,107 @@ def create_user(
             "created_at": user.created_at,
             "updated_at": user.updated_at,
         },
+    }
+
+
+@router.post("/auth/invitations/accept", response_model=TokenResponse, tags=["auth"])
+@router.post("/invitations/accept", response_model=TokenResponse, tags=["auth"])
+def accept_invitation(
+    body: InvitationAccept,
+    db: Session = Depends(get_db),
+):
+    """Redeem a tenant invitation token to activate or provision an account."""
+    invitation = (
+        db.query(TenantInvitation)
+        .filter(TenantInvitation.token == body.token.strip())
+        .first()
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation token not found."
+        )
+
+    if invitation.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invitation has already been {invitation.status}."
+        )
+
+    if _is_expired(invitation.expires_at):
+        invitation.status = "expired"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation token has expired."
+        )
+
+    tenant = db.query(Tenant).filter(Tenant.id == invitation.tenant_id).first()
+    if not tenant or getattr(tenant, "status", "active") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant organization is inactive or suspended."
+        )
+
+    # Check if a user with this email/login already exists for this tenant
+    user = (
+        db.query(User)
+        .filter(
+            User.tenant_id == tenant.id,
+            (User.email == invitation.email) | (User.login == invitation.email)
+        )
+        .first()
+    )
+
+    if not user:
+        pwd_hash = get_password_hash(body.password) if body.password else "[INVITATION_CLAIMED]"
+        user = User(
+            tenant_id=tenant.id,
+            login=invitation.email,
+            email=invitation.email,
+            password_hash=pwd_hash,
+            role=invitation.role,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            is_active=True,
+        )
+        db.add(user)
+    else:
+        user.role = invitation.role
+        user.is_active = True
+        if body.password:
+            user.password_hash = get_password_hash(body.password)
+        if body.first_name:
+            user.first_name = body.first_name
+        if body.last_name:
+            user.last_name = body.last_name
+
+    invitation.status = "accepted"
+    invitation.accepted_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+        "provider_id": user.provider_id,
+        "tenant_id": user.tenant_id,
+    })
+
+    return {
+        "ok": True,
+        "data": {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "login": user.login,
+                "email": user.email,
+                "role": user.role,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "tenant_id": user.tenant_id,
+                "tenant_subdomain": tenant.subdomain,
+            }
+        }
     }

@@ -25,6 +25,7 @@ from .notification import (
 
 # Core domain models
 from .tenant import Tenant, TravelChargeOrigin
+from .invitation import TenantInvitation
 
 from .resource import (
     Resource,
@@ -264,5 +265,6 @@ __all__ = [
     "OnboardingPlan",
     "OnboardingStep",
     "OnboardingAuditLog",
+    "TenantInvitation",
 ]
 

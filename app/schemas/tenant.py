@@ -34,10 +34,14 @@ class TenantBase(BaseModel):
         description="Policy for calculating out-call travel charges: ALWAYS_FROM_BASE or ACTUAL_ORIGIN",
     )
     chatwoot_account_id: Optional[int] = Field(None, description="Bound Chatwoot account ID")
+    status: str = Field("active", description="Lifecycle state ('active' or 'suspended')")
+    suspended_at: Optional[datetime] = Field(None, description="Suspension timestamp")
+    suspension_reason: Optional[str] = Field(None, description="Reason for suspension")
 
 
 class TenantCreate(TenantBase):
     subscription_tier: str = "starter"
+    owner_email: Optional[str] = Field(None, description="Optional email to invite as the initial tenant owner")
 
 
 class TenantUpdate(BaseModel):
@@ -60,6 +64,11 @@ class TenantUpdate(BaseModel):
     chatwoot_account_id: Optional[int] = None
 
 
+class TenantSuspendRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    reason: Optional[str] = Field(None, description="Administrative reason for tenant suspension")
+
+
 class TenantInDBBase(TenantBase):
     id: int
     subscription_tier: str
@@ -70,7 +79,7 @@ class TenantInDBBase(TenantBase):
 
 
 class TenantOut(TenantInDBBase):
-    pass
+    invitation_token: Optional[str] = None
 
 
 class TenantResponse(BaseModel):

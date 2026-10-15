@@ -93,6 +93,11 @@ async def get_current_tenant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tenant '{subdomain}' not found.",
         )
+    if getattr(tenant, "status", "active") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Tenant '{subdomain}' is suspended.",
+        )
     span = trace.get_current_span()
     if span and span.is_recording():
         span.set_attribute("tenant_id", str(tenant.id))
@@ -137,15 +142,26 @@ async def get_current_user(
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    # Enforce tenant isolation from token claim
-    token_tenant_id = payload.get("tenant_id")
-    if token_tenant_id is not None and token_tenant_id != tenant.id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not valid for active tenant")
-
-    # Query user within active tenant scope
-    user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant.id).first()
+    # Query user; if platform owner, allow cross-tenant administration
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    is_platform = (
+        bool(getattr(user, "is_platform_owner", False))
+        or bool(getattr(user, "is_superuser", False))
+        or (getattr(user, "role", "") or "").lower() == "platform_owner"
+    )
+
+    if not is_platform:
+        # Enforce tenant isolation from token claim
+        token_tenant_id = payload.get("tenant_id")
+        if token_tenant_id is not None and token_tenant_id != tenant.id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not valid for active tenant")
+
+        if user.tenant_id != tenant.id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
+
     return user
 
 
@@ -187,17 +203,77 @@ async def get_current_owner(
     return current_user
 
 
+async def get_current_platform_owner(
+    x_token: Optional[str] = Header(None, alias="X-Token"),
+    db: Session = Depends(get_db),
+) -> User:
+    """Retrieve the current platform owner from X-Token header without requiring an X-Tenant context.
+
+    Strictly requires is_platform_owner=True, is_superuser=True, or role='platform_owner'.
+    Tenant-level owners (role='owner' without platform flag) are strictly rejected with 403 Forbidden.
+    """
+    if settings.LOCAL_AUTH_BYPASS and x_token == "local-development-bypass":
+        user = (
+            db.query(User)
+            .filter(
+                (User.is_platform_owner.is_(True))
+                | (User.is_superuser.is_(True))
+                | (User.role == "platform_owner")
+            )
+            .order_by(User.id)
+            .first()
+        )
+        if user:
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Local authentication bypass requires a platform owner account.",
+        )
+
+    if not x_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
+
+    payload = decode_access_token(x_token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    try:
+        user_id = int(payload["sub"])
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    is_platform = (
+        bool(getattr(user, "is_platform_owner", False))
+        or bool(getattr(user, "is_superuser", False))
+        or (getattr(user, "role", "") or "").lower() == "platform_owner"
+    )
+    if not is_platform:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Platform owner privilege required",
+        )
+
+    return user
+
+
 async def require_platform_owner(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_platform_owner),
 ) -> User:
     """Ensure the user is a platform owner or superuser.
 
-    Checks current_user.role == 'owner' or current_user.is_superuser.
-    Rejects any non-owner with 403 Forbidden.
+    Strictly requires is_platform_owner=True, is_superuser=True, or role='platform_owner'.
+    Tenant owner (role='owner' without platform flag) is rejected with 403 Forbidden.
     """
-    is_owner = (getattr(current_user, "role", "") or "").lower() == "owner"
-    is_superuser = bool(getattr(current_user, "is_superuser", False))
-    if not (is_owner or is_superuser):
+    is_platform = (
+        bool(getattr(current_user, "is_platform_owner", False))
+        or bool(getattr(current_user, "is_superuser", False))
+        or (getattr(current_user, "role", "") or "").lower() == "platform_owner"
+    )
+    if not is_platform:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Platform owner privilege required",
@@ -230,6 +306,14 @@ async def get_current_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     """Ensure the current user has an administrative or management role."""
+    is_platform = (
+        bool(getattr(current_user, "is_platform_owner", False))
+        or bool(getattr(current_user, "is_superuser", False))
+        or (getattr(current_user, "role", "") or "").lower() == "platform_owner"
+    )
+    if is_platform:
+        return current_user
+
     if current_user.role not in {"owner", "admin", "manager"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient privileges")
     return current_user

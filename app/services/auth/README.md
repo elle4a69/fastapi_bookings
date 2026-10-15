@@ -37,21 +37,35 @@ This module deliberately avoids managing external customer passwords or storing 
 
 ## 4. Core Workflows & Contracts
 
-### 4.1 Google SSO Login Workflow
+### 4.1 Google SSO Login Workflow & Invitation Requirement
 ```
 Client (Google ID Token) 
   --> POST /api/admin/auth/google 
   --> verify_google_id_token() 
-  --> Resolve/Create User (tenant_id, email, google_sub)
+  --> Check existing User or pending TenantInvitation
+      * If user exists: authenticate
+      * If pending TenantInvitation exists: redeem invitation, provision user with invited role
+      * If uninvited: REJECT with 403 Forbidden (Auto-provisioning eliminated in WP0)
   --> sync_user_to_chatwoot_platform()
   --> generate_chatwoot_sso_url()
   --> Returns { access_token, token_type, user, chatwoot_sso_url }
 ```
 
-### 4.2 RBAC Role Alignment Matrix
+### 4.2 Invitation Token Redemption Workflow
+```
+Client (Invitation Token + Credentials)
+  --> POST /api/auth/invitations/accept
+  --> Verify token status == 'pending' and expires_at > now()
+  --> Atomically create User with invitation.role and invitation.tenant_id
+  --> Mark invitation status = 'accepted', accepted_at = now()
+  --> Return JWT access_token and user profile
+```
+
+### 4.3 RBAC Role Alignment Matrix
 | FastAPI Bookings Role | Chatwoot Account Role | Permissions |
 |---|---|---|
-| `owner` | `administrator` | Full tenant settings, inboxes, users, billing |
+| `platform_owner` | `administrator` | Global control-plane, cross-tenant management, tier mutation |
+| `owner` | `administrator` | Full tenant settings, inboxes, users, billing (Data Plane only) |
 | `admin` | `administrator` | Account settings, inboxes, macros, integrations |
 | `manager` | `agent` | Inboxes, conversation triage, reporting |
 | `provider` | `agent` | Assigned provider inbox and schedule |
@@ -62,8 +76,11 @@ Client (Google ID Token)
 ## 5. Data Safety & Isolation
 
 1. **Mandatory Tenant Claim Isolation**: All JWT access tokens minted by the auth service embed `"tenant_id": user.tenant_id`. Dependencies reject cross-tenant tokens even if a user ID matches across tenants.
-2. **Ephemeral Single-Use SSO Tokens**: Chatwoot SSO URLs use 32-byte cryptographic hex tokens (`USER_SSO_AUTH_TOKEN`) stored in Redis with a 300-second (5-minute) TTL, invalidated immediately upon use.
-3. **Synthetic Password Complexity**: Generated Chatwoot user passwords meet uppercase, lowercase, numeric, and special character constraints (`generate_compliant_password`), preventing unauthenticated local password access.
+2. **Platform Owner Control-Plane Separation**: Platform owners (`is_platform_owner=True`) are strictly distinguished from tenant owners (`role='owner'`). Tenant owners attempting to access platform control-plane endpoints receive `403 Forbidden`.
+3. **Elimination of Auto-Provisioning**: Uninvited Google OAuth logins cannot self-promote to `owner` or `admin`. Every new user must possess a valid, pending `TenantInvitation`.
+4. **Suspension Containment**: Authenticated users of suspended tenants are blocked at the dependency layer (`get_current_tenant`) with `403 Forbidden`.
+5. **Ephemeral Single-Use SSO Tokens**: Chatwoot SSO URLs use 32-byte cryptographic hex tokens (`USER_SSO_AUTH_TOKEN`) stored in Redis with a 300-second (5-minute) TTL, invalidated immediately upon use.
+6. **Synthetic Password Complexity**: Generated Chatwoot user passwords meet uppercase, lowercase, numeric, and special character constraints (`generate_compliant_password`), preventing unauthenticated local password access.
 
 ---
 
@@ -71,15 +88,25 @@ Client (Google ID Token)
 
 - **Google Client ID Verification**: When `GOOGLE_CLIENT_ID` is omitted in staging or local development, Google certificates and issuer are verified while audience matching is bypassed.
 - **PlatformApp Permissibles**: Account users must belong to accounts that are enrolled under the active `PlatformApp`. Newly provisioned tenants via `provision_chatwoot_tenant` are registered automatically.
+- **Timezone Awareness in Invitation Expiry**: When running tests against SQLite (naive datetimes) vs PostgreSQL (offset-aware datetimes), the helper `_is_expired(dt)` normalizes both representations to UTC for accurate expiry checks.
 
 ---
 
 ## 7. Verification & Testing Commands
 
-Execute targeted authentication and SSO test suites:
+Execute targeted authentication, security baseline, and SSO test suites:
 ```powershell
+# Run WP0 security contract tests
+.\.venv\Scripts\python.exe -m pytest tests/test_wp0_security_contract.py -v
+
+# Run 3-tenant isolation and suspension tests
+.\.venv\Scripts\python.exe -m pytest tests/test_three_tenant_isolation.py -v
+
 # Run authentication contract tests
 .\.venv\Scripts\python.exe -m pytest tests/test_auth_contract.py -v
+
+# Run role hierarchy tests
+.\.venv\Scripts\python.exe -m pytest tests/test_role_hierarchy.py -v
 
 # Run SSO and Chatwoot integration tests
 .\.venv\Scripts\python.exe -m pytest tests/test_sso_chatwoot.py -v
