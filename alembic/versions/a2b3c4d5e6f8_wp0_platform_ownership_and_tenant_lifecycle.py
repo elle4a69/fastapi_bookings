@@ -48,11 +48,11 @@ def upgrade() -> None:
     if "tenant_invitations" not in existing_tables:
         op.create_table(
             "tenant_invitations",
-            sa.Column("id", sa.Integer(), primary_key=True, index=True),
-            sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True),
-            sa.Column("email", sa.String(), index=True, nullable=False),
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False),
+            sa.Column("email", sa.String(), nullable=False),
             sa.Column("role", sa.String(length=32), nullable=False, server_default="owner"),
-            sa.Column("token", sa.String(length=128), unique=True, index=True, nullable=False),
+            sa.Column("token", sa.String(length=128), unique=True, nullable=False),
             sa.Column("invited_by_user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
             sa.Column("status", sa.String(length=32), nullable=False, server_default="pending"),
             sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),

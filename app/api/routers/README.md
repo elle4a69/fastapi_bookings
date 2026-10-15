@@ -43,7 +43,10 @@ graph TD
 
 - [auth.py](file:///F:/Projects/fastapi_bookings/app/api/routers/auth.py): User login, credential verification, JWT token issuance.
 - [identity.py](file:///F:/Projects/fastapi_bookings/app/api/routers/identity.py): Logto identity exchange (`POST /api/identity/exchange`), Logto link alias (`POST /api/identity/logto/link`), caller identity mapping (`GET /api/identity/me`), organization directory (`GET /api/identity/organizations`), and webhook intake (`POST /api/identity/webhook`).
+- [flexprice_webhooks.py](file:///F:/Projects/fastapi_bookings/app/api/routers/flexprice_webhooks.py): Flexprice billing webhook receiver (`POST /api/webhooks/flexprice`), HMAC-SHA256 signature verification over raw request body, SHA-256 payload digest audit trail, idempotent event deduplication, and out-of-order event resilience.
+- [platform_billing.py](file:///F:/Projects/fastapi_bookings/app/api/routers/platform_billing.py): Tenant-scoped subscription overview (`GET /api/billing/subscription`), hosted customer billing portal sessions (`POST /api/billing/portal-session`), metered usage reporting (`POST /api/billing/usage`), and platform-owner reconciliation (`GET /api/admin/platform/billing/reconcile`).
 - [bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/bookings.py): Primary booking management, admin scheduling, status updates (`CONFIRMED`, `CANCELLED`, `COMPLETED`).
+
 - [availability.py](file:///F:/Projects/fastapi_bookings/app/api/routers/availability.py): Real-time availability calculation across provider schedules and buffer rules.
 - [public_bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/public_bookings.py): Intake endpoints consumed by the public booking widget.
 - [client_portal.py](file:///F:/Projects/fastapi_bookings/app/api/routers/client_portal.py): Self-service client appointment views, reschedules, and cancellations.

@@ -27,6 +27,14 @@ from .notification import (
 from .tenant import Tenant, TravelChargeOrigin
 from .invitation import TenantInvitation
 from .external_identity import ExternalIdentityLink, ExternalOrganizationLink, IdentityOutboxEvent
+from .platform_billing import (
+    BillingAccount,
+    SubscriptionProjection,
+    EntitlementSnapshot,
+    ProviderEventInbox,
+    UsageEventOutbox,
+)
+
 
 from .resource import (
     Resource,
@@ -270,5 +278,11 @@ __all__ = [
     "ExternalIdentityLink",
     "ExternalOrganizationLink",
     "IdentityOutboxEvent",
+    "BillingAccount",
+    "SubscriptionProjection",
+    "EntitlementSnapshot",
+    "ProviderEventInbox",
+    "UsageEventOutbox",
 ]
+
 

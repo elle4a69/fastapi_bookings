@@ -47,6 +47,8 @@ from . import business_assistant  # noqa: F401
 from . import media  # noqa: F401
 from . import operator_controls  # noqa: F401
 from . import ui_agent  # noqa: F401
+from . import flexprice_webhooks  # noqa: F401
+from . import platform_billing  # noqa: F401
 from app.services.business_assistant.onboarding.router import router as onboarding_router  # noqa: F401
 
 

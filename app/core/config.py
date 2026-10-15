@@ -133,6 +133,25 @@ class Settings(BaseSettings):
         description="Optional pre-configured JWKS or public keys JSON for offline/test environments",
     )
 
+    # Flexprice Billing Settings (WP2)
+    FLEXPRICE_API_BASE_URL: str = Field(
+        "https://api.flexprice.io/v1",
+        description="Flexprice API base URL",
+    )
+    FLEXPRICE_API_KEY: str = Field(
+        "test-flexprice-api-key",
+        description="Flexprice API key",
+    )
+    FLEXPRICE_WEBHOOK_SECRET: str = Field(
+        "test-flexprice-webhook-secret",
+        description="Flexprice Webhook secret for HMAC signature verification",
+    )
+    FLEXPRICE_PORTAL_RETURN_URL: str = Field(
+        "https://app.bookings.local/admin/billing",
+        description="Return URL for hosted billing portal redirect",
+    )
+
+
     # Frontend
     FRONTEND_ORIGINS: str = Field(
         "",

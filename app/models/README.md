@@ -6,7 +6,9 @@ The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schem
 
 ### Primary Domain Entities:
 - **Tenancy, Media & Core Identity**: `Tenant` (with `status`, `suspended_at`, `suspension_reason`), `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`, `platform_owner`; flags: `is_platform_owner`, `is_superuser`), `TenantInvitation` (single-use tokens, status lifecycle), `TenantTranslation`, `ExternalIdentityLink` (Logto sub to User mapping), `ExternalOrganizationLink` (Logto org_id to Tenant mapping), `IdentityOutboxEvent` (asynchronous tenant/org provisioning queue).
+- **Platform Billing & Subscription Projections**: `BillingAccount` (tenant to Flexprice customer ID mapping, no payment credentials), `SubscriptionProjection` (out-of-order resilient projection of external subscription state), `EntitlementSnapshot` (active tenant feature limits and quotas), `ProviderEventInbox` (verified SHA-256 digested incoming provider events), `UsageEventOutbox` (idempotent metered consumption queue).
 - **Catalog & Facilities**: `Service`, `Provider`, `Location`, `Category`, `AddOn`, `Product`, `Package`, `Resource`, `LocationProvider`, `LocationService`.
+
 - **Operations & Scheduling**: `Booking`, `BookingSlotAllocation`, `CalendarNote`, `Client`, `ClientDispute`, `WaitlistEntry`, `BlockedTime`, `ReservedTime`.
 - **Messaging & Omnichannel**: `Conversation`, `Message`, `ChannelAccount`, `MessageStyleExample`, `SmsAccount`, `SmsConversation`, `SmsMessage`, `SmsOutboundJob`, `SmsAiJob`, `SmsConversationEvent`, `SmsNote`, `SmsChatwootBinding`, `SmsQuickTool`.
 - **Commercial & Financial**: `Invoice`, `InvoiceLine`, `Payment`, `PaymentProcessorConfig`, `TaxRate`, `PromotionCode`, `Tip`.
@@ -27,6 +29,7 @@ app/models/
 ├── user.py                   # User authentication, hashed passwords, roles, is_platform_owner, is_superuser, nullable tenant_id
 ├── invitation.py             # TenantInvitation model, single-use tokens, roles, and status lifecycle ('pending', 'accepted', 'revoked', 'expired')
 ├── external_identity.py      # ExternalIdentityLink, ExternalOrganizationLink, IdentityOutboxEvent (WP1 Logto foundation)
+├── platform_billing.py       # BillingAccount, SubscriptionProjection, EntitlementSnapshot, ProviderEventInbox, UsageEventOutbox (WP2)
 ├── provider.py               # Staff practitioners, bios, in-call/out-call travel configuration
 ├── service.py                # Treatments, durations, pricing, buffer rules, in-call/out-call flags
 ├── location.py               # Physical clinics and composite mappings (location_providers, location_services)
