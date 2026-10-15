@@ -4,6 +4,7 @@ Exposes endpoints for viewing, toggling, and managing active tenant modules,
 subscription tiers, and add-on quotas.
 """
 
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -11,7 +12,13 @@ from sqlalchemy.orm import Session
 from ..deps import get_db, get_current_tenant, get_current_admin
 from ...models.tenant import Tenant, CORE_MODULE_KEYS, ADDON_MODULE_KEYS
 from ...models.user import User
+from ...models.platform_billing import (
+    SubscriptionProjection,
+    EntitlementSnapshot,
+    PlatformEntitlementGrant,
+)
 from ...schemas.tenant_modules import (
+    EntitlementSnapshotInfo,
     TenantModuleInfo,
     TenantModulesResponse,
     ToggleModuleRequest,
@@ -19,6 +26,8 @@ from ...schemas.tenant_modules import (
     UpdateTenantTierRequest,
     UpdateTenantModulesRequest,
 )
+from ...services.platform_billing.entitlement_guard import EntitlementGuardService, _as_utc
+from ...services.platform_billing.projection_service import PLAN_ENTITLEMENT_CATALOG
 
 router = APIRouter(tags=["tenant-modules"])
 
@@ -181,10 +190,78 @@ MODULE_CATALOG = [
 ]
 
 
-def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
-    """Build response model from tenant model and catalog."""
+def _build_modules_response(tenant: Tenant, db: Optional[Session] = None) -> TenantModulesResponse:
+    """Build response model from tenant model, local projection, and active entitlements."""
     enabled_keys = set(tenant.get_enabled_modules())
-    
+    effective_tier = tenant.subscription_tier or "starter"
+    entitlements_dict: dict[str, EntitlementSnapshotInfo] = {}
+
+    if db is not None:
+        # Check authoritative subscription projection
+        proj = (
+            db.query(SubscriptionProjection)
+            .filter(
+                SubscriptionProjection.tenant_id == tenant.id,
+                SubscriptionProjection.status.in_(["active", "trialing"]),
+            )
+            .order_by(SubscriptionProjection.id.desc())
+            .first()
+        )
+        if proj:
+            effective_tier = proj.plan_id
+
+        # Collect snapshot records
+        snapshots = (
+            db.query(EntitlementSnapshot)
+            .filter(EntitlementSnapshot.tenant_id == tenant.id)
+            .all()
+        )
+        for s in snapshots:
+            expires_iso = s.expires_at.isoformat() if s.expires_at else None
+            entitlements_dict[s.entitlement_key] = EntitlementSnapshotInfo(
+                key=s.entitlement_key,
+                value_type=s.value_type,
+                value=s.value,
+                is_active=s.is_active,
+                expires_at=expires_iso,
+            )
+
+        # Collect active platform grants (take precedence)
+        now = datetime.now(timezone.utc)
+        grants = (
+            db.query(PlatformEntitlementGrant)
+            .filter(
+                PlatformEntitlementGrant.tenant_id == tenant.id,
+                PlatformEntitlementGrant.is_revoked == False,
+            )
+            .all()
+        )
+        for g in grants:
+            g_exp = _as_utc(g.expires_at) if g.expires_at else None
+            if g_exp is None or g_exp > now:
+                expires_iso = g.expires_at.isoformat() if g.expires_at else None
+                entitlements_dict[g.entitlement_key] = EntitlementSnapshotInfo(
+                    key=g.entitlement_key,
+                    value_type=g.value_type,
+                    value=g.granted_value,
+                    is_active=True,
+                    expires_at=expires_iso,
+                )
+
+    if not entitlements_dict:
+        catalog = PLAN_ENTITLEMENT_CATALOG.get(
+            effective_tier.lower(),
+            PLAN_ENTITLEMENT_CATALOG.get("starter", {}),
+        )
+        for k, (vtype, vval) in catalog.items():
+            entitlements_dict[k] = EntitlementSnapshotInfo(
+                key=k,
+                value_type=vtype,
+                value=str(vval),
+                is_active=True,
+                expires_at=None,
+            )
+
     # Count unique functional addons so aliased keys don't consume extra quota
     unique_addon_keys = set()
     for k in enabled_keys:
@@ -206,7 +283,7 @@ def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
         unique_addon_keys.add(canon_key)
     used_addons = len(unique_addon_keys)
 
-    if tenant.subscription_tier == "unlimited":
+    if effective_tier in ("unlimited", "enterprise"):
         available_addons = 999
     else:
         available_addons = max(0, tenant.addon_quota - used_addons)
@@ -225,11 +302,12 @@ def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
     ]
 
     return TenantModulesResponse(
-        tier=tenant.subscription_tier,
+        tier=effective_tier,
         addon_quota=tenant.addon_quota,
         used_addons=used_addons,
         available_addons=available_addons,
         modules=module_infos,
+        entitlements=entitlements_dict,
     )
 
 
@@ -238,9 +316,47 @@ def _build_modules_response(tenant: Tenant) -> TenantModulesResponse:
 def get_tenant_modules(
     tenant: Tenant = Depends(get_current_tenant),
     current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
 ) -> TenantModulesResponse:
     """Return current tenant subscription tier, quota, and module catalog with status."""
-    return _build_modules_response(tenant)
+    return _build_modules_response(tenant, db=db)
+
+
+def _check_module_entitlement_prerequisites(db: Session, tenant_id: int, module_key: str) -> None:
+    """Validate that tenant satisfies required entitlements before enabling a module."""
+    canon = (
+        "multiple_providers"
+        if module_key in ("multiple_providers", "providers")
+        else (
+            "locations"
+            if module_key == "locations"
+            else (
+                "sms_assistant"
+                if module_key == "sms_assistant"
+                else module_key
+            )
+        )
+    )
+    if canon == "multiple_providers":
+        eff = EntitlementGuardService.get_effective_entitlement(db, tenant_id, "providers.max")
+        if eff is not None and eff[1] <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Entitlement 'providers.max > 1' required to enable Multiple Service Providers. Please upgrade your plan.",
+            )
+    elif canon == "locations":
+        eff = EntitlementGuardService.get_effective_entitlement(db, tenant_id, "locations.max")
+        if eff is not None and eff[1] <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Entitlement 'locations.max > 1' required to enable Locations module. Please upgrade your plan.",
+            )
+    elif canon == "sms_assistant":
+        if not EntitlementGuardService.has_entitlement(db, tenant_id, "sms.enabled", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Entitlement 'sms.enabled' required to enable SMS Assistant. Please upgrade your plan.",
+            )
 
 
 @router.post("/api/admin/tenant/modules/toggle", response_model=ToggleModuleResponse)
@@ -326,6 +442,10 @@ def toggle_tenant_module(
                 detail="Relationship Matrix requires Multiple Service Providers to be enabled.",
             )
 
+    # Validate prerequisite entitlement when enabling
+    if payload.enabled:
+        _check_module_entitlement_prerequisites(db, tenant.id, payload.module_key)
+
     # Validate against quota when enabling an add-on
     if payload.enabled and canon_target not in current_addons:
         if tenant.subscription_tier != "unlimited" and len(current_addons) >= tenant.addon_quota:
@@ -392,7 +512,7 @@ def update_tenant_tier(
     db.commit()
     db.refresh(tenant)
 
-    return _build_modules_response(tenant)
+    return _build_modules_response(tenant, db=db)
 
 
 @router.put("/api/admin/tenant/modules", response_model=TenantModulesResponse)
@@ -410,7 +530,7 @@ def put_tenant_modules(
             detail="Only business owners have permission to manage tenant modules.",
         )
 
-    if payload.tier:
+    if payload.tier or payload.addon_quota is not None:
         is_platform = (
             bool(getattr(current_user, "is_platform_owner", False))
             or bool(getattr(current_user, "is_superuser", False))
@@ -419,20 +539,21 @@ def put_tenant_modules(
         if not is_platform:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Forbidden: Platform owner privilege required to modify subscription tiers.",
+                detail="Forbidden: Platform owner privilege required to modify subscription tiers or quotas.",
             )
-        tier = payload.tier.lower()
-        if tier not in {"starter", "growth", "unlimited"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid subscription tier '{payload.tier}'.",
-            )
-        tenant.subscription_tier = tier
-        if payload.addon_quota is not None:
-            tenant.addon_quota = payload.addon_quota
-        else:
-            default_quotas = {"starter": 0, "growth": 3, "unlimited": 999}
-            tenant.addon_quota = default_quotas[tier]
+        if payload.tier:
+            tier = payload.tier.lower()
+            if tier not in {"starter", "growth", "unlimited"}:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid subscription tier '{payload.tier}'.",
+                )
+            tenant.subscription_tier = tier
+            if payload.addon_quota is not None:
+                tenant.addon_quota = payload.addon_quota
+            else:
+                default_quotas = {"starter": 0, "growth": 3, "unlimited": 999}
+                tenant.addon_quota = default_quotas[tier]
 
     current_enabled = set(tenant.get_enabled_modules())
 
@@ -440,6 +561,10 @@ def put_tenant_modules(
         target_keys = set(payload.enabled_modules)
         # Ensure core modules cannot be turned off
         target_keys.update(CORE_MODULE_KEYS)
+        # Validate prerequisite entitlements for any non-core modules being enabled
+        for mod in target_keys:
+            if mod not in CORE_MODULE_KEYS and mod not in current_enabled:
+                _check_module_entitlement_prerequisites(db, tenant.id, mod)
         # Synchronize aliases
         if "multiple_providers" in target_keys or "providers" in target_keys:
             target_keys.update(["multiple_providers", "providers"])
@@ -451,6 +576,8 @@ def put_tenant_modules(
 
     elif payload.modules is not None:
         for k, enabled in payload.modules.items():
+            if enabled and k not in current_enabled:
+                _check_module_entitlement_prerequisites(db, tenant.id, k)
             aliases = {k}
             if k in ("multiple_providers", "providers"):
                 aliases = {"multiple_providers", "providers"}
@@ -467,6 +594,8 @@ def put_tenant_modules(
 
     elif payload.module_key is not None:
         enabled = payload.enabled if payload.enabled is not None else True
+        if enabled and payload.module_key not in current_enabled:
+            _check_module_entitlement_prerequisites(db, tenant.id, payload.module_key)
         aliases = {payload.module_key}
         if payload.module_key in ("multiple_providers", "providers"):
             aliases = {"multiple_providers", "providers"}
@@ -485,5 +614,5 @@ def put_tenant_modules(
     db.commit()
     db.refresh(tenant)
 
-    return _build_modules_response(tenant)
+    return _build_modules_response(tenant, db=db)
 

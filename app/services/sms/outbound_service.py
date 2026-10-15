@@ -59,6 +59,23 @@ def enqueue_outbound_message_transactional(
     ):
         raise ValueError("Outbound delivery is disabled for this conversation.")
 
+    # 0. Entitlement and Quota Check (WP3)
+    if status == "queued":
+        from app.services.platform_billing.entitlement_guard import (
+            EntitlementGuardService,
+            ENTITLEMENT_SMS_ENABLED,
+            ENTITLEMENT_SMS_MONTHLY_MESSAGES,
+        )
+        if not EntitlementGuardService.has_entitlement(db, conversation.tenant_id, ENTITLEMENT_SMS_ENABLED, True):
+            raise ValueError("SMS entitlement ('sms.enabled') is not active for this tenant.")
+        EntitlementGuardService.check_quota(
+            db=db,
+            tenant_id=conversation.tenant_id,
+            quota_key=ENTITLEMENT_SMS_MONTHLY_MESSAGES,
+            requested_quantity=1,
+            raise_exception=True,
+        )
+
     # 1. Idempotency Check using Client Request ID (e.g. for UI double clicks)
     if client_request_id:
         existing_msg = db.query(SmsMessage).filter(
@@ -138,7 +155,7 @@ def enqueue_outbound_message_transactional(
     db.add(message)
     db.flush()  # populate message.id
 
-    # 4. If queued, create SmsOutboundJob record
+    # 4. If queued, create SmsOutboundJob record and record metered usage
     if status == "queued":
         job = SmsOutboundJob(
             message_id=message.id,
@@ -148,6 +165,18 @@ def enqueue_outbound_message_transactional(
             created_at=datetime.now(timezone.utc)
         )
         db.add(job)
+
+        # Record metered usage event with deduplication
+        from app.services.platform_billing.entitlement_guard import EntitlementGuardService
+        meter_idempotency_key = f"sms:{message.tenant_id}:msg_{message.id}"
+        EntitlementGuardService.record_usage_with_deduplication(
+            db=db,
+            tenant_id=message.tenant_id,
+            meter_key="sms_outbound",
+            quantity=1,
+            idempotency_key=meter_idempotency_key,
+            occurred_at=message.occurred_at,
+        )
         
     # Update conversation's last activity
     conversation.last_activity_at = datetime.now(timezone.utc)

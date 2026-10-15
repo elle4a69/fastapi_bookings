@@ -24,6 +24,21 @@ from .reconciliation_service import (
     ReconciliationService,
     reconciliation_service,
 )
+from .entitlement_guard import (
+    EntitlementGuardService,
+    entitlement_guard,
+    require_entitlement,
+    require_quota,
+    EntitlementRequiredError,
+    QuotaExceededError,
+    ENTITLEMENT_ASSISTANT_ENABLED,
+    ENTITLEMENT_ASSISTANT_MONTHLY_RUNS,
+    ENTITLEMENT_SMS_ENABLED,
+    ENTITLEMENT_SMS_MONTHLY_MESSAGES,
+    ENTITLEMENT_PROVIDERS_MAX,
+    ENTITLEMENT_LOCATIONS_MAX,
+    ENTITLEMENT_API_ENABLED,
+)
 
 __all__ = [
     "FlexpriceClient",
@@ -40,4 +55,17 @@ __all__ = [
     "usage_metering_service",
     "ReconciliationService",
     "reconciliation_service",
+    "EntitlementGuardService",
+    "entitlement_guard",
+    "require_entitlement",
+    "require_quota",
+    "EntitlementRequiredError",
+    "QuotaExceededError",
+    "ENTITLEMENT_ASSISTANT_ENABLED",
+    "ENTITLEMENT_ASSISTANT_MONTHLY_RUNS",
+    "ENTITLEMENT_SMS_ENABLED",
+    "ENTITLEMENT_SMS_MONTHLY_MESSAGES",
+    "ENTITLEMENT_PROVIDERS_MAX",
+    "ENTITLEMENT_LOCATIONS_MAX",
+    "ENTITLEMENT_API_ENABLED",
 ]

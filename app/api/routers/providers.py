@@ -29,6 +29,7 @@ from ...schemas.provider import (
     ProviderResponse,
     ProviderUpdate,
 )
+from ...services.platform_billing.entitlement_guard import EntitlementGuardService
 
 
 router = APIRouter()
@@ -104,6 +105,15 @@ def create_provider(
     current_user = Depends(get_current_owner),
 ) -> dict:
     """Create a new provider."""
+    # Enforce providers.max quota check
+    EntitlementGuardService.check_quota(
+        db=db,
+        tenant_id=tenant.id,
+        quota_key="providers.max",
+        requested_quantity=1,
+        raise_exception=True,
+    )
+
     try:
         validate_provider_capability_against_tenant(tenant, provider_in)
     except CapabilityHierarchyError as exc:

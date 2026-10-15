@@ -33,6 +33,7 @@ from .platform_billing import (
     EntitlementSnapshot,
     ProviderEventInbox,
     UsageEventOutbox,
+    PlatformEntitlementGrant,
 )
 
 

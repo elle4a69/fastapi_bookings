@@ -11,23 +11,34 @@ export interface TenantModuleInfo {
   icon: string
 }
 
+export interface EntitlementSnapshotInfo {
+  key: string
+  value_type: string
+  value: string
+  is_active: boolean
+  expires_at?: string | null
+}
+
 export interface TenantModulesData {
   tier: string
   addon_quota: number
   used_addons: number
   available_addons: number
   modules: TenantModuleInfo[]
+  entitlements?: Record<string, EntitlementSnapshotInfo>
 }
 
 export interface TenantModulesContextType {
   modulesData: TenantModulesData | null
   enabledModules: string[]
+  entitlements: Record<string, EntitlementSnapshotInfo>
   loading: boolean
   error: string | null
   refreshModules: () => Promise<void>
   toggleModule: (moduleKey: string, enabled: boolean) => Promise<{ ok: boolean; message: string }>
   updateTier: (tier: string, quota?: number) => Promise<{ ok: boolean; message?: string }>
   isModuleEnabled: (moduleKey: string) => boolean
+  checkEntitlement: (key: string, requiredValue?: any) => boolean
   multipleProvidersEnabled: boolean
   locationsEnabled: boolean
   categoriesEnabled: boolean
@@ -44,26 +55,12 @@ export interface TenantModulesContextType {
 
 const TenantModulesContext = createContext<TenantModulesContextType | null>(null)
 
-// Safe fallback for core modules before initial network load completes
-const DEFAULT_FALLBACK_MODULES = [
+// Fallback for core modules before initial network load completes
+const DEFAULT_CORE_MODULES = [
   "dashboard",
   "calendar",
   "bookings",
   "website",
-  "multiple_providers",
-  "providers",
-  "locations",
-  "categories",
-  "products",
-  "addons",
-  "packages",
-  "sms_assistant",
-  "finance_invoicing",
-  "media",
-  "booking_forms",
-  "reviews",
-  "calcom_scheduling",
-  "relationship_matrix",
 ]
 
 export function TenantModulesProvider({ children }: { children: React.ReactNode }) {
@@ -89,9 +86,36 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
     refreshModules()
   }, [refreshModules])
 
+  const entitlements = useMemo<Record<string, EntitlementSnapshotInfo>>(() => {
+    return modulesData?.entitlements || {}
+  }, [modulesData])
+
+  const checkEntitlement = useCallback(
+    (key: string, requiredValue: any = true): boolean => {
+      const snap = entitlements[key]
+      if (!snap || !snap.is_active) return false
+      if (snap.expires_at && new Date(snap.expires_at).getTime() <= Date.now()) {
+        return false
+      }
+      if (snap.value_type === "boolean") {
+        const boolVal = snap.value.toLowerCase() === "true" || snap.value === "1"
+        return boolVal === Boolean(requiredValue)
+      }
+      if (snap.value_type === "numeric") {
+        const numVal = parseFloat(snap.value) || 0
+        if (typeof requiredValue === "number") {
+          return numVal >= requiredValue
+        }
+        return numVal > 0
+      }
+      return snap.value === String(requiredValue)
+    },
+    [entitlements]
+  )
+
   const enabledModules = useMemo(() => {
     if (!modulesData) {
-      return DEFAULT_FALLBACK_MODULES
+      return DEFAULT_CORE_MODULES
     }
     return modulesData.modules.filter((m) => m.enabled).map((m) => m.key)
   }, [modulesData])
@@ -99,6 +123,17 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
   const isModuleEnabled = useCallback(
     (moduleKey: string): boolean => {
       const k = moduleKey.toLowerCase()
+      // Underlying prerequisite entitlement checks if present
+      if (k === "sms_assistant" && modulesData?.entitlements) {
+        if (!checkEntitlement("sms.enabled")) return false
+      }
+      if ((k === "multiple_providers" || k === "providers") && modulesData?.entitlements) {
+        if (!checkEntitlement("providers.max", 2)) return false
+      }
+      if (k === "locations" && modulesData?.entitlements) {
+        if (!checkEntitlement("locations.max", 2)) return false
+      }
+
       if (k === "multiple_providers" || k === "providers") {
         return enabledModules.some((m) => m.toLowerCase() === "multiple_providers" || m.toLowerCase() === "providers")
       }
@@ -110,7 +145,7 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
       }
       return enabledModules.some((m) => m.toLowerCase() === k)
     },
-    [enabledModules]
+    [enabledModules, modulesData, checkEntitlement]
   )
 
   const multipleProvidersEnabled = useMemo(() => isModuleEnabled("multiple_providers"), [isModuleEnabled])
@@ -162,12 +197,14 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
     () => ({
       modulesData,
       enabledModules,
+      entitlements,
       loading,
       error,
       refreshModules,
       toggleModule,
       updateTier,
       isModuleEnabled,
+      checkEntitlement,
       multipleProvidersEnabled,
       locationsEnabled,
       categoriesEnabled,
@@ -184,12 +221,14 @@ export function TenantModulesProvider({ children }: { children: React.ReactNode 
     [
       modulesData,
       enabledModules,
+      entitlements,
       loading,
       error,
       refreshModules,
       toggleModule,
       updateTier,
       isModuleEnabled,
+      checkEntitlement,
       multipleProvidersEnabled,
       locationsEnabled,
       categoriesEnabled,
@@ -213,4 +252,3 @@ export function useTenantModules(): TenantModulesContextType {
   }
   return ctx
 }
-

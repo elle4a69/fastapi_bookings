@@ -302,6 +302,29 @@ def submit_text_turn(
     db: Session = Depends(get_db),
 ) -> BusinessAssistantTextTurnRead:
     """Persist a user turn, then run exactly one bounded text generation request."""
+    # 0. Entitlement and Quota Check (WP3)
+    from ...services.platform_billing.entitlement_guard import (
+        EntitlementGuardService,
+        ENTITLEMENT_ASSISTANT_ENABLED,
+        ENTITLEMENT_ASSISTANT_MONTHLY_RUNS,
+    )
+    if not EntitlementGuardService.has_entitlement(db, tenant.id, ENTITLEMENT_ASSISTANT_ENABLED, True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "entitlement_required",
+                "entitlement_key": ENTITLEMENT_ASSISTANT_ENABLED,
+                "message": "Assistant entitlement ('assistant.enabled') is not active on your plan.",
+            },
+        )
+    EntitlementGuardService.check_quota(
+        db=db,
+        tenant_id=tenant.id,
+        quota_key=ENTITLEMENT_ASSISTANT_MONTHLY_RUNS,
+        requested_quantity=1,
+        raise_exception=True,
+    )
+
     service = _service(db, tenant, user)
     try:
         result = service.submit_text_turn(
@@ -354,6 +377,17 @@ def submit_text_turn(
             status_code=status.HTTP_409_CONFLICT,
             detail="This request key is already bound to a different message payload.",
         ) from exc
+
+    # Record metered usage event with deduplication
+    idempotency_key = f"assistant:{tenant.id}:{payload.request_key}"
+    EntitlementGuardService.record_usage_with_deduplication(
+        db=db,
+        tenant_id=tenant.id,
+        meter_key="assistant_runs",
+        quantity=1,
+        idempotency_key=idempotency_key,
+    )
+
     return BusinessAssistantTextTurnRead(
         user_message=BusinessAssistantMessageRead.model_validate(result.user_message),
         assistant_message=BusinessAssistantMessageRead.model_validate(result.assistant_message),

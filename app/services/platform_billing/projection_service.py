@@ -21,9 +21,18 @@ from app.services.platform_billing.webhook_verifier import webhook_verifier
 
 logger = logging.getLogger(__name__)
 
-# Canonical default plan entitlements
+# Canonical default plan entitlements with stable business catalogue (WP3)
 PLAN_ENTITLEMENT_CATALOG = {
     "starter": {
+        # Stable business entitlement catalogue (WP3)
+        "assistant.enabled": ("boolean", "false"),
+        "assistant.monthly_runs": ("numeric", "50"),
+        "sms.enabled": ("boolean", "true"),
+        "sms.monthly_outbound_messages": ("numeric", "100"),
+        "providers.max": ("numeric", "2"),
+        "locations.max": ("numeric", "1"),
+        "api.enabled": ("boolean", "false"),
+        # Legacy / alias keys for backwards compatibility
         "max_locations": ("numeric", "1"),
         "ai_voice_enabled": ("boolean", "false"),
         "sms_monthly_quota": ("numeric", "100"),
@@ -31,7 +40,16 @@ PLAN_ENTITLEMENT_CATALOG = {
         "features.custom_domain": ("boolean", "false"),
         "features.advanced_reporting": ("boolean", "false"),
     },
-    "pro": {
+    "growth": {
+        # Stable business entitlement catalogue (WP3)
+        "assistant.enabled": ("boolean", "true"),
+        "assistant.monthly_runs": ("numeric", "500"),
+        "sms.enabled": ("boolean", "true"),
+        "sms.monthly_outbound_messages": ("numeric", "1000"),
+        "providers.max": ("numeric", "10"),
+        "locations.max": ("numeric", "5"),
+        "api.enabled": ("boolean", "true"),
+        # Legacy / alias keys for backwards compatibility
         "max_locations": ("numeric", "5"),
         "ai_voice_enabled": ("boolean", "true"),
         "sms_monthly_quota": ("numeric", "1000"),
@@ -39,7 +57,48 @@ PLAN_ENTITLEMENT_CATALOG = {
         "features.custom_domain": ("boolean", "true"),
         "features.advanced_reporting": ("boolean", "false"),
     },
+    "pro": {
+        # Identical to growth
+        "assistant.enabled": ("boolean", "true"),
+        "assistant.monthly_runs": ("numeric", "500"),
+        "sms.enabled": ("boolean", "true"),
+        "sms.monthly_outbound_messages": ("numeric", "1000"),
+        "providers.max": ("numeric", "10"),
+        "locations.max": ("numeric", "5"),
+        "api.enabled": ("boolean", "true"),
+        "max_locations": ("numeric", "5"),
+        "ai_voice_enabled": ("boolean", "true"),
+        "sms_monthly_quota": ("numeric", "1000"),
+        "max_staff": ("numeric", "10"),
+        "features.custom_domain": ("boolean", "true"),
+        "features.advanced_reporting": ("boolean", "false"),
+    },
+    "unlimited": {
+        # Stable business entitlement catalogue (WP3)
+        "assistant.enabled": ("boolean", "true"),
+        "assistant.monthly_runs": ("numeric", "5000"),
+        "sms.enabled": ("boolean", "true"),
+        "sms.monthly_outbound_messages": ("numeric", "10000"),
+        "providers.max": ("numeric", "100"),
+        "locations.max": ("numeric", "100"),
+        "api.enabled": ("boolean", "true"),
+        # Legacy / alias keys for backwards compatibility
+        "max_locations": ("numeric", "100"),
+        "ai_voice_enabled": ("boolean", "true"),
+        "sms_monthly_quota": ("numeric", "10000"),
+        "max_staff": ("numeric", "100"),
+        "features.custom_domain": ("boolean", "true"),
+        "features.advanced_reporting": ("boolean", "true"),
+    },
     "enterprise": {
+        # Identical to unlimited
+        "assistant.enabled": ("boolean", "true"),
+        "assistant.monthly_runs": ("numeric", "5000"),
+        "sms.enabled": ("boolean", "true"),
+        "sms.monthly_outbound_messages": ("numeric", "10000"),
+        "providers.max": ("numeric", "100"),
+        "locations.max": ("numeric", "100"),
+        "api.enabled": ("boolean", "true"),
         "max_locations": ("numeric", "100"),
         "ai_voice_enabled": ("boolean", "true"),
         "sms_monthly_quota": ("numeric", "10000"),

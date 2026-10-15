@@ -13,6 +13,7 @@ from ...schemas.location import (
     LocationResponse,
     LocationUpdate,
 )
+from ...services.platform_billing.entitlement_guard import EntitlementGuardService
 
 
 router = APIRouter()
@@ -96,6 +97,15 @@ def create_location(
     current_user = Depends(get_current_admin),
 ) -> dict:
     """Create a new location."""
+    # Enforce locations.max quota check
+    EntitlementGuardService.check_quota(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        quota_key="locations.max",
+        requested_quantity=1,
+        raise_exception=True,
+    )
+
     location_dict = location_in.model_dump(exclude={"provider_ids", "service_ids", "category_ids", "product_ids"})
     location = LocationModel(tenant_id=current_user.tenant_id, **location_dict)
     db.add(location)

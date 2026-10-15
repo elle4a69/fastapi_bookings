@@ -20,6 +20,16 @@ class TenantModuleInfo(BaseModel):
     icon: str = Field(..., description="Lucide icon name identifier")
 
 
+class EntitlementSnapshotInfo(BaseModel):
+    """Authoritative entitlement snapshot item."""
+
+    key: str = Field(..., description="Canonical entitlement key")
+    value_type: str = Field(..., description="Type of the entitlement: boolean, numeric, string")
+    value: str = Field(..., description="Serialized value or limit")
+    is_active: bool = Field(True, description="Whether this entitlement is currently active")
+    expires_at: Optional[str] = Field(None, description="Optional ISO timestamp when entitlement expires")
+
+
 class TenantModulesResponse(BaseModel):
     """Full entitlements and modules payload for the tenant."""
 
@@ -28,6 +38,10 @@ class TenantModulesResponse(BaseModel):
     used_addons: int = Field(..., description="Number of currently enabled add-on modules")
     available_addons: int = Field(..., description="Remaining available add-on slots")
     modules: List[TenantModuleInfo] = Field(..., description="Catalog of all modules and their status")
+    entitlements: Optional[dict[str, EntitlementSnapshotInfo]] = Field(
+        default=None,
+        description="Authoritative active entitlements projection for this tenant",
+    )
 
 
 class ToggleModuleRequest(BaseModel):

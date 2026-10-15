@@ -280,3 +280,64 @@ class UsageEventOutbox(Base):
 
     def __repr__(self) -> str:
         return f"<UsageEventOutbox id={self.id} tenant_id={self.tenant_id} meter={self.meter_key} qty={self.quantity} state={self.delivery_state}>"
+
+
+class PlatformEntitlementGrant(Base):
+    """Platform-authorized explicit entitlement overrides and exceptions (WP3).
+
+    Allows platform operators to grant custom capabilities, beta features,
+    or quota increases that take precedence over the subscription projection.
+    Supports expiring grants and auditing.
+
+    Attributes:
+        id: Primary key.
+        tenant_id: Internal tenant ID receiving the grant.
+        entitlement_key: Canonical entitlement key (e.g. 'assistant.enabled', 'sms.monthly_outbound_messages').
+        value_type: Type descriptor ('boolean', 'numeric', 'string').
+        granted_value: String representation of the granted limit or state.
+        expires_at: Optional expiration timestamp. If null, grant does not expire automatically.
+        reason: Mandatory operational reason for the override.
+        granted_by_user_id: ID of the platform operator granting the override.
+        is_revoked: Whether this grant has been manually revoked.
+        created_at: Record creation timestamp.
+        updated_at: Record update timestamp.
+    """
+
+    __tablename__ = "platform_entitlement_grants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entitlement_key = Column(String(128), nullable=False, index=True)
+    value_type = Column(String(32), default="boolean", nullable=False)
+    granted_value = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    reason = Column(Text, nullable=False)
+    granted_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    is_revoked = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    tenant = relationship("Tenant", backref="platform_entitlement_grants")
+    granted_by = relationship("User", foreign_keys=[granted_by_user_id])
+
+    def __repr__(self) -> str:
+        return f"<PlatformEntitlementGrant id={self.id} tenant_id={self.tenant_id} key={self.entitlement_key} val={self.granted_value} revoked={self.is_revoked}>"
