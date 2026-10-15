@@ -389,3 +389,9 @@ npm test
 ```bash
 python ../scripts/verify_living_docs.py --path README.md
 ```
+# Planning ledger note
+
+The v2 supervisor facade has a planning-only ledger for missions, work packages,
+immutable brief revisions, structural checkpoints, and non-verdict audit scopes.
+Cutover remains `v1_only`: this ledger cannot dispatch work, run commands, or
+grant execution authority.

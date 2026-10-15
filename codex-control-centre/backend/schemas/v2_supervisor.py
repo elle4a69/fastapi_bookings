@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 SCHEMA_VERSION = "0.1"
-ACTION_REGISTRY_VERSION = "0.1"
+ACTION_REGISTRY_VERSION = "0.2"
 
 
 class StrictModel(BaseModel):
@@ -43,8 +43,8 @@ class ErrorEnvelope(StrictModel):
 
 class InfrastructureSnapshot(StrictModel):
     state: Literal["ready", "migration_required"]
-    current_revision: Literal["001", "002", "003", "unknown"] | None
-    expected_revision: Literal["003"] = "003"
+    current_revision: Literal["001", "002", "003", "004", "unknown"] | None
+    expected_revision: Literal["004"] = "004"
     reason_codes: list[str]
 
 
@@ -62,7 +62,7 @@ class ConfirmationDescriptor(StrictModel):
 
 
 class ClaimActionDescriptor(StrictModel):
-    registry_version: Literal["0.1"] = ACTION_REGISTRY_VERSION
+    registry_version: Literal["0.2"] = ACTION_REGISTRY_VERSION
     action: Literal["claim_project"] = "claim_project"
     allowed: Literal[True] = True
     reason_code: None = None
@@ -104,7 +104,7 @@ class Capabilities(StrictModel):
 
 class BootstrapData(StrictModel):
     capabilities: Capabilities
-    action_registry_version: Literal["0.1"] = ACTION_REGISTRY_VERSION
+    action_registry_version: Literal["0.2"] = ACTION_REGISTRY_VERSION
     infrastructure: InfrastructureSnapshot
     project_resolution: ProjectResolutionSnapshot | None
     cutover: CutoverSnapshot | None
@@ -143,7 +143,7 @@ class ProjectsEnvelope(StrictModel):
 
 class ClaimRequest(StrictModel):
     action: Literal["claim_project"]
-    registry_version: Literal["0.1"]
+    registry_version: Literal["0.2"]
     expected_version: int = Field(ge=0)
     confirmation: Literal[True]
 

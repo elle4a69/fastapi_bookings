@@ -225,7 +225,7 @@ class IdempotencyRecord(Base):
             "AND substr(lease_owner, 5) NOT GLOB '*[^0-9a-f]*')",
             name="ck_idempotency_lease_owner",
         ),
-        CheckConstraint("action_code = 'claim_project'", name="ck_idempotency_action"),
+        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope')", name="ck_idempotency_action"),
         CheckConstraint(
             "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'",
             name="ck_idempotency_request_fingerprint",
@@ -285,8 +285,8 @@ class SupervisorEvent(Base):
         ),
         UniqueConstraint("request_id", "action_code", name="uq_supervisor_event_request_action"),
         CheckConstraint("actor_tenant_id > 0 AND actor_user_id > 0", name="ck_supervisor_event_scope"),
-        CheckConstraint("action_code = 'claim_project'", name="ck_supervisor_event_action"),
-        CheckConstraint("schema_version = '0.1'", name="ck_supervisor_event_schema"),
+        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope')", name="ck_supervisor_event_action"),
+        CheckConstraint("schema_version IN ('0.1','0.2')", name="ck_supervisor_event_schema"),
         CheckConstraint("project_version >= 1", name="ck_supervisor_event_project_version"),
         CheckConstraint("project_sequence >= 1", name="ck_supervisor_event_sequence"),
         CheckConstraint("outcome = 'succeeded'", name="ck_supervisor_event_outcome"),
@@ -297,3 +297,80 @@ class SupervisorEvent(Base):
             name="ck_supervisor_event_previous_digest",
         ),
     )
+
+
+class PlanningMission(Base):
+    __tablename__ = "planning_missions"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    title = Column(String(160), nullable=False)
+    summary = Column(String(1200), nullable=False)
+    state = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("id LIKE 'mis_%'", name="ck_mission_id"), CheckConstraint("tenant_id > 0 AND owner_user_id > 0 AND version >= 1", name="ck_mission_scope"), CheckConstraint("state IN ('draft','planned')", name="ck_mission_state"))
+
+
+class PlanningWorkPackage(Base):
+    __tablename__ = "planning_work_packages"
+    id = Column(String, primary_key=True)
+    mission_id = Column(String, ForeignKey("planning_missions.id", ondelete="RESTRICT"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    title = Column(String(160), nullable=False)
+    scope = Column(String(1600), nullable=False)
+    state = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("id LIKE 'wpk_%'", name="ck_work_package_id"), CheckConstraint("tenant_id > 0 AND owner_user_id > 0 AND version >= 1", name="ck_work_package_scope"), CheckConstraint("state IN ('draft','brief_ready','brief_approved')", name="ck_work_package_state"))
+
+
+class PlanningBrief(Base):
+    __tablename__ = "planning_briefs"
+    id = Column(String, primary_key=True)
+    work_package_id = Column(String, ForeignKey("planning_work_packages.id", ondelete="RESTRICT"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    revision = Column(Integer, nullable=False)
+    content = Column(String(4000), nullable=False)
+    content_digest = Column(String(64), nullable=False)
+    future_execution_authorization_requirement = Column(String, nullable=False, default="requires_authorization")
+    state = Column(String, nullable=False, default="draft")
+    version = Column(Integer, nullable=False, default=1)
+    approved_by_user_id = Column(Integer, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (UniqueConstraint("work_package_id", "revision", name="uq_brief_revision"), CheckConstraint("id LIKE 'brf_%'", name="ck_brief_id"), CheckConstraint("state IN ('draft','approved','superseded')", name="ck_brief_state"), CheckConstraint("future_execution_authorization_requirement IN ('requires_authorization','not_required_once_requested')", name="ck_brief_authorization"))
+
+
+class PlanningContextCheckpoint(Base):
+    __tablename__ = "planning_context_checkpoints"
+    id = Column(String, primary_key=True)
+    mission_id = Column(String, ForeignKey("planning_missions.id", ondelete="RESTRICT"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    sequence = Column(Integer, nullable=False)
+    summary = Column(String(1600), nullable=False)
+    decisions = Column(String(1600), nullable=False)
+    constraints = Column(String(1600), nullable=False)
+    open_questions = Column(String(1600), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (UniqueConstraint("mission_id", "sequence", name="uq_checkpoint_sequence"), CheckConstraint("id LIKE 'ctx_%'", name="ck_checkpoint_id"))
+
+
+class PlanningAuditScope(Base):
+    __tablename__ = "planning_audit_scopes"
+    id = Column(String, primary_key=True)
+    work_package_id = Column(String, ForeignKey("planning_work_packages.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    criteria = Column(String(2000), nullable=False)
+    exclusions = Column(String(1200), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint("id LIKE 'asc_%'", name="ck_audit_scope_id"),)

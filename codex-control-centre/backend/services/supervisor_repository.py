@@ -24,7 +24,138 @@ from backend.services.legacy_adoption_service import (
     load_configured_project,
     paths_are_same,
 )
-from backend.services.supervisor_event_service import append_claim_event
+from backend.services.supervisor_event_service import append_claim_event, append_planning_event
+
+# WP-UI-01B planning ledger helpers.  They deliberately contain no worker,
+# execution, filesystem, Git, tool, or evidence capability.
+from backend.models.codex import PlanningMission, PlanningWorkPackage, PlanningBrief, PlanningContextCheckpoint, PlanningAuditScope
+import hashlib
+import re
+
+# Planning text is a deliberately small, structural vocabulary.  It is not a
+# prompt, a work log, source material, or a place to retain personal data.
+_STRUCTURAL_TEXT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ,.?!&'()_-]*$")
+_FORBIDDEN_TEXT_TOKENS = frozenset({
+    "address", "apikey", "auth", "authorization", "code", "command", "credential",
+    "credentials", "directory", "email", "evidence", "file", "filepath", "finding",
+    "key", "keys", "log", "logs", "output", "outcome", "password", "path", "phone",
+    "pii", "prompt", "prompts", "result", "results", "secret", "secrets", "shell",
+    "source", "token", "tokens", "transcript", "verdict", "class", "def", "function",
+    "import", "print", "return", "system", "assistant", "instruction", "instructions",
+})
+_SHELL_TOKENS = frozenset({"bash", "cd", "cmd", "curl", "dir", "docker", "git", "ls", "mkdir", "npm", "pip", "powershell", "py", "pytest", "python", "rm", "sh"})
+_PROMPT_FRAMES = ("you are ", "act as ", "ignore previous", "follow these", "as an ai")
+_EMAIL = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
+_PHONE = re.compile(r"(?:\+?61|0)\s*4\d(?:[\s-]*\d){7}\b|\b\d{8,}\b")
+
+def _safe_text(value: object, maximum: int, field: str) -> str:
+    """Allow only bounded structural planning prose, never operational material."""
+    if not isinstance(value, str):
+        raise SupervisorHTTPError(422, "validation_failed")
+    normalized = value.strip()
+    lowered = normalized.lower()
+    tokens = set(re.findall(r"[a-z]+", lowered))
+    # A field name is intentionally accepted only as a schema selector; all
+    # fields use the same privacy-safe structural grammar in v0.2.
+    if field not in {"title", "summary", "scope", "content", "decisions", "constraints", "open_questions", "criteria", "exclusions"}:
+        raise SupervisorHTTPError(422, "validation_failed")
+    if (not normalized or len(normalized) > maximum or not _STRUCTURAL_TEXT.fullmatch(normalized)
+            or bool(tokens & _FORBIDDEN_TEXT_TOKENS) or bool(tokens & _SHELL_TOKENS)
+            or any(frame in lowered for frame in _PROMPT_FRAMES)
+            or _EMAIL.search(normalized) or _PHONE.search(normalized)):
+        raise SupervisorHTTPError(422, "validation_failed")
+    return normalized
+
+def _scoped(connection: Connection, table, identifier: str, actor: ActorScope):
+    row = connection.execute(select(table).where(table.c.id == identifier, table.c.tenant_id == actor.tenant_id, table.c.owner_user_id == actor.user_id)).first()
+    if row is None:
+        raise SupervisorHTTPError(404, "resource_not_found")
+    return row._mapping
+
+def _claimed_project(connection: Connection, project_id: str, actor: ActorScope):
+    row = connection.execute(select(Project.__table__).where(Project.__table__.c.public_id == project_id, Project.__table__.c.tenant_id == actor.tenant_id, Project.__table__.c.owner_user_id == actor.user_id, Project.__table__.c.scope_state == "claimed")).first()
+    if row is None:
+        raise SupervisorHTTPError(404, "resource_not_found")
+    return row._mapping
+
+def _parent(connection: Connection, action: str, identifier: str, actor: ActorScope):
+    if action == "create_mission":
+        return _claimed_project(connection, identifier, actor), "project"
+    if action in {"create_work_package", "record_context_checkpoint"}:
+        mission = _scoped(connection, PlanningMission.__table__, identifier, actor)
+        project = _scoped(connection, Project.__table__, mission["project_id"], actor)
+        if project["scope_state"] != "claimed": raise SupervisorHTTPError(404, "resource_not_found")
+        return mission, "mission"
+    if action == "approve_brief":
+        brief = _scoped(connection, PlanningBrief.__table__, identifier, actor)
+        work = _scoped(connection, PlanningWorkPackage.__table__, brief["work_package_id"], actor)
+        mission = _scoped(connection, PlanningMission.__table__, work["mission_id"], actor)
+        project = _scoped(connection, Project.__table__, mission["project_id"], actor)
+        if project["scope_state"] != "claimed": raise SupervisorHTTPError(404, "resource_not_found")
+        return brief, "brief"
+    work = _scoped(connection, PlanningWorkPackage.__table__, identifier, actor)
+    mission = _scoped(connection, PlanningMission.__table__, work["mission_id"], actor)
+    project = _scoped(connection, Project.__table__, mission["project_id"], actor)
+    if project["scope_state"] != "claimed": raise SupervisorHTTPError(404, "resource_not_found")
+    return work, "work_package"
+
+def planning_parent_version(action: str, identifier: str, actor: ActorScope) -> int:
+    with database.engine.connect() as connection:
+        parent, _ = _parent(connection, action, identifier, actor)
+        return int(parent["version"])
+
+def planning_parent_version_in_transaction(connection: Connection, action: str, identifier: str, actor: ActorScope) -> int:
+    parent, _ = _parent(connection, action, identifier, actor)
+    return int(parent["version"])
+
+def planning_get(kind: str, identifier: str, actor: ActorScope) -> dict[str, object]:
+    action = {"mission":"create_work_package", "work_package":"create_brief", "brief":"approve_brief"}[kind]
+    with database.engine.connect() as connection:
+        parent, _ = _parent(connection, action, identifier, actor)
+        return dict(parent)
+
+def planning_list(kind: str, parent_id: str, actor: ActorScope) -> list[dict[str, object]]:
+    action = {"mission":"create_mission", "work_package":"create_work_package", "brief":"create_brief", "checkpoint":"record_context_checkpoint", "audit_scope":"define_audit_scope"}[kind]
+    table, field = {"mission":(PlanningMission.__table__, "project_id"), "work_package":(PlanningWorkPackage.__table__, "mission_id"), "brief":(PlanningBrief.__table__, "work_package_id"), "checkpoint":(PlanningContextCheckpoint.__table__, "mission_id"), "audit_scope":(PlanningAuditScope.__table__, "work_package_id")}[kind]
+    with database.engine.connect() as connection:
+        parent, _ = _parent(connection, action, parent_id, actor)
+        key = parent["id"]
+        return [dict(row._mapping) for row in connection.execute(select(table).where(table.c.tenant_id == actor.tenant_id, table.c.owner_user_id == actor.user_id, getattr(table.c, field) == key).order_by(table.c.created_at)).all()]
+
+def planning_create_in_transaction(connection: Connection, kind: str, parent_id: str, payload: dict[str, object], actor: ActorScope) -> tuple[dict[str, object], str, int]:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    action = {"mission":"create_mission", "work_package":"create_work_package", "brief":"create_brief", "checkpoint":"record_context_checkpoint", "audit_scope":"define_audit_scope"}[kind]
+    parent, _ = _parent(connection, action, parent_id, actor)
+    if kind == "mission":
+        values = {"id":"mis_"+uuid.uuid4().hex, "project_id":parent["id"], "tenant_id":actor.tenant_id, "owner_user_id":actor.user_id, "title":_safe_text(payload.get("title"),160,"title"), "summary":_safe_text(payload.get("summary"),1200,"summary"), "state":"draft", "version":1, "created_at":now}; table=PlanningMission.__table__; project_id=parent["public_id"]; project_version=int(parent["version"])
+    elif kind == "work_package":
+        values = {"id":"wpk_"+uuid.uuid4().hex,"mission_id":parent["id"],"project_id":parent["project_id"],"tenant_id":actor.tenant_id,"owner_user_id":actor.user_id,"title":_safe_text(payload.get("title"),160,"title"),"scope":_safe_text(payload.get("scope"),1600,"scope"),"state":"draft","version":1,"created_at":now}; table=PlanningWorkPackage.__table__; project_id=_scoped(connection,Project.__table__,parent["project_id"],actor)["public_id"]; project_version=int(_scoped(connection,Project.__table__,parent["project_id"],actor)["version"])
+    elif kind == "brief":
+        auth=payload.get("future_execution_authorization_requirement", "requires_authorization")
+        if auth not in {"requires_authorization", "not_required_once_requested"}: raise SupervisorHTTPError(422,"validation_failed")
+        revision=(connection.execute(select(PlanningBrief.__table__.c.revision).where(PlanningBrief.__table__.c.work_package_id==parent["id"]).order_by(PlanningBrief.__table__.c.revision.desc()).limit(1)).scalar() or 0)+1
+        content=_safe_text(payload.get("content"),4000,"content"); values={"id":"brf_"+uuid.uuid4().hex,"work_package_id":parent["id"],"project_id":parent["project_id"],"tenant_id":actor.tenant_id,"owner_user_id":actor.user_id,"revision":int(revision),"content":content,"content_digest":hashlib.sha256(content.encode()).hexdigest(),"future_execution_authorization_requirement":auth,"state":"draft","version":1,"approved_by_user_id":None,"approved_at":None,"created_at":now}; table=PlanningBrief.__table__; project_id=_scoped(connection,Project.__table__,parent["project_id"],actor)["public_id"]; project_version=int(_scoped(connection,Project.__table__,parent["project_id"],actor)["version"])
+    elif kind == "checkpoint":
+        sequence=(connection.execute(select(PlanningContextCheckpoint.__table__.c.sequence).where(PlanningContextCheckpoint.__table__.c.mission_id==parent["id"]).order_by(PlanningContextCheckpoint.__table__.c.sequence.desc()).limit(1)).scalar() or 0)+1
+        values={"id":"ctx_"+uuid.uuid4().hex,"mission_id":parent["id"],"project_id":parent["project_id"],"tenant_id":actor.tenant_id,"owner_user_id":actor.user_id,"sequence":int(sequence),"summary":_safe_text(payload.get("summary"),1600,"summary"),"decisions":_safe_text(payload.get("decisions"),1600,"decisions"),"constraints":_safe_text(payload.get("constraints"),1600,"constraints"),"open_questions":_safe_text(payload.get("open_questions"),1600,"open_questions"),"created_at":now}; table=PlanningContextCheckpoint.__table__; project_id=_scoped(connection,Project.__table__,parent["project_id"],actor)["public_id"]; project_version=int(_scoped(connection,Project.__table__,parent["project_id"],actor)["version"])
+    else:
+        approved=connection.execute(select(PlanningBrief.__table__.c.id).where(PlanningBrief.__table__.c.work_package_id==parent["id"],PlanningBrief.__table__.c.state=="approved")).first()
+        if approved is None: raise SupervisorHTTPError(409,"approved_brief_required")
+        values={"id":"asc_"+uuid.uuid4().hex,"work_package_id":parent["id"],"project_id":parent["project_id"],"tenant_id":actor.tenant_id,"owner_user_id":actor.user_id,"criteria":_safe_text(payload.get("criteria"),2000,"criteria"),"exclusions":_safe_text(payload.get("exclusions"),1200,"exclusions"),"created_at":now}; table=PlanningAuditScope.__table__; project_id=_scoped(connection,Project.__table__,parent["project_id"],actor)["public_id"]; project_version=int(_scoped(connection,Project.__table__,parent["project_id"],actor)["version"])
+    connection.execute(table.insert().values(**values))
+    if kind == "brief" and parent["state"] == "brief_approved":
+        connection.execute(update(PlanningWorkPackage.__table__).where(PlanningWorkPackage.__table__.c.id == parent["id"]).values(state="brief_ready", version=int(parent["version"]) + 1))
+    return values, str(project_id), project_version
+
+def planning_approve_in_transaction(connection: Connection, brief_id: str, actor: ActorScope) -> tuple[dict[str, object], str, int]:
+    brief, _ = _parent(connection, "approve_brief", brief_id, actor)
+    if brief["state"] != "draft": raise SupervisorHTTPError(409,"brief_not_draft")
+    now=datetime.now(timezone.utc).replace(microsecond=0)
+    connection.execute(update(PlanningBrief.__table__).where(PlanningBrief.__table__.c.id==brief_id).values(state="approved",approved_by_user_id=actor.user_id,approved_at=now,version=int(brief["version"])+1))
+    connection.execute(update(PlanningBrief.__table__).where(PlanningBrief.__table__.c.work_package_id==brief["work_package_id"],PlanningBrief.__table__.c.id!=brief_id,PlanningBrief.__table__.c.state=="approved").values(state="superseded"))
+    connection.execute(update(PlanningWorkPackage.__table__).where(PlanningWorkPackage.__table__.c.id==brief["work_package_id"]).values(state="brief_approved",version=PlanningWorkPackage.__table__.c.version+1))
+    project=_scoped(connection,Project.__table__,brief["project_id"],actor)
+    return {**dict(brief),"state":"approved","version":int(brief["version"])+1,"approved_by_user_id":actor.user_id,"approved_at":now}, str(project["public_id"]), int(project["version"])
 
 
 MAX_PROJECT_IDENTITY_ROWS = 512
@@ -35,6 +166,10 @@ DETERMINISTIC_FAILURES = {
     "supervisor_quarantined",
     "revision_conflict",
     "supervisor_unconfigured",
+    "resource_not_found",
+    "validation_failed",
+    "approved_brief_required",
+    "brief_not_draft",
 }
 
 

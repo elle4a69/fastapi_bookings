@@ -78,6 +78,21 @@ def append_claim_event(
     return event
 
 
+def append_planning_event(connection: Connection, *, project_public_id: str, actor: ActorScope, action_code: str, project_version: int, request_id: str, idempotency_key: str) -> SupervisorEvent:
+    """Append a low-sensitivity planning action to the existing digest chain."""
+    table = SupervisorEvent.__table__
+    prior = connection.execute(select(table.c.project_sequence, table.c.integrity_digest).where(table.c.project_public_id == project_public_id).order_by(table.c.project_sequence.desc()).limit(1)).first()
+    sequence = 1 if prior is None else int(prior.project_sequence) + 1
+    previous = None if prior is None else str(prior.integrity_digest)
+    occurred = utc_now()
+    payload = canonical_json_bytes({"planning_action": action_code, "execution_authority": "none"}).decode("utf-8")
+    payload_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    material={"action_code":action_code,"idempotency_key_hash":hashlib.sha256(idempotency_key.encode("ascii")).hexdigest(),"occurred_at":occurred.isoformat(),"outcome":"succeeded","payload_sha256":payload_hash,"previous_digest":previous,"project_public_id":project_public_id,"project_sequence":sequence,"project_version":project_version,"request_id":request_id,"schema_version":"0.2"}
+    event=SupervisorEvent(event_key="evt_"+uuid.uuid4().hex,project_public_id=project_public_id,project_sequence=sequence,actor_tenant_id=actor.tenant_id,actor_user_id=actor.user_id,action_code=action_code,outcome="succeeded",project_version=project_version,request_id=request_id,idempotency_key_hash=material["idempotency_key_hash"],payload=payload,payload_sha256=payload_hash,schema_version="0.2",previous_digest=previous,integrity_digest=hashlib.sha256(canonical_json_bytes(material)).hexdigest(),occurred_at=occurred)
+    connection.execute(table.insert().values(**{column.name:getattr(event,column.name) for column in table.columns}))
+    return event
+
+
 def verify_project_chain(connection: Connection, project_public_id: str) -> bool:
     rows = connection.execute(
         select(SupervisorEvent.__table__)

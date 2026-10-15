@@ -165,3 +165,8 @@ runs, evidence and audit. No optional presentation adapter is permitted until
 the separately approved comparative spike prerequisites pass.
 
 Rollback of this documentation package is an ordinary reviewed revert. P0 security controls are not silently reverted.
+# WP-UI-01B planning posture
+
+Revision 004 permits durable planning metadata only. `not_required_once_requested`
+is future execution authorization metadata, not an effective permission or bypass;
+a later run/dispatch boundary must create its own scoped authorization grant.

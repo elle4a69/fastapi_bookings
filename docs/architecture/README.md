@@ -61,3 +61,7 @@ python scripts/verify_living_docs.py --path docs/architecture/README.md
 python scripts/query_docs.py --search "Codex Supervisor v2 facade"
 git diff --check
 ```
+# Codex planning ledger
+
+See the Codex supervisor facade ADR for the v2 planning-only ledger and its fixed
+`v1_only` cutover boundary.

@@ -73,7 +73,7 @@ def canonical_fingerprint(
         "expected_version": expected_version,
         "method": "POST",
         "project_id": project_id,
-        "registry_version": "0.1",
+        "registry_version": "0.2",
         "route": "/api/admin/codex/v2/projects/{project_id}/claim",
         "schema_version": "0.1",
     }
@@ -106,13 +106,13 @@ def _row_to_result(row, fingerprint: str, now: datetime) -> Reservation | None:
     return None
 
 
-def _select_scoped(connection: Connection, actor: ActorScope, idempotency_key: str):
+def _select_scoped(connection: Connection, actor: ActorScope, idempotency_key: str, action_code: str = "claim_project"):
     table = IdempotencyRecord.__table__
     return connection.execute(
         select(table).where(
             table.c.tenant_id == actor.tenant_id,
             table.c.user_id == actor.user_id,
-            table.c.action_code == "claim_project",
+            table.c.action_code == action_code,
             table.c.idempotency_key == idempotency_key,
         )
     ).first()
@@ -131,6 +131,7 @@ def reserve(
     actor: ActorScope,
     idempotency_key: str,
     fingerprint: str,
+    action_code: str = "claim_project",
     db_engine: Engine | None = None,
 ) -> Reservation:
     """Read first, then commit a short reservation or CAS reclaim."""
@@ -144,7 +145,7 @@ def reserve(
             try:
                 connection.exec_driver_sql("PRAGMA query_only=ON")
                 connection.exec_driver_sql("PRAGMA busy_timeout=1000")
-                row = _select_scoped(connection, actor, idempotency_key)
+                row = _select_scoped(connection, actor, idempotency_key, action_code)
                 readable = _row_to_result(row, fingerprint, now)
             finally:
                 connection.rollback()
@@ -162,7 +163,7 @@ def reserve(
         table = IdempotencyRecord.__table__
         with selected_engine.connect() as connection:
             _begin_immediate(connection)
-            current = _select_scoped(connection, actor, idempotency_key)
+            current = _select_scoped(connection, actor, idempotency_key, action_code)
             current_result = _row_to_result(current, fingerprint, utc_now())
             if current_result is not None:
                 connection.rollback()
@@ -188,7 +189,7 @@ def reserve(
                         id=record_id,
                         tenant_id=actor.tenant_id,
                         user_id=actor.user_id,
-                        action_code="claim_project",
+                        action_code=action_code,
                         idempotency_key=idempotency_key,
                         request_id=request_id,
                         created_at=acquired_at,
@@ -234,6 +235,7 @@ def reserve(
                         actor=actor,
                         idempotency_key=idempotency_key,
                         fingerprint=fingerprint,
+                    action_code=action_code,
                         db_engine=selected_engine,
                     )
             connection.commit()

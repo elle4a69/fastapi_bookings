@@ -5,6 +5,8 @@ from pathlib import Path
 import uuid
 from unittest.mock import AsyncMock, patch
 from sqlalchemy.orm import Session
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -22,7 +24,7 @@ def _migrate_isolated_codex_database():
         revisions = connection.exec_driver_sql(
             "SELECT version_num FROM alembic_version"
         ).fetchall()
-    assert revisions == [("003",)]
+    assert revisions == [("004",)]
     yield
     import gc
 
@@ -832,5 +834,226 @@ def test_supervisor_v2_cross_scope_exact_root_is_hidden_and_claim_returns_404(
                 Project.id.like("hidden-volume-api-%")
             ).delete(synchronize_session=False)
             codex_db.commit()
+
+
+def _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch):
+    from backend.config import settings as cfg
+    repository = tmp_path / "planning-repository"
+    repository.mkdir()
+    project_id = "prj_" + uuid.uuid4().hex[:16]
+    monkeypatch.setattr(cfg, "codex_supervisor_configured_project_id", project_id)
+    monkeypatch.setattr(cfg, "codex_supervisor_configured_project_root", str(repository))
+    monkeypatch.setattr(cfg, "codex_supervisor_configured_project_name", "Planning test")
+    monkeypatch.setattr(cfg, "codex_supervisor_configured_default_branch", "main")
+    _, _, headers = _create_admin_user(db_session, suffix="planning-" + uuid.uuid4().hex[:8])
+    claimed = client.post(
+        f"/api/admin/codex/v2/projects/{project_id}/claim",
+        headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"project-0"'},
+        json={"action": "claim_project", "registry_version": "0.2", "expected_version": 0, "confirmation": True},
+    )
+    assert claimed.status_code == 200, claimed.text
+    return project_id, headers
+
+
+def _planning_post(client, path, headers, action, parent_etag, **payload):
+    return client.post(
+        path,
+        headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": parent_etag},
+        json={"action": action, "registry_version": "0.2", "confirmation": True, **payload},
+    )
+
+
+def test_supervisor_v2_planning_ledger_persists_full_inert_workflow(client, db_session, tmp_path, monkeypatch):
+    project_id, headers = _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch)
+    stale = _planning_post(client, f"/api/admin/codex/v2/projects/{project_id}/missions", headers, "create_mission", '"project-0"', title="Plan", summary="Structural summary")
+    assert stale.status_code == 412
+    mission_response = _planning_post(client, f"/api/admin/codex/v2/projects/{project_id}/missions", headers, "create_mission", '"project-1"', title="Plan", summary="Structural summary")
+    assert mission_response.status_code == 200, mission_response.text
+    assert mission_response.headers["cache-control"] == "no-store"
+    assert mission_response.headers["etag"].startswith('"mission-v1-')
+    mission = mission_response.json()["data"]["mission"]
+    work_response = _planning_post(client, f"/api/admin/codex/v2/missions/{mission['id']}/work-packages", headers, "create_work_package", '"mission-1"', title="Backend foundation", scope="Durable planning API")
+    assert work_response.status_code == 200, work_response.text
+    work = work_response.json()["data"]["work_package"]
+    brief_response = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/briefs", headers, "create_brief", '"work_package-1"', content="Implement bounded planning interfaces", future_execution_authorization_requirement="not_required_once_requested")
+    assert brief_response.status_code == 200, brief_response.text
+    brief = brief_response.json()["data"]["brief"]
+    assert brief["future_execution_authorization_requirement"] == "not_required_once_requested"
+    assert "run" not in brief_response.text.lower()
+    approved = _planning_post(client, f"/api/admin/codex/v2/briefs/{brief['id']}/approve", headers, "approve_brief", '"brief-1"')
+    assert approved.status_code == 200, approved.text
+    checkpoint = _planning_post(client, f"/api/admin/codex/v2/missions/{mission['id']}/context-checkpoints", headers, "record_context_checkpoint", '"mission-1"', summary="Current scope", decisions="Planning only", constraints="No execution", open_questions="None")
+    assert checkpoint.status_code == 200, checkpoint.text
+    scope = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/audit-scope", headers, "define_audit_scope", '"work_package-2"', criteria="API isolation", exclusions="No production actions")
+    assert scope.status_code == 200, scope.text
+    assert client.get(f"/api/admin/codex/v2/missions/{mission['id']}", headers=headers).json()["data"]["mission"]["id"] == mission["id"]
+    assert len(client.get(f"/api/admin/codex/v2/missions/{mission['id']}/context-checkpoints", headers=headers).json()["data"]["context_checkpoints"]) == 1
+    assert client.get(f"/api/admin/codex/v2/work-packages/{work['id']}/audit-scope", headers=headers).json()["data"]["audit_scope"]["id"].startswith("asc_")
+
+    # The mounted workflow must leave behind a ledger that cannot be altered
+    # by a direct SQL caller.  This proves the migration triggers, rather than
+    # only route-level checks, protect the durable planning context.
+    from backend.database import engine as codex_engine
+
+    with pytest.raises(IntegrityError, match="planning_append_only"):
+        with codex_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM planning_missions WHERE id=:id"), {"id": mission["id"]}
+            )
+    with pytest.raises(IntegrityError, match="planning_work_package_immutable"):
+        with codex_engine.begin() as connection:
+            connection.execute(
+                text("UPDATE planning_work_packages SET created_at=CURRENT_TIMESTAMP WHERE id=:id"),
+                {"id": work["id"]},
+            )
+    with pytest.raises(IntegrityError, match="planning_brief_immutable"):
+        with codex_engine.begin() as connection:
+            connection.execute(
+                text("UPDATE planning_briefs SET created_at=CURRENT_TIMESTAMP WHERE id=:id"),
+                {"id": brief["id"]},
+            )
+    with codex_engine.connect() as connection:
+        internal_project_id = connection.execute(
+            text("SELECT id FROM projects WHERE public_id=:id"), {"id": project_id}
+        ).scalar_one()
+    with pytest.raises(IntegrityError, match="planning_parent_scope"):
+        with codex_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO planning_missions "
+                    "(id,project_id,tenant_id,owner_user_id,title,summary,state,version,created_at) "
+                    "VALUES (:id,:project_id,:tenant_id,:owner_user_id,'Forged','Forged','draft',1,CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": "mis_" + uuid.uuid4().hex,
+                    "project_id": internal_project_id,
+                    "tenant_id": 999999,
+                    "owner_user_id": 999999,
+                },
+            )
+
+
+def test_planning_approved_brief_revision_supersedes_and_replays(client, db_session, tmp_path, monkeypatch):
+    project_id, headers = _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch)
+    mission = _planning_post(client, f"/api/admin/codex/v2/projects/{project_id}/missions", headers, "create_mission", '"project-1"', title="Planning", summary="Durable planning scope").json()["data"]["mission"]
+    work = _planning_post(client, f"/api/admin/codex/v2/missions/{mission['id']}/work-packages", headers, "create_work_package", '"mission-1"', title="Foundation", scope="Planning persistence").json()["data"]["work_package"]
+    first = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/briefs", headers, "create_brief", '"work_package-1"', content="Define safe planning records").json()["data"]["brief"]
+    _planning_post(client, f"/api/admin/codex/v2/briefs/{first['id']}/approve", headers, "approve_brief", '"brief-1"')
+    second = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/briefs", headers, "create_brief", '"work_package-2"', content="Refine safe planning records").json()["data"]["brief"]
+    ready = client.get(f"/api/admin/codex/v2/work-packages/{work['id']}", headers=headers)
+    assert ready.json()["data"]["work_package"]["state"] == "brief_ready"
+    key = str(uuid.uuid4())
+    request_headers = {**headers, "Idempotency-Key": key, "If-Match": '"brief-1"'}
+    body = {"action":"approve_brief", "registry_version":"0.2", "confirmation":True}
+    approved = client.post(f"/api/admin/codex/v2/briefs/{second['id']}/approve", headers=request_headers, json=body)
+    replay = client.post(f"/api/admin/codex/v2/briefs/{second['id']}/approve", headers=request_headers, json=body)
+    assert approved.status_code == replay.status_code == 200
+    assert replay.content == approved.content and replay.headers["idempotency-replayed"] == "true"
+    assert client.get(f"/api/admin/codex/v2/briefs/{first['id']}", headers=headers).json()["data"]["brief"]["state"] == "superseded"
+    assert client.get(f"/api/admin/codex/v2/work-packages/{work['id']}", headers=headers).json()["data"]["work_package"]["state"] == "brief_approved"
+    stale_key = str(uuid.uuid4())
+    stale_headers = {**headers, "Idempotency-Key": stale_key, "If-Match": '"brief-1"'}
+    stale = client.post(f"/api/admin/codex/v2/briefs/{second['id']}/approve", headers=stale_headers, json=body)
+    stale_replay = client.post(f"/api/admin/codex/v2/briefs/{second['id']}/approve", headers=stale_headers, json=body)
+    assert stale.status_code == stale_replay.status_code == 412
+    assert stale_replay.content == stale.content
+    assert stale_replay.headers["idempotency-replayed"] == "true"
+    from backend.database import engine as codex_engine
+    with codex_engine.connect() as connection:
+        assert connection.execute(text("SELECT COUNT(*) FROM supervisor_events WHERE action_code='approve_brief'")).scalar_one() == 2
+        assert connection.execute(text("SELECT status FROM idempotency_records WHERE action_code='approve_brief' AND idempotency_key=:key"), {"key": stale_key}).scalar_one() == "failed"
+
+
+def test_supervisor_v2_planning_idempotency_cross_scope_and_openapi(client, db_session, tmp_path, monkeypatch):
+    project_id, headers = _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch)
+    key = str(uuid.uuid4())
+    request_headers = {**headers, "Idempotency-Key": key, "If-Match": '"project-1"'}
+    body = {"action": "create_mission", "registry_version": "0.2", "confirmation": True, "title": "Repeatable", "summary": "One durable mission"}
+    first = client.post(f"/api/admin/codex/v2/projects/{project_id}/missions", headers=request_headers, json=body)
+    replay = client.post(f"/api/admin/codex/v2/projects/{project_id}/missions", headers=request_headers, json=body)
+    assert first.status_code == replay.status_code == 200
+    assert first.content == replay.content and replay.headers["idempotency-replayed"] == "true"
+    changed = client.post(f"/api/admin/codex/v2/projects/{project_id}/missions", headers=request_headers, json={**body, "summary": "Different"})
+    assert changed.status_code == 409 and changed.json()["error"]["code"] == "idempotency_conflict"
+    assert len(client.get(f"/api/admin/codex/v2/projects/{project_id}/missions", headers=headers).json()["data"]["missions"]) == 1
+    _, _, other_headers = _create_admin_user(db_session, suffix="planning-other-" + uuid.uuid4().hex[:8])
+    mission_id = first.json()["data"]["mission"]["id"]
+    hidden = client.get(f"/api/admin/codex/v2/missions/{mission_id}", headers=other_headers)
+    assert hidden.status_code == 404 and hidden.json()["error"]["code"] == "resource_not_found"
+    unauthenticated = client.post(f"/api/admin/codex/v2/projects/{project_id}/missions", content=b"not-json")
+    assert unauthenticated.status_code == 401
+    _, _, ordinary = _create_admin_user(db_session, suffix="planning-no-platform-" + uuid.uuid4().hex[:8], is_platform_owner=False)
+    assert client.get(f"/api/admin/codex/v2/projects/{project_id}/missions", headers=ordinary).status_code == 403
+    operation = client.get("/openapi.json").json()["paths"]["/api/admin/codex/v2/projects/{project_id}/missions"]["post"]
+    assert operation["x-action-code"] == "create_mission"
+    assert operation["x-action-registry-version"] == "0.2"
+
+
+def test_planning_deterministic_failure_is_terminal_and_atomic(client, db_session, tmp_path, monkeypatch):
+    """A deterministic event-write failure must not strand a planning side effect."""
+    from backend.middleware.v2_errors import SupervisorHTTPError
+    from backend.models.codex import IdempotencyRecord, PlanningMission, SupervisorEvent
+    from backend import database as codex_database
+    from backend.routers import v2_supervisor
+
+    project_id, headers = _configure_and_claim_planning_project(
+        client, db_session, tmp_path, monkeypatch
+    )
+    key = str(uuid.uuid4())
+    request_headers = {
+        **headers,
+        "Idempotency-Key": key,
+        "If-Match": '"project-1"',
+    }
+    body = {
+        "action": "create_mission",
+        "registry_version": "0.2",
+        "confirmation": True,
+        "title": "Atomic failure",
+        "summary": "No partial planning ledger write",
+    }
+
+    def fail_event(*_args, **_kwargs):
+        raise SupervisorHTTPError(409, "revision_conflict")
+
+    monkeypatch.setattr(v2_supervisor, "append_planning_event", fail_event)
+    first = client.post(
+        f"/api/admin/codex/v2/projects/{project_id}/missions",
+        headers=request_headers,
+        json=body,
+    )
+    assert first.status_code == 409
+    assert first.json()["error"]["code"] == "revision_conflict"
+    replay = client.post(
+        f"/api/admin/codex/v2/projects/{project_id}/missions",
+        headers=request_headers,
+        json=body,
+    )
+    assert replay.status_code == 409
+    assert replay.content == first.content
+    assert replay.headers["idempotency-replayed"] == "true"
+    with codex_database.engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT COUNT(*) FROM planning_missions m "
+                "JOIN projects p ON p.id=m.project_id WHERE p.public_id=:project_id"
+            ),
+            {"project_id": project_id},
+        ).scalar_one() == 0
+        assert connection.execute(
+            text(
+                "SELECT COUNT(*) FROM supervisor_events "
+                "WHERE action_code='create_mission' AND project_public_id=:project_id"
+            ),
+            {"project_id": project_id},
+        ).scalar_one() == 0
+        status = connection.execute(
+            text(
+                "SELECT status FROM idempotency_records "
+                "WHERE action_code='create_mission' AND idempotency_key=:key"
+            ),
+            {"key": key},
+        ).scalar_one()
+    assert status == "failed"
 
 

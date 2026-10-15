@@ -231,3 +231,7 @@ python scripts/index_living_docs.py
 # 3. Test the living documentation parser and search query CLI
 python -m pytest tests/test_living_documentation.py -v
 ```
+# Codex supervisor planning
+
+The integrated Codex Control Centre records planning context only in revision 004;
+it has no execution, worker, Git, shell, booking, SMS, or customer-data authority.

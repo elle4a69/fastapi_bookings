@@ -7,10 +7,12 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from backend.middleware.v2_errors import (
     SupervisorHTTPError,
     canonical_json_bytes,
+    error_body,
     error_response,
     json_response_bytes,
     request_id_for,
@@ -40,6 +42,19 @@ from backend.services.supervisor_repository import (
     claim_reserved_project,
     resolve_project_read_only,
 )
+from backend.services.supervisor_repository import (
+    DETERMINISTIC_FAILURES,
+    planning_approve_in_transaction,
+    planning_create_in_transaction,
+    planning_get,
+    planning_list,
+    planning_parent_version,
+    planning_parent_version_in_transaction,
+)
+from backend.services.supervisor_event_service import append_planning_event
+from backend.models.codex import IdempotencyRecord
+from backend import database
+from backend.services.idempotency_service import terminal_values
 
 
 router = APIRouter(tags=["Codex Supervisor v2"])
@@ -64,6 +79,15 @@ def _error_responses(*statuses: int) -> dict[int, dict[str, object]]:
 READ_ERRORS = _error_responses(401, 403, 422, 500, 503)
 PROJECT_ERRORS = _error_responses(401, 403, 409, 422, 500, 503)
 CLAIM_ERRORS = _error_responses(400, 401, 403, 404, 409, 412, 415, 422, 428, 500, 503)
+PLANNING_READ_RESPONSES = {
+    200: {"description": "Stable planning representation", "headers": {**BASE_RESPONSE_HEADERS, **ETAG_HEADER}},
+    **_error_responses(401, 403, 404, 422, 500, 503),
+}
+PLANNING_MUTATION_RESPONSES = {
+    200: {"description": "Stored planning mutation or byte-exact replay", "headers": {**BASE_RESPONSE_HEADERS, **ETAG_HEADER, **REPLAY_HEADER}},
+    202: {"description": "Matching mutation is in progress", "headers": {**BASE_RESPONSE_HEADERS, **RETRY_HEADER}},
+    **_error_responses(400, 401, 403, 404, 409, 412, 415, 422, 428, 500, 503),
+}
 
 
 def _etag(prefix: str, data: dict[str, object]) -> str:
@@ -127,7 +151,7 @@ def bootstrap(request: Request, actor: ActorScope = Depends(get_actor_scope)) ->
     if infrastructure.state == "migration_required":
         data = {
             "capabilities": {"can_view_supervisor": True, "can_claim_project": False},
-            "action_registry_version": "0.1",
+            "action_registry_version": "0.2",
             "infrastructure": infrastructure.public_dict(),
             "project_resolution": None,
             "cutover": None,
@@ -143,7 +167,7 @@ def bootstrap(request: Request, actor: ActorScope = Depends(get_actor_scope)) ->
         }
         data = {
             "capabilities": {"can_view_supervisor": True, "can_claim_project": can_claim},
-            "action_registry_version": "0.1",
+            "action_registry_version": "0.2",
             "infrastructure": infrastructure.public_dict(),
             "project_resolution": public_resolution,
             "cutover": read_cutover(),
@@ -291,7 +315,7 @@ def _stored_response(result: Reservation, *, replay: bool = False) -> Response:
     openapi_extra={
         "x-operator-action": True,
         "x-action-code": "claim_project",
-        "x-action-registry-version": "0.1",
+        "x-action-registry-version": "0.2",
         "x-backend-permission": "project.claim",
         "requestBody": {
             "required": True,
@@ -357,3 +381,116 @@ async def claim_project(
         expected_version=payload.expected_version,
     )
     return _stored_response(result)
+
+
+# Planning-only endpoints. They deliberately have no route to execute a brief.
+def _planning_output(row: dict[str, object]) -> dict[str, object]:
+    return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items()}
+
+PLANNING_ACTIONS = {
+    "create_mission": ("mission", "project"),
+    "create_work_package": ("work_package", "mission"),
+    "create_brief": ("brief", "work_package"),
+    "approve_brief": ("brief", "brief"),
+    "record_context_checkpoint": ("checkpoint", "mission"),
+    "define_audit_scope": ("audit_scope", "work_package"),
+}
+PLANNING_FIELDS = {
+    "create_mission": {"action", "registry_version", "confirmation", "title", "summary"},
+    "create_work_package": {"action", "registry_version", "confirmation", "title", "scope"},
+    "create_brief": {"action", "registry_version", "confirmation", "content", "future_execution_authorization_requirement"},
+    "approve_brief": {"action", "registry_version", "confirmation"},
+    "record_context_checkpoint": {"action", "registry_version", "confirmation", "summary", "decisions", "constraints", "open_questions"},
+    "define_audit_scope": {"action", "registry_version", "confirmation", "criteria", "exclusions"},
+}
+
+def _parse_planning_request(request: Request, raw: bytes, action: str) -> tuple[dict[str, object], str, str]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise SupervisorHTTPError(415, "unsupported_media_type")
+    key, if_match = request.headers.get("Idempotency-Key"), request.headers.get("If-Match")
+    if not key or not if_match: raise SupervisorHTTPError(428, "precondition_required")
+    try:
+        parsed=uuid.UUID(key)
+        if parsed.version != 4 or str(parsed) != key.lower(): raise ValueError
+        payload=json.loads(raw)
+    except (ValueError, json.JSONDecodeError, TypeError): raise SupervisorHTTPError(422,"validation_failed")
+    if not isinstance(payload, dict) or set(payload) - PLANNING_FIELDS[action] or payload.get("action") != action or payload.get("registry_version") != "0.2" or payload.get("confirmation") is not True:
+        raise SupervisorHTTPError(422, "validation_failed")
+    return payload, key.lower(), if_match
+
+async def _planning_mutation(request: Request, actor: ActorScope, action: str, parent_id: str) -> Response:
+    raw=await request.body(); payload, key, if_match = _parse_planning_request(request, raw, action)
+    kind, parent_prefix=PLANNING_ACTIONS[action]
+    version=planning_parent_version(action, parent_id, actor)
+    fingerprint=hashlib.sha256(canonical_json_bytes({"action":action,"actor_tenant_id":actor.tenant_id,"actor_user_id":actor.user_id,"parent":parent_id,"payload":payload,"registry_version":"0.2","route":request.url.path})).hexdigest()
+    reservation=reserve(actor=actor,idempotency_key=key,fingerprint=fingerprint,action_code=action)
+    if reservation.mode == "conflict": raise SupervisorHTTPError(409,"idempotency_conflict")
+    request.state.supervisor_request_id=reservation.request_id
+    if reservation.mode == "in_progress": return _success(request,{"operation":{"action":action,"state":"in_progress","retry_after_seconds":1}},status_code=202,headers={"Retry-After":"1"},meta_extra={"idempotency_state":"in_progress"})
+    if reservation.mode == "replay": return _stored_response(reservation,replay=True)
+    if not reservation.record_id or not reservation.raw_lease_token: raise SupervisorHTTPError(500,"internal_error")
+    try:
+        with database.engine.connect() as connection:
+            from backend.services.idempotency_service import _begin_immediate, verify_live_reservation
+            _begin_immediate(connection); verify_live_reservation(connection,record_id=reservation.record_id,raw_lease_token=reservation.raw_lease_token)
+            side_effects=connection.begin_nested()
+            try:
+                # A new stale request has a durable terminal 412; an existing
+                # same-key success returned above before this comparison.
+                if if_match != f'"{parent_prefix}-{version}"': raise SupervisorHTTPError(412,"revision_conflict")
+                current=planning_parent_version_in_transaction(connection,action,parent_id,actor)
+                if current != version: raise SupervisorHTTPError(412,"revision_conflict")
+                result, project_id, project_version = (planning_approve_in_transaction(connection,parent_id,actor) if action == "approve_brief" else planning_create_in_transaction(connection,kind,parent_id,payload,actor))
+                append_planning_event(connection,project_public_id=project_id,actor=actor,action_code=action,project_version=project_version,request_id=reservation.request_id,idempotency_key=key)
+                data={kind:_planning_output(result)}; body=canonical_json_bytes({"data":data,"meta":{"request_id":reservation.request_id,"schema_version":"0.2","resource_version":int(result.get("version",1)),"idempotency_state":"succeeded"}}); headers={"Content-Type":"application/json","ETag":_etag(f"{kind}-v1",data),"Cache-Control":"no-store","X-Request-ID":reservation.request_id}
+                connection.execute(IdempotencyRecord.__table__.update().where(IdempotencyRecord.__table__.c.id==reservation.record_id).values(**terminal_values(status="succeeded",response_status=200,response_body=body,response_headers=headers)))
+                side_effects.commit(); connection.commit()
+                return Response(content=body,status_code=200,media_type="application/json",headers=headers)
+            except (SupervisorHTTPError, IntegrityError) as exc:
+                side_effects.rollback()
+                code = exc.code if isinstance(exc, SupervisorHTTPError) else "revision_conflict"
+                status_code = exc.status_code if isinstance(exc, SupervisorHTTPError) else 409
+                if code not in DETERMINISTIC_FAILURES | {"approved_brief_required","brief_not_draft","validation_failed"}:
+                    connection.rollback(); raise
+                body=canonical_json_bytes(error_body(reservation.request_id,code)); headers={"Content-Type":"application/json","Cache-Control":"no-store","X-Request-ID":reservation.request_id}
+                connection.execute(IdempotencyRecord.__table__.update().where(IdempotencyRecord.__table__.c.id==reservation.record_id).values(**terminal_values(status="failed",response_status=status_code,response_body=body,response_headers=headers)))
+                connection.commit(); return _stored_response(Reservation("terminal_failure",reservation.request_id,response_status=status_code,response_body=body,response_headers=headers))
+    except SupervisorHTTPError: raise
+
+@router.get("/projects/{project_id}/missions", responses=PLANNING_READ_RESPONSES, openapi_extra={"x-operator-action":False})
+def list_missions(project_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"missions":[_planning_output(x) for x in planning_list("mission",project_id,actor)]}; return _success(request,data,headers={"ETag":_etag("missions-v1",data)})
+@router.post("/projects/{project_id}/missions", responses=PLANNING_MUTATION_RESPONSES, openapi_extra={"x-operator-action":True,"x-action-code":"create_mission","x-action-registry-version":"0.2","x-backend-permission":"planning.create_mission"})
+async def create_mission(project_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response: return await _planning_mutation(request,actor,"create_mission",project_id)
+@router.get("/missions/{mission_id}", responses=PLANNING_READ_RESPONSES)
+def get_mission(mission_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"mission":_planning_output(planning_get("mission",mission_id,actor))}; return _success(request,data,headers={"ETag":_etag("mission-v1",data)})
+@router.get("/missions/{mission_id}/work-packages", responses=PLANNING_READ_RESPONSES)
+def list_work_packages(mission_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"work_packages":[_planning_output(x) for x in planning_list("work_package",mission_id,actor)]}; return _success(request,data,headers={"ETag":_etag("work-packages-v1",data)})
+@router.post("/missions/{mission_id}/work-packages",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"create_work_package","x-action-registry-version":"0.2","x-backend-permission":"planning.create_work_package"})
+async def create_work_package(mission_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response: return await _planning_mutation(request,actor,"create_work_package",mission_id)
+@router.get("/work-packages/{work_package_id}", responses=PLANNING_READ_RESPONSES)
+def get_work_package(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"work_package":_planning_output(planning_get("work_package",work_package_id,actor))}; return _success(request,data,headers={"ETag":_etag("work-package-v1",data)})
+@router.get("/work-packages/{work_package_id}/briefs", responses=PLANNING_READ_RESPONSES)
+def list_briefs(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"briefs":[_planning_output(x) for x in planning_list("brief",work_package_id,actor)]}; return _success(request,data,headers={"ETag":_etag("briefs-v1",data)})
+@router.post("/work-packages/{work_package_id}/briefs",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"create_brief","x-action-registry-version":"0.2","x-backend-permission":"planning.create_brief"})
+async def create_brief(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"create_brief",work_package_id)
+@router.get("/briefs/{brief_id}", responses=PLANNING_READ_RESPONSES)
+def get_brief(brief_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"brief":_planning_output(planning_get("brief",brief_id,actor))}; return _success(request,data,headers={"ETag":_etag("brief-v1",data)})
+@router.post("/briefs/{brief_id}/approve",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"approve_brief","x-action-registry-version":"0.2","x-backend-permission":"planning.approve_brief"})
+async def approve_brief(brief_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"approve_brief",brief_id)
+@router.get("/missions/{mission_id}/context-checkpoints", responses=PLANNING_READ_RESPONSES)
+def list_checkpoints(mission_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    data={"context_checkpoints":[_planning_output(x) for x in planning_list("checkpoint",mission_id,actor)]}; return _success(request,data,headers={"ETag":_etag("checkpoints-v1",data)})
+@router.post("/missions/{mission_id}/context-checkpoints",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"record_context_checkpoint","x-action-registry-version":"0.2","x-backend-permission":"planning.record_context_checkpoint"})
+async def create_checkpoint(mission_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"record_context_checkpoint",mission_id)
+@router.get("/work-packages/{work_package_id}/audit-scope", responses=PLANNING_READ_RESPONSES)
+def list_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:
+    scopes=planning_list("audit_scope",work_package_id,actor)
+    data={"audit_scope":None if not scopes else _planning_output(scopes[0])}; return _success(request,data,headers={"ETag":_etag("audit-scope-v1",data)})
+@router.post("/work-packages/{work_package_id}/audit-scope",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"define_audit_scope","x-action-registry-version":"0.2","x-backend-permission":"planning.define_audit_scope"})
+async def create_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"define_audit_scope",work_package_id)

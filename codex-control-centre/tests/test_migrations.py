@@ -103,7 +103,7 @@ def test_fresh_child_migration_url_precedes_ambient_settings(
 
     target_engine = create_engine(_url(target_path))
     try:
-        assert _revision(target_engine) == "003"
+        assert _revision(target_engine) == "004"
     finally:
         target_engine.dispose()
     assert not decoy_path.exists()
@@ -114,7 +114,7 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
     _run_alembic(url, "upgrade", "head")
     engine = create_engine(url)
     try:
-        assert _revision(engine) == "003"
+        assert _revision(engine) == "004"
         tables = set(inspect(engine).get_table_names())
         assert {
             "workspace_boundaries", "system_settings", "schema_adoption_metadata",
@@ -135,12 +135,10 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
                 "dialect_options": {},
             }
         ]
-        result = _run_alembic(url, "downgrade", "002", expect_success=False)
-        assert "claim_evidence_loss_acknowledgement_required" in result.stdout
-        _run_alembic(url, "downgrade", "001", evidence_loss=True)
-        assert _revision(engine) == "001"
-        _run_alembic(url, "upgrade", "head")
+        _run_alembic(url, "downgrade", "003")
         assert _revision(engine) == "003"
+        _run_alembic(url, "upgrade", "head")
+        assert _revision(engine) == "004"
     finally:
         engine.dispose()
 
@@ -227,6 +225,61 @@ def test_readiness_requires_exact_root_identity_index(tmp_path: Path):
         engine.dispose()
 
 
+def test_readiness_requires_planning_immutability_and_parent_scope_triggers(tmp_path: Path):
+    """Revision 004 readiness must fail closed if any planning guard is tampered."""
+    url = _url(tmp_path / "planning-trigger-readiness.db")
+    _run_alembic(url, "upgrade", "head")
+    engine = create_engine(url)
+    try:
+        assert inspect_infrastructure(engine).state == "ready"
+        with engine.begin() as connection:
+            connection.exec_driver_sql("DROP TRIGGER trg_planning_briefs_immutable")
+        readiness = inspect_infrastructure(engine)
+        assert readiness.state == "migration_required"
+        assert readiness.reason_codes == ("schema_mismatch",)
+    finally:
+        engine.dispose()
+
+
+def test_populated_planning_ledger_blocks_004_downgrade(tmp_path: Path):
+    """A downgrade must never silently discard durable planning context."""
+    url = _url(tmp_path / "planning-downgrade-blocked.db")
+    _run_alembic(url, "upgrade", "head")
+    engine = create_engine(url)
+    try:
+        root_identity = root_identity_for_path(tmp_path)
+        assert root_identity is not None
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO projects "
+                    "(id,name,repo_path,default_branch,public_id,tenant_id,owner_user_id,"
+                    "scope_state,control_plane,configured_fingerprint,root_identity_digest,"
+                    "claimed_at,version) "
+                    "VALUES ('planning-project','Planning',:repo_path,'main',"
+                    "'prj_1234567890abcdef',1,1,'claimed','legacy',:fingerprint,"
+                    ":root_digest,CURRENT_TIMESTAMP,1)"
+                ),
+                {
+                    "repo_path": str(tmp_path),
+                    "fingerprint": "c" * 64,
+                    "root_digest": root_identity[1],
+                },
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO planning_missions "
+                    "(id,project_id,tenant_id,owner_user_id,title,summary,state,version,created_at) "
+                    "VALUES ('mis_downgrade','planning-project',1,1,'Planning','Durable context','draft',1,CURRENT_TIMESTAMP)"
+                )
+            )
+        result = _run_alembic(url, "downgrade", "003", expect_success=False)
+        assert "planning_ledger_downgrade_blocked" in result.stdout
+        assert _revision(engine) == "004"
+    finally:
+        engine.dispose()
+
+
 def test_claimed_project_blocks_002_to_001(tmp_path: Path):
     url = _url(tmp_path / "claimed.db")
     _run_alembic(url, "upgrade", "head")
@@ -299,7 +352,7 @@ def test_unversioned_exact_legacy_schema_requires_explicit_adoption(tmp_path: Pa
     try:
         assert _revision(engine) == "001"
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "003"
+        assert _revision(engine) == "004"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"
@@ -399,7 +452,7 @@ def test_versioned_001_adopts_matching_ledger_tables_preserves_data_and_downgrad
                 "INSERT INTO system_settings (key,value) VALUES ('mode','synthetic')"
             )
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "003"
+        assert _revision(engine) == "004"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"
