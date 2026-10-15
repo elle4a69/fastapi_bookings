@@ -2,6 +2,8 @@
 
 Codex Control Centre is the main coordination, telemetry, and governance hub for multi-agent workflows. It provides real-time event streaming, thread management, tool approval gating, subagent supervision, and isolated git worktrees.
 
+> **WP-UI-00 ownership and freeze:** The canonical browser application is the repository-root `frontend/`. The duplicate `codex-control-centre/frontend/` tree is frozen as reference/decommission-only and must receive no new product features. The current `/admin/coding-cockpit` remains the operational v1 interface during controlled migration. The future `/api/admin/codex/v2` facade, durable supervisor domain and replacement interface are specified but not implemented; see [`../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md).
+
 ---
 
 ## 1. Purpose & Scope
@@ -76,7 +78,7 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
     - `skills_context.py`: Privacy-bounded skill query derivation, top-match retrieval, content budgets, and turn context assembly.
     - `skills_rag_mcp_bridge.py`: Dependency-free stdio MCP bridge exposing native read-only `find` and `skill` tools backed by the always-on port 8008 daemon.
-- `frontend/`:
+- `frontend/` (**legacy duplicate; frozen reference/decommission-only, not the canonical FastAPI Bookings frontend**):
   - `src/App.tsx`: Root responsive 3-pane workbench container with mobile off-canvas drawer navigation and tablet/mobile overlay backdrops.
   - `src/components/layout/ProjectRail.tsx`: Project switcher, theme toggle, and settings triggers with touch-first tap targets.
   - `src/components/layout/ThreadSidebar.tsx`: Thread search, thread creation, pinned and archived thread lists.
@@ -260,6 +262,18 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 ---
 
 ## 7. Verification & Testing Commands
+
+### WP-UI-00 P0 trust-boundary verification
+
+Run the inherited P0 boundary suites from the repository root and the Control Centre directory. WP-UI-00 changes no application behavior and does not implement v2.
+
+```powershell
+# From the repository root
+.\.venv\Scripts\python.exe -m pytest tests/test_resident_agent.py tests/test_codex_backend_mount.py tests/test_admin_support_tickets.py -k "not stress_fuzzer" -v
+
+# From codex-control-centre/
+..\.venv\Scripts\python.exe -m pytest tests/test_security.py tests/test_events.py -v
+```
 
 ### Backend Verification
 ```bash

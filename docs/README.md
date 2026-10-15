@@ -81,12 +81,32 @@ flowchart TD
 
 ### Documentation Suite Catalog & Key Files:
 - [ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md): Comprehensive system architecture covering multi-tenancy, concurrency, SMS, Chatwoot, and telemetry.
+- [architecture/README.md](architecture/README.md): Living index for binding architecture decision records.
+- [architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md](architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md): Accepted contract freeze for the future Codex Supervisor v2 facade, control plane, cutover, idempotency, action registry, disclosure, native worker ownership, and canonical frontend. It explicitly does not claim v2 runtime implementation.
 - [MODULE_INDEX.md](file:///F:/Projects/fastapi_bookings/docs/MODULE_INDEX.md): Master inventory of all modules, domain boundaries, entrypoints, and test commands.
 - [AGENT_BOOT_SNAPSHOT.md](file:///F:/Projects/fastapi_bookings/docs/AGENT_BOOT_SNAPSHOT.md): Autonomous agent boot snapshot containing compact system status and orientation instructions.
 - [module_manifest.json](file:///F:/Projects/fastapi_bookings/docs/module_manifest.json): Machine-readable documentation metadata and Rule 10 compliance ledger.
 - [module_docs.db](file:///F:/Projects/fastapi_bookings/docs/module_docs.db): SQLite FTS5 full-text search database indexing all module documentation.
 - [app/main.py](file:///F:/Projects/fastapi_bookings/app/main.py): FastAPI application lifecycle, middleware chain, and route mounts.
 - [app/core/config.py](file:///F:/Projects/fastapi_bookings/app/core/config.py): Typed environment settings and platform defaults.
+
+### Approved Codex Supervisor Records
+
+The versioned records under [`../artifacts/codex-supervisor/`](../artifacts/codex-supervisor/) are design, audit and implementation-control evidence. The accepted foundation specification is authoritative where the shorter ADR links to detailed schemas.
+
+- [WP-UI-00 implementation brief](../artifacts/codex-supervisor/WP_UI_00_IMPLEMENTATION_BRIEF.md)
+- [Architecture blueprint](../artifacts/codex-supervisor/CCC_ARCHITECTURE_BLUEPRINT.md)
+- [Security baseline](../artifacts/codex-supervisor/CCC_SECURITY_BASELINE.md)
+- [UX contract](../artifacts/codex-supervisor/CCC_UX_CONTRACT.md)
+- [Existing UI audit](../artifacts/codex-supervisor/CCC_EXISTING_UI_AUDIT.md)
+- [UI API contract inventory](../artifacts/codex-supervisor/CCC_UI_API_CONTRACT_INVENTORY.md)
+- [CopilotKit fit assessment](../artifacts/codex-supervisor/CCC_COPILOTKIT_FIT_ASSESSMENT.md)
+- [Codex Bridge fit assessment](../artifacts/codex-supervisor/CCC_CODEX_BRIDGE_FIT_ASSESSMENT.md)
+- [codex-web-local fit assessment](../artifacts/codex-supervisor/CCC_CODEX_WEB_LOCAL_FIT_ASSESSMENT.md)
+- [Open WebUI fit assessment](../artifacts/codex-supervisor/CCC_OPEN_WEBUI_FIT_ASSESSMENT.md)
+- [Assistant UI fit assessment](../artifacts/codex-supervisor/CCC_ASSISTANT_UI_FIT_ASSESSMENT.md)
+- [Accepted UI foundation specification](../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md)
+- [Independent foundation review](../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md)
 
 ---
 

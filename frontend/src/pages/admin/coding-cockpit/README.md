@@ -2,6 +2,8 @@
 
 The Codex Engineering Cockpit provides a unified, mobile-first, production-grade operational command centre for software reliability, AST diagnostics, automated stress testing, skill discovery, and native Codex agent workflow orchestration inside FastAPI Bookings.
 
+> **Legacy freeze and cutover notice:** This module is the current P0-hardened v1 cockpit at `/admin/coding-cockpit`, but it is frozen against new supervisor product features. The repository-root `frontend/` remains the sole canonical frontend. A ground-up v2 package will be built separately under `frontend/src/pages/admin/codex-supervisor/` and exposed temporarily at `/admin/coding-cockpit-v2/*` only after its durable backend prerequisites pass. V2 does not yet exist; the persisted server cutover contract and ownership rules are frozen in [`../../../../../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../../../../../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md). The duplicate `codex-control-centre/frontend/` is reference/decommission-only and must not receive features or be imported here.
+
 ---
 
 ## 1. Purpose & Scope
@@ -182,6 +184,20 @@ frontend/src/pages/admin/coding-cockpit/
 ## 7. Verification & Testing Commands
 
 To verify the Codex Engineering Cockpit module, run the following commands:
+
+```powershell
+python -c "import subprocess; raise SystemExit(subprocess.call(['node', '--experimental-strip-types', '--test', 'frontend/src/pages/admin/coding-cockpit/coding-cockpit.test.ts']))"
+```
+
+- **Current P0 contract gate**:
+  ```powershell
+  cd frontend
+  node --experimental-strip-types --test src/pages/admin/coding-cockpit/coding-cockpit.test.ts
+  npm test
+  npm run build
+  cd ..
+  python scripts/verify_zero_console_errors.py
+  ```
 
 - **Targeted Unit Tests**:
   ```bash
