@@ -1,5 +1,11 @@
 # FastAPI Bookings — Central Documentation Index
 
+The cross-tenant Control Centre, resident agent, and platform support boundary
+is defined by
+[ADR_PLATFORM_OWNER_AUTHORITY.md](architecture/ADR_PLATFORM_OWNER_AUTHORITY.md).
+Tenant roles never imply platform authority; provisioning is an offline,
+audited operator action.
+
 Welcome to the central documentation index for **FastAPI Bookings**, a high-concurrency, multi-tenant appointment scheduling, provider operations, and autonomous SMS/AI dialogue management system built with Python, FastAPI, SQLAlchemy, and Vite/React.
 
 ---

@@ -1,5 +1,18 @@
 # Codex Control Centre
 
+### Native platform-owner boundary
+
+When mounted inside FastAPI Bookings, every Control Centre route delegates to
+the native `require_platform_owner` dependency. Access requires an active user
+with persisted `users.is_platform_owner`. Tenant roles, dynamic superuser
+values, standalone `local_secret`, and the local-development token alone are
+insufficient. The Control Centre owns no parallel grant table or privilege API.
+
+Standalone compatibility remains separately bounded. Its tests use a
+process-unique temporary database and sentinel repository `codex.db` files.
+Test teardown explicitly disposes the loaded database engine and fails the run
+if its isolated temporary storage cannot be removed.
+
 Codex Control Centre is the main coordination, telemetry, and governance hub for multi-agent workflows. It provides real-time event streaming, thread management, tool approval gating, subagent supervision, and isolated git worktrees.
 
 > **WP-UI-00 ownership and freeze:** The canonical browser application is the repository-root `frontend/`. The duplicate `codex-control-centre/frontend/` tree is frozen as reference/decommission-only and must receive no new product features. The current `/admin/coding-cockpit` remains the operational v1 interface during controlled migration. The future `/api/admin/codex/v2` facade, durable supervisor domain and replacement interface are specified but not implemented; see [`../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md).

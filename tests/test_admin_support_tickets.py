@@ -34,6 +34,7 @@ def _create_user(db_session: Session, suffix: str, role: str = "owner", tenant: 
         login=f"user-{role}-{suffix}",
         password_hash="fake-hash",
         role=role,
+        is_platform_owner=role == "owner",
     )
     db_session.add(user)
     db_session.commit()
@@ -66,6 +67,30 @@ def test_platform_owner_gate_enforcement(client: TestClient, db_session: Session
     # 4. Platform Owner -> 200
     res_owner = client.get("/api/admin/support-tickets", headers=owner_headers)
     assert res_owner.status_code == 200
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
+def test_ordinary_tenant_roles_are_denied_before_support_ticket_lookup_or_dispatch(
+    client: TestClient,
+    db_session: Session,
+    role: str,
+):
+    tenant, user, headers = _create_user(db_session, f"ordinary-{role}", role=role)
+    user.is_platform_owner = False
+    db_session.commit()
+
+    missing_ticket = "00000000-0000-0000-0000-000000000000"
+    assert client.get("/api/admin/support-tickets", headers=headers).status_code == 403
+    assert client.post(
+        f"/api/admin/support-tickets/{missing_ticket}/internal-note",
+        json={"body": "must not be stored"},
+        headers=headers,
+    ).status_code == 403
+    assert client.post(
+        f"/api/admin/support-tickets/{missing_ticket}/launch-codex",
+        json={},
+        headers=headers,
+    ).status_code == 403
 
 
 def test_list_tickets_cross_tenant_and_filtering(client: TestClient, db_session: Session):

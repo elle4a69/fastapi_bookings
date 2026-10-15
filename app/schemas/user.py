@@ -15,12 +15,14 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="User password")
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[str] = None
     provider_id: Optional[int] = None
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserInDBBase(UserBase):

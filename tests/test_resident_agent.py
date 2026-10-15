@@ -54,6 +54,7 @@ def resident_agent_admin(db_session):
         login="resident_admin",
         password_hash="test_hash",
         role="owner",
+        is_platform_owner=True,
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(admin_user)
@@ -87,9 +88,11 @@ def test_resident_agent_status_endpoint(client, resident_agent_admin):
     assert isinstance(data["active_issues"], list)
 
 
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
 def test_resident_agent_rejects_ordinary_tenant_admin(
     client,
     db_session,
+    role,
 ):
     """Resident development authority is restricted to platform owners."""
     tenant = Tenant(name="Ordinary Admin", subdomain="ordinary-resident-admin")
@@ -97,9 +100,10 @@ def test_resident_agent_rejects_ordinary_tenant_admin(
     db_session.flush()
     user = User(
         tenant_id=tenant.id,
-        login="ordinary-resident-admin",
+        login=f"ordinary-resident-{role}",
         password_hash="test_hash",
-        role="admin",
+        role=role,
+        is_platform_owner=False,
     )
     db_session.add(user)
     db_session.commit()

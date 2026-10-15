@@ -16,6 +16,7 @@ def _create_admin_user(
     suffix: str = "mount",
     *,
     role: str = "owner",
+    is_platform_owner: bool = True,
 ) -> tuple[Tenant, User, dict[str, str]]:
     tenant = Tenant(name=f"Codex Admin Tenant {suffix}", subdomain=f"codex-admin-{suffix}")
     db_session.add(tenant)
@@ -26,6 +27,7 @@ def _create_admin_user(
         login=f"admin-{suffix}",
         password_hash="test-secret-hash",
         role=role,
+        is_platform_owner=is_platform_owner,
     )
     db_session.add(user)
     db_session.commit()
@@ -124,18 +126,21 @@ def test_non_admin_requests_rejected(client: TestClient, db_session: Session):
         ),
     ],
 )
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
 def test_codex_routes_reject_non_platform_owner(
     client: TestClient,
     db_session: Session,
     method: str,
     path: str,
     payload: dict | None,
+    role: str,
 ):
     """Ordinary tenant administrators cannot operate the global cockpit."""
     _, _, headers = _create_admin_user(
         db_session,
-        suffix=f"ordinary-{method}-{path.rsplit('/', 1)[-1]}",
-        role="admin",
+        suffix=f"ordinary-{role}-{method}-{path.rsplit('/', 1)[-1]}",
+        role=role,
+        is_platform_owner=False,
     )
     response = client.request(method.upper(), path, json=payload, headers=headers)
     assert response.status_code == 403

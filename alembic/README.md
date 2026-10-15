@@ -1,5 +1,14 @@
 # Database Migrations Architecture & Ledger (`alembic/`)
 
+### Platform-owner authority migration
+
+Revision `d4b8f2a6c901` adds the non-null, permanently false-by-default
+`users.is_platform_owner` column and the
+`ix_users_platform_owner_active` composite index. It backfills every existing
+row to false and never promotes an initial owner implicitly. Apply the migration
+before offline provisioning; do not downgrade while new application code is
+running because downgrade intentionally removes the capability state.
+
 ## 1. Purpose & Scope
 
 The `alembic/` package manages relational schema migrations, version tracking, and schema evolution for **FastAPI Bookings**.

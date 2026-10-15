@@ -23,7 +23,6 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `app/services/auth/` | Application Business Services | `__init__.py`, `google_oidc.py`, `chatwoot_sso.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/auth/README.md) |
 | `app/services/booking/` | Core Booking Engine | `__init__.py`, `operational_window.py`, `availability_service.py` | `py -3.11 -m pytest tests/test_dynamic_itinera...` | **Compliant (Rule 10)** | [README.md](app/services/booking/README.md) |
 | `app/services/business_assistant/gpt_live/` | Business Assistant Foundation | `session_config.json`, `runtime.py`, `router.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/gpt_live/README.md) |
-| `app/services/business_assistant/livekit/` | Business Assistant Foundation | `config.py`, `session_config.json`, `token_service.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/livekit/README.md) |
 | `app/services/business_assistant/onboarding/` | Business Assistant Foundation | `schemas.py`, `normalizer.py`, `plan_service.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/onboarding/README.md) |
 | `app/services/business_assistant/` | Business Assistant Foundation | `business_assistant.py`, `onboarding.py`, `repository.py` | `.\.venv\Scripts\python.exe -m pytest tests/te...` | **Compliant (Rule 10)** | [README.md](app/services/business_assistant/README.md) |
 | `app/services/channel/` | Communication Channel Transports | `conversation.py`, `channel.py`, `__init__.py` | `.\.venv\Scripts\python -m pytest -q tests/tes...` | **Compliant (Rule 10)** | [README.md](app/services/channel/README.md) |
@@ -36,8 +35,9 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `app/services/routing/` | Routing & Geospatial Engine | `travel_service.py`, `geocoding.py`, `distance_calculator.py` | `python -m pytest tests/test_distance_calculat...` | **Compliant (Rule 10)** | [README.md](app/services/routing/README.md) |
 | `app/services/scheduling/` | Scheduling & Slot Allocation | `calcom_adapter.py`, `slot_allocation_service.py`, `scheduling_service.py` | `pytest tests/test_concurrency.py -v` | **Compliant (Rule 10)** | [README.md](app/services/scheduling/README.md) |
 | `app/services/sms/` | Autonomous SMS Dialogue Engine | `inbound_service.py`, `ai_orchestrator.py`, `booking_facade.py` | `python -m pytest tests/test_sms_chatwoot.py t...` | **Compliant (Rule 10)** | [README.md](app/services/sms/README.md) |
+| `docs/architecture/` | Documentation & Architecture Catalog | `ADR_CODEX_SUPERVISOR_V2_FACADE.md`, `CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md`, `CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md` | `.\.venv\Scripts\python.exe -m pytest codex-co...` | **Compliant (Rule 10)** | [README.md](docs/architecture/README.md) |
 | `docs/audits/` | Documentation & Architecture Catalog | `SYSTEM_AUDIT_REPORT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/audits/README.md) |
-| `docs/` | Documentation & Architecture Catalog | `ARCHITECTURE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/README.md) |
+| `docs/` | Documentation & Architecture Catalog | `ARCHITECTURE.md`, `ADR_CODEX_SUPERVISOR_V2_FACADE.md`, `MODULE_INDEX.md` | `python scripts/verify_living_docs.py` | **Compliant (Rule 10)** | [README.md](docs/README.md) |
 | `frontend/` | React Frontend SPA | `App.tsx`, `api.ts`, `AuthContext.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/README.md) |
 | `frontend/src/components/agents-ui/` | React Frontend SPA | `agent-popup.tsx`, `index.ts`, `agent-popup.test.ts` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/components/agents-ui/README.md) |
 | `frontend/src/components/ui-agent/` | React Frontend SPA | `scanner.ts`, `executor.ts`, `GhostCursor.tsx` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/components/ui-agent/README.md) |
@@ -45,7 +45,7 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `frontend/src/pages/admin/assistant-studio/` | Frontend Admin Assistant Studio | `index.tsx`, `types.ts`, `assistant_studio.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/assistant-studio/README.md) |
 | `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
 | `frontend/src/pages/admin/catalog/` | Frontend Admin Catalog & Services | `services.tsx`, `providers.tsx`, `locations.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/catalog/README.md) |
-| `frontend/src/pages/admin/coding-cockpit/` | Frontend Administration Views | `index.tsx`, `types.ts`, `CodingCockpitPage.tsx` | *None recorded* | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/coding-cockpit/README.md) |
+| `frontend/src/pages/admin/coding-cockpit/` | Frontend Administration Views | `index.tsx`, `types.ts`, `CodingCockpitPage.tsx` | `python -c "import subprocess; raise SystemExi...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/coding-cockpit/README.md) |
 | `frontend/src/pages/admin/finance/` | Frontend Admin Finance & Billing | `invoices.tsx`, `payments.tsx`, `promotions.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/finance/README.md) |
 | `frontend/src/pages/admin/gpt-live/` | Frontend Administration Views | `index.tsx`, `use-gpt-live.ts`, `protocol.ts` | `npm test -- --test-name-pattern="GPT-Live"` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/gpt-live/README.md) |
 | `frontend/src/pages/admin/` | Frontend Administration Views | `navigation.ts`, `relationships-matrix.tsx`, `relationships.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/README.md) |
@@ -65,13 +65,13 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 
 #### [Authentication, Google OIDC & Chatwoot SSO Service](app/services/auth/README.md) (`app/services/auth`)
 The `app/services/auth` module acts as the central identity broker and Single Sign-On (SSO) gateway for FastAPI Bookings. It owns: - Cryptographic verification of third-party Identity Provider tokens (Google OAuth2 / OpenID Connect). - Secure user sy...
-- **Key Files**: `__init__.py`, `google_oidc.py`, `chatwoot_sso.py`
+- **Key Files**: `__init__.py`, `google_oidc.py`, `chatwoot_sso.py`, `platform_owner_authority.py`
 - **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_auth_contract.py -v`
 - **Known Debt/Issues**: 2 item(s) logged
 
 #### [Services Module](app/services/README.md) (`app/services`)
 This module contains the core business logic and external service integrations for the FastAPI Bookings engine. It serves as the middleware connecting our application's API endpoints to external SaaS providers, managing operations like tenant synchro...
-- **Key Files**: `agent_runner.py`, `chatwoot_provisioner.py`, `contact_sync.py`, `config.py`, `availability_service.py`, `booking_form_resolver.py`, `booking_relationship_resolver.py`, `chatwoot.py`, `clicksend.py`, `embed_configuration.py`, `fcm.py`, `geocoding.py`
+- **Key Files**: `agent_runner.py`, `chatwoot_provisioner.py`, `contact_sync.py`, `media_service.py`, `website_initial_draft.py`, `config.py`, `availability_service.py`, `booking_form_resolver.py`, `booking_relationship_resolver.py`, `chatwoot.py`, `clicksend.py`, `embed_configuration.py`
 - **Verification**: `python -m pytest tests/test_chatwoot_provisioner.py -v`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -95,9 +95,9 @@ The automated test framework owns: - Verification of the core booking lifecycle,
 
 #### [Resident Autonomous Agent & Code Sentinel](app/services/resident_agent/README.md) (`app/services/resident_agent`)
 The `app/services/resident_agent/` module provides persistent, autonomous codebase supervision, deep subsystem audits, telemetry health sentinels, and transaction integrity fuzzers for **FastAPI Bookings**....
-- **Key Files**: `sentinel.py`, `fuzzer.py`, `auditor.py`, `events.py`, `alert_dispatcher.py`, `code_auditor.py`, `engine.py`, `event_broker.py`, `executor.py`, `remediation_planner.py`, `sentinel_scheduler.py`, `skill_library.py`
+- **Key Files**: `sentinel.py`, `fuzzer.py`, `auditor.py`, `event_broker.py`, `skill_library.py`, `alert_dispatcher.py`, `code_auditor.py`, `engine.py`, `executor.py`, `remediation_planner.py`, `sentinel_scheduler.py`, `stress_fuzzer.py`
 - **Verification**: `.venv\Scripts\python.exe -m pytest tests/test_resident_agent.py -v`
-- **Known Debt/Issues**: 3 item(s) logged
+- **Known Debt/Issues**: 4 item(s) logged
 
 ### 3.5 Autonomous SMS Dialogue Engine
 
@@ -114,12 +114,6 @@ This isolated module creates authenticated GPT-Live WebRTC sessions for an exist
 - **Key Files**: `session_config.json`, `runtime.py`, `router.py`
 - **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_gpt_live.py -q`
 - **Known Debt/Issues**: 1 item(s) logged
-
-#### [LiveKit Voice Assistant & Worker Subsystem](app/services/business_assistant/livekit/README.md) (`app/services/business_assistant/livekit`)
-The `app/services/business_assistant/livekit` package implements the real-time media, participant token issuance, LiveKit Agent worker, and business tool gateway for the FastAPI Bookings conversational business assistant. It delivers a duplex voice i...
-- **Key Files**: `config.py`, `session_config.json`, `token_service.py`, `router.py`, `tool_gateway.py`, `caption_bridge.py`, `worker.py`
-- **Verification**: `.\.venv\Scripts\python.exe -m pytest tests/test_livekit_worker_baseline.py ``
-- **Known Debt/Issues**: 6 item(s) logged
 
 #### [Voice-First Onboarding & In-App Assistance Subsystem](app/services/business_assistant/onboarding/README.md) (`app/services/business_assistant/onboarding`)
 The `app/services/business_assistant/onboarding` package delivers the backend business logic, conversational intent normalization, setup planning state machine, cryptographic delegation guards, and gateway adapters for the voice-first onboarding assi...
@@ -183,6 +177,12 @@ The `alembic/` package manages relational schema migrations, version tracking, a
 
 ### 3.13 Documentation & Architecture Catalog
 
+#### [codex-control-centre Architecture Decision Records](docs/architecture/README.md) (`docs/architecture`)
+This directory records binding architectural decisions for FastAPI Bookings. It owns concise decision records that define system boundaries, terminology, authority, migration and rollback rules before implementation begins. Detailed product research ...
+- **Key Files**: `ADR_CODEX_SUPERVISOR_V2_FACADE.md`, `CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md`, `CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md`
+- **Verification**: `.\.venv\Scripts\python.exe -m pytest codex-control-centre/tests/test_security.py codex-control-centre/tests/test_events.py -v`
+- **Known Debt/Issues**: 4 item(s) logged
+
 #### [Platform Audits, Security Reviews & Diagnostic Ledgers](docs/audits/README.md) (`docs/audits`)
 The Audits module provides forensic investigations, architectural gap assessments, and verified remediation blueprints across all core systems of the FastAPI Bookings platform....
 - **Key Files**: `SYSTEM_AUDIT_REPORT.md`
@@ -191,7 +191,7 @@ The Audits module provides forensic investigations, architectural gap assessment
 
 #### [FastAPI Bookings — Central Documentation Index](docs/README.md) (`docs`)
 This documentation suite serves as the single source of truth for the system architecture, component contracts, operational guides, and testing protocols. ...
-- **Key Files**: `ARCHITECTURE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md`, `module_manifest.json`, `main.py`, `config.py`
+- **Key Files**: `ARCHITECTURE.md`, `ADR_CODEX_SUPERVISOR_V2_FACADE.md`, `MODULE_INDEX.md`, `AGENT_BOOT_SNAPSHOT.md`, `module_manifest.json`, `main.py`, `config.py`
 - **Verification**: `python scripts/verify_living_docs.py`
 - **Known Debt/Issues**: 3 item(s) logged
 
@@ -215,7 +215,7 @@ The Assistant Studio owns: - **Zero-Mock Platform Compliance (AGENTS.md Rule 3)*
 
 #### [Business Assistant Frontend](frontend/src/pages/admin/business-assistant/README.md) (`frontend/src/pages/admin/business-assistant`)
 This module delivers both a full-page Business Assistant management view, a persistent application-wide floating drawer accessible across all authenticated admin routes, and the client-side execution framework for voice-first onboarding assistance....
-- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-livekit-voice.ts`, `use-xai-grok-voice.ts`, `minimized-voice-controller.tsx`, `realtime-protocol.ts`, `index.ts`, `registry.ts`, `business-settings-adapter.ts`
+- **Key Files**: `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx`, `business-assistant-context.tsx`, `context-boundary.ts`, `use-xai-grok-voice.ts`, `minimized-voice-controller.tsx`, `realtime-protocol.ts`, `index.ts`, `registry.ts`, `business-settings-adapter.ts`, `catalog-services-adapter.ts`
 - **Verification**: `npm test`
 - **Known Debt/Issues**: 6 item(s) logged
 
@@ -255,8 +255,9 @@ The Admin Schedule module owns: - Weekly recurring working hours template config
 
 #### [Codex Engineering Cockpit](frontend/src/pages/admin/coding-cockpit/README.md) (`frontend/src/pages/admin/coding-cockpit`)
 - **Primary Purpose**: Consolidates the previously split and fragmented "Resident Agent" (with its broken 750px iframe on port 5180, static prompt copy cards, and competitor radar) and "Conversational Coding Studio" into a single, cohesive, mobile-fi...
-- **Key Files**: `index.tsx`, `types.ts`, `CodingCockpitPage.tsx`, `CodexWorkbenchTab.tsx`, `HealthSentinels.tsx`, `StressFuzzer.tsx`, `IssuesStudio.tsx`, `SkillsBrowser.tsx`, `EventStream.tsx`, `client.ts`, `codexApi.ts`, `useWorkbenchStore.ts`
-- **Known Debt/Issues**: 3 item(s) logged
+- **Key Files**: `index.tsx`, `types.ts`, `CodingCockpitPage.tsx`, `CodexWorkbenchTab.tsx`, `HealthSentinels.tsx`, `StressFuzzer.tsx`, `IssuesStudio.tsx`, `SkillsBrowser.tsx`, `PluginManager.tsx`, `EventStream.tsx`, `residentEventStream.ts`, `client.ts`
+- **Verification**: `python -c "import subprocess; raise SystemExit(subprocess.call(['node', '--experimental-strip-types', '--test', 'frontend/src/pages/admin/coding-cockpit/coding-cockpit.test.ts']))"`
+- **Known Debt/Issues**: 5 item(s) logged
 
 #### [GPT-Live Admin Page](frontend/src/pages/admin/gpt-live/README.md) (`frontend/src/pages/admin/gpt-live`)
 This module starts and closes the native GPT-Live Business Assistant voice experience. Its shared browser WebRTC hook and caption renderer are used by the direct admin page and the Business Assistant drawer/full-page voice controls. It does not hold ...
@@ -354,7 +355,7 @@ The **Routing & Geospatial Services** subsystem provides decoupled dual-route ca
 
 #### [Data Models & Persistence Architecture](app/models/README.md) (`app/models`)
 The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schema for **FastAPI Bookings**....
-- **Key Files**: `__init__.py`, `tenant.py`, `tenant_website.py`, `user.py`, `provider.py`, `service.py`, `location.py`, `booking.py`, `booking_slot_allocation.py`, `calendar_note.py`, `client.py`, `client_dispute.py`
+- **Key Files**: `__init__.py`, `tenant.py`, `tenant_website.py`, `media.py`, `user.py`, `provider.py`, `service.py`, `location.py`, `booking.py`, `booking_slot_allocation.py`, `calendar_note.py`, `client.py`
 - **Verification**: `.\.venv\Scripts\python.exe -m py_compile app/models/*.py`
 - **Known Debt/Issues**: 10 item(s) logged
 
@@ -395,4 +396,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-13 21:20:15Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-15 09:43:19Z by `scripts/index_living_docs.py`.*

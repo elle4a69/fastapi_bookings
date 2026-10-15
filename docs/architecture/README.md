@@ -1,5 +1,9 @@
 # codex-control-centre Architecture Decision Records
 
+- [Persisted Platform-Owner Authority](ADR_PLATFORM_OWNER_AUTHORITY.md) — sole
+  cross-tenant authority bit, offline management, transactional audit, and
+  last-active-owner protection.
+
 ## 1. Purpose & Scope
 
 This directory records binding architectural decisions for FastAPI Bookings. It owns concise decision records that define system boundaries, terminology, authority, migration and rollback rules before implementation begins. Detailed product research and accepted design evidence remain in `artifacts/`; module implementation details remain in each module's living `README.md`.

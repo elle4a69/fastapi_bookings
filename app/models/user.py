@@ -6,14 +6,17 @@ separate ``Client`` model.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, ForeignKey, Index, UniqueConstraint, false
 from sqlalchemy.orm import relationship
 from ..db.database import Base
 
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("tenant_id", "login", name="uq_users_tenant_login"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "login", name="uq_users_tenant_login"),
+        Index("ix_users_platform_owner_active", "is_platform_owner", "is_active"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -27,6 +30,7 @@ class User(Base):
     last_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_platform_owner = Column(Boolean, default=False, server_default=false(), nullable=False)
     provider_id = Column(Integer, ForeignKey("providers.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

@@ -1,5 +1,13 @@
 # HTTP REST API Layer (`app/api/routers`)
 
+### Platform-only route dependency
+
+Mounted Control Centre, resident-agent, and platform-support routes depend on
+`app.api.deps.require_platform_owner`. It accepts only an active user whose
+persisted `is_platform_owner` field is exactly true. Tenant roles, JWT role
+claims, dynamic superuser attributes, and the local authentication token cannot
+substitute for that database capability. No HTTP route grants or revokes it.
+
 This module provides the HTTP REST API router registry, endpoint handlers, request/response serialization, rate-limiting, and error transformation for **FastAPI Bookings**.
 
 ---
