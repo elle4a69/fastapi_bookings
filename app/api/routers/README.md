@@ -41,8 +41,8 @@ graph TD
     Deps --> DB[(Database Session)]
 ```
 
-### Key Router Files
 - [auth.py](file:///F:/Projects/fastapi_bookings/app/api/routers/auth.py): User login, credential verification, JWT token issuance.
+- [identity.py](file:///F:/Projects/fastapi_bookings/app/api/routers/identity.py): Logto identity exchange (`POST /api/identity/exchange`), Logto link alias (`POST /api/identity/logto/link`), caller identity mapping (`GET /api/identity/me`), organization directory (`GET /api/identity/organizations`), and webhook intake (`POST /api/identity/webhook`).
 - [bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/bookings.py): Primary booking management, admin scheduling, status updates (`CONFIRMED`, `CANCELLED`, `COMPLETED`).
 - [availability.py](file:///F:/Projects/fastapi_bookings/app/api/routers/availability.py): Real-time availability calculation across provider schedules and buffer rules.
 - [public_bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/public_bookings.py): Intake endpoints consumed by the public booking widget.

@@ -26,6 +26,7 @@ from .notification import (
 # Core domain models
 from .tenant import Tenant, TravelChargeOrigin
 from .invitation import TenantInvitation
+from .external_identity import ExternalIdentityLink, ExternalOrganizationLink, IdentityOutboxEvent
 
 from .resource import (
     Resource,
@@ -266,5 +267,8 @@ __all__ = [
     "OnboardingStep",
     "OnboardingAuditLog",
     "TenantInvitation",
+    "ExternalIdentityLink",
+    "ExternalOrganizationLink",
+    "IdentityOutboxEvent",
 ]
 

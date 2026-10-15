@@ -91,6 +91,48 @@ class Settings(BaseSettings):
         description="Google OAuth2 Client ID for SSO",
     )
 
+    # Logto Identity Configuration (WP1)
+    LOGTO_ENDPOINT: str = Field(
+        "",
+        description="Logto instance endpoint URL (e.g. https://auth.example.com)",
+    )
+    LOGTO_APP_ID: str = Field(
+        "",
+        description="Logto application client ID",
+    )
+    LOGTO_APP_SECRET: str = Field(
+        "",
+        description="Logto application client secret",
+    )
+    LOGTO_API_RESOURCE: str = Field(
+        "",
+        description="Logto API resource indicator / audience (e.g. https://api.fastapibookings.com)",
+    )
+    LOGTO_M2M_APP_ID: str = Field(
+        "",
+        description="Logto M2M App ID for Management API",
+    )
+    LOGTO_M2M_APP_SECRET: str = Field(
+        "",
+        description="Logto M2M App Secret for Management API",
+    )
+    LOGTO_JWKS_URI: Optional[str] = Field(
+        None,
+        description="Custom JWKS URI for Logto public keys (defaults to {LOGTO_ENDPOINT}/oidc/jwks)",
+    )
+    LOGTO_ISSUER: Optional[str] = Field(
+        None,
+        description="Expected Logto token issuer (defaults to {LOGTO_ENDPOINT}/oidc)",
+    )
+    LOGTO_CACHE_TTL_SECONDS: int = Field(
+        3600,
+        description="In-memory cache TTL for JWKS public keys in seconds",
+    )
+    LOGTO_PUBLIC_KEYS_JSON: Optional[str] = Field(
+        None,
+        description="Optional pre-configured JWKS or public keys JSON for offline/test environments",
+    )
+
     # Frontend
     FRONTEND_ORIGINS: str = Field(
         "",

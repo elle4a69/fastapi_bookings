@@ -5,7 +5,7 @@
 The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schema for **FastAPI Bookings**.
 
 ### Primary Domain Entities:
-- **Tenancy, Media & Core Identity**: `Tenant` (with `status`, `suspended_at`, `suspension_reason`), `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`, `platform_owner`; flags: `is_platform_owner`, `is_superuser`), `TenantInvitation` (single-use tokens, status lifecycle), `TenantTranslation`.
+- **Tenancy, Media & Core Identity**: `Tenant` (with `status`, `suspended_at`, `suspension_reason`), `TenantWebsite`, `Media` (tenant durable assets, public website eligibility, private clinical/booking notes), `User` (roles: `owner`, `manager`, `provider`, `platform_owner`; flags: `is_platform_owner`, `is_superuser`), `TenantInvitation` (single-use tokens, status lifecycle), `TenantTranslation`, `ExternalIdentityLink` (Logto sub to User mapping), `ExternalOrganizationLink` (Logto org_id to Tenant mapping), `IdentityOutboxEvent` (asynchronous tenant/org provisioning queue).
 - **Catalog & Facilities**: `Service`, `Provider`, `Location`, `Category`, `AddOn`, `Product`, `Package`, `Resource`, `LocationProvider`, `LocationService`.
 - **Operations & Scheduling**: `Booking`, `BookingSlotAllocation`, `CalendarNote`, `Client`, `ClientDispute`, `WaitlistEntry`, `BlockedTime`, `ReservedTime`.
 - **Messaging & Omnichannel**: `Conversation`, `Message`, `ChannelAccount`, `MessageStyleExample`, `SmsAccount`, `SmsConversation`, `SmsMessage`, `SmsOutboundJob`, `SmsAiJob`, `SmsConversationEvent`, `SmsNote`, `SmsChatwootBinding`, `SmsQuickTool`.
@@ -26,6 +26,7 @@ app/models/
 ├── media.py                  # Durable media assets, public website eligibility, notes, tenant storage
 ├── user.py                   # User authentication, hashed passwords, roles, is_platform_owner, is_superuser, nullable tenant_id
 ├── invitation.py             # TenantInvitation model, single-use tokens, roles, and status lifecycle ('pending', 'accepted', 'revoked', 'expired')
+├── external_identity.py      # ExternalIdentityLink, ExternalOrganizationLink, IdentityOutboxEvent (WP1 Logto foundation)
 ├── provider.py               # Staff practitioners, bios, in-call/out-call travel configuration
 ├── service.py                # Treatments, durations, pricing, buffer rules, in-call/out-call flags
 ├── location.py               # Physical clinics and composite mappings (location_providers, location_services)
@@ -74,7 +75,7 @@ app/models/
 
 - **SQLAlchemy 2.0**: Declarative ORM base defined in [`app/db/database.py`](file:///f:/Projects/fastapi_bookings/app/db/database.py#L45).
 - **pgvector**: `from pgvector.sqlalchemy import Vector` provides vector column type binding for PostgreSQL.
-- **Alembic Migrations**: Linear version history rooted through `j1k2m3n4p5q6`, `k2m3n4p5q6r7`, `m3n4p5q6r7s8` to head `a2b3c4d5e6f8` (`a2b3c4d5e6f8_wp0_platform_ownership_and_tenant_lifecycle.py`).
+- **Alembic Migrations**: Linear version history rooted through `j1k2m3n4p5q6`, `k2m3n4p5q6r7`, `m3n4p5q6r7s8`, `a2b3c4d5e6f8` (WP0 platform ownership & tenant lifecycle), to head `b3c4d5e6f7a9` (`b3c4d5e6f7a9_wp1_logto_identity_foundation.py`).
 - **Metadata Discovery**: Importing `app.models` in [`app/models/__init__.py`](file:///f:/Projects/fastapi_bookings/app/models/__init__.py#L1) guarantees that all models register onto `Base.metadata`.
 
 ---

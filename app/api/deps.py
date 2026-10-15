@@ -108,16 +108,24 @@ async def get_current_tenant(
 
 async def get_current_user(
     x_token: Optional[str] = Header(None, alias="X-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     tenant: Tenant = Depends(get_current_tenant),
     db: Session = Depends(get_db),
 ) -> User:
-    """Retrieve the current authenticated user from the X-Token header.
+    """Retrieve the current authenticated user from Authorization or X-Token header.
 
-    The token must be a valid JWT containing a ``sub`` claim that
-    corresponds to a user ID. Scopes the lookup to the active tenant to
-    ensure proper multi-tenant boundary isolation.
+    Supports both internal HS256 tokens and Logto RS256 organization-scoped tokens.
+    Scopes the lookup to the active tenant to ensure proper multi-tenant boundary isolation.
     """
-    if settings.LOCAL_AUTH_BYPASS and x_token == "local-development-bypass":
+    raw_token = x_token
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            raw_token = parts[1]
+        elif authorization:
+            raw_token = authorization
+
+    if settings.LOCAL_AUTH_BYPASS and raw_token == "local-development-bypass":
         user = (
             db.query(User)
             .filter(User.tenant_id == tenant.id, User.role.in_(["owner", "admin"]))
@@ -131,10 +139,68 @@ async def get_current_user(
             detail="Local authentication bypass requires an owner account in the active tenant.",
         )
 
-    if not x_token:
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
 
-    payload = decode_access_token(x_token)
+    # 1. Try Logto RS256 token validation
+    from ..services.identity import logto_validator, LogtoValidationError, identity_service
+    from ..models.external_identity import ExternalOrganizationLink
+
+    try:
+        logto_claims = logto_validator.validate_token(raw_token, verify_aud=False)
+        sub = logto_claims.get("sub")
+        if not sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject claim")
+
+        user = identity_service.get_user_by_external_identity(db, provider="logto", external_subject_id=sub)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="External identity not linked")
+        if not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account is deactivated")
+
+        is_platform = (
+            bool(getattr(user, "is_platform_owner", False))
+            or bool(getattr(user, "is_superuser", False))
+            or (getattr(user, "role", "") or "").lower() == "platform_owner"
+        )
+        if is_platform:
+            return user
+
+        # Check organization claim if present in Logto token
+        org_id = logto_claims.get("normalized_org_id")
+        if org_id:
+            org_link = (
+                db.query(ExternalOrganizationLink)
+                .filter(
+                    ExternalOrganizationLink.provider == "logto",
+                    ExternalOrganizationLink.external_organization_id == org_id,
+                )
+                .first()
+            )
+            if not org_link:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Organization not linked to any active tenant",
+                )
+            if org_link.tenant_id != tenant.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Token organization does not match active tenant",
+                )
+
+        if user.tenant_id != tenant.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User not found in this tenant",
+            )
+
+        return user
+    except LogtoValidationError:
+        # Not a Logto token or Logto validation failed, fall back to internal token decoding
+        pass
+
+    # 2. Internal HS256 JWT decoding
+    payload = decode_access_token(raw_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     try:
@@ -205,14 +271,23 @@ async def get_current_owner(
 
 async def get_current_platform_owner(
     x_token: Optional[str] = Header(None, alias="X-Token"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> User:
-    """Retrieve the current platform owner from X-Token header without requiring an X-Tenant context.
+    """Retrieve the current platform owner from Authorization or X-Token header without requiring an X-Tenant context.
 
     Strictly requires is_platform_owner=True, is_superuser=True, or role='platform_owner'.
     Tenant-level owners (role='owner' without platform flag) are strictly rejected with 403 Forbidden.
     """
-    if settings.LOCAL_AUTH_BYPASS and x_token == "local-development-bypass":
+    raw_token = x_token
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            raw_token = parts[1]
+        elif authorization:
+            raw_token = authorization
+
+    if settings.LOCAL_AUTH_BYPASS and raw_token == "local-development-bypass":
         user = (
             db.query(User)
             .filter(
@@ -230,10 +305,34 @@ async def get_current_platform_owner(
             detail="Local authentication bypass requires a platform owner account.",
         )
 
-    if not x_token:
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token")
 
-    payload = decode_access_token(x_token)
+    # 1. Try Logto RS256 token validation
+    from ..services.identity import logto_validator, LogtoValidationError, identity_service
+    try:
+        logto_claims = logto_validator.validate_token(raw_token, verify_aud=False)
+        sub = logto_claims.get("sub")
+        if sub:
+            user = identity_service.get_user_by_external_identity(db, provider="logto", external_subject_id=sub)
+            if not user:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="External identity not linked")
+            is_platform = (
+                bool(getattr(user, "is_platform_owner", False))
+                or bool(getattr(user, "is_superuser", False))
+                or (getattr(user, "role", "") or "").lower() == "platform_owner"
+            )
+            if not is_platform:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden: Platform owner privilege required",
+                )
+            return user
+    except LogtoValidationError:
+        pass
+
+    # 2. Internal HS256 JWT decoding
+    payload = decode_access_token(raw_token)
     if not payload or "sub" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 

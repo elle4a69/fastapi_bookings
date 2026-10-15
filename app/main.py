@@ -78,6 +78,7 @@ from .core.telemetry import init_telemetry, telemetry_disabled
 # --- Import routers ---
 from .api.routers import (
     auth,
+    identity,
     services,
     providers,
     clients,
@@ -528,6 +529,7 @@ if origins:
 
 # Include routers with prefixes
 app.include_router(auth.router, prefix="/api")
+app.include_router(identity.router)
 app.include_router(services.router, prefix="/api/admin")
 app.include_router(providers.router, prefix="/api/admin")
 app.include_router(clients.router, prefix="/api/admin")
