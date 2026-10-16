@@ -1,0 +1,32 @@
+import { useState, type FormEvent, type ReactNode } from 'react'
+import { mapSupervisorError } from './api'
+import type { Brief, Mission, WorkPackage } from './types'
+
+type Submitter = (fields: Record<string, string>) => Promise<void>
+
+function PlanningForm({ title, description, children, submitLabel, confirmationText, onSubmit }: { title: string; description: string; children: ReactNode; submitLabel: string; confirmationText: string; onSubmit: Submitter }) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const values = Object.fromEntries(Array.from(new FormData(event.currentTarget).entries(), ([key, value]) => [key, String(value).trim()] as const))
+    if (values.confirmation !== 'confirmed') { setError(new Error('confirmation_required')); return }
+    const { confirmation: _confirmation, ...fields } = values
+    setPending(true); setError(null)
+    try { await onSubmit(fields); event.currentTarget.reset() } catch (cause) { setError(cause) } finally { setPending(false) }
+  }
+  const mapped = error ? mapSupervisorError(error) : null
+  const confirmationError = error instanceof Error && error.message === 'confirmation_required'
+  return <section className="rounded-xl border bg-card p-4"><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm text-muted-foreground">{description}</p><form className="mt-4 space-y-3" onSubmit={submit}>{children}<label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" name="confirmation" value="confirmed" required /><span>{confirmationText}</span></label>{Boolean(error) && <p role="alert" className="text-sm text-destructive">{confirmationError ? 'Confirm the planning action before submitting.' : `${mapped?.title}: ${mapped?.detail}`}</p>}<button type="submit" disabled={pending} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">{pending ? 'Saving…' : submitLabel}</button></form></section>
+}
+
+function Field({ name, label, maxLength = 240, required = true, hint }: { name: string; label: string; maxLength?: number; required?: boolean; hint?: string }) {
+  return <label className="block text-sm font-medium">{label}<input name={name} required={required} maxLength={maxLength} className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm" />{hint && <span className="mt-1 block text-xs font-normal text-muted-foreground">{hint}</span>}</label>
+}
+
+export function CreateMissionForm({ ready, onSubmit }: { ready: boolean; onSubmit: Submitter }) { if (!ready) return null; return <PlanningForm title="Create mission" description="Add a bounded planning mission to the configured project." submitLabel="Create mission" confirmationText="I confirm this creates an immutable planning mission." onSubmit={onSubmit}><Field name="title" label="Mission title" maxLength={120} /><Field name="summary" label="Structural summary" maxLength={400} /></PlanningForm> }
+export function CreateWorkPackageForm({ mission, onSubmit }: { mission: Mission | null; onSubmit: Submitter }) { if (!mission) return null; return <PlanningForm title="Create work package" description={`Add an immutable work package to ${mission.title}.`} submitLabel="Create work package" confirmationText="I confirm this creates an immutable work package." onSubmit={onSubmit}><Field name="title" label="Work package title" maxLength={120} /><Field name="scope" label="Bounded scope" maxLength={400} /></PlanningForm> }
+export function CreateBriefForm({ workPackage, onSubmit }: { workPackage: WorkPackage | null; onSubmit: Submitter }) { if (!workPackage) return null; return <PlanningForm title="Create brief revision" description="A new brief is immutable. It is planning material only and cannot start work." submitLabel="Create brief" confirmationText="I confirm this creates an immutable brief revision." onSubmit={onSubmit}><Field name="content" label="Brief content" maxLength={1200} /><label className="block text-sm font-medium">Future execution authorization requirement<select name="future_execution_authorization_requirement" defaultValue="requires_authorization" className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm"><option value="requires_authorization">Authorization required</option><option value="not_required_once_requested">Future requestable waiver — no current authority</option></select><span className="mt-1 block text-xs font-normal text-muted-foreground">This creates no run, permission, bypass, or tool access.</span></label></PlanningForm> }
+export function ApproveBriefForm({ brief, onSubmit }: { brief: Brief | null; onSubmit: Submitter }) { if (!brief || brief.state !== 'draft') return null; return <PlanningForm title="Approve draft brief" description={`Approve revision ${brief.revision}. This only changes the planning ledger.`} submitLabel="Approve brief" confirmationText="I confirm this transitions this draft brief to approved planning state." onSubmit={onSubmit}><p className="rounded bg-muted p-3 text-sm">Approval does not dispatch, execute, authorize a run, or grant tools.</p></PlanningForm> }
+export function CheckpointForm({ mission, onSubmit }: { mission: Mission | null; onSubmit: Submitter }) { if (!mission) return null; return <PlanningForm title="Record context checkpoint" description="Append a structural context record for the selected mission." submitLabel="Record checkpoint" confirmationText="I confirm this appends an immutable context checkpoint." onSubmit={onSubmit}><Field name="summary" label="Summary" maxLength={240} /><Field name="decisions" label="Decisions" maxLength={400} /><Field name="constraints" label="Constraints" maxLength={400} /><Field name="open_questions" label="Open questions" maxLength={400} /></PlanningForm> }
+export function AuditScopeForm({ workPackage, hasApprovedBrief, onSubmit }: { workPackage: WorkPackage | null; hasApprovedBrief: boolean; onSubmit: Submitter }) { if (!workPackage || !hasApprovedBrief) return null; return <PlanningForm title="Define audit scope" description="Set bounded audit criteria and exclusions. No evidence or verdict is recorded." submitLabel="Define audit scope" confirmationText="I confirm this creates an immutable audit scope." onSubmit={onSubmit}><Field name="criteria" label="Criteria" maxLength={400} /><Field name="exclusions" label="Exclusions" maxLength={400} /></PlanningForm> }

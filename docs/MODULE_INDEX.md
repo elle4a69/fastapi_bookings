@@ -403,4 +403,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-16 01:54:57Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-16 02:11:08Z by `scripts/index_living_docs.py`.*

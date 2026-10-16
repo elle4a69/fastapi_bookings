@@ -2,15 +2,18 @@
 
 ## Purpose & Scope
 
-This is the ground-up, read-only V2 Development Supervisor at
-`/admin/coding-cockpit-v2`. It reads the native Control Centre V2 planning
+This is the ground-up V2 Development Supervisor at
+`/admin/coding-cockpit-v2`. It uses the native Control Centre V2 planning
 facade; it does not replace the legacy coding cockpit or execute work.
 
 ## Architecture & Key Files
 
-- `SupervisorPage.tsx` owns URL-backed view and selection loading.
+- `SupervisorPage.tsx` owns URL-backed view, selection loading, and the
+  bounded planning mutation handoff.
 - `api.ts` is the only V2 transport adapter and targets `/api/admin/codex/v2`.
 - `SupervisorShell.tsx`, `SupervisorNav.tsx`, and panels render live state.
+- `PlanningForms.tsx` provides accessible, explicitly-confirmed forms for the
+  planning records allowed by the V2 contract.
 - `routeState.ts` preserves Overview, Missions, Context, mission and package
   selection in the URL.
 
@@ -23,11 +26,14 @@ tunnel, and `simplydemo` development fallbacks.
 
 ## Core Workflows & Contracts
 
-Only read operations are made: bootstrap, readiness/project discovery,
-missions, mission details, work packages, briefs, context checkpoints, and
-audit scope. All API responses use the V2 envelope and ETags. The fixed server
-cutover remains `v1_only`; no form, approval, dispatch, execution, evidence,
-or audit-verdict action exists here.
+The UI reads bootstrap, readiness/project discovery, missions, mission details,
+work packages, briefs, context checkpoints, and audit scope. It can create a
+mission, work package, immutable brief, context checkpoint, and audit scope,
+and approve a draft brief. Each mutation is explicitly confirmed and carries a
+new UUIDv4 idempotency key plus the current resource version required by the
+server. All API responses use the V2 envelope and ETags. The fixed server
+cutover remains `v1_only`; no dispatch, execution, evidence, or audit-verdict
+action exists here.
 
 ## Data Safety & Isolation
 
@@ -39,10 +45,14 @@ informational only and grants no authority.
 
 ## Known Issues, Edge Cases & Outstanding Work
 
-The UI is intentionally read-only. Future packages may add controlled planning
-mutations, execution dispatch, proof capture, and independent audit outcomes
-only after separate approval and contracts. A local developer host will show
-the sign-in/context state until an actual tenant-scoped session is available.
+Planning records are immutable once created and a draft brief can be approved
+only through the server's current-version rule. A selected brief may label a
+future authorization requirement as `not_required_once_requested`, but that is
+inert planning metadata: it grants no authority, run, bypass, or tool access.
+Future packages may add execution dispatch, proof capture, and independent
+audit outcomes only after separate approval and contracts. A local developer
+host will show the sign-in/context state until an actual tenant-scoped session
+is available.
 
 ## Verification & Testing Commands
 

@@ -83,10 +83,12 @@ VITE_MAPBOX_TOKEN=pk.eyJ1I...
 
 ### 4.0 Development Supervisor V2
 
-`/admin/coding-cockpit-v2` is a separate, read-only native Control Centre
+`/admin/coding-cockpit-v2` is a separate native Control Centre planning
 surface. It uses only the V2 facade and an actual signed-in tenant admin
-context; it has no localhost/demo/tunnel identity fallback and cannot execute,
-dispatch, or approve a run. See
+context; it has no localhost/demo/tunnel identity fallback. It can create and
+approve bounded planning records with explicit confirmation, current-version
+preconditions, and server idempotency, but cannot execute, dispatch, approve a
+run, collect evidence, or issue a verdict. See
 [the module README](src/pages/admin/codex-supervisor/README.md).
 
 ### 4.1 Mobile-First & PWA Standards

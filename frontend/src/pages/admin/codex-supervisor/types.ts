@@ -36,3 +36,10 @@ export type SupervisorSnapshot = {
   projects: Project[]
   etags: Record<string, string | null>
 }
+
+export type PlanningMutation =
+  | { mission: Mission }
+  | { work_package: WorkPackage }
+  | { brief: Brief }
+  | { checkpoint: Checkpoint }
+  | { audit_scope: AuditScope }
