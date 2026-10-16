@@ -102,9 +102,10 @@ app/services/identity/
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
-- **Outstanding Work (WP2/WP3)**: Downstream billing and subscription state mapping (Flexprice) will be attached to the verified tenant context established by WP1.
+- **Full Control Plane Integration**: WP1 through WP5 are fully implemented and verified. Production deployment topology is documented in [`docs/operations/DEPLOYMENT_TOPOLOGY_LOGTO_FLEXPRICE.md`](file:///f:/Projects/fastapi_bookings/docs/operations/DEPLOYMENT_TOPOLOGY_LOGTO_FLEXPRICE.md), operational runbooks in [`docs/runbooks/SAAS_CONTROL_PLANE_RUNBOOK.md`](file:///f:/Projects/fastapi_bookings/docs/runbooks/SAAS_CONTROL_PLANE_RUNBOOK.md), and platform security review in [`docs/security/SAAS_CONTROL_PLANE_SECURITY_REVIEW.md`](file:///f:/Projects/fastapi_bookings/docs/security/SAAS_CONTROL_PLANE_SECURITY_REVIEW.md).
 - **Edge Case - Concurrent Linking**: Handled via database unique constraints on `(provider, external_subject_id)` and catch-rollback retry in `link_identity`.
 - **Edge Case - Clock Skew**: `python-jose` decode handles standard leeway; expiration validation enforces strict timestamp comparison.
+- **Provider Liveness Check**: Validated via deep readiness probe (`GET /api/platform/health/readiness` and `/health/ready`).
 
 ---
 
@@ -118,10 +119,10 @@ Run the comprehensive Logto identity contract suite:
 python -m pytest tests/test_wp1_logto_identity_contract.py -v
 ```
 
-### Regression Verification Suite
-Execute both WP0 control-plane baseline and WP1 identity foundation regression suites:
+### Full Multi-Tenant Security & Operational Hardening Suite
+Execute the full security, identity, billing, entitlements, and operational hardening verification suites:
 ```powershell
-python -m pytest tests/test_wp0_security_contract.py tests/test_auth_contract.py tests/test_wp1_logto_identity_contract.py -v
+python -m pytest tests/test_wp0_security_contract.py tests/test_wp1_logto_identity_contract.py tests/test_wp2_flexprice_billing_contract.py tests/test_wp3_entitlements_contract.py tests/test_wp4_ux_api_contract.py tests/test_wp5_operational_hardening.py -v
 ```
 
 ### Documentation Verification Gate

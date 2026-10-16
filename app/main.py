@@ -81,6 +81,7 @@ from .api.routers import (
     identity,
     flexprice_webhooks,
     platform_billing,
+    platform_health,
     services,
 
     providers,
@@ -535,6 +536,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(identity.router)
 app.include_router(flexprice_webhooks.router)
 app.include_router(platform_billing.router)
+app.include_router(platform_health.router)
 
 app.include_router(services.router, prefix="/api/admin")
 app.include_router(providers.router, prefix="/api/admin")

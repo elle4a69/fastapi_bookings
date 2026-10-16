@@ -45,6 +45,7 @@ graph TD
 - [identity.py](file:///F:/Projects/fastapi_bookings/app/api/routers/identity.py): Logto identity exchange (`POST /api/identity/exchange`), Logto link alias (`POST /api/identity/logto/link`), caller identity mapping (`GET /api/identity/me`), organization directory (`GET /api/identity/organizations`), and webhook intake (`POST /api/identity/webhook`).
 - [flexprice_webhooks.py](file:///F:/Projects/fastapi_bookings/app/api/routers/flexprice_webhooks.py): Flexprice billing webhook receiver (`POST /api/webhooks/flexprice`), HMAC-SHA256 signature verification over raw request body, SHA-256 payload digest audit trail, idempotent event deduplication, and out-of-order event resilience.
 - [platform_billing.py](file:///F:/Projects/fastapi_bookings/app/api/routers/platform_billing.py): Tenant-scoped subscription overview (`GET /api/billing/subscription`), hosted customer billing portal sessions (`POST /api/billing/portal-session`), metered usage reporting (`POST /api/billing/usage`), and platform operator console endpoints: cross-tenant billing overview (`GET /api/admin/platform/billing/tenants`), tenant diagnostics (`GET /api/admin/platform/billing/tenants/{tenant_id}/diagnostics`), provider event inbox (`GET /api/admin/platform/billing/inbox`), event retry (`POST /api/admin/platform/billing/inbox/{event_id}/retry`), platform grants manager (`GET`, `POST`, `DELETE /api/admin/platform/billing/grants`), and remote provider reconciliation (`GET`, `POST /api/admin/platform/billing/reconcile`).
+- [platform_health.py](file:///F:/Projects/fastapi_bookings/app/api/routers/platform_health.py): Platform deep readiness probe (`GET /api/platform/health/readiness` and `/health/ready`), multi-dependency liveness checking (PostgreSQL, Redis, Logto, Flexprice), strict zero-credential/PII masking, and fail-closed HTTP 503 semantics.
 - [bookings.py](file:///F:/Projects/fastapi_bookings/app/api/routers/bookings.py): Primary booking management, admin scheduling, status updates (`CONFIRMED`, `CANCELLED`, `COMPLETED`).
 
 - [availability.py](file:///F:/Projects/fastapi_bookings/app/api/routers/availability.py): Real-time availability calculation across provider schedules and buffer rules.
@@ -201,6 +202,9 @@ pytest tests/test_assistant_studio_policy_and_scoping.py tests/test_assistant_st
 
 # 8. Test Chatwoot Tenant Binding, Webhook Scoping, AgentBot De-confliction, Automated Provisioning, and Docker E2E
 pytest tests/test_chatwoot_provisioning.py tests/test_sms_chatwoot.py tests/test_chatwoot_agentbot.py tests/test_chatwoot_docker_e2e.py -v
+
+# 9. Test SaaS Control Plane & Operational Hardening (WP0-WP5)
+pytest tests/test_wp0_security_contract.py tests/test_wp1_logto_identity_contract.py tests/test_wp2_flexprice_billing_contract.py tests/test_wp3_entitlements_contract.py tests/test_wp4_ux_api_contract.py tests/test_wp5_operational_hardening.py -v
 ```
 
 ---
@@ -238,6 +242,18 @@ The router layer provides unauthenticated public readiness checks (`/health/gran
 - **Background Outbox Lag**: Quantifies pending and dead-letter projection queues (`knowledge_graph_projections`) and learning events (`learning_events`).
 - **Telemetry & Celery Worker Status**: Evaluates tracing initialization and worker queue responsiveness.
 - **Response Format**: Status 200 with `status: "ready"` if all critical subsystems are online; Status 503 with degraded component details if any core dependency fails.
+
+### 8.3 Platform SaaS Deep Readiness Probe (WP5: `GET /api/platform/health/readiness` & `/health/ready`)
+
+**Routes:** `GET /api/platform/health/readiness` and `GET /health/ready`  
+**Location:** [`app/api/routers/platform_health.py`](file:///F:/Projects/fastapi_bookings/app/api/routers/platform_health.py)  
+**Schema:** `PlatformReadinessResponse` in [`app/schemas/platform_health.py`](file:///F:/Projects/fastapi_bookings/app/schemas/platform_health.py)
+
+Designed specifically for Kubernetes pod readiness probes and AWS/GCP Application Load Balancer health checks:
+- **Comprehensive Dependency Checks**: Assesses PostgreSQL (`SELECT 1`), Redis (`PING`), Logto Identity (`/.well-known/openid-configuration`), and Flexprice Billing (`/health`).
+- **Fail-Closed Semantics**: If database connectivity fails, immediately returns **HTTP 503 Service Unavailable** with `"status": "down"`, pulling the instance out of traffic rotation.
+- **Zero-Credential Guarantee**: Never leaks connection strings, passwords, auth headers, API keys, or tenant PII in response payloads.
+- **Test coverage:** [`tests/test_wp5_operational_hardening.py`](file:///F:/Projects/fastapi_bookings/tests/test_wp5_operational_hardening.py)
 
 ---
 

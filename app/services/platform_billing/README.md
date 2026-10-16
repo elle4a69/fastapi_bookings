@@ -129,19 +129,24 @@ When resolving `get_effective_entitlement(db, tenant_id, entitlement_key)`:
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
+- **Full Control Plane Integration**: WP1 through WP5 are fully implemented and verified. Production deployment topology is codified in [`docs/operations/DEPLOYMENT_TOPOLOGY_LOGTO_FLEXPRICE.md`](file:///f:/Projects/fastapi_bookings/docs/operations/DEPLOYMENT_TOPOLOGY_LOGTO_FLEXPRICE.md), operational runbooks in [`docs/runbooks/SAAS_CONTROL_PLANE_RUNBOOK.md`](file:///f:/Projects/fastapi_bookings/docs/runbooks/SAAS_CONTROL_PLANE_RUNBOOK.md), and platform security review in [`docs/security/SAAS_CONTROL_PLANE_SECURITY_REVIEW.md`](file:///f:/Projects/fastapi_bookings/docs/security/SAAS_CONTROL_PLANE_SECURITY_REVIEW.md).
 - **Out-of-Order Webhook Sequences**: Addressed by monotonic sequence checks in `SubscriptionProjectionService`; older events arriving after a cancellation will not resurrect the subscription.
 - **External Provider Outages**: Fail-closed architecture raises `HTTPException(503)` when the remote provider is unreachable, ensuring unpurchased features are never accidentally exposed.
 - **Grace Period Past Due**: Subscriptions in `past_due` status trigger the amber grace period warning banner in the tenant UX without abruptly locking out existing bookings.
+- **Operational CLI Tooling**: The offline reconciliation script [`scripts/reconcile_saas_control_plane.py`](file:///f:/Projects/fastapi_bookings/scripts/reconcile_saas_control_plane.py) enables operators to audit drift and batch replay dead-letter events.
 
 ---
 
 ## 7. Verification & Testing Commands
 
-Run the full contract test suites across billing, entitlements, and UX:
+Run the full contract test suites across billing, entitlements, UX, and operational release gates:
 
 ```powershell
-# Run backend contract test suites
-.venv\Scripts\python.exe -m pytest tests/test_wp4_ux_api_contract.py tests/test_wp2_flexprice_billing_contract.py tests/test_wp3_entitlements_contract.py -v
+# Run full SaaS control plane contract and operational hardening test suite
+.venv\Scripts\python.exe -m pytest tests/test_wp0_security_contract.py tests/test_wp1_logto_identity_contract.py tests/test_wp2_flexprice_billing_contract.py tests/test_wp3_entitlements_contract.py tests/test_wp4_ux_api_contract.py tests/test_wp5_operational_hardening.py -v
+
+# Run operational reconciliation script smoke check
+.venv\Scripts\python.exe scripts/reconcile_saas_control_plane.py --help
 
 # Run living documentation compliance linter
 python scripts/verify_living_docs.py
