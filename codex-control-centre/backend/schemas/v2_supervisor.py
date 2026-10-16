@@ -45,8 +45,8 @@ class ErrorEnvelope(StrictModel):
 
 class InfrastructureSnapshot(StrictModel):
     state: Literal["ready", "migration_required"]
-    current_revision: Literal["001", "002", "003", "004", "unknown"] | None
-    expected_revision: Literal["004"] = "004"
+    current_revision: Literal["001", "002", "003", "004", "005", "unknown"] | None
+    expected_revision: Literal["005"] = "005"
     reason_codes: list[str]
 
 

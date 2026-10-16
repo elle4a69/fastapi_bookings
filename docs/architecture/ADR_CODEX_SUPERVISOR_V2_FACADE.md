@@ -168,5 +168,19 @@ Rollback of this documentation package is an ordinary reviewed revert. P0 securi
 # WP-UI-01B planning posture
 
 Revision 004 permits durable planning metadata only. `not_required_once_requested`
-is future execution authorization metadata, not an effective permission or bypass;
-a later run/dispatch boundary must create its own scoped authorization grant.
+is future execution authorization metadata, not an effective permission or bypass.
+Revision 005 adds the separately scoped run-start grant described below.
+
+## WP-RUN-01 bounded execution boundary
+
+Revision 005 adds the first V2 dispatch ledger without adopting legacy turn,
+governance, event or worktree HTTP routes. A platform owner starts a run only
+from an approved Brief with a bound audit scope. The server creates and consumes
+a unique expiring, hash-only start-authorisation grant in the same transaction as
+the immutable Brief digest, server-owned capability profile, run and dispatch
+intent. Brief waiver metadata changes only issuance policy and never grants any
+worker or tool capability. The bridge uses the real `WorkerManager` and isolated
+worktree primitive after intent persistence. Acknowledgement is required for
+`dispatch_acknowledged`; failures with uncertain delivery become
+`dispatch_unknown`, are not auto-redriven, and expose no prompt, output,
+command, diff, path, secret, database content, or PII.

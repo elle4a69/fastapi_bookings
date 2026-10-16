@@ -103,7 +103,7 @@ def test_fresh_child_migration_url_precedes_ambient_settings(
 
     target_engine = create_engine(_url(target_path))
     try:
-        assert _revision(target_engine) == "004"
+        assert _revision(target_engine) == "005"
     finally:
         target_engine.dispose()
     assert not decoy_path.exists()
@@ -114,12 +114,25 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
     _run_alembic(url, "upgrade", "head")
     engine = create_engine(url)
     try:
-        assert _revision(engine) == "004"
+        assert _revision(engine) == "005"
         tables = set(inspect(engine).get_table_names())
         assert {
             "workspace_boundaries", "system_settings", "schema_adoption_metadata",
             "control_plane_cutover_state", "idempotency_records", "supervisor_events",
+            "supervisor_runs", "supervisor_run_start_authorization_grants",
+            "supervisor_dispatch_attempts",
         }.issubset(tables)
+        with engine.connect() as connection:
+            trigger_names = {
+                row[0] for row in connection.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
+                ))
+            }
+        assert {
+            "trg_run_grant_no_delete", "trg_run_grant_consume_only",
+            "trg_supervisor_run_no_delete", "trg_supervisor_run_transition_only",
+            "trg_dispatch_attempt_no_delete", "trg_dispatch_attempt_transition_only",
+        }.issubset(trigger_names)
         project_columns = {column["name"]: column for column in inspect(engine).get_columns("projects")}
         assert project_columns["root_identity_digest"]["nullable"] is False
         identity_indexes = [
@@ -138,7 +151,7 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
         _run_alembic(url, "downgrade", "003")
         assert _revision(engine) == "003"
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "004"
+        assert _revision(engine) == "005"
     finally:
         engine.dispose()
 
@@ -275,7 +288,7 @@ def test_populated_planning_ledger_blocks_004_downgrade(tmp_path: Path):
             )
         result = _run_alembic(url, "downgrade", "003", expect_success=False)
         assert "planning_ledger_downgrade_blocked" in result.stdout
-        assert _revision(engine) == "004"
+        assert _revision(engine) == "005"
     finally:
         engine.dispose()
 
@@ -352,7 +365,7 @@ def test_unversioned_exact_legacy_schema_requires_explicit_adoption(tmp_path: Pa
     try:
         assert _revision(engine) == "001"
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "004"
+        assert _revision(engine) == "005"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"
@@ -452,7 +465,7 @@ def test_versioned_001_adopts_matching_ledger_tables_preserves_data_and_downgrad
                 "INSERT INTO system_settings (key,value) VALUES ('mode','synthetic')"
             )
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "004"
+        assert _revision(engine) == "005"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"

@@ -52,9 +52,17 @@ from backend.services.supervisor_repository import (
     planning_parent_version_in_transaction,
 )
 from backend.services.supervisor_event_service import append_planning_event
-from backend.models.codex import IdempotencyRecord
+from backend.models.codex import IdempotencyRecord, Project
 from backend import database
 from backend.services.idempotency_service import terminal_values
+from backend.services.supervisor_run_service import (
+    create_intent,
+    issue_start_authorization,
+    launch_intent,
+    public_run,
+    record_launch_outcome,
+)
+from backend.services.supervisor_event_service import append_run_intent_event, append_run_authorization_issued_event
 
 
 router = APIRouter(tags=["Codex Supervisor v2"])
@@ -494,3 +502,153 @@ def list_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depend
     data={"audit_scope":None if not scopes else _planning_output(scopes[0])}; return _success(request,data,headers={"ETag":_etag("audit-scope-v1",data)})
 @router.post("/work-packages/{work_package_id}/audit-scope",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"define_audit_scope","x-action-registry-version":"0.2","x-backend-permission":"planning.define_audit_scope"})
 async def create_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"define_audit_scope",work_package_id)
+
+
+# WP-RUN-01 is intentionally a separate V2 lifecycle.  It does not invoke the
+# legacy turns/governance/worktree routers and it exposes no active-run UI.
+def _parse_run_start_request(request: Request, raw: bytes) -> tuple[dict[str, object], str, str]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise SupervisorHTTPError(415, "unsupported_media_type")
+    key, if_match = request.headers.get("Idempotency-Key"), request.headers.get("If-Match")
+    if not key or not if_match:
+        raise SupervisorHTTPError(428, "precondition_required")
+    try:
+        parsed = uuid.UUID(key)
+        payload = json.loads(raw)
+        if parsed.version != 4 or str(parsed) != key.lower():
+            raise ValueError
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise SupervisorHTTPError(422, "validation_failed")
+    if not isinstance(payload, dict) or set(payload) != {"action", "registry_version", "confirmation", "grant_token"}:
+        raise SupervisorHTTPError(422, "validation_failed")
+    if payload.get("action") != "start_supervisor_run" or payload.get("registry_version") != "0.3" or payload.get("confirmation") is not True or not isinstance(payload.get("grant_token"), str):
+        raise SupervisorHTTPError(422, "validation_failed")
+    return payload, key.lower(), if_match
+
+
+def _parse_grant_request(request: Request, raw: bytes) -> tuple[dict[str, object], str]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise SupervisorHTTPError(415, "unsupported_media_type")
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        raise SupervisorHTTPError(422, "validation_failed")
+    key = request.headers.get("Idempotency-Key")
+    if not key:
+        raise SupervisorHTTPError(428, "precondition_required")
+    try:
+        parsed_key = uuid.UUID(key)
+        if parsed_key.version != 4 or str(parsed_key) != key.lower():
+            raise ValueError
+    except (ValueError, AttributeError):
+        raise SupervisorHTTPError(422, "validation_failed")
+    if not isinstance(payload, dict) or set(payload) != {"action", "registry_version", "confirmation", "waiver_requested"}:
+        raise SupervisorHTTPError(422, "validation_failed")
+    if payload.get("action") != "issue_run_start_authorization" or payload.get("registry_version") != "0.3" or payload.get("confirmation") is not True or not isinstance(payload.get("waiver_requested"), bool):
+        raise SupervisorHTTPError(422, "validation_failed")
+    return payload, key.lower()
+
+
+@router.post("/work-packages/{work_package_id}/run-start-authorizations", openapi_extra={"x-operator-action": True, "x-action-code": "issue_run_start_authorization", "x-action-registry-version": "0.3", "x-backend-permission": "supervisor.issue_run_start_authorization"})
+async def issue_run_start_authorization(work_package_id: str, request: Request, actor: ActorScope = Depends(get_actor_scope)) -> Response:
+    payload, key = _parse_grant_request(request, await request.body())
+    if inspect_infrastructure().state != "ready":
+        raise SupervisorHTTPError(503, "database_migration_required")
+    fingerprint = hashlib.sha256(canonical_json_bytes({"action":"issue_run_start_authorization","actor_tenant_id":actor.tenant_id,"actor_user_id":actor.user_id,"work_package_id":work_package_id,"payload":payload,"route":request.url.path})).hexdigest()
+    reservation = reserve(actor=actor, idempotency_key=key, fingerprint=fingerprint, action_code="issue_run_start_authorization")
+    if reservation.mode == "conflict": raise SupervisorHTTPError(409, "idempotency_conflict")
+    if reservation.mode == "replay": return _stored_response(reservation, replay=True)
+    if reservation.mode == "in_progress": return _success(request,{"authorization":{"state":"issuance_in_progress"}},status_code=202,headers={"Retry-After":"1"},meta_extra={"idempotency_state":"in_progress"})
+    try:
+        with database.engine.connect() as connection:
+            from backend.services.idempotency_service import _begin_immediate, verify_live_reservation
+            _begin_immediate(connection)
+            verify_live_reservation(connection,record_id=reservation.record_id,raw_lease_token=reservation.raw_lease_token)
+            grant, token = issue_start_authorization(connection, work_package_id=work_package_id, actor=actor, waiver_requested=bool(payload["waiver_requested"]))
+            project = connection.execute(Project.__table__.select().where(Project.__table__.c.id==grant["project_id"])).mappings().one()
+            append_run_authorization_issued_event(connection,project_public_id=str(project["public_id"]),actor=actor,project_version=int(project["version"]),request_id=reservation.request_id,idempotency_key=key)
+            receipt = {"data":{"authorization":{"grant_id":grant["id"],"state":"issued_nonreplayable","expires_at":grant["expires_at"].isoformat()}},"meta":{"request_id":reservation.request_id,"schema_version":"0.3","resource_version":1,"idempotency_state":"succeeded"}}
+            receipt_body=canonical_json_bytes(receipt); receipt_headers={"Content-Type":"application/json","ETag":_etag("run-grant-v1",receipt["data"]),"Cache-Control":"no-store","X-Request-ID":reservation.request_id}
+            connection.execute(IdempotencyRecord.__table__.update().where(IdempotencyRecord.__table__.c.id==reservation.record_id).values(**terminal_values(status="succeeded",response_status=202,response_body=receipt_body,response_headers=receipt_headers)))
+            connection.commit()
+    except SupervisorHTTPError as exc:
+        result=__import__("backend.services.idempotency_service",fromlist=["terminalize_failure"]).terminalize_failure(reservation=reservation,code=exc.code,status_code=exc.status_code)
+        return _stored_response(result)
+    # The opaque token is purposefully not replayable or persisted. It is a
+    # one-time owner-confirmed start credential, not a worker capability.
+    return _success(request, {"authorization": {"grant_id": grant["id"], "expires_at": grant["expires_at"].isoformat(), "token": token}}, status_code=201)
+
+
+@router.post(
+    "/work-packages/{work_package_id}/runs",
+    responses=PLANNING_MUTATION_RESPONSES,
+    openapi_extra={"x-operator-action": True, "x-action-code": "start_supervisor_run", "x-action-registry-version": "0.3", "x-backend-permission": "supervisor.start_run"},
+)
+async def start_supervisor_run(work_package_id: str, request: Request, actor: ActorScope = Depends(get_actor_scope)) -> Response:
+    raw = await request.body()
+    payload, key, if_match = _parse_run_start_request(request, raw)
+    infrastructure = inspect_infrastructure()
+    if infrastructure.state == "dependency_unavailable":
+        raise SupervisorHTTPError(503, "dependency_unavailable")
+    if infrastructure.state != "ready":
+        raise SupervisorHTTPError(503, "database_migration_required")
+    version = planning_parent_version("create_brief", work_package_id, actor)
+    fingerprint = hashlib.sha256(canonical_json_bytes({"action": "start_supervisor_run", "actor_tenant_id": actor.tenant_id, "actor_user_id": actor.user_id, "work_package_id": work_package_id, "payload": payload, "route": request.url.path})).hexdigest()
+    reservation = reserve(actor=actor, idempotency_key=key, fingerprint=fingerprint, action_code="start_supervisor_run")
+    if reservation.mode == "conflict":
+        raise SupervisorHTTPError(409, "idempotency_conflict")
+    request.state.supervisor_request_id = reservation.request_id
+    if reservation.mode == "in_progress":
+        return _success(request, {"operation": {"action": "start_supervisor_run", "state": "in_progress", "retry_after_seconds": 1}}, status_code=202, headers={"Retry-After": "1"}, meta_extra={"idempotency_state": "in_progress"})
+    if reservation.mode == "replay":
+        return _stored_response(reservation, replay=True)
+    if not reservation.record_id or not reservation.raw_lease_token:
+        raise SupervisorHTTPError(500, "internal_error")
+    try:
+        with database.engine.connect() as connection:
+            from backend.services.idempotency_service import _begin_immediate, verify_live_reservation
+            _begin_immediate(connection)
+            verify_live_reservation(connection, record_id=reservation.record_id, raw_lease_token=reservation.raw_lease_token)
+            if if_match != f'"work_package-{version}"' or planning_parent_version_in_transaction(connection, "create_brief", work_package_id, actor) != version:
+                raise SupervisorHTTPError(412, "revision_conflict")
+            intent = create_intent(connection, work_package_id=work_package_id, actor=actor, request_id=reservation.request_id, grant_token=str(payload["grant_token"]))
+            append_run_intent_event(
+                connection, project_public_id=str(intent["project"]["public_id"]), actor=actor,
+                project_version=int(intent["project"]["version"]), request_id=reservation.request_id,
+                idempotency_key=key,
+            )
+            # Terminalize the HTTP idempotency contract *before* crossing the
+            # app-server boundary. A response/retry can therefore only observe
+            # this one durable intent and can never acquire an expired lease to
+            # launch the same work a second time.
+            intent_data = {"run": public_run(connection, str(intent["run_id"]), actor)}
+            intent_body = canonical_json_bytes({"data": intent_data, "meta": {"request_id": reservation.request_id, "schema_version": "0.3", "resource_version": 1, "idempotency_state": "succeeded"}})
+            intent_headers = {"Content-Type": "application/json", "ETag": _etag("supervisor-run-v1", intent_data), "Cache-Control": "no-store", "X-Request-ID": reservation.request_id}
+            connection.execute(IdempotencyRecord.__table__.update().where(IdempotencyRecord.__table__.c.id == reservation.record_id).values(**terminal_values(status="succeeded", response_status=202, response_body=intent_body, response_headers=intent_headers)))
+            connection.commit()
+    except SupervisorHTTPError as exc:
+        result = __import__("backend.services.idempotency_service", fromlist=["terminalize_failure"]).terminalize_failure(reservation=reservation, code=exc.code, status_code=exc.status_code)
+        return _stored_response(result)
+    try:
+        outcome = await launch_intent(intent)
+    except Exception:
+        outcome = "dispatch_unknown"
+    with database.engine.connect() as connection:
+        from backend.services.idempotency_service import _begin_immediate
+        _begin_immediate(connection)
+        record_launch_outcome(connection, run_id=str(intent["run_id"]), actor=actor, outcome=outcome)
+        connection.commit()
+    # The replay body remains the persisted dispatch-intent receipt. The live
+    # run ledger is authoritative for acknowledgement/unknown status and no
+    # replay can redrive the external call.
+    with database.engine.connect() as read_connection:
+        live_data = {"run": public_run(read_connection, str(intent["run_id"]), actor)}
+    return _success(request, live_data, status_code=202, headers={"ETag": _etag("supervisor-run-v1", live_data)})
+
+
+@router.get("/runs/{run_id}", responses=PLANNING_READ_RESPONSES, openapi_extra={"x-operator-action": False})
+def get_supervisor_run(run_id: str, request: Request, actor: ActorScope = Depends(get_actor_scope)) -> Response:
+    """Current privacy-safe status; this never exposes worker evidence/material."""
+    with database.engine.connect() as connection:
+        data = {"run": public_run(connection, run_id, actor)}
+    return _success(request, data, headers={"ETag": _etag("supervisor-run-v1", data)})

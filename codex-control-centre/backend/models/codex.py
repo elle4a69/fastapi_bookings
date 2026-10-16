@@ -225,7 +225,7 @@ class IdempotencyRecord(Base):
             "AND substr(lease_owner, 5) NOT GLOB '*[^0-9a-f]*')",
             name="ck_idempotency_lease_owner",
         ),
-        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope')", name="ck_idempotency_action"),
+        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope','issue_run_start_authorization','start_supervisor_run')", name="ck_idempotency_action"),
         CheckConstraint(
             "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'",
             name="ck_idempotency_request_fingerprint",
@@ -285,7 +285,7 @@ class SupervisorEvent(Base):
         ),
         UniqueConstraint("request_id", "action_code", name="uq_supervisor_event_request_action"),
         CheckConstraint("actor_tenant_id > 0 AND actor_user_id > 0", name="ck_supervisor_event_scope"),
-        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope')", name="ck_supervisor_event_action"),
+        CheckConstraint("action_code IN ('claim_project','create_mission','create_work_package','create_brief','approve_brief','record_context_checkpoint','define_audit_scope','issue_run_start_authorization','start_supervisor_run')", name="ck_supervisor_event_action"),
         CheckConstraint("schema_version IN ('0.1','0.2')", name="ck_supervisor_event_schema"),
         CheckConstraint("project_version >= 1", name="ck_supervisor_event_project_version"),
         CheckConstraint("project_sequence >= 1", name="ck_supervisor_event_sequence"),
@@ -374,3 +374,75 @@ class PlanningAuditScope(Base):
     exclusions = Column(String(1200), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False)
     __table_args__ = (CheckConstraint("id LIKE 'asc_%'", name="ck_audit_scope_id"),)
+
+
+class SupervisorRunStartAuthorizationGrant(Base):
+    """Server-issued, hash-only, one-run start authority; never a tool grant."""
+
+    __tablename__ = "supervisor_run_start_authorization_grants"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    work_package_id = Column(String, ForeignKey("planning_work_packages.id", ondelete="RESTRICT"), nullable=False)
+    brief_id = Column(String, ForeignKey("planning_briefs.id", ondelete="RESTRICT"), nullable=False)
+    audit_scope_id = Column(String, ForeignKey("planning_audit_scopes.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    authorization_hash = Column(String(64), nullable=False, unique=True)
+    policy = Column(String, nullable=False)
+    issued_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    run_id = Column(String, nullable=True, unique=True)
+    __table_args__ = (
+        CheckConstraint("id LIKE 'sag_%'", name="ck_run_grant_id"),
+        CheckConstraint("tenant_id > 0 AND owner_user_id > 0", name="ck_run_grant_scope"),
+        CheckConstraint("policy IN ('requires_authorization','not_required_once_requested')", name="ck_run_grant_policy"),
+        CheckConstraint("length(authorization_hash) = 64 AND authorization_hash NOT GLOB '*[^0-9a-f]*'", name="ck_run_grant_hash"),
+        CheckConstraint("expires_at > issued_at", name="ck_run_grant_expiry"),
+        CheckConstraint("(consumed_at IS NULL AND run_id IS NULL) OR (consumed_at IS NOT NULL AND run_id IS NOT NULL)", name="ck_run_grant_consumption"),
+    )
+
+
+class SupervisorRun(Base):
+    """Privacy-safe durable dispatch ledger, not a worker transcript or tool ledger."""
+
+    __tablename__ = "supervisor_runs"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    work_package_id = Column(String, ForeignKey("planning_work_packages.id", ondelete="RESTRICT"), nullable=False)
+    brief_id = Column(String, ForeignKey("planning_briefs.id", ondelete="RESTRICT"), nullable=False)
+    audit_scope_id = Column(String, ForeignKey("planning_audit_scopes.id", ondelete="RESTRICT"), nullable=False)
+    grant_id = Column(String, ForeignKey("supervisor_run_start_authorization_grants.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    brief_content_digest = Column(String(64), nullable=False)
+    capability_profile = Column(String, nullable=False, default="development_worker_v1")
+    status = Column(String, nullable=False)
+    request_id = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        CheckConstraint("id LIKE 'run_%'", name="ck_supervisor_run_id"),
+        CheckConstraint("tenant_id > 0 AND owner_user_id > 0", name="ck_supervisor_run_scope"),
+        CheckConstraint("length(brief_content_digest) = 64 AND brief_content_digest NOT GLOB '*[^0-9a-f]*'", name="ck_supervisor_run_brief_digest"),
+        CheckConstraint("capability_profile = 'development_worker_v1'", name="ck_supervisor_run_capability"),
+        CheckConstraint("status IN ('dispatching','dispatch_acknowledged','dispatch_unknown','dispatch_rejected')", name="ck_supervisor_run_status"),
+    )
+
+
+class SupervisorDispatchAttempt(Base):
+    __tablename__ = "supervisor_dispatch_attempts"
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("supervisor_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    attempt_number = Column(Integer, nullable=False, default=1)
+    state = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        CheckConstraint("id LIKE 'dpa_%'", name="ck_dispatch_attempt_id"),
+        CheckConstraint("tenant_id > 0 AND owner_user_id > 0 AND attempt_number = 1", name="ck_dispatch_attempt_scope"),
+        CheckConstraint("state IN ('intent_persisted','acknowledged','dispatch_unknown','rejected')", name="ck_dispatch_attempt_state"),
+    )

@@ -393,5 +393,17 @@ python ../scripts/verify_living_docs.py --path README.md
 
 The v2 supervisor facade has a planning-only ledger for missions, work packages,
 immutable brief revisions, structural checkpoints, and non-verdict audit scopes.
-Cutover remains `v1_only`: this ledger cannot dispatch work, run commands, or
-grant execution authority.
+Cutover remains `v1_only`: planning records do not dispatch work or grant
+execution authority. WP-RUN-01 adds a separately authenticated, server-owned
+dispatch boundary: it persists a one-run, hash-only, expiring start-authorisation
+grant and dispatch intent before contacting the native WorkerManager worktree
+primitive. It exposes no transcript, command, tool capability, prompt, output,
+diff, secret, customer data, or active-run UI. A positive app-server
+acknowledgement is required to mark a run acknowledged; exception or ambiguous
+outcomes are durably `dispatch_unknown` and are never auto-redriven.
+Grant issuance is an explicit owner confirmation with a durable V2 idempotency
+receipt. The opaque token is delivered only on the first `201` response and is
+never stored; replay returns only a safe non-replayable issuance receipt. A
+serialized active-grant predicate also rejects retried issuance while an
+unconsumed, unexpired grant exists; a new explicit confirmation is required
+after expiry.

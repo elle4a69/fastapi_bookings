@@ -93,6 +93,21 @@ def append_planning_event(connection: Connection, *, project_public_id: str, act
     return event
 
 
+def append_run_intent_event(connection: Connection, *, project_public_id: str, actor: ActorScope, project_version: int, request_id: str, idempotency_key: str) -> SupervisorEvent:
+    """Append only a structural run-intent fact; never worker material."""
+    return append_planning_event(
+        connection, project_public_id=project_public_id, actor=actor,
+        action_code="start_supervisor_run", project_version=project_version,
+        request_id=request_id, idempotency_key=idempotency_key,
+    )
+
+
+def append_run_authorization_issued_event(connection: Connection, *, project_public_id: str, actor: ActorScope, project_version: int, request_id: str, idempotency_key: str) -> SupervisorEvent:
+    return append_planning_event(connection, project_public_id=project_public_id, actor=actor,
+        action_code="issue_run_start_authorization", project_version=project_version,
+        request_id=request_id, idempotency_key=idempotency_key)
+
+
 def verify_project_chain(connection: Connection, project_public_id: str) -> bool:
     rows = connection.execute(
         select(SupervisorEvent.__table__)

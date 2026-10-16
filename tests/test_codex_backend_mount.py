@@ -24,7 +24,7 @@ def _migrate_isolated_codex_database():
         revisions = connection.exec_driver_sql(
             "SELECT version_num FROM alembic_version"
         ).fetchall()
-    assert revisions == [("004",)]
+    assert revisions == [("005",)]
     yield
     import gc
 
@@ -1064,5 +1064,56 @@ def test_planning_deterministic_failure_is_terminal_and_atomic(client, db_sessio
             {"key": key},
         ).scalar_one()
     assert status == "failed"
+
+
+def test_supervisor_run_requires_explicit_hash_only_one_run_authorization(client, db_session, tmp_path, monkeypatch):
+    """Mounted V2 grant/start path never persists its opaque token or reuses it."""
+    from backend.routers import v2_supervisor
+    from backend.database import engine as codex_engine
+
+    project_id, headers = _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch)
+    mission = _planning_post(client, f"/api/admin/codex/v2/projects/{project_id}/missions", headers, "create_mission", '"project-1"', title="Run plan", summary="Bounded run lifecycle").json()["data"]["mission"]
+    work = _planning_post(client, f"/api/admin/codex/v2/missions/{mission['id']}/work-packages", headers, "create_work_package", '"mission-1"', title="Run package", scope="Bounded V2 worker dispatch").json()["data"]["work_package"]
+    brief = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/briefs", headers, "create_brief", '"work_package-1"', content="Implement bounded lifecycle", future_execution_authorization_requirement="requires_authorization").json()["data"]["brief"]
+    assert _planning_post(client, f"/api/admin/codex/v2/briefs/{brief['id']}/approve", headers, "approve_brief", '"brief-1"').status_code == 200
+    assert _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/audit-scope", headers, "define_audit_scope", '"work_package-2"', criteria="Tenant isolation", exclusions="No production actions").status_code == 200
+    start_path = f"/api/admin/codex/v2/work-packages/{work['id']}/runs"
+    missing = client.post(start_path, headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"work_package-2"'}, json={"action":"start_supervisor_run","registry_version":"0.3","confirmation":True,"grant_token":"missing"})
+    assert missing.status_code == 409
+    grant_key = str(uuid.uuid4())
+    grant_headers = {**headers, "Idempotency-Key": grant_key}
+    grant_body = {"action":"issue_run_start_authorization","registry_version":"0.3","confirmation":True,"waiver_requested":False}
+    grant = client.post(f"/api/admin/codex/v2/work-packages/{work['id']}/run-start-authorizations", headers=grant_headers, json=grant_body)
+    assert grant.status_code == 201, grant.text
+    token = grant.json()["data"]["authorization"]["token"]
+    grant_replay = client.post(f"/api/admin/codex/v2/work-packages/{work['id']}/run-start-authorizations", headers=grant_headers, json=grant_body)
+    assert grant_replay.status_code == 202 and "token" not in grant_replay.text
+    with codex_engine.connect() as connection:
+        stored = connection.execute(text("SELECT authorization_hash FROM supervisor_run_start_authorization_grants WHERE id=:id"), {"id": grant.json()["data"]["authorization"]["grant_id"]}).scalar_one()
+    assert token not in stored and token.encode("utf-8") not in grant_replay.content
+    monkeypatch.setattr(v2_supervisor, "launch_intent", AsyncMock(return_value="dispatch_acknowledged"))
+    key = str(uuid.uuid4())
+    run_headers = {**headers, "Idempotency-Key": key, "If-Match": '"work_package-2"'}
+    body = {"action":"start_supervisor_run","registry_version":"0.3","confirmation":True,"grant_token":token}
+    started = client.post(start_path, headers=run_headers, json=body)
+    replay = client.post(start_path, headers=run_headers, json=body)
+    assert started.status_code == replay.status_code == 202
+    assert replay.headers["idempotency-replayed"] == "true"
+    run_id = started.json()["data"]["run"]["run_id"]
+    assert client.get(f"/api/admin/codex/v2/runs/{run_id}", headers=headers).json()["data"]["run"]["status"] == "dispatch_acknowledged"
+    reused = client.post(start_path, headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"work_package-2"'}, json=body)
+    assert reused.status_code == 409
+    with pytest.raises(IntegrityError, match="run_grant_immutable"):
+        with codex_engine.begin() as connection:
+            connection.execute(text("UPDATE supervisor_run_start_authorization_grants SET policy='not_required_once_requested' WHERE id=:id"), {"id": grant.json()["data"]["authorization"]["grant_id"]})
+    with pytest.raises(IntegrityError, match="run_grant_immutable"):
+        with codex_engine.begin() as connection:
+            connection.execute(text("UPDATE supervisor_run_start_authorization_grants SET consumed_at=datetime(expires_at, '+1 second') WHERE id=:id"), {"id": grant.json()["data"]["authorization"]["grant_id"]})
+    with pytest.raises(IntegrityError, match="supervisor_run_immutable"):
+        with codex_engine.begin() as connection:
+            connection.execute(text("UPDATE supervisor_runs SET capability_profile='forged' WHERE id=:id"), {"id": run_id})
+    with pytest.raises(IntegrityError, match="dispatch_attempt_append_only"):
+        with codex_engine.begin() as connection:
+            connection.execute(text("DELETE FROM supervisor_dispatch_attempts WHERE run_id=:id"), {"id": run_id})
 
 

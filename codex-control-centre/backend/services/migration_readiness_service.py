@@ -14,8 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend import database
 
 
-EXPECTED_REVISION = "004"
-KNOWN_REVISIONS = {"001", "002", "003", "004"}
+EXPECTED_REVISION = "005"
+KNOWN_REVISIONS = {"001", "002", "003", "004", "005"}
 
 # SHA-256 of whitespace-normalized, lower-cased sqlite_master SQL emitted by the
 # accepted 001 -> 002 -> 003 migration chain. Comparing the complete set and
@@ -49,6 +49,25 @@ EXPECTED_SCHEMA_HASHES = {
     ("trigger", "trg_projects_claimed_update_guard"): "b3984efa52e6f8c412d2123337e6225f8a4147a81fdc18ac0efd75d8a9ff1765",
     ("trigger", "trg_supervisor_events_no_delete"): "1d1e62ae6721afb7037121478e3066958c5767463222e91612cc2b9844c2c43f",
     ("trigger", "trg_supervisor_events_no_update"): "463fbba77a73a238a1fe9da79080ea8bf4d23f0b0eb4b11e6c9f6efbbd2cb4fc",
+}
+
+# Revision 005 intentionally widens the action allowlists through SQLite batch
+# recreation. These exact hashes seal the rebuilt replay/event ledgers and the
+# new run tables, rather than accepting merely same-named objects.
+EXPECTED_RUN_SCHEMA_HASHES = {
+    ("table", "idempotency_records"): "0986b2eaf10a23be6450e507e3347e149dc1b88df7fc014af6d73320f377025a",
+    ("table", "supervisor_events"): "b900f1bc0e6cfd9f955b113d2cfc49765f1df8f08816357252a055ebe9f5aa1a",
+    ("table", "supervisor_dispatch_attempts"): "537d8510a81ede340e945a546c98f454e2946c764dbdfd346a4ecd64362723aa",
+    ("table", "supervisor_run_start_authorization_grants"): "e725d27bd94f27ca42bf1e428030a936a2fc4e33d140d47281ba936a59cd7140",
+    ("table", "supervisor_runs"): "fcc5542e73c6082cf0685dbf194931baec86faf6fea81b3f949600ebeb96b4dc",
+    ("trigger", "trg_run_grant_parent_scope"): "b985f0723a02b4bf3308c73d52448a1bb9dccb8eb894d871e1c73ff489e2fc5c",
+    ("trigger", "trg_run_parent_scope"): "f5c7270198f96283058651a4dae7225034b17c038631d8dee567b4b9bebaa5f0",
+    ("trigger", "trg_run_grant_no_delete"): "bcb756e42d0022cb55a79903a4b47588fa30c5eb62f6ce5b87ef90040e3d0c65",
+    ("trigger", "trg_run_grant_consume_only"): "c030681450b3db5b8c9123849c4183cdc82d9e9e537b6277004685bb45ede49a",
+    ("trigger", "trg_supervisor_run_no_delete"): "72ff0a4c3d2aa12e03cb37e42e43aa6b71b977f6d27a1784ced2cd8f15a61719",
+    ("trigger", "trg_supervisor_run_transition_only"): "3b3628750062bd4ae31ab9c8a2063cdefa9841883584790f9ee5dbcd67dadeff",
+    ("trigger", "trg_dispatch_attempt_no_delete"): "4dd7c216ffbf071f4c9d3bd5ffbc60f68a1832820887c61e595064a247c8ca8f",
+    ("trigger", "trg_dispatch_attempt_transition_only"): "4e84f3be8a11b19a95423b79e7b0f84fc889d3edff257ee8a4dbdaca27e1656d",
 }
 
 EXPECTED_ADOPTION_DIGESTS = {
@@ -240,7 +259,7 @@ def inspect_infrastructure(db_engine: Engine | None = None) -> InfrastructureRea
                 )
             revision = str(revisions[0])
             if revision != EXPECTED_REVISION:
-                if revision in {"001", "002", "003"}:
+                if revision in {"001", "002", "003", "004"}:
                     return InfrastructureReadiness(
                         "migration_required", revision, reason_codes=("revision_behind",)
                     )
@@ -248,13 +267,18 @@ def inspect_infrastructure(db_engine: Engine | None = None) -> InfrastructureRea
                     "migration_required", "unknown", reason_codes=("revision_ahead",)
                 )
 
-            # 004 is a closed ledger contract: all inherited objects revised by
-            # batch recreation and every planning object/trigger are exact.
+            # 005 preserves the sealed planning contract and adds the bounded
+            # run ledger.  The action-list constraints are intentionally
+            # widened by the 005 migration, so they are checked structurally
+            # through required tables rather than against 004's old hashes.
             hashes = _schema_hashes(connection)
             required_planning = {"planning_missions", "planning_work_packages", "planning_briefs", "planning_context_checkpoints", "planning_audit_scopes"}
-            required_baseline = EXPECTED_SCHEMA_HASHES
+            required_run = {"supervisor_runs", "supervisor_run_start_authorization_grants", "supervisor_dispatch_attempts"}
+            required_baseline = {key: value for key, value in EXPECTED_SCHEMA_HASHES.items() if key not in {("table", "idempotency_records"), ("table", "supervisor_events")}}
             if (not required_planning.issubset({name for (kind, name) in hashes if kind == "table"}) or
+                not required_run.issubset({name for (kind, name) in hashes if kind == "table"}) or
                 any(hashes.get(key) != value for key, value in required_baseline.items()) or
+                any(hashes.get(key) != value for key, value in EXPECTED_RUN_SCHEMA_HASHES.items()) or
                 any(hashes.get(key) != value for key, value in EXPECTED_PLANNING_SCHEMA_HASHES.items())):
                 return InfrastructureReadiness(
                     "migration_required", EXPECTED_REVISION, reason_codes=("schema_mismatch",)
