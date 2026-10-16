@@ -43,3 +43,71 @@ export type PlanningMutation =
   | { brief: Brief }
   | { checkpoint: Checkpoint }
   | { audit_scope: AuditScope }
+
+export type RunStatus = 'dispatching' | 'dispatch_acknowledged' | 'running' | 'completed' | 'failed' | 'dispatch_unknown'
+
+export type SupervisorRun = {
+  run_id: string
+  work_package_id: string
+  brief_id: string
+  audit_scope_id: string
+  capability_profile: string
+  status: RunStatus
+  created_at: string
+}
+
+export type RunStartAuthorization = {
+  grant_id: string
+  expires_at: string
+  token?: string
+  state?: string
+}
+
+export type AcceptanceContract = {
+  contract_id: string
+  work_package_id: string
+  registry_version: string
+  criterion_codes: string[]
+  state: string
+  created_at: string
+}
+
+export type AuditRequestState = 'sandbox_unavailable' | 'pending' | 'evaluating' | 'passed' | 'failed'
+
+export type AuditRequest = {
+  audit_request_id: string
+  run_id: string
+  state: AuditRequestState
+  requested_at: string
+}
+
+export type CriterionOutcome = 'passed' | 'failed' | 'not_evaluated'
+
+export type CriterionResult = {
+  criterion_code: string
+  title: string
+  description: string
+  outcome: CriterionOutcome
+  evidence_digest?: string | null
+  recorded_at?: string
+}
+
+export type StructuralGitFacts = {
+  baseline_tree_sha: string
+  submitted_tree_sha?: string | null
+  changed_files_count?: number | null
+  insertions?: number | null
+  deletions?: number | null
+}
+
+export type ActiveRunLifecycleStatus =
+  | 'idle'
+  | 'grant_requested'
+  | 'authorized'
+  | 'dispatching'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'dispatch_unknown'
+  | 'sandbox_unavailable'
+

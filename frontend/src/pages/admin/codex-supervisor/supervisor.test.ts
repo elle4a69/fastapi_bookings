@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict'
 // @ts-expect-error Node test types are intentionally not part of the app build.
 import test from 'node:test'
-import { createSettlementTracker, createSupervisorRequestGuards, getSupervisorTenantFromHost, loadSupervisorSnapshot, mapSupervisorError, mutatePlanning, planningEtag, shouldApplyMutationSelection, SupervisorApiError, supervisorCredentials } from './api.ts'
+import { createAcceptanceContract, createSettlementTracker, createSupervisorRequestGuards, getSupervisorTenantFromHost, issueRunStartAuthorization, loadSupervisorRun, loadSupervisorSnapshot, mapSupervisorError, mutatePlanning, planningEtag, requestIndependentAudit, shouldApplyMutationSelection, startSupervisorRun, SupervisorApiError, supervisorCredentials } from './api.ts'
+
 import { readSupervisorRoute, writeSupervisorRoute } from './routeState.ts'
 
 function installBrowser(hostname: string, token: string | null) {
@@ -141,3 +142,167 @@ test('composite selected-mission loading remains active until every independent 
   assert.equal(tracker.settle(), false)
   assert.equal(tracker.settle(), true)
 })
+
+test('run start authorization request sends required confirmation and acquires single-use grant', async () => {
+  installBrowser('tenant.example.test', 'real-session-token')
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init })
+    return new Response(
+      JSON.stringify({
+        data: { authorization: { grant_id: 'sag_test_123', expires_at: '2026-10-17T00:00:00Z', token: 'opaque-secret-token' } },
+        meta: { request_id: 'req_grant', schema_version: '0.3' },
+      }),
+      { status: 201 },
+    )
+  }
+  const auth = await issueRunStartAuthorization('wpk_1', true)
+  assert.equal(auth.grant_id, 'sag_test_123')
+  assert.equal(auth.token, 'opaque-secret-token')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, '/api/admin/codex/v2/work-packages/wpk_1/run-start-authorizations')
+  const body = JSON.parse(String(calls[0].init?.body))
+  assert.deepEqual(body, {
+    action: 'issue_run_start_authorization',
+    registry_version: '0.3',
+    confirmation: true,
+    waiver_requested: true,
+  })
+})
+
+test('start supervisor run dispatches with grant token and returns durable run entity', async () => {
+  installBrowser('tenant.example.test', 'real-session-token')
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init })
+    return new Response(
+      JSON.stringify({
+        data: {
+          run: {
+            run_id: 'run_abc123',
+            work_package_id: 'wpk_1',
+            brief_id: 'brf_1',
+            audit_scope_id: 'asc_1',
+            capability_profile: 'development_worker_v1',
+            status: 'dispatch_acknowledged',
+            created_at: '2026-10-17T00:00:00Z',
+          },
+        },
+        meta: { request_id: 'req_start', schema_version: '0.3' },
+      }),
+      { status: 202, headers: { ETag: '"supervisor-run-v1"' } },
+    )
+  }
+  const result = await startSupervisorRun('wpk_1', 2, 'opaque-secret-token')
+  assert.equal(result.run.run_id, 'run_abc123')
+  assert.equal(result.run.status, 'dispatch_acknowledged')
+  assert.equal(result.etag, '"supervisor-run-v1"')
+  assert.equal(calls.length, 1)
+  const headers = new Headers(calls[0].init?.headers)
+  assert.equal(headers.get('If-Match'), '"work_package-2"')
+  const body = JSON.parse(String(calls[0].init?.body))
+  assert.equal(body.grant_token, 'opaque-secret-token')
+})
+
+test('request independent audit captures explicit sandbox_unavailable state', async () => {
+  installBrowser('tenant.example.test', 'real-session-token')
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init })
+    return new Response(
+      JSON.stringify({
+        data: {
+          audit_request: {
+            audit_request_id: 'arq_test_1',
+            run_id: 'run_abc123',
+            state: 'sandbox_unavailable',
+            requested_at: '2026-10-17T00:00:00Z',
+          },
+        },
+        meta: { request_id: 'req_audit', schema_version: '1' },
+      }),
+      { status: 201 },
+    )
+  }
+  const audit = await requestIndependentAudit('run_abc123', '"supervisor-run-v1"')
+  assert.equal(audit.audit_request_id, 'arq_test_1')
+  assert.equal(audit.state, 'sandbox_unavailable')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, '/api/admin/codex/v2/runs/run_abc123/audit-requests')
+})
+
+test('run and audit error mapping safely handles active run and sandbox codes', () => {
+  const activeErr = mapSupervisorError(new SupervisorApiError(409, 'active_run_exists', 'server trace', 'req_1'))
+  assert.equal(activeErr.title, 'Active run in progress')
+  assert.equal(activeErr.detail.includes('server trace'), false)
+
+  const sandboxErr = mapSupervisorError(new SupervisorApiError(503, 'sandbox_unavailable', 'server trace', 'req_2'))
+  assert.equal(sandboxErr.title, 'Sandbox unavailable')
+
+  const authExpiredErr = mapSupervisorError(new SupervisorApiError(409, 'start_authorization_unavailable', 'server trace', 'req_3'))
+  assert.equal(authExpiredErr.title, 'Authorization unavailable')
+})
+
+test('create acceptance contract creates bounded criteria contract', async () => {
+  installBrowser('tenant.example.test', 'real-session-token')
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init })
+    return new Response(
+      JSON.stringify({
+        data: {
+          acceptance_contract: {
+            contract_id: 'acc_123',
+            work_package_id: 'wpk_1',
+            registry_version: '1',
+            criterion_codes: ['repository_identity_bound', 'baseline_captured', 'sandbox_attested'],
+            state: 'approved',
+            created_at: '2026-10-17T00:00:00Z',
+          },
+        },
+        meta: { request_id: 'req_acc', schema_version: '1' },
+      }),
+      { status: 201 },
+    )
+  }
+  const contract = await createAcceptanceContract('wpk_1', 3)
+  assert.equal(contract.contract_id, 'acc_123')
+  assert.equal(contract.state, 'approved')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, '/api/admin/codex/v2/work-packages/wpk_1/acceptance-contracts')
+  const headers = new Headers(calls[0].init?.headers)
+  assert.equal(headers.get('If-Match'), '"work_package-3"')
+})
+
+test('load supervisor run retrieves status and etag safely', async () => {
+  installBrowser('tenant.example.test', 'real-session-token')
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = []
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init })
+    return new Response(
+      JSON.stringify({
+        data: {
+          run: {
+            run_id: 'run_poll_1',
+            work_package_id: 'wpk_1',
+            brief_id: 'brf_1',
+            audit_scope_id: 'asc_1',
+            capability_profile: 'development_worker_v1',
+            status: 'running',
+            created_at: '2026-10-17T00:00:00Z',
+          },
+        },
+        meta: { request_id: 'req_poll', schema_version: '0.3' },
+      }),
+      { status: 200, headers: { ETag: '"supervisor-run-v1-poll"' } },
+    )
+  }
+  const result = await loadSupervisorRun('run_poll_1')
+  assert.equal(result.run.run_id, 'run_poll_1')
+  assert.equal(result.run.status, 'running')
+  assert.equal(result.etag, '"supervisor-run-v1-poll"')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, '/api/admin/codex/v2/runs/run_poll_1')
+})
+
+

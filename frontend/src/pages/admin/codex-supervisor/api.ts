@@ -1,5 +1,6 @@
 import { getAdminAccessToken } from '../../../lib/api.ts'
-import type { AuditScope, Bootstrap, Brief, Checkpoint, Mission, Project, SupervisorEnvelope, SupervisorErrorPayload, SupervisorSnapshot, WorkPackage } from './types'
+import type { AcceptanceContract, AuditRequest, AuditScope, Bootstrap, Brief, Checkpoint, Mission, Project, RunStartAuthorization, SupervisorEnvelope, SupervisorErrorPayload, SupervisorRun, SupervisorSnapshot, WorkPackage } from './types'
+
 
 const PREFIX = '/api/admin/codex/v2'
 const LOCAL_BYPASS_TOKEN = 'local-development-bypass'
@@ -27,6 +28,13 @@ export function mapSupervisorError(error: unknown): SupervisorUiError {
     if (error.code === 'database_migration_required') return { title: 'Supervisor migration required', detail: 'The control-plane database is not ready. No planning data has been shown.', canRetry: true }
     if (error.code === 'supervisor_unconfigured') return { title: 'Project configuration required', detail: 'No configured project is available to this supervisor.', canRetry: false }
     if (error.status === 404) return { title: 'Planning resource unavailable', detail: 'The selected planning resource is not available in this scope.', canRetry: false }
+    if (error.code === 'start_authorization_already_issued') return { title: 'Start authorization active', detail: 'A valid start authorization has already been issued for this work package.', canRetry: false }
+    if (error.code === 'start_authorization_unavailable') return { title: 'Authorization unavailable', detail: 'The start authorization has expired or already been consumed.', canRetry: false }
+    if (error.code === 'active_run_exists') return { title: 'Active run in progress', detail: 'An active run already exists for this work package.', canRetry: false }
+    if (error.code === 'approved_acceptance_contract_required') return { title: 'Acceptance contract required', detail: 'An approved acceptance contract is required before initiating a run.', canRetry: true }
+    if (error.code === 'dispatch_prerequisite_unavailable') return { title: 'Dispatch prerequisite unavailable', detail: 'The repository runtime or worker manager is not available for dispatch.', canRetry: false }
+    if (error.code === 'run_baseline_required') return { title: 'Baseline capture required', detail: 'A Git baseline could not be captured before dispatch.', canRetry: false }
+    if (error.code === 'sandbox_unavailable') return { title: 'Sandbox unavailable', detail: 'A host-enforced independent sandbox is not available to evaluate audit criteria.', canRetry: false }
     if (error.status === 409) return { title: 'Supervisor state changed', detail: 'The planning state is not currently available for this view. Refresh before continuing.', canRetry: true }
     if (error.status === 412 || error.code === 'revision_conflict') return { title: 'Planning state changed', detail: 'This planning record changed before the action could be applied. Refresh and review the current state.', canRetry: true }
     if (error.status === 422 || error.code === 'validation_failed') return { title: 'Planning details need review', detail: 'Use the required bounded planning fields and try again.', canRetry: false }
@@ -141,6 +149,103 @@ export async function loadWorkPackage(id: string, signal?: AbortSignal) { return
 export async function loadBriefs(id: string, signal?: AbortSignal) { return (await get<{ briefs: Brief[] }>(`/work-packages/${encodeURIComponent(id)}/briefs`, signal)).envelope.data.briefs }
 export async function loadCheckpoints(id: string, signal?: AbortSignal) { return (await get<{ context_checkpoints: Checkpoint[] }>(`/missions/${encodeURIComponent(id)}/context-checkpoints`, signal)).envelope.data.context_checkpoints }
 export async function loadAuditScope(id: string, signal?: AbortSignal) { return (await get<{ audit_scope: AuditScope | null }>(`/work-packages/${encodeURIComponent(id)}/audit-scope`, signal)).envelope.data.audit_scope }
+
+export async function createAcceptanceContract(workPackageId: string, workPackageVersion: number): Promise<AcceptanceContract> {
+  const credentials = supervisorCredentials()
+  if (!credentials) throw new SupervisorApiError(401, 'supervisor_session_unavailable', 'A signed-in tenant administrator session is not available.', null)
+  const headers = new Headers(credentials)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Idempotency-Key', newIdempotencyKey())
+  headers.set('If-Match', `"work_package-${workPackageVersion}"`)
+  const response = await fetch(`${PREFIX}/work-packages/${encodeURIComponent(workPackageId)}/acceptance-contracts`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'create_acceptance_contract', registry_version: '1', confirmation: true }),
+  })
+  const text = await response.text()
+  let payload: SupervisorEnvelope<{ acceptance_contract: AcceptanceContract }> | SupervisorErrorPayload | null = null
+  try { payload = text ? (JSON.parse(text) as SupervisorEnvelope<{ acceptance_contract: AcceptanceContract }>) : null } catch { /* handled below */ }
+  if (!response.ok) {
+    const error = payload as SupervisorErrorPayload | null
+    throw new SupervisorApiError(response.status, error?.error?.code ?? `HTTP_${response.status}`, error?.error?.message ?? response.statusText ?? 'Request failed.', error?.meta?.request_id ?? response.headers.get('X-Request-ID'))
+  }
+  if (!payload || !('data' in payload)) throw new SupervisorApiError(502, 'invalid_supervisor_response', 'The supervisor API returned an invalid response envelope.', response.headers.get('X-Request-ID'))
+  return (payload as SupervisorEnvelope<{ acceptance_contract: AcceptanceContract }>).data.acceptance_contract
+}
+
+export async function issueRunStartAuthorization(workPackageId: string, waiverRequested = false): Promise<RunStartAuthorization> {
+  const credentials = supervisorCredentials()
+  if (!credentials) throw new SupervisorApiError(401, 'supervisor_session_unavailable', 'A signed-in tenant administrator session is not available.', null)
+  const headers = new Headers(credentials)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Idempotency-Key', newIdempotencyKey())
+  const response = await fetch(`${PREFIX}/work-packages/${encodeURIComponent(workPackageId)}/run-start-authorizations`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'issue_run_start_authorization', registry_version: '0.3', confirmation: true, waiver_requested: Boolean(waiverRequested) }),
+  })
+  const text = await response.text()
+  let payload: SupervisorEnvelope<{ authorization: RunStartAuthorization }> | SupervisorErrorPayload | null = null
+  try { payload = text ? (JSON.parse(text) as SupervisorEnvelope<{ authorization: RunStartAuthorization }>) : null } catch { /* handled below */ }
+  if (!response.ok) {
+    const error = payload as SupervisorErrorPayload | null
+    throw new SupervisorApiError(response.status, error?.error?.code ?? `HTTP_${response.status}`, error?.error?.message ?? response.statusText ?? 'Request failed.', error?.meta?.request_id ?? response.headers.get('X-Request-ID'))
+  }
+  if (!payload || !('data' in payload)) throw new SupervisorApiError(502, 'invalid_supervisor_response', 'The supervisor API returned an invalid response envelope.', response.headers.get('X-Request-ID'))
+  return (payload as SupervisorEnvelope<{ authorization: RunStartAuthorization }>).data.authorization
+}
+
+export async function startSupervisorRun(workPackageId: string, workPackageVersion: number, grantToken: string): Promise<{ run: SupervisorRun; etag: string | null }> {
+  const credentials = supervisorCredentials()
+  if (!credentials) throw new SupervisorApiError(401, 'supervisor_session_unavailable', 'A signed-in tenant administrator session is not available.', null)
+  const headers = new Headers(credentials)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Idempotency-Key', newIdempotencyKey())
+  headers.set('If-Match', `"work_package-${workPackageVersion}"`)
+  const response = await fetch(`${PREFIX}/work-packages/${encodeURIComponent(workPackageId)}/runs`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'start_supervisor_run', registry_version: '0.3', confirmation: true, grant_token: grantToken }),
+  })
+  const text = await response.text()
+  let payload: SupervisorEnvelope<{ run: SupervisorRun }> | SupervisorErrorPayload | null = null
+  try { payload = text ? (JSON.parse(text) as SupervisorEnvelope<{ run: SupervisorRun }>) : null } catch { /* handled below */ }
+  if (!response.ok) {
+    const error = payload as SupervisorErrorPayload | null
+    throw new SupervisorApiError(response.status, error?.error?.code ?? `HTTP_${response.status}`, error?.error?.message ?? response.statusText ?? 'Request failed.', error?.meta?.request_id ?? response.headers.get('X-Request-ID'))
+  }
+  if (!payload || !('data' in payload)) throw new SupervisorApiError(502, 'invalid_supervisor_response', 'The supervisor API returned an invalid response envelope.', response.headers.get('X-Request-ID'))
+  return { run: (payload as SupervisorEnvelope<{ run: SupervisorRun }>).data.run, etag: response.headers.get('ETag') }
+}
+
+export async function loadSupervisorRun(runId: string, signal?: AbortSignal): Promise<{ run: SupervisorRun; etag: string | null }> {
+  const res = await get<{ run: SupervisorRun }>(`/runs/${encodeURIComponent(runId)}`, signal)
+  return { run: res.envelope.data.run, etag: res.etag }
+}
+
+export async function requestIndependentAudit(runId: string, runEtag: string): Promise<AuditRequest> {
+  const credentials = supervisorCredentials()
+  if (!credentials) throw new SupervisorApiError(401, 'supervisor_session_unavailable', 'A signed-in tenant administrator session is not available.', null)
+  const headers = new Headers(credentials)
+  headers.set('Content-Type', 'application/json')
+  headers.set('Idempotency-Key', newIdempotencyKey())
+  headers.set('If-Match', runEtag)
+  const response = await fetch(`${PREFIX}/runs/${encodeURIComponent(runId)}/audit-requests`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'request_independent_audit', registry_version: '1', confirmation: true }),
+  })
+  const text = await response.text()
+  let payload: SupervisorEnvelope<{ audit_request: AuditRequest }> | SupervisorErrorPayload | null = null
+  try { payload = text ? (JSON.parse(text) as SupervisorEnvelope<{ audit_request: AuditRequest }>) : null } catch { /* handled below */ }
+  if (!response.ok) {
+    const error = payload as SupervisorErrorPayload | null
+    throw new SupervisorApiError(response.status, error?.error?.code ?? `HTTP_${response.status}`, error?.error?.message ?? response.statusText ?? 'Request failed.', error?.meta?.request_id ?? response.headers.get('X-Request-ID'))
+  }
+  if (!payload || !('data' in payload)) throw new SupervisorApiError(502, 'invalid_supervisor_response', 'The supervisor API returned an invalid response envelope.', response.headers.get('X-Request-ID'))
+  return (payload as SupervisorEnvelope<{ audit_request: AuditRequest }>).data.audit_request
+}
+
 
 export function createRequestEpoch() {
   let epoch = 0
