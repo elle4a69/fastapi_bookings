@@ -118,7 +118,7 @@ async def get_current_user(
     Scopes the lookup to the active tenant to ensure proper multi-tenant boundary isolation.
     """
     raw_token = x_token
-    if authorization:
+    if isinstance(authorization, str) and authorization:
         parts = authorization.split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
             raw_token = parts[1]
@@ -212,24 +212,26 @@ async def get_current_user(
     except (TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    # Query user; if platform owner, allow cross-tenant administration
-    user = db.query(User).filter(User.id == user_id).first()
+    # Enforce tenant isolation from token claim
+    token_tenant_id = payload.get("tenant_id")
+    if token_tenant_id is not None and token_tenant_id != tenant.id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not valid for active tenant")
+
+    # Query user within active tenant scope (or platform owner for cross-tenant)
+    user = db.query(User).filter(User.id == user_id, User.tenant_id == tenant.id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-
-    is_platform = (
-        bool(getattr(user, "is_platform_owner", False))
-        or bool(getattr(user, "is_superuser", False))
-        or (getattr(user, "role", "") or "").lower() == "platform_owner"
-    )
-
-    if not is_platform:
-        # Enforce tenant isolation from token claim
-        token_tenant_id = payload.get("tenant_id")
-        if token_tenant_id is not None and token_tenant_id != tenant.id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token not valid for active tenant")
-
-        if user.tenant_id != tenant.id:
+        candidate = db.query(User).filter(User.id == user_id).first()
+        is_platform = (
+            candidate is not None
+            and (
+                bool(getattr(candidate, "is_platform_owner", False))
+                or bool(getattr(candidate, "is_superuser", False))
+                or (getattr(candidate, "role", "") or "").lower() == "platform_owner"
+            )
+        )
+        if is_platform:
+            user = candidate
+        else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found in this tenant")
 
     return user
@@ -284,7 +286,7 @@ async def get_current_platform_owner(
     Tenant-level owners (role='owner' without platform flag) are strictly rejected with 403 Forbidden.
     """
     raw_token = x_token
-    if authorization:
+    if isinstance(authorization, str) and authorization:
         parts = authorization.split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
             raw_token = parts[1]
@@ -364,7 +366,7 @@ async def get_current_platform_owner(
 
 
 async def require_platform_owner(
-    current_user: User = Depends(get_current_platform_owner),
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """Require the persisted platform capability on an active user row."""
     if current_user.is_active is not True or current_user.is_platform_owner is not True:

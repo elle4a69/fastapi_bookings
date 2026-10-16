@@ -411,7 +411,7 @@ def test_support_launch_dispatch_failure_is_truthful(
 ):
     """Failure after turn creation cannot queue a ticket or leave an active turn."""
     tenant, user, _ = _create_user(db_session, "dispatch-fail-t", role="owner")
-    _, _, owner_headers = _create_user(db_session, "dispatch-fail-owner", role="owner")
+    _, _, owner_headers = _create_user(db_session, "dispatch-fail-owner", role="platform_owner", is_platform_owner=True)
     ticket = SupportTicket(
         tenant_id=tenant.id,
         created_by_user_id=user.id,
