@@ -70,6 +70,67 @@ def test_get_admin_website_creates_default_starter(client, website_test_env):
     assert "hero" in data["sections_data"]
     assert "Serenity Wellness Spa" in data["sections_data"]["hero"]["headline"]
     assert data["sections_data"]["contact"]["address"] == "789 Blossom Avenue, Suite 10"
+    assert data["sections_data"]["testimonials"]["enabled"] is False
+    assert data["sections_data"]["testimonials"]["items"] == []
+
+
+def test_initial_draft_uses_authoritative_services_and_existing_images_once(client, website_test_env, db_session):
+    """The automatic private draft prefers persisted tenant media and is idempotent."""
+    from app.models.service import Service
+
+    tenant = website_test_env["tenant"]
+    tenant.logo_url = "https://tenant.example.test/media/logo.png"
+    service = Service(
+        tenant_id=tenant.id,
+        name="Deep Tissue Massage",
+        description="Targeted massage treatment.",
+        duration=60,
+        price=120,
+        active=True,
+        is_visible=True,
+        image="https://tenant.example.test/media/deep-tissue.jpg",
+    )
+    db_session.add(service)
+    db_session.commit()
+
+    first = client.get("/api/admin/website", headers=website_test_env["headers"])
+    assert first.status_code == status.HTTP_200_OK
+    first_data = first.json()["data"]
+    sections = first_data["sections_data"]
+    assert sections["services"]["selected_service_ids"] == [service.id]
+    assert sections["services"]["show_prices"] is False
+    assert sections["hero"]["bg_image_url"] == tenant.logo_url
+    assert sections["about"]["image_url"] == service.image
+    assert sections["draft_meta"]["is_initial_system_draft"] is True
+    assert sections["testimonials"]["enabled"] is False
+
+    # A later read must not regenerate or replace the owner's existing draft.
+    sections["hero"]["headline"] = "Owner-written headline"
+    saved = client.put(
+        "/api/admin/website",
+        json={"sections_data": sections},
+        headers=website_test_env["headers"],
+    )
+    assert saved.status_code == status.HTTP_200_OK
+    second = client.get("/api/admin/website", headers=website_test_env["headers"])
+    assert second.json()["data"]["sections_data"]["hero"]["headline"] == "Owner-written headline"
+
+
+def test_initial_draft_never_overwrites_an_existing_published_site(client, website_test_env, db_session):
+    tenant = website_test_env["tenant"]
+    existing = TenantWebsite(
+        tenant_id=tenant.id,
+        sections_data={"hero": {"headline": "Already live", "enabled": True}},
+        is_published=True,
+        seo_title="Already live",
+    )
+    db_session.add(existing)
+    db_session.commit()
+
+    response = client.get("/api/admin/website", headers=website_test_env["headers"])
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["data"]["is_published"] is True
+    assert response.json()["data"]["sections_data"]["hero"]["headline"] == "Already live"
 
 
 def test_update_admin_website_draft(client, website_test_env):
@@ -144,7 +205,8 @@ def test_ai_generate_endpoint(client, website_test_env):
     assert data1["suggested_template"] in ["wellness", "luxury"]
     assert data1["suggested_theme"] in ["emerald_oasis", "rose_gold"]
     assert "hero" in data1["generated_sections"]
-    assert len(data1["generated_sections"]["testimonials"]["items"]) > 0
+    assert data1["generated_sections"]["testimonials"]["items"] == []
+    assert data1["generated_sections"]["testimonials"]["enabled"] is False
 
     # 2. Section rewrite
     payload_rewrite = {
@@ -308,4 +370,3 @@ def test_public_website_chat_endpoint(client, website_test_env, db_session):
     assert resp3.status_code == status.HTTP_200_OK
     assert resp3.json()["ok"] is True
     assert resp3.json()["conversation_id"] > 0
-

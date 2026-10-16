@@ -49,6 +49,17 @@ import {
   THEMES,
 } from "@/pages/public/website-page";
 import type { WebsiteConfigData } from "@/pages/public/website-page";
+import { History } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import {
+  ProposalReviewDrawer,
+  type ProposalDetail,
+  type WebsiteRevisionItem,
+} from "./website/proposal-review-drawer";
+import {
+  executeOwnerPublishProposal,
+  executeOwnerPublishToggle,
+} from "./website/publication-gate";
 
 const TEMPLATES = [
   {
@@ -121,6 +132,7 @@ export default function WebsiteBuilderPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [publishing, setPublishing] = useState<boolean>(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(false);
 
   // Active Website State
   const [config, setConfig] = useState<WebsiteConfigData>({
@@ -133,14 +145,12 @@ export default function WebsiteBuilderPage() {
         subhead: "Experience personalized treatments tailored specifically to your goals.",
         cta_text: "Book Appointment",
         cta_link: "#booking",
-        bg_image_url: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1600&q=80",
         enabled: true,
       },
       about: {
         badge: "Our Story",
         headline: "Dedicated to Exceptional Quality",
         story: "Founded with a mission to bring world-class services and mindful care together.",
-        image_url: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1000&q=80",
         enabled: true,
       },
       services: {
@@ -157,22 +167,9 @@ export default function WebsiteBuilderPage() {
       },
       testimonials: {
         headline: "What Our Clients Say",
-        subhead: "Trusted by hundreds of happy clients every month.",
-        items: [
-          {
-            name: "Sarah Jenkins",
-            role: "Regular Client",
-            content: "The attention to detail and relaxing ambiance made all the difference. Booking online was effortless!",
-            rating: 5,
-          },
-          {
-            name: "David Miller",
-            role: "Verified Client",
-            content: "Outstanding service from start to finish. Highly recommend their skilled team.",
-            rating: 5,
-          },
-        ],
-        enabled: true,
+        subhead: "Real experiences from people who love our services.",
+        items: [],
+        enabled: false,
       },
       contact: {
         headline: "Visit or Reach Out",
@@ -229,6 +226,11 @@ export default function WebsiteBuilderPage() {
   const [aiAction, setAiAction] = useState<"generate_full" | "rewrite_section" | "suggest_theme">("generate_full");
   const [aiSectionKey, setAiSectionKey] = useState<string>("hero");
   const [aiGenerating, setAiGenerating] = useState<boolean>(false);
+  const { isOwner } = useAuth();
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState<boolean>(false);
+  const [activeProposal, setActiveProposal] = useState<ProposalDetail | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<number>(1);
+  const [revisionsHistory, setRevisionsHistory] = useState<WebsiteRevisionItem[]>([]);
   const [isVoiceListening, setIsVoiceListening] = useState<boolean>(false);
   const speechRecognitionRef = useRef<any>(null);
 
@@ -301,6 +303,23 @@ export default function WebsiteBuilderPage() {
         } catch {
           // ignore fallback
         }
+
+        // Load website state & revisions history for proposals & rollback
+        try {
+          const stateRes: any = await apiClient.get("/api/business-assistant/website/state?include_history=true");
+          if (stateRes) {
+            if (stateRes.active_version) {
+              setCurrentVersion(stateRes.active_version);
+            } else if (stateRes.latest_proposal_version) {
+              setCurrentVersion(stateRes.latest_proposal_version);
+            }
+            if (Array.isArray(stateRes.recent_proposals)) {
+              setRevisionsHistory(stateRes.recent_proposals);
+            }
+          }
+        } catch {
+          // ignore fallback
+        }
       } catch (err: any) {
         toast.error("Failed to load website configuration: " + err.message);
       } finally {
@@ -309,6 +328,74 @@ export default function WebsiteBuilderPage() {
     }
     loadData();
   }, []);
+
+  // LiveKit Assistant RPC event listeners: real-time preview toggle and change review drawer
+  useEffect(() => {
+    const handlePreviewToggle = (e: Event) => {
+      const custom = e as CustomEvent<{ state?: 'open' | 'closed' | 'toggle' }>
+      const targetState = custom.detail?.state ?? 'toggle'
+      if (targetState === 'open') {
+        setMobileView('preview')
+      } else if (targetState === 'closed') {
+        setMobileView('editor')
+      } else {
+        setMobileView((prev) => (prev === 'preview' ? 'editor' : 'preview'))
+      }
+    }
+
+    const handleChangeReviewDrawer = async (e: Event) => {
+      const custom = e as CustomEvent<{ state?: 'open' | 'closed' | 'toggle'; proposalId?: number }>
+      const targetState = custom.detail?.state ?? 'toggle'
+      if (targetState === 'closed') {
+        setReviewDrawerOpen(false)
+      } else {
+        const proposalId = custom.detail?.proposalId
+        if (proposalId) {
+          try {
+            const previewRes: any = await apiClient.get(`/api/business-assistant/website/proposals/${proposalId}/preview`)
+            if (previewRes?.proposal) {
+              const propDetail: ProposalDetail = {
+                id: previewRes.proposal.id,
+                version: previewRes.proposal.version,
+                expected_version: currentVersion,
+                title: previewRes.proposal.title,
+                content_payload: previewRes.proposal.content_payload,
+                config: previewRes.preview,
+                status: previewRes.proposal.status,
+                created_at: previewRes.proposal.created_at,
+                published_at: previewRes.proposal.published_at,
+                rollback_version: previewRes.proposal.rollback_version,
+              }
+              setActiveProposal(propDetail)
+              setReviewDrawerOpen(true)
+              return
+            }
+          } catch (err) {
+            console.warn('[Review Drawer] Could not load proposal preview:', err)
+          }
+        }
+
+        // Fallback: open review with current state or existing proposal
+        setActiveProposal((prev) =>
+          prev ?? {
+            title: 'Website Draft Review',
+            config: config,
+            version: currentVersion,
+            id: proposalId,
+          },
+        )
+        setReviewDrawerOpen((prev) => (targetState === 'toggle' ? !prev : true))
+      }
+    }
+
+    window.addEventListener('assistant-rpc:preview-toggle', handlePreviewToggle)
+    window.addEventListener('assistant-rpc:change-review-drawer', handleChangeReviewDrawer)
+
+    return () => {
+      window.removeEventListener('assistant-rpc:preview-toggle', handlePreviewToggle)
+      window.removeEventListener('assistant-rpc:change-review-drawer', handleChangeReviewDrawer)
+    }
+  }, [config, currentVersion])
 
   // Track edits
   const updateSection = (sectionName: string, updates: Record<string, any>) => {
@@ -352,18 +439,16 @@ export default function WebsiteBuilderPage() {
     }
   };
 
-  // 1-Click Publish / Unpublish
+  // 1-Click Publish / Unpublish (Strict Owner Publication Gate)
   const handlePublishToggle = async (publish: boolean) => {
     try {
       setPublishing(true);
-      const res: any = await apiClient.post("/api/admin/website/publish", {
-        is_published: publish,
-      });
+      const res = await executeOwnerPublishToggle(publish, { isOwner, isAutomated: false });
       if (res?.ok) {
         setConfig((prev) => ({
           ...prev,
-          is_published: res.data.is_published,
-          published_at: res.data.published_at,
+          is_published: res.is_published,
+          published_at: res.published_at ? new Date(res.published_at).toISOString() : null,
         }));
         setHasUnsavedChanges(false);
         if (publish) {
@@ -376,6 +461,100 @@ export default function WebsiteBuilderPage() {
       toast.error("Publishing error: " + err.message);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  // Proposal Approve & Publish Gate Handler
+  const handleApproveAndPublishProposal = async (prop: ProposalDetail) => {
+    if (!isOwner) {
+      toast.error("Permission denied: Only business owners can publish changes to the live site.");
+      return;
+    }
+    try {
+      if (prop.id) {
+        const res = await executeOwnerPublishProposal(prop.id, {
+          isOwner,
+          isStale: false,
+          isAutomated: false,
+        });
+        if (res.ok) {
+          setConfig((prev) => ({
+            ...prev,
+            is_published: true,
+            published_at: res.published_at || new Date().toISOString(),
+          }));
+          setHasUnsavedChanges(false);
+          toast.success("Proposal approved and published live!");
+        }
+      } else {
+        await handlePublishToggle(true);
+      }
+      // Refresh state and history
+      const stateRes: any = await apiClient.get("/api/business-assistant/website/state?include_history=true");
+      if (stateRes) {
+        if (stateRes.active_version) setCurrentVersion(stateRes.active_version);
+        if (Array.isArray(stateRes.recent_proposals)) setRevisionsHistory(stateRes.recent_proposals);
+      }
+    } catch (err: any) {
+      toast.error("Publication error: " + err.message);
+      throw err;
+    }
+  };
+
+  // Re-sync proposal handler
+  const handleResyncProposal = async (prop: ProposalDetail) => {
+    if (!prop.id) {
+      setActiveProposal({
+        ...prop,
+        config,
+        expected_version: currentVersion,
+      });
+      toast.success("Proposal re-synced with active draft.");
+      return;
+    }
+    try {
+      const previewRes: any = await apiClient.get(`/api/business-assistant/website/proposals/${prop.id}/preview`);
+      if (previewRes?.preview) {
+        setActiveProposal({
+          ...prop,
+          config: previewRes.preview,
+          expected_version: currentVersion,
+        });
+        toast.success("Proposal re-synced with current draft!");
+      }
+    } catch (err: any) {
+      toast.error("Failed to re-sync proposal: " + err.message);
+    }
+  };
+
+  // Rollback to prior version handler
+  const handleRollbackVersion = async (targetVersion: number) => {
+    if (!isOwner) {
+      toast.error("Permission denied: Only business owners can initiate a rollback.");
+      return;
+    }
+    try {
+      const res: any = await apiClient.post("/api/business-assistant/website/rollback", {
+        target_version: targetVersion,
+        expected_current_version: currentVersion,
+      });
+      if (res?.ok) {
+        toast.success(`Successfully rolled back to Version ${targetVersion}`);
+        // Refresh website config and state
+        const refreshed: any = await apiClient.get("/api/admin/website");
+        if (refreshed?.ok && refreshed?.data) {
+          setConfig(refreshed.data);
+          setHasUnsavedChanges(false);
+        }
+        const stateRes: any = await apiClient.get("/api/business-assistant/website/state?include_history=true");
+        if (stateRes) {
+          if (stateRes.active_version) setCurrentVersion(stateRes.active_version);
+          if (Array.isArray(stateRes.recent_proposals)) setRevisionsHistory(stateRes.recent_proposals);
+        }
+      }
+    } catch (err: any) {
+      toast.error("Rollback failed: " + (err.message || String(err)));
+      throw err;
     }
   };
 
@@ -448,29 +627,59 @@ export default function WebsiteBuilderPage() {
       });
 
       if (res?.ok) {
+        let proposedConfig: WebsiteConfigData = config;
         if (aiAction === "generate_full" && res.generated_sections) {
-          setConfig((prev) => ({
-            ...prev,
-            template_id: res.suggested_template || prev.template_id,
-            theme_id: res.suggested_theme || prev.theme_id,
+          proposedConfig = {
+            ...config,
+            template_id: res.suggested_template || config.template_id,
+            theme_id: res.suggested_theme || config.theme_id,
             sections_data: res.generated_sections,
-          }));
-          toast.success("Full website copy and layout generated!");
+          };
         } else if (aiAction === "rewrite_section" && res.rewritten_text) {
-          updateSection(aiSectionKey, {
+          proposedConfig = {
+            ...config,
+            sections_data: {
+              ...config.sections_data,
+              [aiSectionKey]: {
+                ...(config.sections_data as any)?.[aiSectionKey],
             headline: res.rewritten_text,
             story: res.rewritten_text,
-          });
-          toast.success(`Rewrote ${aiSectionKey} successfully!`);
+              },
+            },
+          };
         } else if (aiAction === "suggest_theme") {
-          setConfig((prev) => ({
-            ...prev,
-            template_id: res.suggested_template || prev.template_id,
-            theme_id: res.suggested_theme || prev.theme_id,
-          }));
-          toast.success(`Theme updated to ${res.suggested_theme} with ${res.suggested_template} template!`);
+          proposedConfig = {
+            ...config,
+            template_id: res.suggested_template || config.template_id,
+            theme_id: res.suggested_theme || config.theme_id,
+          };
         }
-        setHasUnsavedChanges(true);
+
+        // Persist a reviewable Business Assistant proposal first. Applying it
+        // below only updates the private draft; publishing remains separate.
+        const proposalPayload: any = {
+          template_id: proposedConfig.template_id,
+          theme_id: proposedConfig.theme_id,
+          sections_data: proposedConfig.sections_data,
+          seo_title: proposedConfig.seo_title,
+          seo_description: proposedConfig.seo_description,
+        };
+        const proposalRes: any = await apiClient.post("/api/admin/business-assistant/website/proposals", {
+          title: aiAction === "rewrite_section" ? `Suggested update to ${aiSectionKey}` : "Suggested website update",
+          content_payload: proposalPayload,
+          request_key: `website-ai-${Date.now()}`,
+        });
+        const propDetail: ProposalDetail = {
+          id: proposalRes?.proposal?.id,
+          version: proposalRes?.proposal?.version || currentVersion,
+          expected_version: currentVersion,
+          title: aiAction === "rewrite_section" ? `Suggested update to ${aiSectionKey}` : "Suggested website update",
+          config: proposedConfig,
+          content_payload: proposalPayload,
+          created_at: new Date().toISOString(),
+        };
+        setActiveProposal(propDetail);
+        setReviewDrawerOpen(true);
         setAiModalOpen(false);
       }
     } catch (err: any) {
@@ -564,15 +773,17 @@ export default function WebsiteBuilderPage() {
             </Badge>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWizardOpen(true)}
-            className="text-xs flex items-center gap-1.5 border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 min-h-[36px]"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-            <span className="hidden sm:inline">Guided</span> Wizard
-          </Button>
+          {showAdvancedControls && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setWizardOpen(true)}
+              className="text-xs flex items-center gap-1.5 border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 min-h-[36px]"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+              Guided setup
+            </Button>
+          )}
 
           {/* Mobile Editor/Preview toggle */}
           <div className="flex lg:hidden items-center bg-slate-100 p-0.5 rounded-lg border">
@@ -597,6 +808,14 @@ export default function WebsiteBuilderPage() {
 
         {/* Device Switcher & Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAdvancedControls((current) => !current)}
+            className="min-h-[36px]"
+          >
+            {showAdvancedControls ? "Simple view" : "More options"}
+          </Button>
           {/* Device Switcher */}
           <div className="hidden sm:flex items-center bg-slate-100 p-1 rounded-lg border">
             <Button
@@ -667,14 +886,33 @@ export default function WebsiteBuilderPage() {
             {saving ? "Saving..." : <><span className="hidden sm:inline">Save</span> Draft</>}
           </Button>
 
-          {/* Publish Toggle Button */}
+          {/* Review & History Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setActiveProposal((prev) => prev ?? {
+                title: "Website Draft Review",
+                config: config,
+                version: currentVersion,
+              });
+              setReviewDrawerOpen(true);
+            }}
+            className="flex items-center gap-1.5 min-h-[36px]"
+          >
+            <History className="h-4 w-4 text-slate-600" />
+            <span className="hidden sm:inline">Review &</span> History
+          </Button>
+
+          {/* Publish Toggle Button (Strict Owner Publication Gate) */}
           {config.is_published ? (
             <Button
               variant="destructive"
               size="sm"
               onClick={() => handlePublishToggle(false)}
-              disabled={publishing}
+              disabled={publishing || !isOwner}
               className="flex items-center gap-1.5 min-h-[36px]"
+              title={!isOwner ? "Only business owners can unpublish the website." : "Unpublish website"}
             >
               Unpublish
             </Button>
@@ -682,8 +920,9 @@ export default function WebsiteBuilderPage() {
             <Button
               size="sm"
               onClick={() => handlePublishToggle(true)}
-              disabled={publishing}
+              disabled={publishing || !isOwner}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-1.5 shadow-sm min-h-[36px]"
+              title={!isOwner ? "Only business owners can publish the website." : "Publish website live"}
             >
               <Send className="h-4 w-4" />
               {publishing ? "Publishing..." : <><span className="hidden sm:inline">Publish</span> Website</>}
@@ -694,8 +933,33 @@ export default function WebsiteBuilderPage() {
 
       {/* ── TWO-COLUMN WORKSPACE ───────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
+        {!showAdvancedControls && (
+          <div className={`w-full lg:w-[400px] border-r bg-white flex flex-col justify-center p-7 sm:p-10 shrink-0 ${mobileView === "preview" ? "hidden lg:flex" : "flex"}`}>
+            <div className="max-w-sm space-y-5">
+              <div className="h-11 w-11 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-bold text-slate-900">Your website is ready to review</h2>
+                <p className="text-sm leading-6 text-slate-600">
+                  We used your business details, services and available business images to make this private first draft. It is not public yet.
+                </p>
+              </div>
+              <div className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-700 space-y-2">
+                <p className="font-medium">What happens next</p>
+                <p>Look through the preview, then tell the assistant what you would like changed. When you are happy, choose Publish Website.</p>
+                {((config.sections_data as any)?.draft_meta?.missing_essential_facts || []).length > 0 && (
+                  <p className="text-amber-700">To finish the draft, add {((config.sections_data as any).draft_meta.missing_essential_facts || []).join(", ")}.</p>
+                )}
+              </div>
+              <Button onClick={() => setShowAdvancedControls(true)} variant="outline" className="w-full">
+                Make a detailed change
+              </Button>
+            </div>
+          </div>
+        )}
         {/* LEFT PANEL: EDITORS & TABS */}
-        <div className={`w-full lg:w-[480px] xl:w-[540px] border-r bg-white flex flex-col shrink-0 overflow-y-auto ${mobileView === "preview" ? "hidden lg:flex" : "flex"}`}>
+        <div className={`w-full lg:w-[480px] xl:w-[540px] border-r bg-white flex flex-col shrink-0 overflow-y-auto ${showAdvancedControls ? (mobileView === "preview" ? "hidden lg:flex" : "flex") : "hidden"}`}>
           <Tabs defaultValue="templates" className="flex flex-col h-full">
             <div className="px-6 pt-4 border-b bg-slate-50/50">
               <TabsList className="grid grid-cols-4 w-full">
@@ -1752,6 +2016,31 @@ export default function WebsiteBuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Visual Before/After Diff, Stale Invalidation, Rollback, and Strict Owner Publication Gate */}
+      <ProposalReviewDrawer
+        open={reviewDrawerOpen}
+        onOpenChange={(isOpen) => {
+          setReviewDrawerOpen(isOpen);
+          if (!isOpen) {
+            setActiveProposal(null);
+          }
+        }}
+        proposal={activeProposal}
+        currentConfig={config}
+        currentVersion={currentVersion}
+        hasUnsavedChanges={hasUnsavedChanges}
+        isOwner={isOwner}
+        onApplyDraft={(mergedConfig) => {
+          setConfig(mergedConfig);
+          setHasUnsavedChanges(true);
+          toast.success("Changes applied to private draft. Review it, then save when you are happy.");
+        }}
+        onApproveAndPublish={handleApproveAndPublishProposal}
+        onResyncProposal={handleResyncProposal}
+        onRollback={handleRollbackVersion}
+        revisionsHistory={revisionsHistory}
+      />
 
       {/* ── MODAL: STEP-BY-STEP GUIDED ONBOARDING WIZARD ─── */}
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>

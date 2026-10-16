@@ -7,7 +7,6 @@ Provides endpoints for managing tenant single-page public websites:
 - Public website configuration retrieval
 """
 
-import copy
 import hashlib
 import hmac
 import json
@@ -18,11 +17,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ..deps import get_current_admin, get_current_tenant, get_db, get_public_tenant
+from ..deps import get_current_admin, get_current_owner, get_current_tenant, get_db, get_public_tenant
 from ...core.config import settings
 from ...models.tenant import Tenant
-from ...models.tenant_website import DEFAULT_SECTIONS_DATA, TenantWebsite
+from ...models.tenant_website import TenantWebsite
 from ...models.user import User
+from ...services.website_initial_draft import build_initial_website_sections, ensure_initial_website_draft
 from ...schemas.website import (
     PublicWebsiteData,
     PublicWebsiteResponse,
@@ -42,22 +42,6 @@ from ...schemas.website import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["website"])
-
-
-def _generate_starter_sections(tenant: Tenant) -> Dict[str, Any]:
-    """Generates initial starter content personalized with the tenant's details."""
-    sections = copy.deepcopy(DEFAULT_SECTIONS_DATA)
-    if tenant.name:
-        sections["hero"]["headline"] = f"Welcome to {tenant.name}"
-        sections["about"]["headline"] = f"About {tenant.name}"
-        sections["footer"]["copyright"] = f"© {datetime.now(timezone.utc).year} {tenant.name}. All rights reserved."
-    if tenant.address:
-        sections["contact"]["address"] = tenant.address
-    if tenant.phone:
-        sections["contact"]["phone"] = tenant.phone
-    if tenant.email:
-        sections["contact"]["email"] = tenant.email
-    return sections
 
 
 def generate_chat_session_token(tenant_id: int, conversation_id: int) -> str:
@@ -82,20 +66,8 @@ def get_admin_website_config(
     db: Session = Depends(get_db),
 ) -> WebsiteResponse:
     """Retrieve or initialize the active tenant's draft website configuration."""
-    website = db.query(TenantWebsite).filter(TenantWebsite.tenant_id == tenant.id).first()
-    if not website:
-        initial_sections = _generate_starter_sections(tenant)
-        website = TenantWebsite(
-            tenant_id=tenant.id,
-            template_id="minimalist",
-            theme_id="ocean_slate",
-            custom_colors={},
-            sections_data=initial_sections,
-            is_published=False,
-            seo_title=f"{tenant.name} | Book Online",
-            seo_description=f"Book your appointment online with {tenant.name}.",
-        )
-        db.add(website)
+    website, created = ensure_initial_website_draft(db, tenant)
+    if created:
         db.commit()
         db.refresh(website)
 
@@ -110,20 +82,7 @@ def update_admin_website_config(
     db: Session = Depends(get_db),
 ) -> WebsiteResponse:
     """Update the active tenant's draft website configuration."""
-    website = db.query(TenantWebsite).filter(TenantWebsite.tenant_id == tenant.id).first()
-    if not website:
-        initial_sections = _generate_starter_sections(tenant)
-        website = TenantWebsite(
-            tenant_id=tenant.id,
-            template_id="minimalist",
-            theme_id="ocean_slate",
-            custom_colors={},
-            sections_data=initial_sections,
-            is_published=False,
-            seo_title=f"{tenant.name} | Book Online",
-            seo_description=f"Book your appointment online with {tenant.name}.",
-        )
-        db.add(website)
+    website, _ = ensure_initial_website_draft(db, tenant)
 
     update_dict = payload.model_dump(exclude_unset=True)
     for field, val in update_dict.items():
@@ -141,24 +100,11 @@ def update_admin_website_config(
 def publish_website(
     payload: Optional[WebsitePublishRequest] = None,
     tenant: Tenant = Depends(get_current_tenant),
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(get_current_owner),
     db: Session = Depends(get_db),
 ) -> WebsitePublishResponse:
     """Publish current draft website to live status or unpublish it."""
-    website = db.query(TenantWebsite).filter(TenantWebsite.tenant_id == tenant.id).first()
-    if not website:
-        initial_sections = _generate_starter_sections(tenant)
-        website = TenantWebsite(
-            tenant_id=tenant.id,
-            template_id="minimalist",
-            theme_id="ocean_slate",
-            custom_colors={},
-            sections_data=initial_sections,
-            is_published=False,
-            seo_title=f"{tenant.name} | Book Online",
-            seo_description=f"Book your appointment online with {tenant.name}.",
-        )
-        db.add(website)
+    website, _ = ensure_initial_website_draft(db, tenant)
 
     should_publish = payload.is_published if (payload is not None and payload.is_published is not None) else True
     website.is_published = should_publish
@@ -221,16 +167,10 @@ def ai_generate_website_content(
     # Action: Rewrite single section
     if action == "rewrite_section" and payload.section_key:
         sec = payload.section_key
-        if sec == "hero":
-            rewritten = f"Transformative Excellence at {b_name}. Experience tailored care crafted specifically for your needs."
-        elif sec == "about":
-            rewritten = f"At {b_name}, we are dedicated to providing world-class quality and individualized attention. Our experienced team blends passion with precision to deliver results you can feel and see every single day."
-        elif sec == "services":
-            rewritten = "Handcrafted sessions and treatments designed to deliver immediate results and lasting satisfaction."
-        elif sec == "booking":
-            rewritten = "Effortless online scheduling. Select your preferred specialist, treatment, and time."
-        else:
-            rewritten = f"Welcome to {b_name}. Designed for exceptional quality and effortless satisfaction."
+        rewritten = (
+            f"Suggested wording for the {sec} section of {b_name}. "
+            "Review and personalise this draft before applying it."
+        )
 
         return WebsiteAiGenerateResponse(
             ok=True,
@@ -248,6 +188,20 @@ def ai_generate_website_content(
             suggested_theme=theme,
             message=f"Suggested {template} template with {theme} palette based on your description.",
         )
+
+    # AI output is only a proposal candidate.  Start from current authoritative
+    # tenant data and deliberately omit stock imagery, invented testimonials,
+    # qualifications, prices, availability and other unverified claims.
+    # The UI submits this candidate to the Business Assistant proposal endpoint
+    # for review; this endpoint never persists it.
+    sections = build_initial_website_sections(db, tenant)
+    return WebsiteAiGenerateResponse(
+        ok=True,
+        suggested_template=template,
+        suggested_theme=theme,
+        generated_sections=sections,
+        message="Prepared a fact-based website proposal for your review.",
+    )
 
     # Action: Full site copy generation
     sections = copy.deepcopy(DEFAULT_SECTIONS_DATA)
@@ -350,7 +304,7 @@ def get_public_website(
     if not website:
         # If previewing or not found, return 404 or default starter if preview
         if preview:
-            starter_sections = _generate_starter_sections(tenant)
+            starter_sections = build_initial_website_sections(db, tenant)
             config = WebsiteConfigSchema(
                 tenant_id=tenant.id,
                 template_id="minimalist",
@@ -760,4 +714,3 @@ def get_public_website_chat_messages(
         reply=latest_reply,
         messages=msg_items,
     )
-

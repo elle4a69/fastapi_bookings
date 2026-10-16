@@ -917,26 +917,6 @@ export function PublicWebsiteView({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-                {isClinical && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    <ShieldCheck className="h-4 w-4 text-blue-600" />
-                    Board-Certified Clinical Specialists
-                  </div>
-                )}
-                {isWellness && (
-                  <div
-                    className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold"
-                    style={{ backgroundColor: accentColor, color: theme.accentText }}
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Holistic Relaxation & Rejuvenation
-                  </div>
-                )}
-                {isLuxury && (
-                  <p className="text-xs uppercase tracking-[0.25em] font-medium text-amber-700">
-                    Excellence · Artistry · Sanctuary
-                  </p>
-                )}
 
                 <h1
                   className={`text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight ${fontHeading}`}
@@ -977,30 +957,9 @@ export function PublicWebsiteView({
                   </Button>
                 </div>
 
-                {/* Trust stats */}
-                <div className="pt-8 grid grid-cols-3 gap-6 border-t border-slate-200/80 max-w-md mx-auto lg:mx-0">
-                  <div>
-                    <div className="text-2xl font-bold" style={{ color: primaryColor }}>
-                      5.0 ★
-                    </div>
-                    <div className="text-xs text-slate-500">Over 350+ reviews</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold" style={{ color: primaryColor }}>
-                      100%
-                    </div>
-                    <div className="text-xs text-slate-500">Satisfaction guarantee</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold" style={{ color: primaryColor }}>
-                      Verified
-                    </div>
-                    <div className="text-xs text-slate-500">Top Rated Studio</div>
-                  </div>
-                </div>
               </div>
 
-              <div className="lg:col-span-5 relative">
+              {sections.hero?.bg_image_url && <div className="lg:col-span-5 relative">
                 <div
                   className={`overflow-hidden shadow-2xl border-4 border-white ${
                     isWellness
@@ -1011,15 +970,12 @@ export function PublicWebsiteView({
                   }`}
                 >
                   <img
-                    src={
-                      sections.hero?.bg_image_url ||
-                      "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=1200&q=80"
-                    }
+                    src={sections.hero.bg_image_url}
                     alt={tenantName}
                     className="w-full h-[400px] object-cover hover:scale-105 transition-transform duration-700"
                   />
                 </div>
-              </div>
+              </div>}
             </div>
           </div>
         </section>
@@ -1034,7 +990,7 @@ export function PublicWebsiteView({
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-              <div className="lg:col-span-5 order-2 lg:order-1">
+              {sections.about?.image_url && <div className="lg:col-span-5 order-2 lg:order-1">
                 <div
                   className={`relative overflow-hidden shadow-xl ${
                     isWellness
@@ -1045,15 +1001,12 @@ export function PublicWebsiteView({
                   }`}
                 >
                   <img
-                    src={
-                      sections.about?.image_url ||
-                      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1000&q=80"
-                    }
+                    src={sections.about.image_url}
                     alt="About our practice"
                     className="w-full h-[380px] object-cover"
                   />
                 </div>
-              </div>
+              </div>}
 
               <div className="lg:col-span-7 order-1 lg:order-2 space-y-6">
                 <div
@@ -1398,7 +1351,7 @@ export function PublicWebsiteView({
       )}
 
       {/* ── 6. Testimonials Section ────────────────────────── */}
-      {sections.testimonials?.enabled !== false && (
+      {sections.testimonials?.enabled !== false && (sections.testimonials?.items?.length || 0) > 0 && (
         <section id="testimonials-section" className="py-20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
@@ -1414,31 +1367,7 @@ export function PublicWebsiteView({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {(
-                sections.testimonials?.items || [
-                  {
-                    name: "Sarah Jenkins",
-                    role: "Regular Client",
-                    content:
-                      "The attention to detail and relaxing ambiance made all the difference. Booking online was effortless!",
-                    rating: 5,
-                  },
-                  {
-                    name: "David Miller",
-                    role: "Verified Client",
-                    content:
-                      "Outstanding service from start to finish. Highly recommend their skilled team.",
-                    rating: 5,
-                  },
-                  {
-                    name: "Elena Rostova",
-                    role: "Monthly Member",
-                    content:
-                      "A true sanctuary in the middle of a busy week. My favourite place to unwind.",
-                    rating: 5,
-                  },
-                ]
-              ).map((t, i) => (
+              {(sections.testimonials?.items || []).map((t, i) => (
                 <div
                   key={i}
                   className={`p-8 bg-white border shadow-sm flex flex-col justify-between ${cardRadius}`}
