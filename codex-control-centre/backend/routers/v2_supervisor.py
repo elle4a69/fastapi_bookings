@@ -151,7 +151,7 @@ def bootstrap(request: Request, actor: ActorScope = Depends(get_actor_scope)) ->
     if infrastructure.state == "migration_required":
         data = {
             "capabilities": {"can_view_supervisor": True, "can_claim_project": False},
-            "action_registry_version": "0.2",
+            "action_registry_version": "0.1",
             "infrastructure": infrastructure.public_dict(),
             "project_resolution": None,
             "cutover": None,
@@ -167,7 +167,7 @@ def bootstrap(request: Request, actor: ActorScope = Depends(get_actor_scope)) ->
         }
         data = {
             "capabilities": {"can_view_supervisor": True, "can_claim_project": can_claim},
-            "action_registry_version": "0.2",
+            "action_registry_version": "0.1",
             "infrastructure": infrastructure.public_dict(),
             "project_resolution": public_resolution,
             "cutover": read_cutover(),
@@ -315,7 +315,7 @@ def _stored_response(result: Reservation, *, replay: bool = False) -> Response:
     openapi_extra={
         "x-operator-action": True,
         "x-action-code": "claim_project",
-        "x-action-registry-version": "0.2",
+        "x-action-registry-version": "0.1",
         "x-backend-permission": "project.claim",
         "requestBody": {
             "required": True,

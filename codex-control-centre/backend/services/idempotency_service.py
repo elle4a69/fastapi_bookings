@@ -73,7 +73,7 @@ def canonical_fingerprint(
         "expected_version": expected_version,
         "method": "POST",
         "project_id": project_id,
-        "registry_version": "0.2",
+        "registry_version": "0.1",
         "route": "/api/admin/codex/v2/projects/{project_id}/claim",
         "schema_version": "0.1",
     }

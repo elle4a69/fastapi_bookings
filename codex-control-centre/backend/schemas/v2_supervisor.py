@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 SCHEMA_VERSION = "0.1"
-ACTION_REGISTRY_VERSION = "0.2"
+# The original claim action remains a v0.1 contract.  Planning actions added
+# by WP-UI-01B have their own explicitly enforced v0.2 registry below.
+CLAIM_ACTION_REGISTRY_VERSION = "0.1"
 
 
 class StrictModel(BaseModel):
@@ -62,7 +64,7 @@ class ConfirmationDescriptor(StrictModel):
 
 
 class ClaimActionDescriptor(StrictModel):
-    registry_version: Literal["0.2"] = ACTION_REGISTRY_VERSION
+    registry_version: Literal["0.1"] = CLAIM_ACTION_REGISTRY_VERSION
     action: Literal["claim_project"] = "claim_project"
     allowed: Literal[True] = True
     reason_code: None = None
@@ -104,7 +106,7 @@ class Capabilities(StrictModel):
 
 class BootstrapData(StrictModel):
     capabilities: Capabilities
-    action_registry_version: Literal["0.2"] = ACTION_REGISTRY_VERSION
+    action_registry_version: Literal["0.1"] = CLAIM_ACTION_REGISTRY_VERSION
     infrastructure: InfrastructureSnapshot
     project_resolution: ProjectResolutionSnapshot | None
     cutover: CutoverSnapshot | None
@@ -143,7 +145,7 @@ class ProjectsEnvelope(StrictModel):
 
 class ClaimRequest(StrictModel):
     action: Literal["claim_project"]
-    registry_version: Literal["0.2"]
+    registry_version: Literal["0.1"]
     expected_version: int = Field(ge=0)
     confirmation: Literal[True]
 

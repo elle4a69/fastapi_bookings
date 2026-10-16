@@ -849,7 +849,7 @@ def _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypa
     claimed = client.post(
         f"/api/admin/codex/v2/projects/{project_id}/claim",
         headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"project-0"'},
-        json={"action": "claim_project", "registry_version": "0.2", "expected_version": 0, "confirmation": True},
+        json={"action": "claim_project", "registry_version": "0.1", "expected_version": 0, "confirmation": True},
     )
     assert claimed.status_code == 200, claimed.text
     return project_id, headers
@@ -960,7 +960,16 @@ def test_planning_approved_brief_revision_supersedes_and_replays(client, db_sess
     assert stale_replay.headers["idempotency-replayed"] == "true"
     from backend.database import engine as codex_engine
     with codex_engine.connect() as connection:
-        assert connection.execute(text("SELECT COUNT(*) FROM supervisor_events WHERE action_code='approve_brief'")).scalar_one() == 2
+        # The mounted suite shares its isolated CCC ledger across tests. Count
+        # only this configured project so earlier planning approvals cannot
+        # alter this revision/replay assertion.
+        assert connection.execute(
+            text(
+                "SELECT COUNT(*) FROM supervisor_events "
+                "WHERE action_code='approve_brief' AND project_public_id=:project_id"
+            ),
+            {"project_id": project_id},
+        ).scalar_one() == 2
         assert connection.execute(text("SELECT status FROM idempotency_records WHERE action_code='approve_brief' AND idempotency_key=:key"), {"key": stale_key}).scalar_one() == "failed"
 
 

@@ -41,7 +41,8 @@ All routes are under `/api/admin/codex/v2`, use the existing `{data,meta}` envel
 `Cache-Control: no-store`, `X-Request-ID`, and `ETag` for resource reads/mutations. All
 mutation requests require native `ActorScope`, JSON, UUIDv4 `Idempotency-Key`, `If-Match`
 for the stated parent/resource version, explicit `confirmation:true`, and idempotent replay.
-The action registry version is `0.2`: `claim_project`, `create_mission`,
+The existing `claim_project` contract and its action metadata remain registry version
+`0.1`. The new planning actions use registry version `0.2`: `create_mission`,
 `create_work_package`, `create_brief`, `approve_brief`, `record_context_checkpoint`, and
 `define_audit_scope`.
 
