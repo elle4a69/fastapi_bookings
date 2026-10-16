@@ -60,6 +60,7 @@ const SystemPage = lazy(() => import("@/pages/admin/system"))
 const TelemetryPage = lazy(() => import("@/pages/admin/telemetry"))
 const CodingCockpitPage = lazy(() => import("@/pages/admin/coding-cockpit"))
 const CodexSupervisorPage = lazy(() => import("@/pages/admin/codex-supervisor"))
+const CodexV3Page = lazy(() => import("@/pages/admin/codex-v3"))
 const PublicBookingPage = lazy(() => import("@/pages/public/booking-page"))
 const PublicUploadPage = lazy(() => import("@/pages/public/upload-page"))
 const WebsiteBuilderPage = lazy(() => import("@/pages/admin/website"))
@@ -236,6 +237,7 @@ function App() {
                 <Route path="/admin/assistant-studio/:tab" element={<AssistantStudioPage />} />
                 <Route path="/admin/coding-cockpit" element={<CodingCockpitPage />} />
                 <Route path="/admin/coding-cockpit-v2" element={<CodexSupervisorPage />} />
+                <Route path="/admin/codex-v3" element={<CodexV3Page />} />
                 <Route path="/admin/resident-agent" element={<Navigate to="/admin/coding-cockpit" replace />} />
                 <Route path="/admin/coding-studio" element={<Navigate to="/admin/coding-cockpit?tab=workbench" replace />} />
                 <Route path="/admin/settings/modules" element={<TenantModulesPage />} />
