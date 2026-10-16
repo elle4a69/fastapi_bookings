@@ -81,6 +81,16 @@ VITE_MAPBOX_TOKEN=pk.eyJ1I...
 
 ## 4. Core Workflows & Contracts
 
+### 4.0 Development Supervisor V2
+
+`/admin/coding-cockpit-v2` is a separate native Control Centre planning
+surface. It uses only the V2 facade and an actual signed-in tenant admin
+context; it has no localhost/demo/tunnel identity fallback. It can create and
+approve bounded planning records with explicit confirmation, current-version
+preconditions, and server idempotency, but cannot execute, dispatch, approve a
+run, collect evidence, or issue a verdict. See
+[the module README](src/pages/admin/codex-supervisor/README.md).
+
 ### 4.1 Mobile-First & PWA Standards
 - **Standalone PWA**: Configured with `display: 'standalone'` in `manifest.webmanifest`. Includes automatic update service worker (`sw.js`).
 - **44x44px Touch Targets**: All buttons, inputs, switches, and navigation triggers adhere to the 44px minimum tap height in standard touch views.

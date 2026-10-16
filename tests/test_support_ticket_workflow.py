@@ -209,7 +209,7 @@ def test_internal_only_messages_never_visible_in_tenant_endpoint(client, db_sess
 
 @pytest.mark.asyncio
 async def test_require_platform_owner_dependency_direct():
-    """require_platform_owner enforces owner role or superuser privilege."""
+    """Only an active persisted platform owner passes the dependency."""
     # 1. Non-owner regular staff -> 403 Forbidden
     staff_user = User(id=10, tenant_id=1, login="staff1", role="staff")
     with pytest.raises(HTTPException) as exc_info:
@@ -222,22 +222,43 @@ async def test_require_platform_owner_dependency_direct():
         await require_platform_owner(current_user=provider_user)
     assert exc_info.value.status_code == 403
 
-    # 3. Owner role -> allowed
-    owner_user = User(id=12, tenant_id=1, login="owner1", role="owner")
-    resolved_owner = await require_platform_owner(current_user=owner_user)
-    assert resolved_owner == owner_user
+    # 3. Tenant owner role alone -> denied
+    owner_user = User(id=12, tenant_id=1, login="owner1", role="owner", is_active=True)
+    with pytest.raises(HTTPException) as exc_info:
+        await require_platform_owner(current_user=owner_user)
+    assert exc_info.value.status_code == 403
 
-    # 4. Superuser user -> allowed
+    # 4. A dynamic superuser attribute -> denied
     superuser = User(id=13, tenant_id=1, login="super1", role="manager")
     setattr(superuser, "is_superuser", True)
-    resolved_super = await require_platform_owner(current_user=superuser)
-    assert resolved_super == superuser
+    with pytest.raises(HTTPException) as exc_info:
+        await require_platform_owner(current_user=superuser)
+    assert exc_info.value.status_code == 403
+
+    # 5. Active persisted platform owner -> allowed
+    platform_owner = User(
+        id=14,
+        tenant_id=1,
+        login="platform-owner",
+        role="manager",
+        is_active=True,
+        is_platform_owner=True,
+    )
+    assert await require_platform_owner(current_user=platform_owner) is platform_owner
+
+    # 6. Inactive persisted platform owner -> denied
+    platform_owner.is_active = False
+    with pytest.raises(HTTPException) as exc_info:
+        await require_platform_owner(current_user=platform_owner)
+    assert exc_info.value.status_code == 403
 
 
 def test_platform_owner_endpoint_protection(client, db_session):
     """Platform owner internal note endpoint rejects non-owners with 403."""
     tenant, owner_user = _create_actor(db_session, "owner-act", role="owner")
     _, staff_user = _create_actor(db_session, "staff-act", role="staff", tenant=tenant)
+    owner_user.is_platform_owner = True
+    db_session.commit()
 
     owner_headers = _headers(tenant, owner_user)
     staff_headers = _headers(tenant, staff_user)

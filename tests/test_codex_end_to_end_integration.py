@@ -46,6 +46,7 @@ def _create_admin_user(db_session: Session, suffix: str = "mount") -> tuple[Tena
         login=f"admin-{suffix}",
         password_hash="test-secret-hash",
         role="owner",
+        is_platform_owner=True,
     )
     db_session.add(user)
     db_session.commit()
@@ -258,8 +259,8 @@ def test_e2e_health_and_sentinels_deep_diagnostics(client: TestClient, db_sessio
     """Health check endpoint, OpenTelemetry latency checks, and worker sentinels."""
     tenant, user, headers = _create_admin_user(db_session, suffix="sentinels")
 
-    # 1. Public Health Check
-    health_res = client.get("/api/admin/codex/health")
+    # 1. Platform-owner-protected health check
+    health_res = client.get("/api/admin/codex/health", headers=headers)
     assert health_res.status_code == 200
     health_data = health_res.json()
     assert health_data["status"] == "healthy"

@@ -1,5 +1,27 @@
 # Test Architecture & Verification Gates (`tests/`)
 
+### Platform-owner authority coverage
+
+`test_platform_owner_authority.py` covers persisted authorization,
+transactional audit behavior, offline CLI safety, local-bypass containment,
+idempotency, last-owner protection, and real file-backed SQLite concurrency.
+An opt-in PostgreSQL gate, enabled only by the disposable-test harness through
+`WP_SEC_01_TEST_POSTGRES_URL`, executes real advisory-lock-backed concurrent
+grant and revoke transactions and verifies the persisted audit/cardinality
+invariants against that isolated service.
+`test_platform_owner_authority_migration.py` covers the parent-to-head upgrade,
+false backfill/default/index, raw inserts, downgrade/re-upgrade, and single-head
+linkage without using ORM `create_all()` as populated migration evidence.
+
+Both test roots select process-unique temporary SQLite databases before app
+imports. Session teardown disposes every loaded application database engine,
+removes that process's temporary storage without suppressing failures, and
+fails visibly if cleanup remains. Session-end sentinels fail if repository
+runtime databases change. A child-process regression opens a real database
+session and FastAPI `TestClient` lifespan, calls a mounted Control Centre
+route, and then proves the focused run leaves neither application temp prefix
+nor a changed default runtime database.
+
 The `tests/` directory contains the automated test suites, fixtures, mock isolation wrappers, and release verification gates for **FastAPI Bookings**.
 
 ---

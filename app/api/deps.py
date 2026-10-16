@@ -128,7 +128,11 @@ async def get_current_user(
     if settings.LOCAL_AUTH_BYPASS and raw_token == "local-development-bypass":
         user = (
             db.query(User)
-            .filter(User.tenant_id == tenant.id, User.role.in_(["owner", "admin"]))
+            .filter(
+                User.tenant_id == tenant.id,
+                User.is_active.is_(True),
+                User.is_platform_owner.is_(True),
+            )
             .order_by(User.id)
             .first()
         )
@@ -136,7 +140,7 @@ async def get_current_user(
             return user
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Local authentication bypass requires an owner account in the active tenant.",
+            detail="Local authentication bypass is unavailable for the active tenant.",
         )
 
     if not raw_token:
@@ -362,17 +366,8 @@ async def get_current_platform_owner(
 async def require_platform_owner(
     current_user: User = Depends(get_current_platform_owner),
 ) -> User:
-    """Ensure the user is a platform owner or superuser.
-
-    Strictly requires is_platform_owner=True, is_superuser=True, or role='platform_owner'.
-    Tenant owner (role='owner' without platform flag) is rejected with 403 Forbidden.
-    """
-    is_platform = (
-        bool(getattr(current_user, "is_platform_owner", False))
-        or bool(getattr(current_user, "is_superuser", False))
-        or (getattr(current_user, "role", "") or "").lower() == "platform_owner"
-    )
-    if not is_platform:
+    """Require the persisted platform capability on an active user row."""
+    if current_user.is_active is not True or current_user.is_platform_owner is not True:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Platform owner privilege required",

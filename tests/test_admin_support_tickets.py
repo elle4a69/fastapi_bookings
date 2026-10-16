@@ -10,8 +10,12 @@ Tests:
 """
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+from backend.database import SessionLocal as CodexSessionLocal
+from backend.models.codex import Turn as CodexTurn
 
 from app.core.security import create_access_token
 from app.models.support_ticket import SupportTicket, SupportTicketAuditEvent, SupportTicketMessage
@@ -75,6 +79,30 @@ def test_platform_owner_gate_enforcement(client: TestClient, db_session: Session
     # 5. Platform Owner -> 200
     res_owner = client.get("/api/admin/support-tickets", headers=platform_owner_headers)
     assert res_owner.status_code == 200
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
+def test_ordinary_tenant_roles_are_denied_before_support_ticket_lookup_or_dispatch(
+    client: TestClient,
+    db_session: Session,
+    role: str,
+):
+    tenant, user, headers = _create_user(db_session, f"ordinary-{role}", role=role)
+    user.is_platform_owner = False
+    db_session.commit()
+
+    missing_ticket = "00000000-0000-0000-0000-000000000000"
+    assert client.get("/api/admin/support-tickets", headers=headers).status_code == 403
+    assert client.post(
+        f"/api/admin/support-tickets/{missing_ticket}/internal-note",
+        json={"body": "must not be stored"},
+        headers=headers,
+    ).status_code == 403
+    assert client.post(
+        f"/api/admin/support-tickets/{missing_ticket}/launch-codex",
+        json={},
+        headers=headers,
+    ).status_code == 403
 
 
 def test_list_tickets_cross_tenant_and_filtering(client: TestClient, db_session: Session):
@@ -310,7 +338,11 @@ def test_post_internal_note_and_tenant_reply(client: TestClient, db_session: Ses
     assert "tenant_reply_added" in actions
 
 
-def test_launch_codex_investigation(client: TestClient, db_session: Session):
+def test_launch_codex_investigation(
+    client: TestClient,
+    db_session: Session,
+    tmp_path,
+):
     """Platform owner can launch Codex investigation, creating a thread and turn, and updating ticket status."""
     tenant, user, _ = _create_user(db_session, "codex-t", role="owner")
     _, _, owner_headers = _create_user(db_session, "codex-boss", role="platform_owner", is_platform_owner=True)
@@ -327,13 +359,26 @@ def test_launch_codex_investigation(client: TestClient, db_session: Session):
     db_session.add(ticket)
     db_session.commit()
 
-    # Launch Codex investigation
-    res = client.post(
-        f"/api/admin/support-tickets/{ticket.id}/launch-codex",
-        json={},
-        headers=owner_headers,
-    )
+    # Launch only after the worker acknowledges turn/start.
+    worker = MagicMock()
+    worker.send_request = AsyncMock(return_value={"turn": {"id": "synthetic-turn"}})
+    with (
+        patch(
+            "backend.routers.turns.ensure_thread_worktree",
+            return_value=tmp_path,
+        ),
+        patch(
+            "backend.routers.turns.worker_manager.get_worker_for_thread",
+            AsyncMock(return_value=worker),
+        ),
+    ):
+        res = client.post(
+            f"/api/admin/support-tickets/{ticket.id}/launch-codex",
+            json={},
+            headers=owner_headers,
+        )
     assert res.status_code == 200
+    assert worker.send_request.await_args.args[0] == "turn/start"
     data = res.json()
     assert data["ticket_id"] == ticket.id
     assert "codex_thread_id" in data
@@ -357,3 +402,72 @@ def test_launch_codex_investigation(client: TestClient, db_session: Session):
     )
     assert audit_event is not None
     assert audit_event.event_data["codex_thread_id"] == data["codex_thread_id"]
+
+
+def test_support_launch_dispatch_failure_is_truthful(
+    client: TestClient,
+    db_session: Session,
+    tmp_path,
+):
+    """Failure after turn creation cannot queue a ticket or leave an active turn."""
+    tenant, user, _ = _create_user(db_session, "dispatch-fail-t", role="owner")
+    _, _, owner_headers = _create_user(db_session, "dispatch-fail-owner", role="owner")
+    ticket = SupportTicket(
+        tenant_id=tenant.id,
+        created_by_user_id=user.id,
+        title="Synthetic dispatch failure",
+        description="Labelled test ticket; no customer data.",
+        category="technical",
+        status="received",
+    )
+    db_session.add(ticket)
+    db_session.commit()
+
+    worker = MagicMock()
+    worker.send_request = AsyncMock(
+        side_effect=RuntimeError("synthetic worker rejected turn/start")
+    )
+    with (
+        patch(
+            "backend.routers.turns.ensure_thread_worktree",
+            return_value=tmp_path,
+        ),
+        patch(
+            "backend.routers.turns.worker_manager.get_worker_for_thread",
+            AsyncMock(return_value=worker),
+        ),
+    ):
+        response = client.post(
+            f"/api/admin/support-tickets/{ticket.id}/launch-codex",
+            json={},
+            headers=owner_headers,
+        )
+
+    assert response.status_code == 503
+    assert worker.send_request.await_count == 1
+    assert worker.send_request.await_args.args[0] == "turn/start"
+    db_session.refresh(ticket)
+    assert ticket.status == "under_review"
+    assert ticket.codex_thread_id is None
+
+    failure_event = (
+        db_session.query(SupportTicketAuditEvent)
+        .filter(
+            SupportTicketAuditEvent.ticket_id == ticket.id,
+            SupportTicketAuditEvent.action == "codex_dispatch_failed",
+        )
+        .one()
+    )
+    assert failure_event.event_data["reason"] == "worker_dispatch_failed"
+    assert "turn_id" not in failure_event.event_data
+
+    with CodexSessionLocal() as codex_db:
+        active_turns = (
+            codex_db.query(CodexTurn)
+            .filter(
+                CodexTurn.status == "active",
+                CodexTurn.prompt.contains("Synthetic dispatch failure"),
+            )
+            .all()
+        )
+    assert active_turns == []

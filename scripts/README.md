@@ -1,5 +1,15 @@
 # Operational & Development Scripts (`scripts/`)
 
+### Offline platform-owner management
+
+`manage_platform_owner.py` is the only supported operator entry point for
+platform authority. `status` is read-only; `grant` and `revoke` default to a
+dry-run and require `--apply` plus an exact typed confirmation to mutate. All
+commands accept positive numeric tenant/user IDs only and emit bounded JSON
+without human identity or configuration secrets. Applied changes are
+serialized, transactionally audited, idempotent, and protected against removal
+of the last active platform owner.
+
 The `scripts/` directory contains CLI automation tools, deterministic database seeders, living documentation verifiers, production secrets validators, and unified release gate runners for **FastAPI Bookings**.
 
 ---

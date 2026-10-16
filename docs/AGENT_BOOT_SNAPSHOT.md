@@ -36,4 +36,4 @@ fastapi_bookings/
 - **Known Debt/Issues**: `python scripts/query_docs.py --known-issues`
 - **Rule 10 Gate**: `python scripts/verify_living_docs.py`
 
-*Generated automatically on 2026-10-13 21:20:15Z by scripts/index_living_docs.py*
+*Generated automatically on 2026-10-16 02:11:08Z by scripts/index_living_docs.py*

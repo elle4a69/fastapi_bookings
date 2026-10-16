@@ -1,5 +1,15 @@
 # FastAPI Bookings — Central Documentation Index
 
+The cross-tenant Control Centre, resident agent, and platform support boundary
+is defined by
+[ADR_PLATFORM_OWNER_AUTHORITY.md](architecture/ADR_PLATFORM_OWNER_AUTHORITY.md).
+Tenant roles never imply platform authority; provisioning is an offline,
+audited operator action.
+
+The parallel, read-only Development Supervisor V2 frontend is documented in
+[frontend/src/pages/admin/codex-supervisor/README.md](../frontend/src/pages/admin/codex-supervisor/README.md).
+It reads only the native V2 planning facade; server cutover remains `v1_only`.
+
 Welcome to the central documentation index for **FastAPI Bookings**, a high-concurrency, multi-tenant appointment scheduling, provider operations, and autonomous SMS/AI dialogue management system built with Python, FastAPI, SQLAlchemy, and Vite/React.
 
 ---
@@ -81,12 +91,33 @@ flowchart TD
 
 ### Documentation Suite Catalog & Key Files:
 - [ARCHITECTURE.md](file:///F:/Projects/fastapi_bookings/docs/ARCHITECTURE.md): Comprehensive system architecture covering multi-tenancy, concurrency, SMS, Chatwoot, and telemetry.
+- [architecture/README.md](architecture/README.md): Living index for binding architecture decision records.
+- [architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md](architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md): Accepted Codex Supervisor v2 contract and implementation status. WP-UI-01A-v6 provides the authenticated five-route `0.1` project-claim foundation with exact readiness attestation, indexed physical-root identity, pre-reservation identity validation, Git-equivalent branch checks, hidden cross-scope isolation, and atomic phase-two failure handling; replacement UI, workflow domains, workers, and active cutover remain deferred.
 - [MODULE_INDEX.md](file:///F:/Projects/fastapi_bookings/docs/MODULE_INDEX.md): Master inventory of all modules, domain boundaries, entrypoints, and test commands.
 - [AGENT_BOOT_SNAPSHOT.md](file:///F:/Projects/fastapi_bookings/docs/AGENT_BOOT_SNAPSHOT.md): Autonomous agent boot snapshot containing compact system status and orientation instructions.
 - [module_manifest.json](file:///F:/Projects/fastapi_bookings/docs/module_manifest.json): Machine-readable documentation metadata and Rule 10 compliance ledger.
 - [module_docs.db](file:///F:/Projects/fastapi_bookings/docs/module_docs.db): SQLite FTS5 full-text search database indexing all module documentation.
 - [app/main.py](file:///F:/Projects/fastapi_bookings/app/main.py): FastAPI application lifecycle, middleware chain, and route mounts.
 - [app/core/config.py](file:///F:/Projects/fastapi_bookings/app/core/config.py): Typed environment settings and platform defaults.
+
+### Approved Codex Supervisor Records
+
+The versioned records under [`../artifacts/codex-supervisor/`](../artifacts/codex-supervisor/) are design, audit and implementation-control evidence. The accepted foundation specification is authoritative where the shorter ADR links to detailed schemas.
+
+- [WP-UI-00 implementation brief](../artifacts/codex-supervisor/WP_UI_00_IMPLEMENTATION_BRIEF.md)
+- [WP-UI-01A-v6 implementation brief](../artifacts/codex-supervisor/WP_UI_01A_V2_IMPLEMENTATION_BRIEF.md)
+- [Architecture blueprint](../artifacts/codex-supervisor/CCC_ARCHITECTURE_BLUEPRINT.md)
+- [Security baseline](../artifacts/codex-supervisor/CCC_SECURITY_BASELINE.md)
+- [UX contract](../artifacts/codex-supervisor/CCC_UX_CONTRACT.md)
+- [Existing UI audit](../artifacts/codex-supervisor/CCC_EXISTING_UI_AUDIT.md)
+- [UI API contract inventory](../artifacts/codex-supervisor/CCC_UI_API_CONTRACT_INVENTORY.md)
+- [CopilotKit fit assessment](../artifacts/codex-supervisor/CCC_COPILOTKIT_FIT_ASSESSMENT.md)
+- [Codex Bridge fit assessment](../artifacts/codex-supervisor/CCC_CODEX_BRIDGE_FIT_ASSESSMENT.md)
+- [codex-web-local fit assessment](../artifacts/codex-supervisor/CCC_CODEX_WEB_LOCAL_FIT_ASSESSMENT.md)
+- [Open WebUI fit assessment](../artifacts/codex-supervisor/CCC_OPEN_WEBUI_FIT_ASSESSMENT.md)
+- [Assistant UI fit assessment](../artifacts/codex-supervisor/CCC_ASSISTANT_UI_FIT_ASSESSMENT.md)
+- [Accepted UI foundation specification](../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_SPEC.md)
+- [Independent foundation review](../artifacts/codex-supervisor/CCC_SUPERVISOR_UI_FOUNDATION_REVIEW.md)
 
 ---
 
@@ -204,3 +235,7 @@ python scripts/index_living_docs.py
 # 3. Test the living documentation parser and search query CLI
 python -m pytest tests/test_living_documentation.py -v
 ```
+# Codex supervisor planning
+
+The integrated Codex Control Centre records planning context only in revision 004;
+it has no execution, worker, Git, shell, booking, SMS, or customer-data authority.

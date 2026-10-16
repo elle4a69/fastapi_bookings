@@ -159,7 +159,7 @@ from .api.routers import (
 from .services.business_assistant.gpt_live.router import router as gpt_live_router
 from .api.routers.voice import router as voice_router
 from .services.business_assistant.onboarding.router import router as onboarding_router
-from .api.deps import get_current_admin
+from .api.deps import require_platform_owner
 
 # Clean import integration for Codex Control Centre backend
 import sys
@@ -182,6 +182,8 @@ codex_worktrees = importlib.import_module("backend.routers.worktrees")
 codex_governance = importlib.import_module("backend.routers.governance")
 codex_plugins = importlib.import_module("backend.routers.plugins")
 codex_skills = importlib.import_module("backend.routers.skills")
+codex_v2_supervisor = importlib.import_module("backend.routers.v2_supervisor")
+codex_v2_errors = importlib.import_module("backend.middleware.v2_errors")
 
 
 
@@ -251,43 +253,37 @@ async def app_lifespan(app: FastAPI):
 
     # Codex Control Centre initialization and startup sweep
     try:
-        codex_config = importlib.import_module("backend.config")
         codex_db_mod = importlib.import_module("backend.database")
         codex_boundary = importlib.import_module("backend.services.boundary_service")
         codex_worker = importlib.import_module("backend.services.worker_manager")
         codex_models_mod = importlib.import_module("backend.models.codex")
 
-        codex_db_path = codex_config.default_db_path
-        init_codex_db = codex_db_mod.init_db
         CodexSessionLocal = codex_db_mod.SessionLocal
         codex_engine = codex_db_mod.engine
         seed_default_boundaries_if_empty = codex_boundary.seed_default_boundaries_if_empty
         worker_manager = codex_worker.worker_manager
-        WorkerProcessManager = codex_worker.WorkerProcessManager
         Turn = codex_models_mod.Turn
         from datetime import datetime, timezone
-        from sqlalchemy import text
-
-        with codex_engine.connect() as conn:
-            conn.execute(text("PRAGMA journal_mode=WAL"))
-            conn.execute(text("PRAGMA foreign_keys=ON"))
-            conn.commit()
-
-        init_codex_db()
-        with CodexSessionLocal() as codex_db:
-            seed_default_boundaries_if_empty(codex_db)
-            active_turns = codex_db.query(Turn).filter(Turn.status == "active").all()
-            if active_turns:
-                logging.getLogger(__name__).info("Codex startup sweep: found %d orphaned active turn(s); marking as interrupted.", len(active_turns))
-                for turn in active_turns:
-                    worker = worker_manager.get_active_worker_for_thread(turn.thread_id)
-                    if not worker or not worker_manager._is_running(worker):
-                        turn.status = "interrupted"
-                        turn.completed_at = datetime.now(timezone.utc)
-                codex_db.commit()
-        logging.getLogger(__name__).info("Codex Control Centre initialized with SQLite DB at %s (WAL mode)", codex_db_path)
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Failed initializing Codex Control Centre: %s", exc)
+        readiness_service = importlib.import_module("backend.services.migration_readiness_service")
+        if readiness_service.inspect_infrastructure().state == "ready":
+            with CodexSessionLocal() as codex_db:
+                seed_default_boundaries_if_empty(codex_db)
+                active_turns = codex_db.query(Turn).filter(Turn.status == "active").all()
+                if active_turns:
+                    logging.getLogger(__name__).info("Codex startup sweep: found %d orphaned active turn(s); marking as interrupted.", len(active_turns))
+                    for turn in active_turns:
+                        worker = worker_manager.get_active_worker_for_thread(turn.thread_id)
+                        if not worker or not worker_manager._is_running(worker):
+                            turn.status = "interrupted"
+                            turn.completed_at = datetime.now(timezone.utc)
+                    codex_db.commit()
+            logging.getLogger(__name__).info("Codex Control Centre schema ready")
+        else:
+            logging.getLogger(__name__).warning(
+                "Codex Control Centre schema is not ready; startup domain work skipped"
+            )
+    except Exception:
+        logging.getLogger(__name__).warning("Failed initializing Codex Control Centre")
 
     yield
 
@@ -409,7 +405,11 @@ async def add_correlation_id_header(request, call_next):
             current_span.set_attribute("tenant_id", str(t_id))
         if t_sub:
             current_span.set_attribute("tenant_subdomain", str(t_sub))
-    response.headers["X-Request-ID"] = trace_id
+    if request.url.path.startswith("/api/admin/codex/v2"):
+        if not response.headers.get("X-Request-ID", "").startswith("req_"):
+            response.headers["X-Request-ID"] = codex_v2_errors.request_id_for(request)
+    else:
+        response.headers["X-Request-ID"] = trace_id
     response.headers["X-Trace-ID"] = trace_id
     return response
 
@@ -429,6 +429,14 @@ def add_cors_headers(request, response: JSONResponse) -> JSONResponse:
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request, exc: StarletteHTTPException):
+    if request.url.path.startswith("/api/admin/codex/v2"):
+        code = codex_v2_errors.code_for_http_exception(exc)
+        details = getattr(exc, "safe_details", {})
+        response_status = exc.status_code
+        if not isinstance(exc, codex_v2_errors.SupervisorHTTPError) and exc.status_code in (400, 404):
+            response_status = 401
+            code = "authentication_required"
+        return codex_v2_errors.error_response(request, response_status, code, details)
     code = "HTTP_ERROR"
     if exc.status_code == 401:
         code = "UNAUTHORIZED"
@@ -477,6 +485,8 @@ async def http_exception_handler(request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
+    if request.url.path.startswith("/api/admin/codex/v2"):
+        return codex_v2_errors.error_response(request, 422, "validation_failed")
     current_span = trace.get_current_span()
     trace_id = ""
     if current_span and current_span.get_span_context().is_valid:
@@ -499,6 +509,9 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
+    if request.url.path.startswith("/api/admin/codex/v2"):
+        logging.getLogger(__name__).error("Unhandled supervisor v2 exception")
+        return codex_v2_errors.error_response(request, 500, "internal_error")
     logging.exception(f"Unhandled exception occurred: {str(exc)}")
     current_span = trace.get_current_span()
     trace_id = ""
@@ -631,21 +644,26 @@ app.include_router(admin_support_tickets.router)
 
 # Codex Control Centre Admin Routers
 app.include_router(
+    codex_v2_supervisor.router,
+    prefix="/api/admin/codex/v2",
+    tags=["Codex Supervisor v2"],
+)
+app.include_router(
     codex_projects.router,
     prefix="/api/admin/codex/projects",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Projects"],
 )
 app.include_router(
     codex_threads.router,
     prefix="/api/admin/codex/threads",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Threads"],
 )
 app.include_router(
     codex_turns.router,
     prefix="/api/admin/codex/turns",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Turns"],
 )
 app.include_router(
@@ -656,42 +674,43 @@ app.include_router(
 app.include_router(
     codex_settings.router,
     prefix="/api/admin/codex/settings",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Settings"],
 )
 app.include_router(
     codex_models.router,
     prefix="/api/admin/codex/models",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Models"],
 )
 app.include_router(
     codex_diagnostics.router,
     prefix="/api/admin/codex",
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Diagnostics"],
 )
 app.include_router(
     codex_worktrees.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Worktrees"],
 )
 app.include_router(
     codex_governance.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Governance"],
 )
 app.include_router(
     codex_plugins.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Plugins"],
 )
 app.include_router(
     codex_skills.router,
     prefix="/api/admin",
-    dependencies=[Depends(get_current_admin)],
+    dependencies=[Depends(require_platform_owner)],
     tags=["Codex Skills"],
 )
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models.codex import Project, Thread
+from backend.services.legacy_adoption_service import root_identity_for_path
 
 logger = logging.getLogger("codex.projects")
 
@@ -129,6 +130,18 @@ class ProjectFileEntry(BaseModel):
 
 @router.post("", response_model=ProjectResponse)
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
+    project_id = payload.id.strip() if payload.id and payload.id.strip() else f"proj_{uuid.uuid4().hex[:8]}"
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if project is not None and project.scope_state == "claimed":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "supervisor_owned",
+                "message": "The project is owned by the supervisor control plane.",
+                "details": {},
+            },
+        )
+
     path_obj = Path(payload.repo_path).expanduser().resolve()
     if not path_obj.exists() or not path_obj.is_dir():
         raise HTTPException(
@@ -140,13 +153,19 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     validate_path_in_boundaries(path_obj, db)
 
     resolved_repo_path = str(path_obj)
-    project_id = payload.id.strip() if payload.id and payload.id.strip() else f"proj_{uuid.uuid4().hex[:8]}"
+    root_identity = root_identity_for_path(path_obj)
+    if root_identity is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Repository root identity could not be proven.",
+        )
+    _, root_identity_digest = root_identity
     default_branch = payload.default_branch.strip() if payload.default_branch and payload.default_branch.strip() else "main"
 
-    project = db.query(Project).filter(Project.id == project_id).first()
     if project:
         project.name = payload.name.strip()
         project.repo_path = resolved_repo_path
+        project.root_identity_digest = root_identity_digest
         project.default_branch = default_branch
         project.updated_at = datetime.now(timezone.utc)
     else:
@@ -154,6 +173,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
             id=project_id,
             name=payload.name.strip(),
             repo_path=resolved_repo_path,
+            root_identity_digest=root_identity_digest,
             default_branch=default_branch,
         )
         db.add(project)

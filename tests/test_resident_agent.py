@@ -5,6 +5,7 @@ safe fix execution, and AI advisory with web research capabilities.
 """
 
 from datetime import datetime, timezone
+import httpx
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -28,6 +29,11 @@ from app.services.resident_agent import (
     stress_fuzzer,
     tech_radar,
 )
+from app.services.resident_agent.skill_library import (
+    InvalidSkillIdError,
+    SkillLibrary,
+    derive_safe_search_query,
+)
 
 
 @pytest.fixture
@@ -48,6 +54,7 @@ def resident_agent_admin(db_session):
         login="resident_admin",
         password_hash="test_hash",
         role="owner",
+        is_platform_owner=True,
         created_at=datetime.now(timezone.utc),
     )
     db_session.add(admin_user)
@@ -79,6 +86,65 @@ def test_resident_agent_status_endpoint(client, resident_agent_admin):
     assert "chatwoot_status" in data
     assert "active_issues" in data
     assert isinstance(data["active_issues"], list)
+
+
+@pytest.mark.parametrize("role", ["owner", "admin", "manager"])
+def test_resident_agent_rejects_ordinary_tenant_admin(
+    client,
+    db_session,
+    role,
+):
+    """Resident development authority is restricted to platform owners."""
+    tenant = Tenant(name="Ordinary Admin", subdomain="ordinary-resident-admin")
+    db_session.add(tenant)
+    db_session.flush()
+    user = User(
+        tenant_id=tenant.id,
+        login=f"ordinary-resident-{role}",
+        password_hash="test_hash",
+        role=role,
+        is_platform_owner=False,
+    )
+    db_session.add(user)
+    db_session.commit()
+    headers = {
+        "X-Tenant": tenant.subdomain,
+        "X-Token": create_access_token({"sub": str(user.id)}),
+    }
+
+    assert client.get(
+        "/api/admin/resident-agent/status", headers=headers
+    ).status_code == status.HTTP_403_FORBIDDEN
+    assert client.get(
+        "/api/admin/resident-agent/events", headers=headers
+    ).status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_resident_events_require_header_authenticated_platform_owner(
+    client,
+    resident_agent_admin,
+    monkeypatch,
+):
+    """SSE rejects unauthenticated/query credentials and accepts owner headers."""
+    tenant, _, headers = resident_agent_admin
+    token = headers["X-Token"]
+
+    assert client.get(
+        "/api/admin/resident-agent/events",
+        headers={"X-Tenant": tenant.subdomain},
+    ).status_code == status.HTTP_401_UNAUTHORIZED
+    assert client.get(
+        f"/api/admin/resident-agent/events?token={token}",
+        headers={"X-Tenant": tenant.subdomain},
+    ).status_code == status.HTTP_401_UNAUTHORIZED
+
+    async def one_event(*, replay_count: int):
+        yield 'data: {"type":"audit","data":"safe","timestamp":"2026-10-15T00:00:00Z"}\n\n'
+
+    monkeypatch.setattr(event_broker, "subscribe", one_event)
+    response = client.get("/api/admin/resident-agent/events", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers["content-type"].startswith("text/event-stream")
 
 
 def test_resident_agent_audit_endpoint(client, resident_agent_admin):
@@ -197,23 +263,42 @@ async def test_event_broker_publish_and_history():
     assert any(ev["title"] == "Unit Test Event" for ev in history)
 
 
-def test_skill_library_discovery_and_surgical_read(client, resident_agent_admin):
-    """Verify find_relevant_skills discovers skills and read_skill loads SKILL.md on demand."""
+def test_skill_library_discovery_and_surgical_read(
+    client,
+    resident_agent_admin,
+    monkeypatch,
+):
+    """Resident skill reads use only bounded Skills RAG identifiers."""
     _, _, headers = resident_agent_admin
+
+    def fake_get(path, *, params=None):
+        if path == "/api/skills/search":
+            return {
+                "results": [
+                    {
+                        "id": "fastapi-security",
+                        "name": "FastAPI Security",
+                        "description": "Bounded authorization guidance.",
+                        "score": 0.9,
+                    }
+                ]
+            }
+        if path == "/api/skills/read" and params == {"name": "fastapi-security"}:
+            return {
+                "id": "fastapi-security",
+                "name": "FastAPI Security",
+                "content": "# FastAPI Security\nUse explicit authorization boundaries.",
+            }
+        raise AssertionError((path, params))
+
+    monkeypatch.setattr(skill_library, "_get", fake_get)
 
     # Direct service tests
     skills = skill_library.find_relevant_skills(query="fastapi async", top_k=3)
-    assert isinstance(skills, list)
-    if skills:
-        assert "skill_id" in skills[0]
-        assert "name" in skills[0]
-        assert "description" in skills[0]
-        assert "path" in skills[0]
-
-        # Test on-demand surgical read
-        content = skill_library.read_skill(skills[0]["skill_id"])
-        assert isinstance(content, str)
-        assert len(content) > 10
+    assert skills[0]["skill_id"] == "fastapi-security"
+    assert "path" not in skills[0]
+    content = skill_library.read_skill(skills[0]["skill_id"])
+    assert "authorization" in content
 
     # API endpoints
     search_res = client.get("/api/admin/resident-agent/skills?query=fastapi&top_k=2", headers=headers)
@@ -221,13 +306,81 @@ def test_skill_library_discovery_and_surgical_read(client, resident_agent_admin)
     api_skills = search_res.json()
     assert isinstance(api_skills, list)
 
-    if api_skills:
-        skill_id = api_skills[0]["skill_id"]
-        detail_res = client.get(f"/api/admin/resident-agent/skills/{skill_id}", headers=headers)
-        assert detail_res.status_code == status.HTTP_200_OK
-        detail_data = detail_res.json()
-        assert detail_data["skill_id"] == skill_id
-        assert len(detail_data["content"]) > 10
+    skill_id = api_skills[0]["skill_id"]
+    detail_res = client.get(f"/api/admin/resident-agent/skills/{skill_id}", headers=headers)
+    assert detail_res.status_code == status.HTTP_200_OK
+    detail_data = detail_res.json()
+    assert detail_data["skill_id"] == skill_id
+    assert len(detail_data["content"]) > 10
+
+
+def test_resident_skill_search_excludes_prompt_pii_and_secret_canaries(caplog):
+    """Only allowlisted technical terms may enter the Skills RAG request URL."""
+    raw_prompt = (
+        "Diagnose FastAPI booking security for person@example.invalid "
+        "phone +61000000000 note=synthetic-customer-note "
+        "key=sk-test-not-a-secret Authorization=Bearer fake-token-canary"
+    )
+    canaries = [
+        "person@example.invalid",
+        "61000000000",
+        "synthetic-customer-note",
+        "sk-test-not-a-secret",
+        "fake-token-canary",
+        "Bearer",
+    ]
+    captured_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_urls.append(str(request.url))
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "id": "api-security-best-practices",
+                        "name": "API Security",
+                        "description": "Safe technical guidance.",
+                    }
+                ]
+            },
+        )
+
+    library = SkillLibrary(
+        base_url="http://127.0.0.1:8008",
+        transport=httpx.MockTransport(handler),
+    )
+    results = library.find_relevant_skills(
+        raw_prompt,
+        top_k=1,
+        fail_open=False,
+    )
+
+    assert captured_urls
+    outgoing = captured_urls[0]
+    assert "fastapi" in outgoing
+    assert "booking" in outgoing
+    assert "security" in outgoing
+    for canary in canaries:
+        assert canary.lower() not in outgoing.lower()
+        assert canary.lower() not in repr(results).lower()
+        assert canary.lower() not in caplog.text.lower()
+    assert derive_safe_search_query(raw_prompt) == "codex fastapi booking security"
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        r"C:\\Users\\Frank\\.env",
+        "/etc/passwd",
+        "../secret.txt",
+        "%2e%2e%2fsecret.txt",
+    ],
+)
+def test_resident_skill_read_rejects_host_paths(candidate):
+    """Absolute and traversal paths can never become Skills RAG reads."""
+    with pytest.raises(InvalidSkillIdError):
+        skill_library.read_skill(candidate)
 
 
 @pytest.mark.asyncio

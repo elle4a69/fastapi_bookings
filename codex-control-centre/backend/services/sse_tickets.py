@@ -4,7 +4,6 @@ import asyncio
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from backend.config import settings
 
@@ -14,7 +13,6 @@ class SseTicket:
     project_id: str
     thread_id: str
     expires_at: datetime
-    consumed_at: Optional[datetime] = None
 
 
 class SseTicketStore:
@@ -52,13 +50,9 @@ class SseTicketStore:
             ):
                 return False
 
-            # Allow a short grace window (15s) after first use for browser retry / reconnection / StrictMode
-            if record.consumed_at is not None:
-                if (now - record.consumed_at).total_seconds() > 15:
-                    self._tickets.pop(ticket, None)
-                    return False
-            else:
-                record.consumed_at = now
+            # Valid consumption is atomic under the store lock. Reconnects must
+            # mint a fresh ticket, so copied credentials cannot replay.
+            self._tickets.pop(ticket, None)
             return True
 
 

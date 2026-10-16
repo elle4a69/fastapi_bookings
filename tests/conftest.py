@@ -1,7 +1,13 @@
 """Conftest file for setting up pytest fixtures and overriding app dependencies."""
 
 import os
+import hashlib
+from pathlib import Path
+import shutil
 import socket
+import sqlite3
+import sys
+import tempfile
 import threading
 
 # Force OTel SDK off before ANY app module is imported.
@@ -10,13 +16,74 @@ os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ.setdefault("SECRET_KEY", "test-secret-key-32-chars-long-strictly-for-tests")
 os.environ["CHATWOOT_WEBHOOK_SECRET"] = ""
 
+# Select process-unique file-backed databases before either application is
+# imported.  This prevents test collection and app lifespans from opening the
+# repository's runtime databases.
+_TEST_DATABASE_DIR = Path(tempfile.mkdtemp(prefix="fastapi-bookings-pytest-"))
+_APP_TEST_DATABASE = _TEST_DATABASE_DIR / "application.db"
+_CODEX_TEST_DATABASE = _TEST_DATABASE_DIR / "codex-control-centre.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{_APP_TEST_DATABASE.as_posix()}"
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_DATABASES = (
+    _REPOSITORY_ROOT / "fastapi_bookings.db",
+    _REPOSITORY_ROOT / "fastapi_bookings.db-wal",
+    _REPOSITORY_ROOT / "fastapi_bookings.db-shm",
+    _REPOSITORY_ROOT / "codex-control-centre" / "codex.db",
+    _REPOSITORY_ROOT / "codex-control-centre" / "codex.db-wal",
+    _REPOSITORY_ROOT / "codex-control-centre" / "codex.db-shm",
+)
+
+
+def _file_snapshot(path: Path) -> tuple[bool, int | None, int | None, str | None]:
+    if not path.exists():
+        return (False, None, None, None)
+    stat = path.stat()
+    return (True, stat.st_size, stat.st_mtime_ns, hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+_DEFAULT_DATABASE_SNAPSHOT = {path: _file_snapshot(path) for path in _DEFAULT_DATABASES}
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
+# Windows environment names are case-insensitive, while the two applications
+# intentionally use DATABASE_URL and database_url.  Freeze the FastAPI
+# Bookings settings/engine first, then select the independent Control Centre
+# database before importing the mounted application.
+from app.db.database import Base, engine as application_engine, get_db
+os.environ["database_url"] = f"sqlite:///{_CODEX_TEST_DATABASE.as_posix()}"
+
+# Production startup deliberately performs no CCC DDL.  Root tests that mount
+# CCC routes therefore migrate only their process-unique temporary CCC database
+# before importing app.main or any nested backend module.
+from alembic import command as alembic_command
+from alembic.config import Config as AlembicConfig
+
+_CODEX_ROOT = _REPOSITORY_ROOT / "codex-control-centre"
+_CODEX_ALEMBIC_ROOT = (_CODEX_ROOT / "alembic").resolve()
+_codex_alembic_config = AlembicConfig(str((_CODEX_ROOT / "alembic.ini").resolve()))
+_codex_alembic_config.set_main_option("script_location", str(_CODEX_ALEMBIC_ROOT))
+_codex_alembic_config.set_main_option(
+    "sqlalchemy.url", f"sqlite:///{_CODEX_TEST_DATABASE.as_posix()}"
+)
+if Path(_codex_alembic_config.get_main_option("script_location")).resolve() != _CODEX_ALEMBIC_ROOT:
+    raise RuntimeError("isolated_ccc_migration_script_location_invalid")
+alembic_command.upgrade(_codex_alembic_config, "head")
+_codex_revision_connection = sqlite3.connect(_CODEX_TEST_DATABASE)
+try:
+    _codex_revisions = _codex_revision_connection.execute(
+        "SELECT version_num FROM alembic_version"
+    ).fetchall()
+finally:
+    _codex_revision_connection.close()
+del _codex_revision_connection
+if _codex_revisions != [("006",)]:
+    raise RuntimeError("isolated_ccc_migration_revision_invalid")
+
 from app.main import app as fastapi_app
-from app.db.database import Base, get_db
 import app.models  # Crucial: imports all models to register them on Base.metadata
 from tests.fixtures.channel_fixtures import (  # noqa: F401
     channel_test_env,
@@ -25,8 +92,7 @@ from tests.fixtures.channel_fixtures import (  # noqa: F401
     legacy_sms_compatibility_data,
 )
 
-# SQLite in-memory database URL for tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_APP_TEST_DATABASE.as_posix()}"
 
 _ORIGINAL_SOCKET_CONNECT = socket.socket.connect
 _ORIGINAL_SOCKETPAIR = socket.socketpair
@@ -62,13 +128,63 @@ def _create_local_socketpair(*args, **kwargs):
 
 @pytest.fixture(scope="session")
 def engine():
-    """Create a session-wide SQLite in-memory engine and build all database tables."""
+    """Create a session-wide isolated SQLite engine and build all tables."""
     test_engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
     )
     Base.metadata.create_all(bind=test_engine)
     yield test_engine
     Base.metadata.drop_all(bind=test_engine)
+    test_engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def default_database_snapshot():
+    """Expose a read-only sentinel proving runtime database files stay untouched."""
+    return _DEFAULT_DATABASE_SNAPSHOT, _file_snapshot
+
+
+def pytest_sessionfinish(session, exitstatus):
+    cleanup_failures = []
+    engines = [("FastAPI Bookings", application_engine)]
+    codex_database = sys.modules.get("backend.database")
+    codex_engine = getattr(codex_database, "engine", None)
+    if codex_engine is not None and codex_engine is not application_engine:
+        engines.append(("Codex Control Centre", codex_engine))
+
+    for label, loaded_engine in engines:
+        try:
+            loaded_engine.dispose()
+        except Exception as exc:  # pragma: no cover - exercised only on teardown failure
+            cleanup_failures.append(f"{label} engine disposal failed: {type(exc).__name__}")
+
+    changed = [
+        str(path)
+        for path, before in _DEFAULT_DATABASE_SNAPSHOT.items()
+        if _file_snapshot(path) != before
+    ]
+    try:
+        shutil.rmtree(_TEST_DATABASE_DIR)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:  # pragma: no cover - exercised only on teardown failure
+        cleanup_failures.append(
+            f"temporary test storage removal failed: {type(exc).__name__}: {_TEST_DATABASE_DIR}"
+        )
+    if _TEST_DATABASE_DIR.exists():
+        cleanup_failures.append(f"temporary test storage remains: {_TEST_DATABASE_DIR}")
+
+    if changed or cleanup_failures:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter:
+            reporter.write_sep("=", "test database isolation failure")
+            if changed:
+                reporter.write_line("Unexpectedly changed runtime database sentinel(s):")
+                for path in changed:
+                    reporter.write_line(path)
+            for failure in cleanup_failures:
+                reporter.write_line(failure)
 
 @pytest.fixture(scope="function")
 def db_session(engine):

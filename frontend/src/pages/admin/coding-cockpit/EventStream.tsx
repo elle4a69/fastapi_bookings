@@ -3,45 +3,31 @@ import { ListFilter, Trash2, Terminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { getAdminAccessToken } from '@/lib/api'
+import { authenticatedAdminFetch } from '@/lib/api'
 import type { StreamEvent } from './types'
+import {
+  connectResidentEventStream,
+  type ResidentStreamState,
+} from './residentEventStream'
 
 export const EventStream: React.FC = () => {
   const [events, setEvents] = useState<StreamEvent[]>([])
   const [eventFilter, setEventFilter] = useState<string>('all')
   const [autoScroll, setAutoScroll] = useState<boolean>(true)
+  const [streamState, setStreamState] = useState<ResidentStreamState>({
+    status: 'connecting',
+  })
   const terminalBottomRef = useRef<HTMLDivElement>(null)
 
   // SSE Live Event Stream Connection
   useEffect(() => {
-    let eventSource: EventSource | null = null
-    const token = getAdminAccessToken()
-
-    try {
-      const sseUrl = `/api/admin/resident-agent/events${token ? `?token=${encodeURIComponent(token)}` : ''}`
-      eventSource = new EventSource(sseUrl)
-
-      eventSource.onmessage = (e) => {
-        try {
-          const parsed: StreamEvent = JSON.parse(e.data)
-          setEvents((prev) => [...prev.slice(-250), parsed])
-        } catch {
-          // ignore keepalive
-        }
-      }
-
-      eventSource.onerror = () => {
-        // SSE handles reconnection
-      }
-    } catch (err) {
-      console.warn('SSE stream error:', err)
-    }
-
-    return () => {
-      if (eventSource) {
-        eventSource.close()
-      }
-    }
+    return connectResidentEventStream({
+      fetchStream: authenticatedAdminFetch,
+      onEvent: (event) => {
+        setEvents((prev) => [...prev.slice(-250), event])
+      },
+      onState: setStreamState,
+    })
   }, [])
 
   // Auto-scroll terminal log
@@ -83,6 +69,16 @@ export const EventStream: React.FC = () => {
 
         {/* Controls */}
         <div className="flex items-center gap-4">
+          <span
+            className="text-xs text-muted-foreground"
+            role={streamState.status === 'error' ? 'alert' : 'status'}
+          >
+            {streamState.status === 'live' && 'Live'}
+            {streamState.status === 'connecting' && 'Connecting…'}
+            {streamState.status === 'retrying' &&
+              `Reconnecting (attempt ${streamState.attempt})…`}
+            {streamState.status === 'error' && streamState.message}
+          </span>
           <div className="flex items-center space-x-2">
             <Switch
               id="autoscroll-switch"

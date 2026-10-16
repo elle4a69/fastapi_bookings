@@ -1,5 +1,18 @@
 # Authentication, Google OIDC & Chatwoot SSO Service
 
+### Persisted platform-owner authority
+
+`platform_owner_authority.py` owns status, preview, grant, and revoke behavior
+for the cross-tenant platform capability. Mutations require a fresh session,
+serialize through a PostgreSQL transaction advisory lock or SQLite
+`BEGIN IMMEDIATE`, enforce the last-active-owner invariant, and commit the user
+change with one structural `AuditLog`. Unsupported database dialects fail
+closed. No login, email, token, or customer data is accepted or emitted.
+
+The service deliberately does not own tenant RBAC, public HTTP routes, user
+deactivation, or initial provisioning. Callers use numeric tenant/user IDs and
+the offline CLI; future deactivation/deletion support must reuse this guard.
+
 ## 1. Purpose & Scope
 
 The `app/services/auth` module acts as the central identity broker and Single Sign-On (SSO) gateway for FastAPI Bookings. It owns:

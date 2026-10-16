@@ -503,31 +503,60 @@ async def launch_codex_investigation(
 
         turn_req = TurnStart(thread_id=codex_thread_id, prompt=investigation_prompt)
         turn_id = None
+        dispatch_failed = False
         try:
-            turn_res = await start_turn(turn_req, background_tasks, db=codex_db)
-            if isinstance(turn_res, dict) and "turn_id" in turn_res:
+            turn_res = await start_turn(
+                turn_req,
+                background_tasks,
+                db=codex_db,
+                await_worker_ack=True,
+            )
+            if (
+                isinstance(turn_res, dict)
+                and turn_res.get("worker_acknowledged") is True
+                and "turn_id" in turn_res
+            ):
                 turn_id = turn_res["turn_id"]
+            if not turn_id:
+                dispatch_failed = True
         except Exception as exc:
-            logger.warning("Codex turn dispatch encountered exception, checking DB turn: %s", exc)
+            dispatch_failed = True
+            logger.warning(
+                "Codex turn dispatch failed for support ticket %s (%s)",
+                ticket.id,
+                type(exc).__name__,
+            )
             last_turn = (
                 codex_db.query(CodexTurn)
                 .filter(CodexTurn.thread_id == codex_thread_id)
                 .order_by(CodexTurn.id.desc())
                 .first()
             )
-            if last_turn:
-                turn_id = last_turn.id
-            else:
-                fallback_turn = CodexTurn(
-                    thread_id=codex_thread_id,
-                    turn_number=1,
-                    status="active",
-                    prompt=investigation_prompt,
-                )
-                codex_db.add(fallback_turn)
+            if last_turn and last_turn.status == "active":
+                last_turn.status = "failed"
+                last_turn.completed_at = _utc_now()
                 codex_db.commit()
-                codex_db.refresh(fallback_turn)
-                turn_id = fallback_turn.id
+
+    if dispatch_failed:
+        ticket.status = "under_review"
+        ticket.codex_thread_id = None
+        ticket.updated_at = _utc_now()
+        db.add(
+            SupportTicketAuditEvent(
+                ticket_id=ticket.id,
+                actor_user_id=platform_owner.id,
+                action="codex_dispatch_failed",
+                event_data={
+                    "reason": "worker_dispatch_failed",
+                    "codex_thread_id": codex_thread_id,
+                },
+            )
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Codex investigation could not be dispatched to a worker.",
+        )
 
     # Update ticket in app database
     ticket.codex_thread_id = codex_thread_id
@@ -547,5 +576,5 @@ async def launch_codex_investigation(
     return LaunchCodexResponse(
         ticket_id=ticket.id,
         codex_thread_id=codex_thread_id,
-        turn_id=turn_id or 1,
+        turn_id=turn_id,
     )

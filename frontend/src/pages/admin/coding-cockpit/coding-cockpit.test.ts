@@ -15,6 +15,10 @@ import {
   resolveCodexModel,
   setLastUsedCodexModel,
 } from './workbench/modelCatalog.ts'
+import {
+  connectResidentEventStream,
+  type ResidentStreamState,
+} from './residentEventStream.ts'
 
 test('Navigation menu consolidates Resident Agent and Coding Studio into Engineering Cockpit', () => {
   const complianceSection = navigation.find((s) => s.label === 'Compliance & System')
@@ -41,6 +45,92 @@ test('filterNavigationByModules preserves Engineering Cockpit when modules are e
   const item = complianceSection!.items.find((i) => i.url === '/admin/coding-cockpit')
   assert.ok(item, 'Engineering Cockpit must remain accessible')
   assert.equal(item!.title, 'Engineering Cockpit')
+})
+
+test('resident event stream reconnects once without query credentials or duplicate requests', async () => {
+  const requestedUrls: string[] = []
+  const states: ResidentStreamState[] = []
+  let resolveTerminal!: () => void
+  const terminal = new Promise<void>((resolve) => {
+    resolveTerminal = resolve
+  })
+  let activeRequests = 0
+  let maxActiveRequests = 0
+
+  const disconnectingFetch = async (endpoint: string): Promise<Response> => {
+    requestedUrls.push(endpoint)
+    activeRequests += 1
+    maxActiveRequests = Math.max(maxActiveRequests, activeRequests)
+    await Promise.resolve()
+    activeRequests -= 1
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close()
+        },
+      }),
+      { status: 200 },
+    )
+  }
+
+  const stop = connectResidentEventStream({
+    fetchStream: disconnectingFetch,
+    onEvent: () => undefined,
+    onState: (state) => {
+      states.push(state)
+      if (state.status === 'error') resolveTerminal()
+    },
+    maxReconnects: 1,
+    baseDelayMs: 0,
+  })
+  await Promise.race([
+    terminal,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('resident stream did not terminate')), 500),
+    ),
+  ])
+  stop()
+
+  assert.equal(requestedUrls.length, 2)
+  assert.deepEqual(requestedUrls, [
+    '/api/admin/resident-agent/events',
+    '/api/admin/resident-agent/events',
+  ])
+  assert.equal(requestedUrls.some((url) => url.includes('?')), false)
+  assert.equal(maxActiveRequests, 1)
+  assert.equal(states.at(-1)?.status, 'error')
+})
+
+test('resident event stream treats authorization rejection as terminal', async () => {
+  const states: ResidentStreamState[] = []
+  let requestCount = 0
+  let resolveTerminal!: () => void
+  const terminal = new Promise<void>((resolve) => {
+    resolveTerminal = resolve
+  })
+  const stop = connectResidentEventStream({
+    fetchStream: async () => {
+      requestCount += 1
+      return new Response(null, { status: 401 })
+    },
+    onEvent: () => undefined,
+    onState: (state) => {
+      states.push(state)
+      if (state.status === 'error') resolveTerminal()
+    },
+    maxReconnects: 3,
+    baseDelayMs: 0,
+  })
+  await terminal
+  stop()
+
+  assert.equal(requestCount, 1)
+  const lastState = states.at(-1)
+  assert.equal(lastState?.status, 'error')
+  assert.match(
+    lastState?.status === 'error' ? lastState.message : '',
+    /authorization was rejected/i,
+  )
 })
 
 test('ApiClient defaults to same-origin /api/admin/codex and attaches admin tokens', () => {

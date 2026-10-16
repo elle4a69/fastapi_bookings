@@ -1,6 +1,21 @@
 # Codex Control Centre
 
+### Native platform-owner boundary
+
+When mounted inside FastAPI Bookings, every Control Centre route delegates to
+the native `require_platform_owner` dependency. Access requires an active user
+with persisted `users.is_platform_owner`. Tenant roles, dynamic superuser
+values, standalone `local_secret`, and the local-development token alone are
+insufficient. The Control Centre owns no parallel grant table or privilege API.
+
+Standalone compatibility remains separately bounded. Its tests use a
+process-unique temporary database and sentinel repository `codex.db` files.
+Test teardown explicitly disposes the loaded database engine and fails the run
+if its isolated temporary storage cannot be removed.
+
 Codex Control Centre is the main coordination, telemetry, and governance hub for multi-agent workflows. It provides real-time event streaming, thread management, tool approval gating, subagent supervision, and isolated git worktrees.
+
+> **Supervisor foundation:** The canonical browser application is the repository-root `frontend/`. The duplicate `codex-control-centre/frontend/` tree is frozen as reference/decommission-only. WP-UI-01A-v6 implements the five-route `/api/admin/codex/v2` project-claim foundation; it does not activate a replacement UI, a writable cutover transition, or any later supervisor domain. See [`../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md`](../docs/architecture/ADR_CODEX_SUPERVISOR_V2_FACADE.md).
 
 ---
 
@@ -66,17 +81,17 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
     - `worktrees.py`: Git worktree creation, validation, dirty-check deletion.
     - `diagnostics.py`: Readiness, liveness, SigNoz connectivity probes.
 - **FastAPI Bookings Administrative Integration**:
-  All primary Codex routers (`projects`, `threads`, `turns`, `events`, `settings`, `models`) are mounted directly into the main FastAPI Bookings application (`app/main.py`) under `/api/admin/codex/*` with strict administrative authentication. Standard routers use `Depends(get_current_admin)`; the event router uses its shared verifier so the standalone service and mounted SSE ticket flow retain one contract.
+  All primary Codex routers are mounted directly into FastAPI Bookings under `/api/admin/codex/*`. The integrated cockpit is a global development control plane and therefore requires `require_platform_owner`; ordinary tenant administrators and managers have no authority over its projects, threads, settings, worktrees, diagnostics, governance, plugins, or skills.
   - `services/`:
     - `worker.py`: Subprocess management, stdio JSON-RPC protocol dispatch, event routing.
     - `worker_manager.py`: Thread-to-worker process pool, graceful restart and teardown.
     - `protocol.py`: JSON-RPC message normalization (`agent_message`, `reasoning`, `turn_completed`, `turn_failed`).
     - `event_service.py`: In-memory thread-scoped SSE event broker with historical replay.
-    - `sse_tickets.py`: Short-lived single-use authorization ticket store.
+    - `sse_tickets.py`: Short-lived authorization tickets atomically removed on first valid consumption.
     - `telemetry.py`: SigNoz / OpenTelemetry instrumentation and fallback logger.
     - `skills_context.py`: Privacy-bounded skill query derivation, top-match retrieval, content budgets, and turn context assembly.
     - `skills_rag_mcp_bridge.py`: Dependency-free stdio MCP bridge exposing native read-only `find` and `skill` tools backed by the always-on port 8008 daemon.
-- `frontend/`:
+- `frontend/` (**legacy duplicate; frozen reference/decommission-only, not the canonical FastAPI Bookings frontend**):
   - `src/App.tsx`: Root responsive 3-pane workbench container with mobile off-canvas drawer navigation and tablet/mobile overlay backdrops.
   - `src/components/layout/ProjectRail.tsx`: Project switcher, theme toggle, and settings triggers with touch-first tap targets.
   - `src/components/layout/ThreadSidebar.tsx`: Thread search, thread creation, pinned and archived thread lists.
@@ -94,6 +109,21 @@ Codex Control Centre provides an enterprise-grade supervisory control plane and 
 ---
 
 ## 3. Setup, Configuration & Dependencies
+
+The supervisor foundation requires four server-only settings:
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_ID`,
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_ROOT`,
+`CODEX_SUPERVISOR_CONFIGURED_PROJECT_NAME`, and
+`CODEX_SUPERVISOR_CONFIGURED_DEFAULT_BRANCH`. The root is never accepted from or
+returned to a browser. CCC migrations are independent of the root application:
+run the CCC Alembic ledger to revision `003`. Production startup performs no
+`create_all`. Unversioned legacy databases require the offline, dry-run-first
+`python -m backend.services.legacy_adoption_service` workflow and explicit
+confirmation before an `001` stamp; normal Alembic upgrade follows separately.
+Runtime readiness is read-only and fail-closed. It attests the migration-script
+head and database ledger revision, the complete expected column definitions,
+constraints, ordered index definitions, normalized trigger bodies, and the
+fixed cutover singleton/state. A matching object name alone is not sufficient.
 
 ### Prerequisites
 - **Python**: 3.11+
@@ -124,7 +154,7 @@ Set these variables in `.env` or system environment:
 | `DATABASE_URL` | `sqlite:///./codex.db` | SQLAlchemy database connection string. |
 | `HOST` | `127.0.0.1` | Host address to bind the API server. |
 | `PORT` | `4500` | Port for the API server. |
-| `TOKEN_SECRET` | `local_secret` | Bearer token secret for authentication. |
+| `TOKEN_SECRET` | `local_secret` | Standalone-only compatibility secret. It is never accepted by the FastAPI Bookings mount; standalone deployments must override the default before exposure. |
 | `SIGNOZ_URL` | `http://localhost:3301` | SigNoz telemetry collector URL (can also be dynamically managed in UI). |
 | `OTLP_ENDPOINT` | `http://localhost:4318` | OpenTelemetry OTLP endpoint (can also be dynamically managed in UI). |
 | `ALLOWED_BOUNDARIES` | `["<codex_dir>"]` | Comma-separated or JSON list of initial allowed workspace base boundaries. |
@@ -148,6 +178,34 @@ disabled to prevent duplicate models, graph deserialization, and SQLite locks.
 ---
 
 ## 4. Core Workflows & Contracts
+
+### Supervisor v2 `0.1` foundation
+
+- Four reads expose bootstrap, readiness, fixed cutover posture, and the single
+  configured project; `claim_project` is the only mutation/action descriptor.
+- Native `require_platform_owner` authority resolves before CCC inspection or
+  request-body parsing.
+- Claim validates the opaque `prj_` route identity and complete request contract
+  before fingerprinting or reserving an idempotency key. The configured default
+  branch is accepted only when it satisfies Git-equivalent branch-name rules.
+- Claim uses a read-first idempotency decision, a committed 30-second lease, and
+  one phase-two outer transaction. Project and event writes run inside a nested
+  savepoint: deterministic safe failure rolls the savepoint back and terminalizes
+  the failed reservation in that same outer transaction; unexpected failure
+  rolls the outer transaction back and leaves the lease for bounded recovery.
+  Terminal success and safe deterministic failure replay exact stored bytes for
+  24 hours.
+- Same-scope exact-root legacy rows may be adopted. A non-public, indexed
+  `root_identity_digest` binds the normalized resolved path and positive filesystem
+  device/inode identity; migration aborts before schema changes if any legacy root
+  cannot be proven. Cross-scope rows are filtered before classification and are
+  never counted, described, quarantined, adopted, or mutated. Even when an indexed
+  hidden collision blocks mutation, reads remain absence-equivalent:
+  `claim_required`, the version-0 configured summary/action, and
+  `can_claim_project=true`; a targeted claim returns only `404 resource_not_found`.
+  Ambiguous or conflicting same-scope state is quarantined read-only.
+- Cutover remains fixed at `v1_only`; claimed state stays legacy-controlled and
+  v1 mutation guards prevent identity/ownership drift.
 
 ### 1. Dynamic Workspace Boundaries & Project Registration
 1. **Dynamic Multi-Folder Boundaries**: Allowed root boundaries (`WorkspaceBoundary`) are persisted in SQLite and managed via REST endpoints:
@@ -228,7 +286,8 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
   - `POST /api/admin/codex/turns/start` — Start new agent turn.
   - `POST /api/admin/codex/turns/interrupt` — Steer or cancel active turn.
   - `GET /api/admin/codex/events/{project_id}/{thread_id}` — Real-time SSE stream.
-- **Security Boundary**: Standard mounted endpoints use `dependencies=[Depends(get_current_admin)]`. The event ticket endpoint uses the shared control-centre verifier, which accepts either its standalone service secret, a verified tenant-scoped admin JWT, or the native `local-development-bypass` credential only while FastAPI Bookings has `LOCAL_AUTH_BYPASS=true` and the requested tenant has a real admin account. Stream connections consume short-lived single-use tickets. Unauthenticated or non-admin requests receive HTTP 401/403.
+- **Security Boundary**: Mounted endpoints require the native FastAPI Bookings platform-owner identity. The standalone `TOKEN_SECRET` (including `local_secret`) and query-string bearer tokens have no mounted authority. Event ticket minting and publication require a platform owner; stream connections accept only a short-lived, scoped SSE ticket that is atomically removed on first valid consumption. Every reconnect mints a fresh ticket. Unauthenticated callers and ordinary tenant administrators receive HTTP 401/403.
+- **Acknowledged Support Dispatch**: Normal interactive turns remain asynchronously dispatched, while the support-ticket bridge invokes the same turn-start path in acknowledgement mode and reports `queued_for_codex` only after the worker answers `turn/start`.
 - **Lifespan Integration**:
   - `app_lifespan` in `app/main.py` explicitly initialises `WorkerProcessManager` (via `WorkerManager`), sets SQLite `PRAGMA journal_mode=WAL`, seeds default workspace boundaries, and performs a startup sweep on orphaned active turns.
   - On application shutdown, active Codex worker processes and SSE subscribers are gracefully terminated.
@@ -251,6 +310,12 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 
 ## 6. Known Issues, Edge Cases & Outstanding Work
 
+- The `0.1` facade is backend foundation only. There is no new supervisor UI,
+  mission/work/brief/run model, active cutover transition, or coding-worker
+  activation in this package.
+- SQLite is the only CCC database dialect supported by these migrations; other
+  dialects fail closed.
+
 - **Model Availability Drift**: The mounted catalog reflects the current models enabled for this Codex environment. Runtime account entitlements can still reject a model that is not enabled for the signed-in account; catalog updates must keep the backend endpoint and integrated frontend `modelCatalog.ts` in parity.
 - **Skills RAG Process Dependency**: The heavyweight `mcp-skillset` worker integration remains disabled to prevent worker startup hangs. Automatic context and the native `skills-rag` MCP tools both delegate to the independently managed loopback service on port 8008. If unavailable, automatic retrieval degrades to the original prompt, while explicit `find` or `skill` calls return a recoverable tool error. Neither path places the raw user prompt in Skills RAG request logs.
 - **Subprocess Loop Cleanup on Windows**: Asyncio proactor transport warning (`RuntimeError: Event loop is closed`) on process teardown in Python 3.11 Windows is benign but handled via explicit transport closure.
@@ -259,6 +324,30 @@ In addition to running as a standalone service on port 4500, Codex Control Centr
 ---
 
 ## 7. Verification & Testing Commands
+
+### WP-UI-00 P0 trust-boundary verification
+
+Run the inherited P0 boundary suites from the repository root and the Control Centre directory. WP-UI-00 changes no application behavior and does not implement v2.
+
+```powershell
+# From the repository root
+.\.venv\Scripts\python.exe -m pytest tests/test_resident_agent.py tests/test_codex_backend_mount.py tests/test_admin_support_tickets.py -k "not stress_fuzzer" -v
+
+# From codex-control-centre/
+..\.venv\Scripts\python.exe -m pytest tests/test_security.py tests/test_events.py -v
+```
+
+### WP-UI-01A-v6 supervisor foundation
+
+```powershell
+# From codex-control-centre/
+python -m pytest tests/test_supervisor_identity.py tests/test_supervisor_bootstrap_claim.py tests/test_supervisor_idempotency.py tests/test_supervisor_events.py tests/test_migrations.py -q
+
+# From the repository root
+python -m pytest tests/test_codex_backend_mount.py -q
+python scripts/verify_zero_console_errors.py
+python scripts/verify_living_docs.py --path codex-control-centre/README.md
+```
 
 ### Backend Verification
 ```bash
@@ -300,3 +389,34 @@ npm test
 ```bash
 python ../scripts/verify_living_docs.py --path README.md
 ```
+# Planning ledger note
+
+The v2 supervisor facade has a planning-only ledger for missions, work packages,
+immutable brief revisions, structural checkpoints, and non-verdict audit scopes.
+Cutover remains `v1_only`: planning records do not dispatch work or grant
+execution authority. WP-RUN-01 adds a separately authenticated, server-owned
+dispatch boundary: it persists a one-run, hash-only, expiring start-authorisation
+grant and dispatch intent before contacting the native WorkerManager worktree
+primitive. It exposes no transcript, command, tool capability, prompt, output,
+diff, secret, customer data, or active-run UI. A positive app-server
+acknowledgement is required to mark a run acknowledged; exception or ambiguous
+outcomes are durably `dispatch_unknown` and are never auto-redriven.
+Grant issuance is an explicit owner confirmation with a durable V2 idempotency
+receipt. The opaque token is delivered only on the first `201` response and is
+never stored; replay returns only a safe non-replayable issuance receipt. A
+serialized active-grant predicate also rejects retried issuance while an
+unconsumed, unexpired grant exists; a new explicit confirmation is required
+after expiry.
+
+### WP-EVID-01 evidence and independent-audit boundary
+
+Revision `006` adds an immutable, tenant/owner-scoped evidence foundation for
+V2 runs. A run now needs an approved fixed-code acceptance contract and a
+server-derived structural Git baseline before it can cross the dispatch
+boundary. The ledger stores only opaque SHA-256 structural identities and the
+fixed criterion registry; it intentionally stores no paths, commands, prompts,
+worker events, turn/item material, diffs, logs, raw results, credentials, or
+customer data. Independent-audit requests are fail-closed: without a separate
+host-enforced read-only sandbox attestation they are recorded as
+`sandbox_unavailable`, cannot dispatch an auditor, and cannot produce a
+completion verdict. This package does not supply that sandbox.

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend.database import engine, init_db
+from backend.database import engine
 from backend.services.event_service import broker
 from backend.services.worker_manager import worker_manager
 from backend.middleware.logging import CorrelationLoggingMiddleware, RedactingFilter
@@ -26,13 +26,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Codex Control Centre API starting up...")
     try:
-        init_db()
+        from backend.services.migration_readiness_service import inspect_infrastructure
         from backend.database import SessionLocal
         from backend.services.boundary_service import seed_default_boundaries_if_empty
-        with SessionLocal() as db_session:
-            seed_default_boundaries_if_empty(db_session)
-    except Exception as e:
-        logger.error(f"Error initializing database: {e}")
+        if inspect_infrastructure().state == "ready":
+            with SessionLocal() as db_session:
+                seed_default_boundaries_if_empty(db_session)
+        else:
+            logger.warning("Control Centre schema is not ready; startup domain work skipped")
+    except Exception:
+        logger.error("Error initializing Control Centre database")
 
     try:
         init_telemetry(app)
@@ -44,18 +47,20 @@ async def lifespan(app: FastAPI):
         from datetime import datetime, timezone
         from backend.database import SessionLocal
         from backend.models.codex import Turn
-        with SessionLocal() as db:
-            active_turns = db.query(Turn).filter(Turn.status == "active").all()
-            if active_turns:
-                logger.info("Startup sweep: found %d orphaned active turn(s); marking as interrupted.", len(active_turns))
-                for turn in active_turns:
-                    worker = worker_manager.get_active_worker_for_thread(turn.thread_id)
-                    if not worker or not worker_manager._is_running(worker):
-                        turn.status = "interrupted"
-                        turn.completed_at = datetime.now(timezone.utc)
-                db.commit()
-    except Exception as e:
-        logger.error(f"Error during orphaned turn startup sweep: {e}")
+        from backend.services.migration_readiness_service import inspect_infrastructure
+        if inspect_infrastructure().state == "ready":
+            with SessionLocal() as db:
+                active_turns = db.query(Turn).filter(Turn.status == "active").all()
+                if active_turns:
+                    logger.info("Startup sweep: found %d orphaned active turn(s); marking as interrupted.", len(active_turns))
+                    for turn in active_turns:
+                        worker = worker_manager.get_active_worker_for_thread(turn.thread_id)
+                        if not worker or not worker_manager._is_running(worker):
+                            turn.status = "interrupted"
+                            turn.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+    except Exception:
+        logger.error("Error during orphaned turn startup sweep")
 
     yield
     # Graceful Shutdown

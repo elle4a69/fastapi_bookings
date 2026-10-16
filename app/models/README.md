@@ -1,5 +1,12 @@
 # Data Models & Persistence Architecture (`app/models/`)
 
+### Platform authority boundary
+
+`User.is_platform_owner` is a persisted, non-null, false-by-default capability
+used only for cross-tenant platform operations. It is independent of tenant
+`role` and is indexed with `is_active`. Public schemas and tokens do not expose
+or mutate it; the offline authority service is its sole supported writer.
+
 ## 1. Purpose & Scope
 
 The `app/models/` directory defines the complete SQLAlchemy 2.0 ORM domain schema for **FastAPI Bookings**.
