@@ -12,7 +12,7 @@ import secrets
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
@@ -245,3 +245,110 @@ def record_launch_outcome(connection: Connection, *, run_id: str, actor: ActorSc
 def public_run(connection: Connection, run_id: str, actor: ActorScope) -> dict[str, object]:
     row = _scoped_row(connection, SupervisorRun.__table__, run_id, actor)
     return {"run_id": row["id"], "work_package_id": row["work_package_id"], "brief_id": row["brief_id"], "audit_scope_id": row["audit_scope_id"], "capability_profile": row["capability_profile"], "status": row["status"], "created_at": row["created_at"].isoformat()}
+
+
+def record_run_completion(
+    connection: Connection,
+    *,
+    run_id: str,
+    status: str,
+    actor: Optional[ActorScope] = None,
+) -> dict[str, object]:
+    """Transition supervisor_runs from dispatch_acknowledged to completed or failed."""
+    if status not in {"completed", "failed"}:
+        raise SupervisorHTTPError(422, "invalid_run_completion_status")
+
+    query = select(SupervisorRun.__table__).where(SupervisorRun.__table__.c.id == run_id)
+    if actor is not None:
+        query = query.where(
+            SupervisorRun.__table__.c.tenant_id == actor.tenant_id,
+            SupervisorRun.__table__.c.owner_user_id == actor.user_id,
+        )
+    row = connection.execute(query).mappings().first()
+    if row is None:
+        raise SupervisorHTTPError(404, "resource_not_found")
+    if row["status"] != "dispatch_acknowledged":
+        raise SupervisorHTTPError(409, "run_not_in_acknowledged_state")
+
+    now = utc_now()
+    connection.execute(
+        update(SupervisorRun.__table__).where(
+            SupervisorRun.__table__.c.id == run_id,
+            SupervisorRun.__table__.c.status == "dispatch_acknowledged",
+        ).values(status=status)
+    )
+
+    # Emit fixed structural lifecycle event bound to the run identity, with zero
+    # raw prompt, source code, or credential leakage.
+    try:
+        from backend.services.event_service import broker, EventEnvelope
+        broker.publish_event(
+            EventEnvelope(
+                project_id=str(row["project_id"]),
+                thread_id=run_id,
+                type=f"supervisor_run_{status}",
+                payload={
+                    "run_id": run_id,
+                    "work_package_id": str(row["work_package_id"]),
+                    "status": status,
+                    "occurred_at": now.isoformat(),
+                },
+            )
+        )
+    except Exception as ev_err:
+        import logging
+        logging.getLogger(__name__).warning("Could not emit supervisor lifecycle event: %s", ev_err)
+
+    return {
+        "run_id": run_id,
+        "work_package_id": row["work_package_id"],
+        "status": status,
+        "completed_at": now.isoformat(),
+    }
+
+
+def emit_run_started_event(run_id: str, project_id: str, work_package_id: str) -> None:
+    """Emit fixed structural started lifecycle event with zero prompt/code leakage."""
+    try:
+        from backend.services.event_service import broker, EventEnvelope
+        broker.publish_event(
+            EventEnvelope(
+                project_id=project_id,
+                thread_id=run_id,
+                type="supervisor_run_started",
+                payload={
+                    "run_id": run_id,
+                    "work_package_id": work_package_id,
+                    "status": "started",
+                    "occurred_at": utc_now().isoformat(),
+                },
+            )
+        )
+    except Exception:
+        pass
+
+
+def notify_supervisor_lifecycle_signal(thread_id: str, signal: str) -> None:
+    """Safely bridge worker lifecycle signals into supervisor run state and events."""
+    if not thread_id:
+        return
+    clean_id = thread_id[3:] if thread_id.startswith("wt-") else thread_id
+    try:
+        from backend.database import engine
+        with engine.connect() as conn:
+            run = conn.execute(
+                select(SupervisorRun.__table__).where(SupervisorRun.__table__.c.id == clean_id)
+            ).mappings().first()
+            if run:
+                if signal == "started":
+                    emit_run_started_event(clean_id, str(run["project_id"]), str(run["work_package_id"]))
+                elif signal in ("completed", "failed", "interrupted"):
+                    term_status = "completed" if signal == "completed" else "failed"
+                    if run["status"] == "dispatch_acknowledged":
+                        record_run_completion(conn, run_id=clean_id, status=term_status)
+                        conn.commit()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Supervisor lifecycle signal bridge ignored: %s", exc)
+
+

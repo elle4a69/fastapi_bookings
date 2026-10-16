@@ -144,6 +144,7 @@ app.include_router(threads.router, prefix="/codex/threads", dependencies=[Depend
 app.include_router(turns.router, prefix="/codex/turns", dependencies=[Depends(verify_auth)])
 app.include_router(turns.router, prefix="/codex", dependencies=[Depends(verify_auth)])
 app.include_router(worktrees.router, dependencies=[Depends(verify_auth)])
+app.include_router(worktrees.router, prefix="/api/admin", dependencies=[Depends(verify_auth)])
 app.include_router(governance.router, dependencies=[Depends(verify_auth)])
 app.include_router(projects.router, prefix="/codex/projects", dependencies=[Depends(verify_auth)])
 app.include_router(settings_router.router, prefix="/codex/settings", dependencies=[Depends(verify_auth)])

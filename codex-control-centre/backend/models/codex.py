@@ -427,7 +427,7 @@ class SupervisorRun(Base):
         CheckConstraint("tenant_id > 0 AND owner_user_id > 0", name="ck_supervisor_run_scope"),
         CheckConstraint("length(brief_content_digest) = 64 AND brief_content_digest NOT GLOB '*[^0-9a-f]*'", name="ck_supervisor_run_brief_digest"),
         CheckConstraint("capability_profile = 'development_worker_v1'", name="ck_supervisor_run_capability"),
-        CheckConstraint("status IN ('dispatching','dispatch_acknowledged','dispatch_unknown','dispatch_rejected')", name="ck_supervisor_run_status"),
+        CheckConstraint("status IN ('dispatching','dispatch_acknowledged','dispatch_unknown','dispatch_rejected','completed','failed')", name="ck_supervisor_run_status"),
     )
 
 

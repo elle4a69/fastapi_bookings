@@ -20,7 +20,7 @@ export const TerminalTab: React.FC = () => {
             cwd: item.workingDirectory,
             status: item.status || 'completed',
             uptime: `${item.durationMs || 100}ms`,
-            pid: item.processId || 8100
+            pid: item.processId || 4500
           })
         }
       })
@@ -39,7 +39,7 @@ export const TerminalTab: React.FC = () => {
     },
     {
       id: 'proc_vite_dev',
-      command: 'npm run dev -- --port 5180',
+      command: 'npm run dev -- --port 4600',
       cwd: 'F:\\Projects\\fastapi_bookings\\frontend',
       status: 'running',
       uptime: '18m 45s',

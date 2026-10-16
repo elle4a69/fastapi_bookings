@@ -609,6 +609,11 @@ class WorkerProcess:
                             if turn:
                                 turn.status = "running"
                                 db.commit()
+                            try:
+                                from backend.services.supervisor_run_service import notify_supervisor_lifecycle_signal
+                                notify_supervisor_lifecycle_signal(target_thread_id, "started")
+                            except Exception:
+                                pass
 
                         elif norm_env.type == "turn_completed":
                             turn = (
@@ -683,6 +688,14 @@ class WorkerProcess:
                                 turn.completed_at = datetime.now(timezone.utc)
                                 db.commit()
 
+                            try:
+                                from backend.services.supervisor_run_service import notify_supervisor_lifecycle_signal
+                                reported_status = str(norm_env.payload.get("status") or "completed").lower()
+                                comp_signal = "completed" if (turn and turn.status == "completed") or (reported_status in {"completed", "success"}) else "failed"
+                                notify_supervisor_lifecycle_signal(target_thread_id, comp_signal)
+                            except Exception:
+                                pass
+
                         elif norm_env.type == "turn_failed":
                             turn = (
                                 db.query(Turn)
@@ -715,6 +728,12 @@ class WorkerProcess:
                                     sequence=seq,
                                 ))
                                 db.commit()
+
+                            try:
+                                from backend.services.supervisor_run_service import notify_supervisor_lifecycle_signal
+                                notify_supervisor_lifecycle_signal(target_thread_id, "failed")
+                            except Exception:
+                                pass
 
                         elif norm_env.type == "agent_message" and norm_env.payload.get("is_streaming") is False:
                             turn = (

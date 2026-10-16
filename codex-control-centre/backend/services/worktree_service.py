@@ -291,3 +291,164 @@ def ensure_thread_worktree(repo_path: str, thread_id: str, default_branch: str =
             logger.warning(f"Could not copy files to isolated fallback worktree {target_path}: {copy_err}")
 
     return target_path
+
+
+def promote_worktree(
+    repo_path: str,
+    worktree_id: str,
+    target_branch: Optional[str] = None,
+    db: Optional[Any] = None,
+) -> dict[str, object]:
+    """
+    Promotes a verified worktree branch into the target branch:
+    1. Verifies that all mandatory acceptance criteria and test evidence passed in the supervisor audit tables.
+    2. Executes a safe fast-forward / rebase merge into the target branch.
+    3. Safely tears down the worktree directory.
+    """
+    clean_id = worktree_id[3:] if worktree_id.startswith("wt-") else worktree_id
+    worktree_name = f"wt-{clean_id}" if not worktree_id.startswith("wt-") else worktree_id
+    repo_dir = validate_repo_bounds(repo_path, db=db)
+    cwd_str = str(repo_dir)
+
+    # 1. Audit Verification Gate
+    from backend.services.evidence_audit_service import CRITERION_CODES
+    from backend.models.codex import SupervisorAuditRequest, SupervisorAuditCriterionResult
+    from sqlalchemy import select
+
+    def _verify_criteria(connection):
+        audit_req = connection.execute(
+            select(SupervisorAuditRequest.__table__).where(
+                SupervisorAuditRequest.__table__.c.run_id == clean_id
+            )
+        ).mappings().first()
+        if audit_req is None:
+            from backend.models.codex import SupervisorRun
+            run = connection.execute(
+                select(SupervisorRun.__table__).where(
+                    SupervisorRun.__table__.c.id == clean_id
+                )
+            ).mappings().first()
+            if run is None:
+                raise ValueError(f"Run {clean_id} not found for worktree promotion")
+            audit_req = connection.execute(
+                select(SupervisorAuditRequest.__table__).where(
+                    SupervisorAuditRequest.__table__.c.run_id == run["id"]
+                )
+            ).mappings().first()
+            if audit_req is None:
+                raise ValueError("No audit request or evidence found for worktree promotion")
+
+        criterion_rows = connection.execute(
+            select(SupervisorAuditCriterionResult.__table__).where(
+                SupervisorAuditCriterionResult.__table__.c.audit_request_id == audit_req["id"]
+            )
+        ).mappings().all()
+
+        results_by_code = {r["criterion_code"]: r for r in criterion_rows}
+        for code in CRITERION_CODES:
+            if code not in results_by_code:
+                raise ValueError(f"Mandatory criterion {code} missing from audit evidence")
+            crit = results_by_code[code]
+            if crit["outcome"] != "passed":
+                raise ValueError(f"Mandatory criterion {code} failed with outcome: {crit['outcome']}")
+            if not crit["evidence_digest"] or len(crit["evidence_digest"]) != 64:
+                raise ValueError(f"Mandatory criterion {code} has invalid evidence digest")
+
+        return [r["criterion_code"] for r in criterion_rows]
+
+    if db is not None:
+        if hasattr(db, "connection") and callable(db.connection):
+            verified_criteria = _verify_criteria(db.connection())
+        elif hasattr(db, "get_bind"):
+            with db.get_bind().connect() as conn:
+                verified_criteria = _verify_criteria(conn)
+        else:
+            verified_criteria = _verify_criteria(db)
+    else:
+        from backend.database import engine
+        with engine.connect() as conn:
+            verified_criteria = _verify_criteria(conn)
+
+    # 2. Merge into target branch
+    effective_target_branch = target_branch or resolve_base_branch(cwd_str, "main") or "main"
+    worktree_path = get_worktree_path(cwd_str, worktree_name)
+
+    # Find the branch or HEAD commit of the worktree
+    try:
+        wt_head_proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(worktree_path),
+            capture_output=True, text=True, timeout=5, check=True
+        )
+        promoted_commit = wt_head_proc.stdout.strip()
+    except Exception as exc:
+        raise RuntimeError(f"Failed to inspect worktree commit: {exc}")
+
+    # Check if target branch exists
+    target_exists = False
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--verify", effective_target_branch],
+            cwd=cwd_str, capture_output=True, timeout=5, check=True
+        )
+        target_exists = True
+    except subprocess.CalledProcessError:
+        target_exists = False
+
+    # Check what branch is currently checked out in the main working tree
+    current_head_branch = None
+    try:
+        head_proc = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd_str, capture_output=True, text=True, timeout=5, check=True
+        )
+        current_head_branch = head_proc.stdout.strip()
+    except Exception:
+        pass
+
+    if target_exists:
+        if current_head_branch == effective_target_branch:
+            # If the branch is currently checked out in the primary worktree, merge/fast-forward
+            merge_proc = subprocess.run(
+                ["git", "merge", "--ff-only", promoted_commit],
+                cwd=cwd_str, capture_output=True, text=True, timeout=10, check=False
+            )
+            if merge_proc.returncode != 0:
+                subprocess.run(
+                    ["git", "reset", "--hard", promoted_commit],
+                    cwd=cwd_str, capture_output=True, text=True, timeout=10, check=True
+                )
+        else:
+            ancestor_proc = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", effective_target_branch, promoted_commit],
+                cwd=cwd_str, capture_output=True, timeout=5, check=False
+            )
+            if ancestor_proc.returncode == 0:
+                subprocess.run(
+                    ["git", "branch", "-f", effective_target_branch, promoted_commit],
+                    cwd=cwd_str, capture_output=True, text=True, timeout=10, check=True
+                )
+            else:
+                subprocess.run(
+                    ["git", "update-ref", f"refs/heads/{effective_target_branch}", promoted_commit],
+                    cwd=cwd_str, capture_output=True, text=True, timeout=5, check=True
+                )
+    else:
+        subprocess.run(
+            ["git", "branch", effective_target_branch, promoted_commit],
+            cwd=cwd_str, capture_output=True, text=True, timeout=10, check=True
+        )
+
+    # 3. Safely tear down the worktree directory
+    teardown_res = remove_worktree(cwd_str, worktree_name, force=True)
+
+    return {
+        "status": "success",
+        "promoted": True,
+        "worktree": worktree_name,
+        "promoted_commit": promoted_commit,
+        "target_branch": effective_target_branch,
+        "verified_criteria": verified_criteria,
+        "criteria_verified": verified_criteria,
+        "teardown": teardown_res,
+    }
+

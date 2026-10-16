@@ -530,6 +530,12 @@ async def interrupt_turn(req: TurnInterrupt, db: Session = Depends(get_db)):
         turn.completed_at = datetime.now(timezone.utc)
         db.commit()
 
+    try:
+        from backend.services.supervisor_run_service import notify_supervisor_lifecycle_signal
+        notify_supervisor_lifecycle_signal(req.thread_id, "interrupted")
+    except Exception:
+        pass
+
     # Cascade cancellation: cancel all pending approvals for this thread
     governance_service.cancel_pending_approvals_for_thread(
         thread_id=req.thread_id,

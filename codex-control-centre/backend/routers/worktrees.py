@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from backend.database import get_db
 from backend.services.worktree_service import create_worktree, list_worktrees, remove_worktree
 
 router = APIRouter(prefix="/codex/worktrees", tags=["worktrees"])
@@ -37,3 +39,43 @@ def remove_worktree_endpoint(worktree_name: str, repo_path: str, force: bool = F
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class PromoteWorktreeRequest(BaseModel):
+    repo_path: str | None = None
+    target_branch: str | None = None
+
+
+@router.post("/{worktree_id}/promote")
+@router.post("/worktrees/{worktree_id}/promote")
+def promote_worktree_endpoint(
+    worktree_id: str,
+    req: PromoteWorktreeRequest | None = None,
+    repo_path: str | None = None,
+    db: Session = Depends(get_db),
+):
+    from backend.services.worktree_service import promote_worktree
+    from backend.config import settings
+    effective_repo = None
+    target_branch = None
+    if req is not None:
+        effective_repo = req.repo_path
+        target_branch = req.target_branch
+    if not effective_repo and repo_path:
+        effective_repo = repo_path
+    if not effective_repo:
+        effective_repo = str(settings.repo_root)
+
+    try:
+        result = promote_worktree(
+            repo_path=effective_repo,
+            worktree_id=worktree_id,
+            target_branch=target_branch,
+            db=db,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
