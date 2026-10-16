@@ -73,6 +73,7 @@ export default function PlanBillingPage() {
   const { isOwner } = useAuth()
   const [loading, setLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [portalError, setPortalError] = useState<string | null>(null)
   const [data, setData] = useState<TenantSubscriptionOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,19 +104,26 @@ export default function PlanBillingPage() {
 
     try {
       setPortalLoading(true)
+      setPortalError(null)
+      toast.loading("Connecting to secure billing portal...", { id: "billing-portal" })
+
+      const returnUrl = `${window.location.origin}/admin/plan-billing`
       const res = await apiClient.post<{ portal_url: string; expires_at?: string }>(
         "/api/billing/portal-session",
-        { return_url: window.location.href }
+        { return_url: returnUrl }
       )
       if (res?.portal_url) {
-        toast.info("Redirecting to secure billing portal...")
-        window.location.href = res.portal_url
+        toast.success("Redirecting to secure billing portal...", { id: "billing-portal" })
+        window.location.assign(res.portal_url)
       } else {
-        toast.error("Provider returned an empty portal URL. Please try again later.")
+        const emptyMsg = "Billing provider returned an empty portal URL. Please try again later."
+        setPortalError(emptyMsg)
+        toast.error(emptyMsg, { id: "billing-portal" })
       }
     } catch (err: any) {
       const msg = err?.message || "Unable to open billing portal. Service may be temporarily offline."
-      toast.error(msg)
+      setPortalError(msg)
+      toast.error(msg, { id: "billing-portal" })
     } finally {
       setPortalLoading(false)
     }
@@ -195,6 +203,34 @@ export default function PlanBillingPage() {
       description="Manage your practice subscription plan, included quotas, and secure hosted payment methods."
     >
       <div className="space-y-6 max-w-6xl pb-12">
+        {/* Portal Connection Error Banner */}
+        {portalError && (
+          <div className="flex items-start justify-between gap-3 p-4 rounded-xl border border-destructive/40 bg-destructive/10 text-destructive animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-start gap-3">
+              <AlertTriangleIcon className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold text-destructive">
+                  Unable to Connect to Billing Provider
+                </p>
+                <p className="text-xs leading-relaxed text-destructive/90">
+                  The billing service (Flexprice) is currently offline, unreachable on port 8085, or not configured in this environment. Please ensure the Flexprice provider container is running or contact system support.
+                </p>
+                <div className="mt-2 text-xs font-mono bg-destructive/15 p-2 rounded border border-destructive/30 break-all">
+                  {portalError}
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/20 hover:text-destructive shrink-0"
+              onClick={() => setPortalError(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+
         {/* Past Due Grace Period Alert Banner */}
         {data?.is_past_due && (
           <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
@@ -210,10 +246,14 @@ export default function PlanBillingPage() {
                   variant="outline"
                   className="border-amber-500/40 text-amber-900 dark:text-amber-100 hover:bg-amber-500/20"
                   onClick={handleOpenPortal}
-                  disabled={portalLoading}
+                  disabled={portalLoading || !isOwner}
                 >
-                  <CreditCardIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Update Payment Method
+                  {portalLoading ? (
+                    <RefreshCwIcon className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <CreditCardIcon className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {portalLoading ? "Connecting..." : "Update Payment Method"}
                 </Button>
               </div>
             </div>
@@ -325,15 +365,26 @@ export default function PlanBillingPage() {
                   <ShieldCheckIcon className="h-4 w-4 text-muted-foreground" />
                   Payment methods and plan upgrades are securely managed via Flexprice.
                 </p>
-                <Button
-                  onClick={handleOpenPortal}
-                  disabled={portalLoading || !isOwner}
-                  className="font-medium"
-                >
-                  <CreditCardIcon className="h-4 w-4 mr-2" />
-                  {portalLoading ? "Generating Session..." : "Manage Billing & Payment Methods"}
-                  <ExternalLinkIcon className="h-3.5 w-3.5 ml-2 opacity-70" />
-                </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    onClick={handleOpenPortal}
+                    disabled={portalLoading || !isOwner}
+                    className="font-medium"
+                  >
+                    {portalLoading ? (
+                      <RefreshCwIcon className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CreditCardIcon className="h-4 w-4 mr-2" />
+                    )}
+                    {portalLoading ? "Connecting to Portal..." : "Manage Billing & Payment Methods"}
+                    {!portalLoading && <ExternalLinkIcon className="h-3.5 w-3.5 ml-2 opacity-70" />}
+                  </Button>
+                  {!isOwner && (
+                    <span className="text-[11px] text-muted-foreground">
+                      * Tenant owner role required to manage billing
+                    </span>
+                  )}
+                </div>
               </CardFooter>
             </Card>
 
@@ -362,7 +413,7 @@ export default function PlanBillingPage() {
                   </p>
                 </div>
               </CardContent>
-              <CardFooter className="border-t pt-3">
+              <CardFooter className="border-t pt-3 flex flex-col gap-1.5 items-stretch">
                 <Button
                   variant="outline"
                   size="sm"
@@ -370,8 +421,23 @@ export default function PlanBillingPage() {
                   onClick={handleOpenPortal}
                   disabled={portalLoading || !isOwner}
                 >
-                  Launch Customer Portal
+                  {portalLoading ? (
+                    <>
+                      <RefreshCwIcon className="h-3.5 w-3.5 mr-2 animate-spin" />
+                      Connecting to Portal...
+                    </>
+                  ) : (
+                    <>
+                      Launch Customer Portal
+                      <ExternalLinkIcon className="h-3 w-3 ml-1.5 opacity-70" />
+                    </>
+                  )}
                 </Button>
+                {!isOwner && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Tenant owner role required
+                  </p>
+                )}
               </CardFooter>
             </Card>
           </div>

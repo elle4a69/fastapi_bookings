@@ -15,7 +15,7 @@ except ImportError:
     from pydantic import BaseSettings
     SettingsConfigDict = dict
 from typing import List, Optional
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 
 
 class Settings(BaseSettings):
@@ -135,8 +135,9 @@ class Settings(BaseSettings):
 
     # Flexprice Billing Settings (WP2)
     FLEXPRICE_API_BASE_URL: str = Field(
-        "https://api.flexprice.io/v1",
-        description="Flexprice API base URL",
+        "http://localhost:8085/v1",
+        validation_alias=AliasChoices("FLEXPRICE_API_BASE_URL", "FLEXPRICE_API_URL"),
+        description="Flexprice API base URL (port 8085 dedicated to avoid collision with SigNoz on port 8080)",
     )
     FLEXPRICE_API_KEY: str = Field(
         "test-flexprice-api-key",
@@ -149,6 +150,10 @@ class Settings(BaseSettings):
     FLEXPRICE_PORTAL_RETURN_URL: str = Field(
         "https://app.bookings.local/admin/billing",
         description="Return URL for hosted billing portal redirect",
+    )
+    FLEXPRICE_SANDBOX_PORTAL_URL: Optional[str] = Field(
+        None,
+        description="Optional fallback or sandbox portal URL for local development/test environments",
     )
 
 

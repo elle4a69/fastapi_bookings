@@ -73,8 +73,9 @@ The platform architecture follows an isolated multi-tier topology within a dedic
 ### 2.2 Flexprice Engine (Usage-Based Billing & Metering)
 - **Runtime**: Go compiled binary runtime.
 - **Role**: Billing accounts, credit grants, invoice generation, subscription life-cycle management, and high-throughput meter ingestion.
+- **Port Allocation**: Port `8085` (`http://localhost:8085/v1` or `http://flexprice-internal.vpc:8085/v1`). Note: Port `8080` is strictly reserved for the SigNoz telemetry query service / Web UI and must not be bound to Flexprice.
 - **Ingress Endpoints**:
-  - Internal VPC Endpoint (`http://flexprice-internal.vpc:8080/api/v1`): Private REST API for provisioning, metering ingestion, and portal session generation.
+  - Internal VPC Endpoint (`http://flexprice-internal.vpc:8085/api/v1`): Private REST API for provisioning, metering ingestion, and portal session generation.
   - Outbound Webhooks: Dispatches signed HMAC-SHA256 events to `https://api.domain.com/api/v1/platform-billing/webhooks/flexprice`.
 - **Dependencies**:
   - PostgreSQL 16+ (Transactional state, customers, subscriptions, invoices, plans).
@@ -93,12 +94,12 @@ The platform architecture follows an isolated multi-tier topology within a dedic
     - Port `5432` to `sg-postgres-bookings`
     - Port `6379` to `sg-redis`
     - Port `443` to `sg-logto` (Internal M2M)
-    - Port `8080` / `443` to `sg-flexprice` (Internal API)
+    - Port `8085` / `443` to `sg-flexprice` (Internal API; note: SigNoz runs on `8080`)
 - **Logto SG (`sg-logto`)**:
   - Ingress: Port `3001`/`443` allowed only from ALB and `sg-fastapi`.
   - Egress: Port `5432` allowed only to `sg-postgres-logto`.
 - **Flexprice SG (`sg-flexprice`)**:
-  - Ingress: Port `8080` allowed only from `sg-fastapi`.
+  - Ingress: Port `8085` allowed only from `sg-fastapi`.
   - Egress:
     - Port `5432` to `sg-postgres-flexprice`
     - Port `6379` to `sg-redis`

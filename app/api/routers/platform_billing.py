@@ -13,6 +13,7 @@ from app.api.deps import (
     get_current_platform_owner,
     require_role,
 )
+from app.core.config import settings
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.platform_billing import (
@@ -157,6 +158,14 @@ def create_billing_portal_session(
     Strictly requires tenant owner role. Fails closed with 503 if provider is unreachable.
     NO payment credentials ever enter our system; all billing management is hosted by Flexprice.
     """
+    # Check if a sandbox / fallback portal URL is configured for local development
+    if settings.FLEXPRICE_SANDBOX_PORTAL_URL:
+        logger.info("Using configured FLEXPRICE_SANDBOX_PORTAL_URL for tenant %s", tenant.id)
+        return PortalSessionResponse(
+            portal_url=settings.FLEXPRICE_SANDBOX_PORTAL_URL,
+            expires_at=None,
+        )
+
     billing_acct = (
         db.query(BillingAccount)
         .filter(BillingAccount.tenant_id == tenant.id)
@@ -200,16 +209,18 @@ def create_billing_portal_session(
         )
 
     except FlexpriceOutageError as exc:
-        logger.error("Flexprice billing portal outage: %s", exc)
+        target_host = flexprice_client.base_url
+        logger.error("Flexprice billing portal outage at %s: %s", target_host, exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Billing portal service is temporarily unavailable. Please try again later.",
+            detail=f"Billing portal service is temporarily unavailable: Flexprice service at '{target_host}' is unreachable ({exc}).",
         )
     except FlexpriceClientError as exc:
-        logger.error("Flexprice client error creating portal session: %s", exc)
+        target_host = flexprice_client.base_url
+        logger.error("Flexprice client error creating portal session at %s: %s", target_host, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to initiate billing portal session with provider.",
+            detail=f"Failed to initiate billing portal session with provider: Flexprice service at '{target_host}' returned an error ({exc}).",
         )
 
 

@@ -70,9 +70,10 @@ frontend/src/pages/admin/
 ## 3. Setup, Configuration & Dependencies
 
 ### Environment Variables
-- `FLEXPRICE_BASE_URL`: Base URL for the external Flexprice billing API (e.g. `https://api.flexprice.io/v1`).
+- `FLEXPRICE_API_BASE_URL` (or alias `FLEXPRICE_API_URL`): Base URL for the Flexprice billing API (defaults to `http://localhost:8085/v1` to prevent port collision with SigNoz which runs on port 8080).
 - `FLEXPRICE_API_KEY`: Secret API token used to authenticate outbound requests to Flexprice.
 - `FLEXPRICE_WEBHOOK_SECRET`: Secret key used for raw-body HMAC-SHA256 webhook signature validation.
+- `FLEXPRICE_SANDBOX_PORTAL_URL`: Optional fallback or sandbox portal URL for local development/test environments.
 
 ### Internal Dependencies
 - `app.models.tenant.Tenant`: Host tenant records.

@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "rea
 import { navigation } from "@/components/navigation"
 import { AdminLayout } from "@/layouts/admin-layout"
 import { getAdminAccessToken } from "@/lib/api"
+import { Toaster } from "@/components/ui/sonner"
 
 // Lazy loaded page components
 const CategoriesPage = lazy(() => import("@/pages/admin/catalog/categories"))
@@ -300,6 +301,7 @@ function App() {
         </Suspense>
         </TranslationProvider>
       </AuthProvider>
+      <Toaster richColors position="top-right" />
     </BrowserRouter>
   )
 }
