@@ -206,6 +206,43 @@ def test_portal_session_requires_tenant_owner(client: TestClient, db_session: Se
     assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
+def test_portal_session_owner_returns_portal_url(client: TestClient, db_session: Session):
+    """Tenant owner can generate a portal session, returning valid portal_url."""
+    tenant = _seed_tenant(db_session, "portalowner", tier="starter")
+    owner_user = _seed_user(db_session, tenant.id, "owner_user", role="owner")
+    token = create_access_token(data={"sub": str(owner_user.id), "tenant_id": tenant.id})
+
+    resp = client.post(
+        "/api/billing/portal-session",
+        json={"return_url": "https://example.com/billing"},
+        headers={"Authorization": f"Bearer {token}", "X-Tenant": tenant.subdomain},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert "portal_url" in data
+    assert data["portal_url"].startswith("http")
+
+
+def test_portal_session_sandbox_fallback(client: TestClient, db_session: Session, monkeypatch):
+    """When Stripe is disabled or bypassed, portal session cleanly falls back to FLEXPRICE_SANDBOX_PORTAL_URL."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", "")
+    monkeypatch.setattr(settings, "FLEXPRICE_SANDBOX_PORTAL_URL", "https://billing.stripe.com/p/session/test_sample_session")
+
+    tenant = _seed_tenant(db_session, "portalsandbox", tier="starter")
+    owner_user = _seed_user(db_session, tenant.id, "sandbox_owner", role="owner")
+    token = create_access_token(data={"sub": str(owner_user.id), "tenant_id": tenant.id})
+
+    resp = client.post(
+        "/api/billing/portal-session",
+        json={"return_url": "https://example.com/billing"},
+        headers={"Authorization": f"Bearer {token}", "X-Tenant": tenant.subdomain},
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["portal_url"] == "https://billing.stripe.com/p/session/test_sample_session"
+
+
 # ---------------------------------------------------------------------------
 # 3. Platform Operator Security Boundary
 # ---------------------------------------------------------------------------

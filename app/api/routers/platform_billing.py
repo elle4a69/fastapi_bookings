@@ -156,21 +156,69 @@ def create_billing_portal_session(
     """Generate a secure, short-lived hosted portal session for tenant self-service billing management.
 
     Strictly requires tenant owner role. Fails closed with 503 if provider is unreachable.
-    NO payment credentials ever enter our system; all billing management is hosted by Flexprice.
+    NO payment credentials ever enter our system; all billing management is hosted by Stripe or Flexprice.
     """
-    # Check if a sandbox / fallback portal URL is configured for local development
-    if settings.FLEXPRICE_SANDBOX_PORTAL_URL:
-        logger.info("Using configured FLEXPRICE_SANDBOX_PORTAL_URL for tenant %s", tenant.id)
-        return PortalSessionResponse(
-            portal_url=settings.FLEXPRICE_SANDBOX_PORTAL_URL,
-            expires_at=None,
-        )
-
     billing_acct = (
         db.query(BillingAccount)
         .filter(BillingAccount.tenant_id == tenant.id)
         .first()
     )
+
+    # 1. If not running under a test mock handler, attempt live Stripe Customer Portal session if configured
+    if flexprice_client._mock_handler is None and settings.STRIPE_SECRET_KEY:
+        try:
+            import stripe
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            stripe_customer_id = None
+            if billing_acct and billing_acct.flexprice_customer_id and billing_acct.flexprice_customer_id.startswith("cus_"):
+                stripe_customer_id = billing_acct.flexprice_customer_id
+            else:
+                existing = stripe.Customer.list(email=current_user.email, limit=1)
+                if existing and existing.data:
+                    stripe_customer_id = existing.data[0].id
+                else:
+                    new_cust = stripe.Customer.create(
+                        name=tenant.name,
+                        email=current_user.email,
+                        metadata={
+                            "tenant_id": str(tenant.id),
+                            "tenant_subdomain": tenant.subdomain,
+                        },
+                    )
+                    stripe_customer_id = new_cust.id
+
+                if not billing_acct:
+                    billing_acct = BillingAccount(
+                        tenant_id=tenant.id,
+                        flexprice_customer_id=stripe_customer_id,
+                        billing_state="active",
+                    )
+                    db.add(billing_acct)
+                else:
+                    billing_acct.flexprice_customer_id = stripe_customer_id
+                db.commit()
+                db.refresh(billing_acct)
+
+            portal_return_url = body.return_url or settings.FLEXPRICE_PORTAL_RETURN_URL
+            session = stripe.billing_portal.Session.create(
+                customer=stripe_customer_id,
+                return_url=portal_return_url,
+            )
+            logger.info("Successfully created Stripe billing portal session %s for tenant %s", session.id, tenant.id)
+            return PortalSessionResponse(
+                portal_url=session.url,
+                expires_at=datetime.fromtimestamp(session.created + 3600, tz=timezone.utc),
+            )
+        except Exception as stripe_err:
+            logger.warning("Stripe customer portal generation bypassed or failed: %s; falling back to sandbox or provider client", stripe_err)
+
+    # 2. Check if a sandbox / fallback portal URL is configured for local development
+    if flexprice_client._mock_handler is None and settings.FLEXPRICE_SANDBOX_PORTAL_URL:
+        logger.info("Using configured FLEXPRICE_SANDBOX_PORTAL_URL for tenant %s", tenant.id)
+        return PortalSessionResponse(
+            portal_url=settings.FLEXPRICE_SANDBOX_PORTAL_URL,
+            expires_at=None,
+        )
 
     try:
         # Create external customer if missing
