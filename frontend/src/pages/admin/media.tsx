@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ChangeEvent } from "react"
+import { useState, useEffect, useMemo, useCallback, type ChangeEvent } from "react"
 import { 
   Upload, 
   FolderPlus, 
@@ -16,21 +16,15 @@ import {
   X, 
   FileText,
   Layers,
-  Wand2,
-  RotateCcw,
-  RotateCw,
-  FlipHorizontal,
-  FlipVertical,
-  Sun,
-  Contrast,
-  Undo,
-  Save,
-  Crop,
-  Link as LinkIcon,
-  Copy,
-  Share2,
-  Clock,
-  Lock
+  Link as LinkIcon, 
+  Copy, 
+  Share2, 
+  Clock, 
+  Lock,
+  Globe,
+  AlertCircle,
+  RefreshCw,
+  FileCheck
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -45,6 +39,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { apiClient } from "@/lib/api"
+import {
+  type BackendMediaItem,
+  type MediaListParams,
+  listMedia,
+  uploadMedia,
+  updateMediaEligibility,
+  deleteMedia,
+  getAdminMediaStreamUrl,
+  formatMediaFileSize,
+  validateMediaUploadFile,
+  fetchMediaBlobUrl
+} from "@/api/media"
 
 export interface ServiceProvider {
   id: string | number
@@ -62,29 +68,6 @@ export interface MediaAlbum {
   createdAt: string
   coverUrl?: string
   shortUrl?: string
-}
-
-export interface MediaNote {
-  id: string
-  author: string
-  text: string
-  timestamp: string
-}
-
-export interface MediaItem {
-  id: string
-  title: string
-  type: "image" | "video"
-  url: string
-  fileSize?: string
-  mimeType?: string
-  albumId?: string
-  providerId?: string
-  description?: string
-  notes: MediaNote[]
-  uploadedAt: string
-  shortUrl?: string
-  isGuestUpload?: boolean
 }
 
 export interface PublicUploadLink {
@@ -106,12 +89,16 @@ export interface QueuedUploadItem {
   id: string
   file: File
   title: string
-  type: "image" | "video"
-  url: string
+  description?: string
+  notes?: string
+  providerId?: string
+  isEligible: boolean
+  type: "image" | "video" | "document"
+  previewUrl: string
   fileSize: string
+  error?: string
 }
 
-const STORAGE_KEY_MEDIA = "fastapi_bookings_media_items_v1"
 const STORAGE_KEY_ALBUMS = "fastapi_bookings_media_albums_v1"
 const STORAGE_KEY_PUBLIC_LINKS = "fastapi_bookings_public_upload_links_v1"
 
@@ -152,72 +139,6 @@ const INITIAL_ALBUMS: MediaAlbum[] = [
   }
 ]
 
-const INITIAL_MEDIA_ITEMS: MediaItem[] = [
-  {
-    id: "med-1",
-    title: "Post-Treatment Dermal Scan",
-    type: "image",
-    url: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80",
-    fileSize: "2.4 MB",
-    mimeType: "image/jpeg",
-    albumId: "alb-1",
-    providerId: "prov-1",
-    description: "High-resolution dermal imaging captured after session #3.",
-    notes: [
-      { id: "n-1", author: "Dr. Sarah Jenkins", text: "Notice significant collagen improvement in targeted cheek zone.", timestamp: "2026-08-02 11:20 AM" },
-      { id: "n-2", author: "Client Coordinator", text: "Approved by client for clinical tracking portfolio.", timestamp: "2026-08-03 04:15 PM" }
-    ],
-    uploadedAt: "2026-08-02T11:00:00Z",
-    shortUrl: "http://localhost:8002/api/v1/med-1"
-  },
-  {
-    id: "med-2",
-    title: "Laser Skin Resurfacing Walkthrough",
-    type: "video",
-    url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    fileSize: "14.8 MB",
-    mimeType: "video/mp4",
-    albumId: "alb-2",
-    providerId: "prov-2",
-    description: "Video recording explaining proper post-laser skincare routine.",
-    notes: [
-      { id: "n-3", author: "Alex Rivera", text: "Video tutorial sent to client via notification email.", timestamp: "2026-08-05 09:45 AM" }
-    ],
-    uploadedAt: "2026-08-05T09:30:00Z",
-    shortUrl: "http://localhost:8002/api/v1/med-2"
-  },
-  {
-    id: "med-3",
-    title: "HydraFacial Glow Session",
-    type: "image",
-    url: "https://images.unsplash.com/photo-1512290900673-7002fffe935a?w=800&auto=format&fit=crop&q=80",
-    fileSize: "1.8 MB",
-    mimeType: "image/png",
-    albumId: "alb-2",
-    providerId: "prov-2",
-    description: "Hydration treatment completion photography.",
-    notes: [],
-    uploadedAt: "2026-08-06T15:10:00Z",
-    shortUrl: "http://localhost:8002/api/v1/med-3"
-  },
-  {
-    id: "med-4",
-    title: "Provider Studio Workspace Showcase",
-    type: "image",
-    url: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&auto=format&fit=crop&q=80",
-    fileSize: "3.1 MB",
-    mimeType: "image/jpeg",
-    albumId: "alb-3",
-    providerId: "prov-3",
-    description: "Sterile treatment room layout for wellness consultations.",
-    notes: [
-      { id: "n-4", author: "Elena Rostova", text: "Updated for updated website booking page banner.", timestamp: "2026-08-07 02:00 PM" }
-    ],
-    uploadedAt: "2026-08-07T13:45:00Z",
-    shortUrl: "http://localhost:8002/api/v1/med-4"
-  }
-]
-
 // Short URL Service Generator Helper
 async function createShortUrl(longUrl: string, _resourceId?: string, _prefix?: "med" | "alb" | "upl"): Promise<string> {
   try {
@@ -240,26 +161,77 @@ async function createShortUrl(longUrl: string, _resourceId?: string, _prefix?: "
   return longUrl
 }
 
+// Media Item Preview Component
+function MediaPreviewThumbnail({ item }: { item: BackendMediaItem }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [hasError, setHasError] = useState(false)
+
+  const handleImageError = () => {
+    if (!blobUrl && !hasError) {
+      fetchMediaBlobUrl(item.id)
+        .then((url) => setBlobUrl(url))
+        .catch(() => setHasError(true))
+    } else {
+      setHasError(true)
+    }
+  }
+
+  if (item.media_type === "video") {
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-slate-900 text-white">
+        <Film className="h-10 w-10 opacity-75 group-hover:scale-110 transition-transform" />
+        <Badge className="absolute top-2.5 right-2.5 bg-black/70 backdrop-blur-sm gap-1 text-[10px]">
+          <Film className="h-3 w-3" /> VIDEO
+        </Badge>
+      </div>
+    )
+  }
+
+  if (hasError) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-muted text-muted-foreground p-2 text-center text-xs">
+        <ImageIcon className="h-8 w-8 mb-1 opacity-50" />
+        <span className="truncate max-w-[120px]">{item.filename}</span>
+      </div>
+    )
+  }
+
+  const src = blobUrl || item.url || getAdminMediaStreamUrl(item.id)
+
+  return (
+    <img 
+      src={src} 
+      alt={item.title || item.filename} 
+      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      onError={handleImageError}
+    />
+  )
+}
+
 export default function MediaPage() {
   const [providers, setProviders] = useState<ServiceProvider[]>(DEFAULT_PROVIDERS)
   const [albums, setAlbums] = useState<MediaAlbum[]>([])
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
+  const [mediaItems, setMediaItems] = useState<BackendMediaItem[]>([])
   const [publicLinks, setPublicLinks] = useState<PublicUploadLink[]>([])
+  const [isLoadingMedia, setIsLoadingMedia] = useState<boolean>(true)
+  const [mediaError, setMediaError] = useState<string | null>(null)
 
   // Filtering state
   const [selectedAlbumId, setSelectedAlbumId] = useState<string>("all")
   const [selectedProviderId, setSelectedProviderId] = useState<string>("all")
-  const [mediaTypeFilter, setMediaTypeFilter] = useState<"all" | "image" | "video">("all")
+  const [eligibilityFilter, setEligibilityFilter] = useState<"all" | "eligible" | "ineligible">("all")
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<"all" | "image" | "video" | "document">("all")
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [activeTab, setActiveTab] = useState<string>("all-media")
 
-  // Modal & Editor state
+  // Modal & Detail state
   const [isUploadOpen, setIsUploadOpen] = useState(false)
   const [isNewAlbumOpen, setIsNewAlbumOpen] = useState(false)
   const [isPublicLinkOpen, setIsPublicLinkOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null)
-  const [newNoteText, setNewNoteText] = useState("")
+  const [selectedItem, setSelectedItem] = useState<BackendMediaItem | null>(null)
+  const [togglingEligibilityId, setTogglingEligibilityId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // Public Link Generator State
   const [linkExpiryDuration, setLinkExpiryDuration] = useState<string>("24h")
@@ -268,32 +240,17 @@ export default function MediaPage() {
   const [linkTargetProviderId, setLinkTargetProviderId] = useState<string>("none")
   const [createdPublicLink, setCreatedPublicLink] = useState<PublicUploadLink | null>(null)
 
-  // Image Editor States
-  const [isEditingImage, setIsEditingImage] = useState(false)
-  const [rotation, setRotation] = useState<number>(0)
-  const [flipH, setFlipH] = useState<boolean>(false)
-  const [flipV, setFlipV] = useState<boolean>(false)
-  const [brightness, setBrightness] = useState<number>(100)
-  const [contrast, setContrast] = useState<number>(100)
-  const [saturation, setSaturation] = useState<number>(100)
-  const [grayscale, setGrayscale] = useState<number>(0)
-  const [sepia, setSepia] = useState<number>(0)
-
-  // Aspect Ratio & Crop States
-  const [cropAspect, setCropAspect] = useState<"free" | "1:1" | "4:3" | "16:9" | "3:4" | "9:16">("free")
-  const [cropScale, setCropScale] = useState<number>(100)
-  const [cropPosition, setCropPosition] = useState<"center" | "top" | "bottom" | "left" | "right">("center")
-  const [isSavingEdits, setIsSavingEdits] = useState(false)
-
-  // Form states - Multi-File Upload Queue
+  // Multi-File Upload Queue State
   const [uploadQueue, setUploadQueue] = useState<QueuedUploadItem[]>([])
   const [uploadAlbumId, setUploadAlbumId] = useState<string>("none")
   const [uploadProviderId, setUploadProviderId] = useState<string>("none")
   const [uploadDescription, setUploadDescription] = useState("")
   const [uploadNote, setUploadNote] = useState("")
+  const [uploadIsEligible, setUploadIsEligible] = useState<boolean>(false)
   const [isBatchUploading, setIsBatchUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 })
 
-  // Form states - New Album
+  // New Album Form state
   const [albumName, setAlbumName] = useState("")
   const [albumDescription, setAlbumDescription] = useState("")
   const [albumProviderId, setAlbumProviderId] = useState<string>("none")
@@ -321,9 +278,43 @@ export default function MediaPage() {
     loadProviders()
   }, [])
 
-  // Load Albums, Media Items, & Public Links from localStorage
+  // Load Media Items from Real Backend API
+  const fetchMediaItems = useCallback(async () => {
+    setIsLoadingMedia(true)
+    setMediaError(null)
+    try {
+      const params: MediaListParams = {}
+      if (eligibilityFilter === "eligible") {
+        params.is_public_website_eligible = true
+      } else if (eligibilityFilter === "ineligible") {
+        params.is_public_website_eligible = false
+      }
+
+      if (selectedProviderId !== "all" && selectedProviderId !== "unassigned") {
+        const provNum = parseInt(selectedProviderId, 10)
+        if (!isNaN(provNum)) {
+          params.provider_id = provNum
+        }
+      }
+
+      const res = await listMedia(params)
+      setMediaItems(res.data || [])
+    } catch (err: any) {
+      console.error("Failed to load media items:", err)
+      setMediaError(err?.message || "Failed to load media items from server.")
+      toast.error("Failed to load media items from server.")
+    } finally {
+      setIsLoadingMedia(false)
+    }
+  }, [eligibilityFilter, selectedProviderId])
+
   useEffect(() => {
-    async function initData() {
+    fetchMediaItems()
+  }, [fetchMediaItems])
+
+  // Load Albums & Public Links from Storage
+  useEffect(() => {
+    async function initAuxData() {
       let loadedAlbums: MediaAlbum[] = INITIAL_ALBUMS
       const savedAlbums = localStorage.getItem(STORAGE_KEY_ALBUMS)
       if (savedAlbums) {
@@ -333,40 +324,7 @@ export default function MediaPage() {
           loadedAlbums = INITIAL_ALBUMS
         }
       }
-
-      const updatedAlbums = await Promise.all(
-        loadedAlbums.map(async (alb) => {
-          if (!alb.shortUrl) {
-            const shortUrl = await createShortUrl(alb.coverUrl || `http://localhost:7070/admin/media?album=${alb.id}`, alb.id, "alb")
-            return { ...alb, shortUrl }
-          }
-          return alb
-        })
-      )
-      setAlbums(updatedAlbums)
-      localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(updatedAlbums))
-
-      let loadedMedia: MediaItem[] = INITIAL_MEDIA_ITEMS
-      const savedMedia = localStorage.getItem(STORAGE_KEY_MEDIA)
-      if (savedMedia) {
-        try {
-          loadedMedia = JSON.parse(savedMedia)
-        } catch {
-          loadedMedia = INITIAL_MEDIA_ITEMS
-        }
-      }
-
-      const updatedMedia = await Promise.all(
-        loadedMedia.map(async (item) => {
-          if (!item.shortUrl) {
-            const shortUrl = await createShortUrl(item.url, item.id, "med")
-            return { ...item, shortUrl }
-          }
-          return item
-        })
-      )
-      setMediaItems(updatedMedia)
-      localStorage.setItem(STORAGE_KEY_MEDIA, JSON.stringify(updatedMedia))
+      setAlbums(loadedAlbums)
 
       const savedLinksRaw = localStorage.getItem(STORAGE_KEY_PUBLIC_LINKS)
       if (savedLinksRaw) {
@@ -378,51 +336,13 @@ export default function MediaPage() {
       }
     }
 
-    initData()
+    initAuxData()
   }, [])
-
-  // Reset Editor States when Selected Item changes
-  useEffect(() => {
-    if (selectedItem) {
-      setIsEditingImage(false)
-      resetEditorParams()
-    }
-  }, [selectedItem])
-
-  const resetEditorParams = () => {
-    setRotation(0)
-    setFlipH(false)
-    setFlipV(false)
-    setBrightness(100)
-    setContrast(100)
-    setSaturation(100)
-    setGrayscale(0)
-    setSepia(0)
-    setCropAspect("free")
-    setCropScale(100)
-    setCropPosition("center")
-  }
-
-  // Persist Changes
-  const saveAlbums = (updated: MediaAlbum[]) => {
-    setAlbums(updated)
-    localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(updated))
-  }
-
-  const saveMediaItems = (updated: MediaItem[]) => {
-    setMediaItems(updated)
-    localStorage.setItem(STORAGE_KEY_MEDIA, JSON.stringify(updated))
-  }
-
-  const savePublicLinks = (updated: PublicUploadLink[]) => {
-    setPublicLinks(updated)
-    localStorage.setItem(STORAGE_KEY_PUBLIC_LINKS, JSON.stringify(updated))
-  }
 
   // Copy Short Link to Clipboard
   const handleCopyShortUrl = (shortUrl: string, label: string) => {
     navigator.clipboard.writeText(shortUrl)
-    toast.success(`${label} short link copied to clipboard!`)
+    toast.success(`${label} link copied to clipboard!`)
   }
 
   // Generate Ad-Hoc Public Upload Link
@@ -461,7 +381,8 @@ export default function MediaPage() {
     }
 
     const updated = [newLink, ...publicLinks]
-    savePublicLinks(updated)
+    setPublicLinks(updated)
+    localStorage.setItem(STORAGE_KEY_PUBLIC_LINKS, JSON.stringify(updated))
     setCreatedPublicLink(newLink)
     toast.success("Public Upload Portal Link generated with expiry protection!")
   }
@@ -469,38 +390,49 @@ export default function MediaPage() {
   // Revoke Public Link
   const handleRevokePublicLink = (linkId: string) => {
     const updated = publicLinks.filter(l => l.id !== linkId)
-    savePublicLinks(updated)
+    setPublicLinks(updated)
+    localStorage.setItem(STORAGE_KEY_PUBLIC_LINKS, JSON.stringify(updated))
     toast.success("Public upload link revoked.")
   }
 
-  // Handle Multi-File Selection
+  // Handle Multi-File Selection with validation
   const handleMultiFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return
 
     const filesArr = Array.from(e.target.files)
 
     filesArr.forEach((file, index) => {
+      const validation = validateMediaUploadFile(file)
       const isVideo = file.type.startsWith("video/")
+      const isDoc = file.type === "application/pdf"
       const itemTitle = file.name.replace(/\.[^/.]+$/, "")
-      const itemSize = `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      const itemSize = formatMediaFileSize(file.size)
 
-      const reader = new FileReader()
-      reader.onload = (evt) => {
-        const dataUrl = evt.target?.result as string || ""
-        setUploadQueue(prev => [
-          ...prev,
-          {
-            id: `q-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 4)}`,
-            file,
-            title: itemTitle,
-            type: isVideo ? "video" : "image",
-            url: dataUrl,
-            fileSize: itemSize
-          }
-        ])
-      }
-      reader.readAsDataURL(file)
+      let mediaType: "image" | "video" | "document" = "image"
+      if (isVideo) mediaType = "video"
+      else if (isDoc) mediaType = "document"
+
+      const previewUrl = URL.createObjectURL(file)
+
+      setUploadQueue(prev => [
+        ...prev,
+        {
+          id: `q-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 6)}`,
+          file,
+          title: itemTitle,
+          description: uploadDescription,
+          notes: uploadNote,
+          providerId: uploadProviderId !== "none" ? uploadProviderId : undefined,
+          isEligible: uploadIsEligible,
+          type: mediaType,
+          previewUrl,
+          fileSize: itemSize,
+          error: validation.valid ? undefined : validation.error
+        }
+      ])
     })
+
+    e.target.value = ""
   }
 
   // Remove Item from Queue
@@ -532,8 +464,9 @@ export default function MediaPage() {
     }
 
     const updated = [newAlbum, ...albums]
-    saveAlbums(updated)
-    toast.success(`Album "${newAlbum.name}" created with assigned Short Link!`)
+    setAlbums(updated)
+    localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(updated))
+    toast.success(`Album "${newAlbum.name}" created!`)
 
     setAlbumName("")
     setAlbumDescription("")
@@ -542,281 +475,159 @@ export default function MediaPage() {
     setIsNewAlbumOpen(false)
   }
 
-  // Submit Multi-File Batch Upload
+  // Submit Multi-File Batch Upload to Real Backend API
   const handleBatchUploadSubmit = async () => {
-    if (uploadQueue.length === 0) return
+    const validItems = uploadQueue.filter(q => !q.error)
+    if (validItems.length === 0) {
+      toast.error("Please add valid files to upload.")
+      return
+    }
+
     setIsBatchUploading(true)
+    setUploadProgress({ current: 0, total: validItems.length })
+
+    let successCount = 0
+    let failureCount = 0
 
     try {
-      let finalProviderId = uploadProviderId !== "none" ? uploadProviderId : undefined
-      if (!finalProviderId && uploadAlbumId !== "none") {
-        const targetAlbum = albums.find(a => a.id === uploadAlbumId)
-        if (targetAlbum?.providerId) {
-          finalProviderId = targetAlbum.providerId
+      for (let i = 0; i < validItems.length; i++) {
+        const qItem = validItems[i]
+        setUploadProgress({ current: i + 1, total: validItems.length })
+
+        let finalProviderId: number | null = null
+        if (qItem.providerId && qItem.providerId !== "none") {
+          const parsed = parseInt(qItem.providerId, 10)
+          if (!isNaN(parsed)) finalProviderId = parsed
+        } else if (uploadProviderId !== "none") {
+          const parsed = parseInt(uploadProviderId, 10)
+          if (!isNaN(parsed)) finalProviderId = parsed
         }
-      }
 
-      const createdItems: MediaItem[] = []
-
-      for (let i = 0; i < uploadQueue.length; i++) {
-        const qItem = uploadQueue[i]
-        const newId = `med-${Date.now()}-${i}`
-        const finalUrl = qItem.url || (qItem.type === "video" 
-          ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-          : "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80")
-
-        const generatedShortUrl = await createShortUrl(finalUrl, newId, "med")
-
-        const initialNotesList: MediaNote[] = []
-        if (uploadNote.trim()) {
-          initialNotesList.push({
-            id: `n-${Date.now()}-${i}`,
-            author: "Admin User",
-            text: uploadNote.trim(),
-            timestamp: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+        try {
+          await uploadMedia({
+            file: qItem.file,
+            title: qItem.title.trim() || undefined,
+            description: (uploadDescription.trim() || qItem.description?.trim()) || undefined,
+            notes: (uploadNote.trim() || qItem.notes?.trim()) || undefined,
+            provider_id: finalProviderId,
+            is_public_website_eligible: uploadIsEligible || qItem.isEligible
           })
-        }
-
-        const newItem: MediaItem = {
-          id: newId,
-          title: qItem.title.trim() || `Uploaded File #${i + 1}`,
-          type: qItem.type,
-          url: finalUrl,
-          fileSize: qItem.fileSize,
-          mimeType: qItem.file.type || (qItem.type === "video" ? "video/mp4" : "image/jpeg"),
-          albumId: uploadAlbumId !== "none" ? uploadAlbumId : undefined,
-          providerId: finalProviderId,
-          description: uploadDescription.trim() || undefined,
-          notes: initialNotesList,
-          uploadedAt: new Date().toISOString(),
-          shortUrl: generatedShortUrl
-        }
-
-        createdItems.push(newItem)
-      }
-
-      const updated = [...createdItems, ...mediaItems]
-      saveMediaItems(updated)
-      toast.success(`Successfully uploaded ${createdItems.length} media asset${createdItems.length > 1 ? "s" : ""}!`)
-
-      // Update album cover if needed
-      if (uploadAlbumId !== "none") {
-        const firstPhoto = createdItems.find(i => i.type === "image")
-        if (firstPhoto) {
-          const albumIdx = albums.findIndex(a => a.id === uploadAlbumId)
-          if (albumIdx !== -1 && !albums[albumIdx].coverUrl) {
-            const updatedAlbums = [...albums]
-            updatedAlbums[albumIdx].coverUrl = firstPhoto.url
-            saveAlbums(updatedAlbums)
-          }
+          successCount++
+        } catch (err: any) {
+          console.error(`Failed to upload ${qItem.file.name}:`, err)
+          failureCount++
+          toast.error(`Upload failed for ${qItem.file.name}: ${err?.message || "Server error"}`)
         }
       }
 
-      // Reset Form
-      setUploadQueue([])
-      setUploadAlbumId("none")
-      setUploadProviderId("none")
-      setUploadDescription("")
-      setUploadNote("")
-      setIsUploadOpen(false)
-    } catch (err) {
-      console.error("Batch upload failed:", err)
-      toast.error("Failed to upload files.")
+      if (successCount > 0) {
+        toast.success(`Successfully uploaded ${successCount} media asset${successCount > 1 ? "s" : ""} to storage!`)
+        await fetchMediaItems()
+        setUploadQueue([])
+        setUploadDescription("")
+        setUploadNote("")
+        setUploadIsEligible(false)
+        setIsUploadOpen(false)
+      }
     } finally {
       setIsBatchUploading(false)
     }
   }
 
-  // Add Note to Item
-  const handleAddNote = () => {
-    if (!selectedItem || !newNoteText.trim()) return
+  // Toggle Public Website Eligibility via API
+  const handleToggleEligibility = async (item: BackendMediaItem) => {
+    setTogglingEligibilityId(item.id)
+    const targetState = !item.is_public_website_eligible
 
-    const newNote: MediaNote = {
-      id: `n-${Date.now()}`,
-      author: "Admin User",
-      text: newNoteText.trim(),
-      timestamp: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    try {
+      const res = await updateMediaEligibility(item.id, targetState)
+      setMediaItems(prev => prev.map(m => m.id === item.id ? res.data : m))
+      if (selectedItem?.id === item.id) {
+        setSelectedItem(res.data)
+      }
+      toast.success(
+        targetState 
+          ? `Asset marked public website eligible.` 
+          : `Asset restricted to internal/private use.`
+      )
+    } catch (err: any) {
+      console.error("Failed to update eligibility:", err)
+      toast.error(err?.message || "Failed to update eligibility state.")
+    } finally {
+      setTogglingEligibilityId(null)
     }
-
-    const updatedItem = {
-      ...selectedItem,
-      notes: [...selectedItem.notes, newNote]
-    }
-
-    const updatedList = mediaItems.map(m => m.id === selectedItem.id ? updatedItem : m)
-    saveMediaItems(updatedList)
-    setSelectedItem(updatedItem)
-    setNewNoteText("")
   }
 
-  // Delete Item
-  const handleDeleteItem = (id: string) => {
-    const updated = mediaItems.filter(m => m.id !== id)
-    saveMediaItems(updated)
-    if (selectedItem?.id === id) {
-      setSelectedItem(null)
+  // Delete Item via Real API
+  const handleDeleteItem = async (id: number) => {
+    setDeletingId(id)
+    try {
+      await deleteMedia(id)
+      setMediaItems(prev => prev.filter(m => m.id !== id))
+      if (selectedItem?.id === id) {
+        setSelectedItem(null)
+      }
+      toast.success("Media asset deleted permanently from storage.")
+    } catch (err: any) {
+      console.error("Failed to delete media asset:", err)
+      toast.error(err?.message || "Failed to delete media asset.")
+    } finally {
+      setDeletingId(null)
     }
   }
 
   // Delete Album
   const handleDeleteAlbum = (albumId: string) => {
     const updatedAlbums = albums.filter(a => a.id !== albumId)
-    saveAlbums(updatedAlbums)
-
-    const updatedItems = mediaItems.map(m => m.albumId === albumId ? { ...m, albumId: undefined } : m)
-    saveMediaItems(updatedItems)
+    setAlbums(updatedAlbums)
+    localStorage.setItem(STORAGE_KEY_ALBUMS, JSON.stringify(updatedAlbums))
+    toast.success("Album deleted.")
   }
 
-  // Update Media Provider / Album Assignment
-  const handleUpdateItemAssignment = (itemId: string, field: "providerId" | "albumId", value: string) => {
-    const targetValue = value === "none" ? undefined : value
-    const updatedList = mediaItems.map(m => {
-      if (m.id === itemId) {
-        return { ...m, [field]: targetValue }
-      }
-      return m
-    })
-    saveMediaItems(updatedList)
-    if (selectedItem?.id === itemId) {
-      setSelectedItem(prev => prev ? { ...prev, [field]: targetValue } : null)
-    }
-  }
-
-  // Save Canvas Image Edits + Aspect Ratio Cropping
-  const handleSaveImageEdits = async () => {
-    if (!selectedItem || selectedItem.type !== "image") return
-    setIsSavingEdits(true)
-
-    try {
-      const img = new Image()
-      img.crossOrigin = "anonymous"
-      
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve()
-        img.onerror = () => reject()
-        img.src = selectedItem.url
-      })
-
-      const tempCanvas = document.createElement("canvas")
-      const tempCtx = tempCanvas.getContext("2d")
-      if (!tempCtx) {
-        setIsSavingEdits(false)
-        return
-      }
-
-      const isQuarterTurn = Math.abs(rotation / 90) % 2 === 1
-      tempCanvas.width = isQuarterTurn ? img.height : img.width
-      tempCanvas.height = isQuarterTurn ? img.width : img.height
-
-      tempCtx.save()
-      tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2)
-      tempCtx.rotate((rotation * Math.PI) / 180)
-      tempCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1)
-      tempCtx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) grayscale(${grayscale}%) sepia(${sepia}%)`
-      tempCtx.drawImage(img, -img.width / 2, -img.height / 2)
-      tempCtx.restore()
-
-      let cropWidth = tempCanvas.width * (cropScale / 100)
-      let cropHeight = tempCanvas.height * (cropScale / 100)
-
-      if (cropAspect !== "free") {
-        let targetRatio = 1
-        if (cropAspect === "1:1") targetRatio = 1
-        else if (cropAspect === "4:3") targetRatio = 4 / 3
-        else if (cropAspect === "16:9") targetRatio = 16 / 9
-        else if (cropAspect === "3:4") targetRatio = 3 / 4
-        else if (cropAspect === "9:16") targetRatio = 9 / 16
-
-        if (cropWidth / cropHeight > targetRatio) {
-          cropWidth = cropHeight * targetRatio
-        } else {
-          cropHeight = cropWidth / targetRatio
+  // Filtered Media Items (Search & local filters)
+  const filteredMediaItems = useMemo(() => {
+    return mediaItems.filter(item => {
+      // Album filter
+      if (selectedAlbumId !== "all") {
+        const targetAlbum = albums.find(a => a.id === selectedAlbumId)
+        if (targetAlbum?.providerId && String(item.provider_id) !== targetAlbum.providerId) {
+          return false
         }
       }
 
-      let srcX = (tempCanvas.width - cropWidth) / 2
-      let srcY = (tempCanvas.height - cropHeight) / 2
-
-      if (cropPosition === "top") srcY = 0
-      else if (cropPosition === "bottom") srcY = tempCanvas.height - cropHeight
-      else if (cropPosition === "left") srcX = 0
-      else if (cropPosition === "right") srcX = tempCanvas.width - cropWidth
-
-      const finalCanvas = document.createElement("canvas")
-      finalCanvas.width = cropWidth
-      finalCanvas.height = cropHeight
-      const finalCtx = finalCanvas.getContext("2d")
-      if (!finalCtx) {
-        setIsSavingEdits(false)
-        return
-      }
-
-      finalCtx.drawImage(
-        tempCanvas,
-        srcX, srcY, cropWidth, cropHeight,
-        0, 0, cropWidth, cropHeight
-      )
-
-      const editedDataUrl = finalCanvas.toDataURL("image/jpeg", 0.92)
-      
-      const updatedItem = { ...selectedItem, url: editedDataUrl }
-      const updatedList = mediaItems.map(m => m.id === selectedItem.id ? updatedItem : m)
-      saveMediaItems(updatedList)
-      setSelectedItem(updatedItem)
-      setIsEditingImage(false)
-      resetEditorParams()
-      toast.success("Image crop & filters saved!")
-    } catch (err) {
-      console.error("Failed to render canvas image edits:", err)
-      toast.error("Failed to save image edits.")
-    } finally {
-      setIsSavingEdits(false)
-    }
-  }
-
-  // Filtered Items
-  const filteredMediaItems = useMemo(() => {
-    return mediaItems.filter(item => {
-      if (selectedAlbumId !== "all") {
-        if (selectedAlbumId === "unassigned" && item.albumId) return false
-        if (selectedAlbumId !== "unassigned" && item.albumId !== selectedAlbumId) return false
-      }
-
+      // Local Provider filter
       if (selectedProviderId !== "all") {
-        if (selectedProviderId === "unassigned" && item.providerId) return false
-        if (selectedProviderId !== "unassigned" && item.providerId !== selectedProviderId) return false
+        if (selectedProviderId === "unassigned" && item.provider_id) return false
+        if (selectedProviderId !== "unassigned" && String(item.provider_id) !== selectedProviderId) return false
       }
 
-      if (mediaTypeFilter !== "all" && item.type !== mediaTypeFilter) return false
+      // Local Eligibility filter
+      if (eligibilityFilter === "eligible" && !item.is_public_website_eligible) return false
+      if (eligibilityFilter === "ineligible" && item.is_public_website_eligible) return false
 
+      // Media Type filter
+      if (mediaTypeFilter !== "all" && item.media_type !== mediaTypeFilter) return false
+
+      // Search Query filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase()
-        const matchTitle = item.title.toLowerCase().includes(query)
-        const matchDesc = item.description?.toLowerCase().includes(query)
-        const matchNotes = item.notes.some(n => n.text.toLowerCase().includes(query) || n.author.toLowerCase().includes(query))
-        if (!matchTitle && !matchDesc && !matchNotes) return false
+        const matchTitle = (item.title || "").toLowerCase().includes(query)
+        const matchFilename = (item.filename || "").toLowerCase().includes(query)
+        const matchDesc = (item.description || "").toLowerCase().includes(query)
+        const matchNotes = (item.notes || "").toLowerCase().includes(query)
+        if (!matchTitle && !matchFilename && !matchDesc && !matchNotes) return false
       }
 
       return true
     })
-  }, [mediaItems, selectedAlbumId, selectedProviderId, mediaTypeFilter, searchQuery])
+  }, [mediaItems, selectedAlbumId, albums, selectedProviderId, eligibilityFilter, mediaTypeFilter, searchQuery])
 
   // Get Provider Name Helper
-  const getProviderName = (providerId?: string) => {
+  const getProviderName = (providerId?: number | string | null) => {
     if (!providerId) return "Unassigned Provider"
     const p = providers.find(prov => String(prov.id) === String(providerId))
     return p ? p.name : `Provider #${providerId}`
   }
-
-  // Get Album Name Helper
-  const getAlbumName = (albumId?: string) => {
-    if (!albumId) return "Unassigned Library"
-    const a = albums.find(alb => alb.id === albumId)
-    return a ? a.name : "Unknown Library"
-  }
-
-  // CSS Filter string for preview
-  const cssFilterPreview = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) grayscale(${grayscale}%) sepia(${sepia}%)`
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 min-w-0">
@@ -832,11 +643,24 @@ export default function MediaPage() {
             Media & Asset Library
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage photographs, multi-file uploads, organize into albums, generate public upload links with auto-destruction rules, and assign items to service providers.
+            Durable tenant-scoped storage. Manage photographs, videos, eligibility for public website publication, and private notes.
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Refresh Button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => fetchMediaItems()} 
+            disabled={isLoadingMedia}
+            className="gap-1.5 text-xs"
+            title="Refresh Media Items"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoadingMedia ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+
           {/* Public Upload Link Dialog */}
           <Dialog open={isPublicLinkOpen} onOpenChange={setIsPublicLinkOpen}>
             <DialogTrigger asChild>
@@ -1086,10 +910,10 @@ export default function MediaPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Upload className="h-5 w-5 text-primary" />
-                  Multi-File Media Upload
+                  Upload Media Asset
                 </DialogTitle>
                 <DialogDescription>
-                  Select multiple photographs or videos to upload in batch. Each file receives its own short URL.
+                  Upload files directly to durable backend tenant storage. Validated for safe MIME types and 25MB maximum size.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-2">
@@ -1107,7 +931,7 @@ export default function MediaPage() {
                   <div className="border-2 border-dashed rounded-xl p-5 text-center hover:border-primary/60 transition-colors bg-muted/20">
                     <input 
                       type="file" 
-                      accept="image/*,video/*" 
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,video/mp4,video/webm,video/quicktime,application/pdf" 
                       multiple
                       id="media-multi-file-input" 
                       className="hidden" 
@@ -1118,10 +942,10 @@ export default function MediaPage() {
                         <Upload className="h-6 w-6" />
                       </div>
                       <div className="text-sm font-semibold">
-                        Click to select multiple files or drag & drop here
+                        Click to select files or drag & drop here
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Supports JPG, PNG, WEBP, MP4, WEBM (Upload multiple items at once)
+                        Supports JPG, PNG, WEBP, GIF, SVG, MP4, WEBM, QuickTime, PDF (Max 25MB per file)
                       </p>
                     </label>
                   </div>
@@ -1142,12 +966,14 @@ export default function MediaPage() {
 
                     <div className="space-y-2">
                       {uploadQueue.map((item, idx) => (
-                        <div key={item.id} className="p-2.5 rounded-md bg-card border flex items-center gap-3 text-xs">
+                        <div key={item.id} className={`p-2.5 rounded-md bg-card border flex items-center gap-3 text-xs ${item.error ? "border-destructive/60 bg-destructive/5" : ""}`}>
                           <div className="h-10 w-12 rounded bg-muted overflow-hidden shrink-0 flex items-center justify-center">
                             {item.type === "video" ? (
                               <Film className="h-5 w-5 text-primary" />
+                            ) : item.type === "document" ? (
+                              <FileText className="h-5 w-5 text-primary" />
                             ) : (
-                              <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
+                              <img src={item.previewUrl} alt={item.title} className="w-full h-full object-cover" />
                             )}
                           </div>
 
@@ -1161,6 +987,15 @@ export default function MediaPage() {
                             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                               <Badge variant="outline" className="uppercase py-0 h-3.5 text-[9px]">{item.type}</Badge>
                               <span>{item.fileSize}</span>
+                              {item.error ? (
+                                <span className="text-destructive font-medium flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" /> {item.error}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-500 flex items-center gap-0.5">
+                                  <FileCheck className="h-3 w-3" /> Valid
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1179,68 +1014,100 @@ export default function MediaPage() {
                 )}
 
                 {/* Batch Options */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="grid gap-2">
-                    <Label htmlFor="upload-album">Target Library / Album</Label>
-                    <Select value={uploadAlbumId} onValueChange={setUploadAlbumId}>
-                      <SelectTrigger id="upload-album" aria-label="Target library / album">
-                        <SelectValue placeholder="Select Album" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Unassigned (Root)</SelectItem>
-                        {albums.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="upload-provider">Assigned Service Provider</Label>
+                    <Label htmlFor="upload-provider">Assign Service Provider</Label>
                     <Select value={uploadProviderId} onValueChange={setUploadProviderId}>
                       <SelectTrigger id="upload-provider" aria-label="Assigned service provider">
                         <SelectValue placeholder="Select Service Provider" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Default / Inherit from Album</SelectItem>
+                        <SelectItem value="none">No Provider Assigned</SelectItem>
                         {providers.map((p) => (
                           <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="upload-album">Pre-Assign to Album (Optional)</Label>
+                    <Select value={uploadAlbumId} onValueChange={setUploadAlbumId}>
+                      <SelectTrigger id="upload-album" aria-label="Pre-assign to album">
+                        <SelectValue placeholder="Select Album" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {albums.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="upload-desc">Description (Applies to Batch)</Label>
+                  <Label htmlFor="upload-desc">Description</Label>
                   <Input 
                     id="upload-desc" 
-                    placeholder="Brief description for these media assets..." 
+                    placeholder="Safe descriptive summary of the media asset..." 
                     value={uploadDescription}
                     onChange={(e) => setUploadDescription(e.target.value)}
                   />
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="upload-note">Communication Note (Applies to Batch)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="upload-note" className="flex items-center gap-1.5">
+                      <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>Internal / Clinical Notes</span>
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">Excluded from AI & public website</span>
+                  </div>
                   <Textarea 
                     id="upload-note" 
-                    placeholder="Add text notes or instructions for staff..." 
+                    placeholder="Internal staff notes, clinical observations, or handling instructions..." 
                     value={uploadNote}
                     onChange={(e) => setUploadNote(e.target.value)}
                     rows={2}
                   />
                 </div>
+
+                {/* Public Website Eligibility Checkbox */}
+                <div className="p-3 rounded-lg border bg-muted/20 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="upload-eligible"
+                    checked={uploadIsEligible}
+                    onChange={(e) => setUploadIsEligible(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="upload-eligible" className="text-xs cursor-pointer select-none">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-emerald-500" />
+                      Approve for Public Website Use
+                    </span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      When checked, this asset becomes eligible to be included in public website galleries and AI assistant recommendations. Leave unchecked for private or clinical-only assets.
+                    </p>
+                  </label>
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsUploadOpen(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => setIsUploadOpen(false)} disabled={isBatchUploading}>
+                  Cancel
+                </Button>
                 <Button 
                   onClick={handleBatchUploadSubmit} 
-                  disabled={uploadQueue.length === 0 || isBatchUploading}
+                  disabled={uploadQueue.filter(q => !q.error).length === 0 || isBatchUploading}
                   className="gap-1.5 font-semibold"
                 >
                   <Upload className="h-4 w-4" />
-                  <span>{isBatchUploading ? "Uploading Batch..." : `Upload ${uploadQueue.length} Asset${uploadQueue.length > 1 ? "s" : ""}`}</span>
+                  <span>
+                    {isBatchUploading 
+                      ? `Uploading (${uploadProgress.current}/${uploadProgress.total})...` 
+                      : `Upload ${uploadQueue.filter(q => !q.error).length} Asset${uploadQueue.filter(q => !q.error).length > 1 ? "s" : ""}`}
+                  </span>
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1289,10 +1156,11 @@ export default function MediaPage() {
 
           <Card className="border shadow-2xs">
             <CardContent className="p-3 flex flex-wrap items-center gap-3">
+              {/* Search input */}
               <div className="relative flex-1 min-w-[200px] max-w-md">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search media, notes, text..."
+                  placeholder="Search media by title, filename, notes..."
                   className="pl-8 text-xs h-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -1307,6 +1175,22 @@ export default function MediaPage() {
                 )}
               </div>
 
+              {/* Public Website Eligibility Filter */}
+              <div className="w-full sm:w-auto min-w-[180px]">
+                <Select value={eligibilityFilter} onValueChange={(val: any) => setEligibilityFilter(val)}>
+                  <SelectTrigger className="h-9 text-xs" aria-label="Filter by website eligibility">
+                    <Globe className="h-3.5 w-3.5 mr-1.5 text-emerald-500 shrink-0" />
+                    <SelectValue placeholder="All Eligibility" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Eligibility</SelectItem>
+                    <SelectItem value="eligible">Website Eligible (Public)</SelectItem>
+                    <SelectItem value="ineligible">Internal Only (Private)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Provider Filter */}
               <div className="w-full sm:w-auto min-w-[160px]">
                 <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
                   <SelectTrigger className="h-9 text-xs" aria-label="Filter by provider">
@@ -1323,31 +1207,17 @@ export default function MediaPage() {
                 </Select>
               </div>
 
-              <div className="w-full sm:w-auto min-w-[170px]">
-                <Select value={selectedAlbumId} onValueChange={setSelectedAlbumId}>
-                  <SelectTrigger className="h-9 text-xs" aria-label="Filter by library">
-                    <Folder className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
-                    <SelectValue placeholder="All Libraries" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Libraries</SelectItem>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {albums.map(a => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
+              {/* Media Type Filter */}
               <div className="w-full sm:w-auto min-w-[130px]">
                 <Select value={mediaTypeFilter} onValueChange={(val: any) => setMediaTypeFilter(val)}>
                   <SelectTrigger className="h-9 text-xs" aria-label="Filter by media type">
                     <SelectValue placeholder="All Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Media</SelectItem>
+                    <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="image">Photos Only</SelectItem>
                     <SelectItem value="video">Videos Only</SelectItem>
+                    <SelectItem value="document">Documents</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1358,13 +1228,19 @@ export default function MediaPage() {
         {/* ── TAB 1: ALL MEDIA ITEMS ────────────────────────────────────── */}
         <TabsContent value="all-media" className="mt-0">
           
-          {(selectedAlbumId !== "all" || selectedProviderId !== "all" || mediaTypeFilter !== "all" || searchQuery) && (
+          {(selectedAlbumId !== "all" || selectedProviderId !== "all" || eligibilityFilter !== "all" || mediaTypeFilter !== "all" || searchQuery) && (
             <div className="flex items-center gap-2 mb-4 flex-wrap text-xs bg-muted/20 p-2.5 rounded-lg border">
               <span className="text-muted-foreground font-medium">Active Filters:</span>
               {selectedAlbumId !== "all" && (
                 <Badge variant="secondary" className="gap-1 text-xs">
-                  Library: {selectedAlbumId === "unassigned" ? "Unassigned" : getAlbumName(selectedAlbumId)}
+                  Album: {albums.find(a => a.id === selectedAlbumId)?.name || selectedAlbumId}
                   <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedAlbumId("all")} />
+                </Badge>
+              )}
+              {eligibilityFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  Eligibility: {eligibilityFilter === "eligible" ? "Public Website" : "Internal Only"}
+                  <X className="h-3 w-3 cursor-pointer" onClick={() => setEligibilityFilter("all")} />
                 </Badge>
               )}
               {selectedProviderId !== "all" && (
@@ -1386,6 +1262,7 @@ export default function MediaPage() {
                 onClick={() => {
                   setSelectedAlbumId("all")
                   setSelectedProviderId("all")
+                  setEligibilityFilter("all")
                   setMediaTypeFilter("all")
                   setSearchQuery("")
                 }}
@@ -1395,14 +1272,29 @@ export default function MediaPage() {
             </div>
           )}
 
-          {filteredMediaItems.length === 0 ? (
+          {isLoadingMedia ? (
+            <div className="rounded-xl border border-dashed p-12 text-center flex flex-col items-center gap-3 bg-muted/10">
+              <RefreshCw className="h-8 w-8 text-primary animate-spin" />
+              <h3 className="text-base font-semibold">Loading media assets from storage...</h3>
+              <p className="text-xs text-muted-foreground">Connecting to tenant durable media storage.</p>
+            </div>
+          ) : mediaError ? (
+            <div className="rounded-xl border border-destructive/40 p-8 text-center flex flex-col items-center gap-3 bg-destructive/5">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <h3 className="text-base font-semibold text-destructive">Failed to Load Media</h3>
+              <p className="text-xs text-muted-foreground max-w-md">{mediaError}</p>
+              <Button variant="outline" size="sm" onClick={() => fetchMediaItems()} className="gap-1.5 mt-2">
+                <RefreshCw className="h-3.5 w-3.5" /> Try Again
+              </Button>
+            </div>
+          ) : filteredMediaItems.length === 0 ? (
             <div className="rounded-xl border border-dashed p-12 text-center flex flex-col items-center gap-3 bg-muted/10">
               <div className="p-4 rounded-full bg-muted">
                 <ImageIcon className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-semibold">No media items found</h3>
               <p className="text-sm text-muted-foreground max-w-md">
-                No photographs or videos match your current filter options. Try uploading a new media file or adjusting your search.
+                No photographs or videos match your current filter options. Try uploading a new media file or adjusting your filters.
               </p>
               <Button onClick={() => setIsUploadOpen(true)} className="gap-2 mt-2">
                 <Upload className="h-4 w-4" />
@@ -1419,42 +1311,38 @@ export default function MediaPage() {
                   onClick={() => setSelectedItem(item)}
                 >
                   <div className="relative h-44 w-full overflow-hidden bg-muted flex items-center justify-center shrink-0">
-                    {item.type === "video" ? (
-                      <div className="relative w-full h-full flex items-center justify-center bg-slate-900 text-white">
-                        <Film className="h-10 w-10 opacity-75 group-hover:scale-110 transition-transform" />
-                        <Badge className="absolute top-2.5 right-2.5 bg-black/70 backdrop-blur-sm gap-1 text-[10px]">
-                          <Film className="h-3 w-3" /> VIDEO
+                    <MediaPreviewThumbnail item={item} />
+
+                    {/* Eligibility Badge */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1">
+                      {item.is_public_website_eligible ? (
+                        <Badge className="bg-emerald-600 text-white gap-1 text-[9px] shadow-sm">
+                          <Globe className="h-2.5 w-2.5" /> Website Eligible
                         </Badge>
-                      </div>
-                    ) : (
-                      <img 
-                        src={item.url} 
-                        alt={item.title} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=600&auto=format&fit=crop&q=80"
-                        }}
-                      />
-                    )}
+                      ) : (
+                        <Badge variant="outline" className="bg-background/80 backdrop-blur-xs border-amber-500/50 text-amber-600 dark:text-amber-400 gap-1 text-[9px] shadow-sm">
+                          <Lock className="h-2.5 w-2.5" /> Internal Only
+                        </Badge>
+                      )}
+                    </div>
 
-                    {item.isGuestUpload && (
-                      <Badge className="absolute top-2.5 left-2.5 bg-emerald-600 text-white gap-1 text-[9px] shadow-sm">
-                        <Upload className="h-2.5 w-2.5" /> Public Upload
+                    {/* MIME Type & Size Badge */}
+                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5">
+                      <Badge className="bg-black/75 backdrop-blur-sm text-white font-mono text-[9px] py-0 h-4">
+                        {formatMediaFileSize(item.file_size)}
                       </Badge>
-                    )}
-
-                    {item.notes.length > 0 && (
-                      <Badge className="absolute bottom-2.5 left-2.5 bg-primary/90 text-primary-foreground gap-1 text-[10px]">
-                        <MessageSquare className="h-3 w-3" />
-                        <span>{item.notes.length} note{item.notes.length > 1 ? "s" : ""}</span>
-                      </Badge>
-                    )}
+                      {item.notes && (
+                        <Badge className="bg-primary/90 text-primary-foreground gap-1 text-[9px] py-0 h-4">
+                          <MessageSquare className="h-2.5 w-2.5" /> Notes
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   <CardContent className="p-3.5 flex flex-col gap-2 flex-1 min-w-0 w-full">
                     <div className="flex items-center justify-between gap-2 min-w-0 w-full">
                       <h4 className="font-semibold text-sm truncate min-w-0 flex-1 group-hover:text-primary transition-colors">
-                        {item.title}
+                        {item.title || item.filename}
                       </h4>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -1464,17 +1352,31 @@ export default function MediaPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}>
-                            <FileText className="h-3.5 w-3.5 mr-2" /> View & Add Notes
+                            <FileText className="h-3.5 w-3.5 mr-2" /> View Details & Notes
                           </DropdownMenuItem>
-                          {item.shortUrl && (
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleCopyShortUrl(item.shortUrl!, item.title); }}>
-                              <LinkIcon className="h-3.5 w-3.5 mr-2 text-primary" /> Copy Short Link
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); handleToggleEligibility(item); }}
+                            disabled={togglingEligibilityId === item.id}
+                          >
+                            <Globe className="h-3.5 w-3.5 mr-2 text-emerald-500" />
+                            {item.is_public_website_eligible ? "Make Internal Only" : "Approve for Website"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              const a = document.createElement("a");
+                              a.href = getAdminMediaStreamUrl(item.id);
+                              a.download = item.filename;
+                              a.click();
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-2" /> Download Binary
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             className="text-destructive focus:text-destructive"
                             onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }}
+                            disabled={deletingId === item.id}
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete Asset
                           </DropdownMenuItem>
@@ -1489,28 +1391,16 @@ export default function MediaPage() {
                     )}
 
                     <div className="flex flex-col gap-1.5 mt-auto pt-2.5 border-t text-xs min-w-0 w-full">
+                      <div className="flex items-center justify-between text-muted-foreground text-[11px] min-w-0 w-full">
+                        <span className="font-mono text-[10px] truncate max-w-[130px]">{item.content_type}</span>
+                        <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                      </div>
+
                       <div className="flex items-center gap-1.5 text-muted-foreground min-w-0 w-full">
                         <UserRoundCog className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span className="font-medium text-foreground truncate min-w-0 flex-1">
-                          {getProviderName(item.providerId)}
+                          {getProviderName(item.provider_id)}
                         </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1 text-muted-foreground text-[11px] min-w-0 w-full">
-                        <div className="flex items-center gap-1 truncate min-w-0">
-                          <Folder className="h-3 w-3 shrink-0" />
-                          <span className="truncate min-w-0">{getAlbumName(item.albumId)}</span>
-                        </div>
-                        {item.shortUrl && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleCopyShortUrl(item.shortUrl!, item.title); }}
-                            className="text-primary hover:underline font-mono text-[10px] flex items-center gap-1 shrink-0 bg-primary/10 px-1.5 py-0.5 rounded"
-                            title="Copy Short URL"
-                          >
-                            <LinkIcon className="h-2.5 w-2.5" />
-                            <span>Short Link</span>
-                          </button>
-                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -1529,55 +1419,59 @@ export default function MediaPage() {
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="h-12 w-16 rounded overflow-hidden bg-muted shrink-0 relative flex items-center justify-center">
-                        {item.type === "video" ? (
-                          <div className="w-full h-full bg-slate-900 flex items-center justify-center text-white">
-                            <Film className="h-5 w-5" />
-                          </div>
-                        ) : (
-                          <img src={item.url} alt={item.title} className="w-full h-full object-cover" />
-                        )}
+                        <MediaPreviewThumbnail item={item} />
                       </div>
 
                       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h4 className="font-semibold text-sm truncate min-w-0">{item.title}</h4>
-                          <Badge variant="outline" className="text-[10px] uppercase py-0 h-4 shrink-0">
-                            {item.type}
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          <h4 className="font-semibold text-sm truncate min-w-0">{item.title || item.filename}</h4>
+                          <Badge variant="outline" className="text-[9px] uppercase py-0 h-4 font-mono shrink-0">
+                            {item.content_type}
                           </Badge>
-                          {item.isGuestUpload && (
-                            <Badge className="bg-emerald-600 text-white text-[9px] py-0 h-4">
-                              Guest Upload
+                          {item.is_public_website_eligible ? (
+                            <Badge className="bg-emerald-600 text-white text-[9px] py-0 h-4 gap-1">
+                              <Globe className="h-2.5 w-2.5" /> Website Eligible
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-amber-500 border-amber-500/40 text-[9px] py-0 h-4 gap-1">
+                              <Lock className="h-2.5 w-2.5" /> Internal
                             </Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground truncate min-w-0">
-                          {item.description || "No description provided."}
+                          {item.description || item.filename}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      {item.shortUrl && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 text-xs font-mono gap-1 text-primary"
-                          onClick={(e) => { e.stopPropagation(); handleCopyShortUrl(item.shortUrl!, item.title); }}
-                        >
-                          <LinkIcon className="h-3 w-3" />
-                          <span className="hidden sm:inline">Short Link</span>
-                        </Button>
+                      <span className="font-mono text-xs text-muted-foreground hidden sm:inline">
+                        {formatMediaFileSize(item.file_size)}
+                      </span>
+
+                      {item.notes && (
+                        <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground" title="Internal notes attached">
+                          <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                        </div>
                       )}
 
-                      <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        <span>{item.notes.length} notes</span>
+                      <div className="hidden md:flex flex-col text-right text-xs max-w-[150px] min-w-0">
+                        <span className="font-medium text-foreground truncate min-w-0">{getProviderName(item.provider_id)}</span>
+                        <span className="text-muted-foreground text-[10px] truncate min-w-0">{new Date(item.created_at).toLocaleDateString()}</span>
                       </div>
 
-                      <div className="hidden md:flex flex-col text-right text-xs max-w-[150px] min-w-0">
-                        <span className="font-medium text-foreground truncate min-w-0">{getProviderName(item.providerId)}</span>
-                        <span className="text-muted-foreground text-[11px] truncate min-w-0">{getAlbumName(item.albumId)}</span>
-                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleEligibility(item)
+                        }}
+                        disabled={togglingEligibilityId === item.id}
+                      >
+                        {item.is_public_website_eligible ? "Make Private" : "Approve"}
+                      </Button>
 
                       <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}>
                         View
@@ -1595,7 +1489,6 @@ export default function MediaPage() {
         <TabsContent value="albums" className="mt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 w-full min-w-0">
             {albums.map((album) => {
-              const albumItems = mediaItems.filter(m => m.albumId === album.id)
               const provider = providers.find(p => String(p.id) === String(album.providerId))
 
               return (
@@ -1610,9 +1503,6 @@ export default function MediaPage() {
                     
                     <div className="absolute bottom-3 left-3 right-3 text-white flex items-end justify-between min-w-0">
                       <div className="min-w-0 flex-1">
-                        <Badge className="bg-primary/90 text-primary-foreground text-[10px] mb-1">
-                          {albumItems.length} {albumItems.length === 1 ? "Item" : "Items"}
-                        </Badge>
                         <h3 className="font-bold text-lg leading-tight truncate min-w-0">{album.name}</h3>
                       </div>
                     </div>
@@ -1651,7 +1541,7 @@ export default function MediaPage() {
 
                       <Button 
                         variant="ghost" 
-                        size="sm"
+                        size="sm" 
                         className="h-7 text-xs gap-1 shrink-0"
                         onClick={() => {
                           setSelectedAlbumId(album.id)
@@ -1679,28 +1569,34 @@ export default function MediaPage() {
         </TabsContent>
       </Tabs>
 
-      {/* ── MEDIA DETAIL & EDITING DIALOG ──────────────────────────────────── */}
+      {/* ── MEDIA DETAIL & PREVIEW DIALOG ──────────────────────────────────── */}
       {selectedItem && (
         <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
           <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto flex flex-col gap-4">
             <DialogHeader className="text-left border-b pb-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="uppercase text-[10px]">
-                    {selectedItem.type}
+                    {selectedItem.media_type}
                   </Badge>
-                  {selectedItem.isGuestUpload && (
-                    <Badge className="bg-emerald-600 text-white text-[9px]">
-                      Guest Upload
+                  {selectedItem.is_public_website_eligible ? (
+                    <Badge className="bg-emerald-600 text-white gap-1 text-[10px]">
+                      <Globe className="h-3 w-3" /> Public Website Eligible
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-amber-500/50 text-amber-500 gap-1 text-[10px]">
+                      <Lock className="h-3 w-3" /> Internal Only (Private)
                     </Badge>
                   )}
                   <span className="text-xs text-muted-foreground">
-                    Uploaded {new Date(selectedItem.uploadedAt).toLocaleDateString()}
+                    Uploaded {new Date(selectedItem.created_at).toLocaleDateString()}
                   </span>
                 </div>
               </div>
 
-              <DialogTitle className="text-xl font-bold mt-1">{selectedItem.title}</DialogTitle>
+              <DialogTitle className="text-xl font-bold mt-1">
+                {selectedItem.title || selectedItem.filename}
+              </DialogTitle>
               {selectedItem.description && (
                 <DialogDescription className="text-xs">
                   {selectedItem.description}
@@ -1708,362 +1604,125 @@ export default function MediaPage() {
               )}
             </DialogHeader>
 
-            {/* Dynamic Short URL & Image Editing Toolbar Card inside Modal */}
+            {/* Quick Actions Card inside Modal */}
             <div className="p-3 rounded-lg border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                  <LinkIcon className="h-3.5 w-3.5 text-primary" /> Assigned Dynamic Short Link
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Stored Asset Reference
                 </span>
-                <span className="font-mono text-xs text-primary truncate">
-                  {selectedItem.shortUrl || `http://localhost:8002/api/v1/med-${selectedItem.id}`}
+                <span className="font-mono text-xs text-foreground truncate">
+                  {selectedItem.filename} ({formatMediaFileSize(selectedItem.file_size)} • {selectedItem.content_type})
                 </span>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <Button 
-                  variant="outline" 
+                  variant={selectedItem.is_public_website_eligible ? "secondary" : "default"}
                   size="sm" 
-                  className="h-7 text-xs gap-1"
-                  onClick={() => handleCopyShortUrl(selectedItem.shortUrl || `http://localhost:8002/api/v1/med-${selectedItem.id}`, selectedItem.title)}
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => handleToggleEligibility(selectedItem)}
+                  disabled={togglingEligibilityId === selectedItem.id}
                 >
-                  <Copy className="h-3 w-3" /> Copy Link
+                  <Globe className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>{selectedItem.is_public_website_eligible ? "Revoke Website Approval" : "Approve for Public Website"}</span>
                 </Button>
-
-                {selectedItem.type === "image" && (
-                  <Button 
-                    variant={isEditingImage ? "secondary" : "default"} 
-                    size="sm"
-                    className="h-7 text-xs gap-1.5"
-                    onClick={() => setIsEditingImage(!isEditingImage)}
-                  >
-                    <Wand2 className="h-3.5 w-3.5" />
-                    <span>{isEditingImage ? "Done Editing" : "Edit & Crop Image"}</span>
-                  </Button>
-                )}
               </div>
             </div>
 
-            {/* Full Image / Video Display Container with Crop Overlay */}
+            {/* Full Image / Video Display Container with Backend Streaming */}
             <div className="rounded-xl overflow-hidden bg-slate-950/95 border p-2 flex items-center justify-center min-h-[300px] max-h-[500px] w-full relative shadow-inner">
-              {selectedItem.type === "video" ? (
+              {selectedItem.media_type === "video" ? (
                 <video 
-                  src={selectedItem.url} 
+                  src={selectedItem.url || getAdminMediaStreamUrl(selectedItem.id)} 
                   controls 
                   className="w-full max-h-[460px] object-contain rounded"
-                  poster="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=600&auto=format&fit=crop&q=80"
                 />
+              ) : selectedItem.media_type === "document" ? (
+                <div className="flex flex-col items-center justify-center gap-3 p-8 text-center text-white">
+                  <FileText className="h-16 w-16 text-primary opacity-80" />
+                  <p className="text-sm font-semibold">{selectedItem.filename}</p>
+                  <p className="text-xs text-muted-foreground">PDF Document ({formatMediaFileSize(selectedItem.file_size)})</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="mt-2 text-xs gap-1.5"
+                    onClick={() => {
+                      window.open(getAdminMediaStreamUrl(selectedItem.id), "_blank")
+                    }}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Open / Download Document
+                  </Button>
+                </div>
               ) : (
                 <div className="relative flex items-center justify-center overflow-hidden max-w-full max-h-[460px]">
                   <img 
-                    src={selectedItem.url} 
-                    alt={selectedItem.title} 
-                    className="max-w-full max-h-[460px] w-auto h-auto object-contain rounded transition-all duration-150" 
-                    style={{
-                      filter: cssFilterPreview,
-                      transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`
+                    src={selectedItem.url || getAdminMediaStreamUrl(selectedItem.id)} 
+                    alt={selectedItem.title || selectedItem.filename} 
+                    className="max-w-full max-h-[460px] w-auto h-auto object-contain rounded" 
+                    onError={(e) => {
+                      // If public URL fails due to privacy, stream through admin endpoint
+                      fetchMediaBlobUrl(selectedItem.id).then((url) => {
+                        (e.target as HTMLImageElement).src = url
+                      }).catch(() => {
+                        // ignore
+                      })
                     }}
                   />
-
-                  {isEditingImage && cropScale < 100 && (
-                    <div 
-                      className="absolute border-2 border-dashed border-primary bg-primary/10 pointer-events-none transition-all duration-200"
-                      style={{
-                        width: `${cropScale}%`,
-                        height: cropAspect === "1:1" ? `${cropScale}%` : cropAspect === "4:3" ? `${cropScale * 0.75}%` : cropAspect === "16:9" ? `${cropScale * 0.5625}%` : `${cropScale}%`,
-                        maxHeight: "95%",
-                        maxWidth: "95%"
-                      }}
-                    >
-                      <Badge className="absolute top-1 left-1 bg-primary text-primary-foreground text-[9px] py-0 px-1">
-                        Crop Area ({cropAspect})
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
 
-            {/* ── IMAGE EDITING & CROP TOOLBAR ─────────────────────────────────── */}
-            {selectedItem.type === "image" && isEditingImage && (
-              <div className="p-3.5 rounded-lg border bg-muted/30 flex flex-col gap-3 text-xs animate-fade-in">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <span className="font-semibold flex items-center gap-1.5">
-                    <Crop className="h-4 w-4 text-primary" /> Aspect Ratio Cropping & Image Editing
+            {/* Provider and Metadata */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20 text-xs">
+              <div className="grid gap-1">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1">
+                  <UserRoundCog className="h-3.5 w-3.5 text-primary" /> Associated Provider
+                </span>
+                <span className="font-medium text-foreground">
+                  {getProviderName(selectedItem.provider_id)}
+                </span>
+              </div>
+
+              <div className="grid gap-1">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1">
+                  <Globe className="h-3.5 w-3.5 text-emerald-500" /> Public Website URL
+                </span>
+                {selectedItem.is_public_website_eligible ? (
+                  <span className="font-mono text-emerald-500 truncate" title={selectedItem.url}>
+                    {selectedItem.url}
                   </span>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
-                    onClick={resetEditorParams}
-                  >
-                    <Undo className="h-3 w-3" /> Reset All
-                  </Button>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                    <Crop className="h-3 w-3" /> Aspect Ratio Crop Presets:
-                  </Label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Button 
-                      variant={cropAspect === "free" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("free")}
-                    >
-                      Freeform
-                    </Button>
-                    <Button 
-                      variant={cropAspect === "1:1" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("1:1")}
-                    >
-                      1:1 (Square)
-                    </Button>
-                    <Button 
-                      variant={cropAspect === "4:3" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("4:3")}
-                    >
-                      4:3 (Photo)
-                    </Button>
-                    <Button 
-                      variant={cropAspect === "16:9" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("16:9")}
-                    >
-                      16:9 (Widescreen)
-                    </Button>
-                    <Button 
-                      variant={cropAspect === "3:4" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("3:4")}
-                    >
-                      3:4 (Portrait)
-                    </Button>
-                    <Button 
-                      variant={cropAspect === "9:16" ? "default" : "outline"} 
-                      size="sm" 
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setCropAspect("9:16")}
-                    >
-                      9:16 (Story)
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t">
-                  <div className="grid gap-1">
-                    <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
-                      <span>Crop Frame Size</span>
-                      <span>{cropScale}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="40" 
-                      max="100" 
-                      value={cropScale}
-                      onChange={(e) => setCropScale(Number(e.target.value))}
-                      className="w-full accent-primary h-1.5 rounded bg-muted cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="grid gap-1">
-                    <Label className="text-[11px] font-medium text-muted-foreground">Crop Position Alignment</Label>
-                    <Select value={cropPosition} onValueChange={(val: any) => setCropPosition(val)}>
-                      <SelectTrigger className="h-7 text-xs bg-card" aria-label="Crop position alignment">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="center">Center</SelectItem>
-                        <SelectItem value="top">Top Focus</SelectItem>
-                        <SelectItem value="bottom">Bottom Focus</SelectItem>
-                        <SelectItem value="left">Left Focus</SelectItem>
-                        <SelectItem value="right">Right Focus</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setRotation((prev) => (prev - 90) % 360)}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> Rotate -90°
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setRotation((prev) => (prev + 90) % 360)}
-                  >
-                    <RotateCw className="h-3.5 w-3.5" /> Rotate +90°
-                  </Button>
-                  <Button 
-                    variant={flipH ? "secondary" : "outline"} 
-                    size="sm" 
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setFlipH(!flipH)}
-                  >
-                    <FlipHorizontal className="h-3.5 w-3.5" /> Flip Horiz
-                  </Button>
-                  <Button 
-                    variant={flipV ? "secondary" : "outline"} 
-                    size="sm" 
-                    className="h-7 text-xs gap-1"
-                    onClick={() => setFlipV(!flipV)}
-                  >
-                    <FlipVertical className="h-3.5 w-3.5" /> Flip Vert
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t">
-                  <div className="grid gap-1">
-                    <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
-                      <span className="flex items-center gap-1"><Sun className="h-3 w-3" /> Brightness</span>
-                      <span>{brightness}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="50" 
-                      max="150" 
-                      value={brightness}
-                      onChange={(e) => setBrightness(Number(e.target.value))}
-                      className="w-full accent-primary h-1.5 rounded bg-muted cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="grid gap-1">
-                    <div className="flex justify-between text-[11px] font-medium text-muted-foreground">
-                      <span className="flex items-center gap-1"><Contrast className="h-3 w-3" /> Contrast</span>
-                      <span>{contrast}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="50" 
-                      max="150" 
-                      value={contrast}
-                      onChange={(e) => setContrast(Number(e.target.value))}
-                      className="w-full accent-primary h-1.5 rounded bg-muted cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-7 text-xs"
-                    onClick={() => setIsEditingImage(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={handleSaveImageEdits}
-                    disabled={isSavingEdits}
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    <span>{isSavingEdits ? "Applying Crop & Edits..." : "Apply Crop & Save"}</span>
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/20">
-              <div className="grid gap-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <UserRoundCog className="h-3.5 w-3.5 text-primary" /> Service Provider Assignment
-                </Label>
-                <Select 
-                  value={selectedItem.providerId || "none"} 
-                  onValueChange={(val) => handleUpdateItemAssignment(selectedItem.id, "providerId", val)}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-card" aria-label="Service provider assignment">
-                    <SelectValue placeholder="Assign Provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {providers.map(p => (
-                      <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                  <Folder className="h-3.5 w-3.5 text-primary" /> Library / Album Assignment
-                </Label>
-                <Select 
-                  value={selectedItem.albumId || "none"} 
-                  onValueChange={(val) => handleUpdateItemAssignment(selectedItem.id, "albumId", val)}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-card" aria-label="Library / album assignment">
-                    <SelectValue placeholder="Assign Album" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned (Root)</SelectItem>
-                    {albums.map(a => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                ) : (
+                  <span className="text-muted-foreground italic">
+                    Not public (URL inactive until marked eligible)
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 border-t pt-3">
+            {/* Private Notes Section */}
+            <div className="flex flex-col gap-2 border-t pt-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-primary" />
-                  Text Communication & Staff Notes ({selectedItem.notes.length})
+                  Internal / Clinical Notes
                 </h3>
+                <Badge variant="outline" className="text-[10px] text-muted-foreground border-slate-700">
+                  <Lock className="h-2.5 w-2.5 mr-1" /> Confidential
+                </Badge>
               </div>
 
-              <div className="flex flex-col gap-2.5 max-h-52 overflow-y-auto pr-1">
-                {selectedItem.notes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic p-3 border border-dashed rounded text-center">
-                    No communication notes attached yet. Use the field below to add instructions or notes for this media item.
-                  </p>
-                ) : (
-                  selectedItem.notes.map((note) => (
-                    <div key={note.id} className="p-3 rounded-lg bg-card border text-xs flex flex-col gap-1 shadow-2xs">
-                      <div className="flex items-center justify-between font-medium">
-                        <span className="text-primary">{note.author}</span>
-                        <span className="text-[10px] text-muted-foreground">{note.timestamp}</span>
-                      </div>
-                      <p className="text-foreground leading-relaxed whitespace-pre-wrap">{note.text}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2 mt-1">
-                <Textarea 
-                  placeholder="Write a message or clinical note regarding this media asset..."
-                  value={newNoteText}
-                  onChange={(e) => setNewNoteText(e.target.value)}
-                  className="text-xs resize-none"
-                  rows={2}
-                />
-                <Button 
-                  size="sm" 
-                  onClick={handleAddNote} 
-                  disabled={!newNoteText.trim()}
-                  className="self-end gap-1.5 text-xs"
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Post Communication Note
-                </Button>
-              </div>
+              {selectedItem.notes ? (
+                <div className="p-3 rounded-lg bg-card border text-xs whitespace-pre-wrap leading-relaxed">
+                  {selectedItem.notes}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic p-3 border border-dashed rounded text-center">
+                  No internal notes attached to this media asset.
+                </p>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                Notes are confidential and strictly excluded from assistant tool context and public website rendering.
+              </p>
             </div>
 
             <DialogFooter className="border-t pt-3 flex items-center justify-between sm:justify-between w-full">
@@ -2071,9 +1730,11 @@ export default function MediaPage() {
                 variant="destructive" 
                 size="sm" 
                 onClick={() => handleDeleteItem(selectedItem.id)} 
+                disabled={deletingId === selectedItem.id}
                 className="gap-1.5 text-xs"
               >
-                <Trash2 className="h-3.5 w-3.5" /> Delete Asset
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{deletingId === selectedItem.id ? "Deleting..." : "Delete Asset"}</span>
               </Button>
 
               <div className="flex items-center gap-2">
@@ -2090,9 +1751,8 @@ export default function MediaPage() {
                   size="sm" 
                   onClick={() => {
                     const a = document.createElement("a")
-                    a.href = selectedItem.url
-                    a.download = selectedItem.title
-                    a.target = "_blank"
+                    a.href = getAdminMediaStreamUrl(selectedItem.id)
+                    a.download = selectedItem.filename
                     a.click()
                   }}
                   className="gap-1.5 text-xs"
