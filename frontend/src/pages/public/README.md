@@ -98,7 +98,15 @@ frontend/src/pages/
 
 ---
 
-## 6. Verification & Testing Commands
+## 6. Known Issues, Edge Cases & Outstanding Work
+
+- **Live Subdomain DNS Propagation**: Custom branded domains require wildcard reverse-proxy CNAME propagation before custom DNS routing resolves.
+- **Browser Location Denial Fallback**: When visitors deny browser geolocation in the directory, the interface gracefully degrades to suburb/postcode input.
+- **Single-Use Invitation Expiry**: Expired tokens (>7 days) display a helpful expired notification rather than a generic 400 error.
+
+---
+
+## 7. Verification & Testing Commands
 
 To run contract tests and verify frontend builds:
 
