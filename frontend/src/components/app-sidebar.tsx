@@ -121,14 +121,24 @@ function NavigationItem({ item, onNavigate }: { item: NavItem; onNavigate: () =>
 export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar()
   const { enabledModules } = useTenantModules()
-  const { role, isProvider } = useAuth()
+  const { role, isProvider, isPlatformOwner } = useAuth()
 
   const filteredNavigation = useMemo(() => {
     if (isProvider || role === 'provider') {
       return providerNavigation
     }
-    return filterNavigationByModules(navigation, enabledModules)
-  }, [isProvider, role, enabledModules])
+    const moduleFiltered = filterNavigationByModules(navigation, enabledModules)
+    if (isPlatformOwner) {
+      return moduleFiltered
+    }
+    return moduleFiltered
+      .filter((section) => !section.platformOnly)
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.platformOnly),
+      }))
+      .filter((section) => section.items.length > 0)
+  }, [isProvider, role, enabledModules, isPlatformOwner])
 
   const closeMobileNavigation = () => {
     if (isMobile) setOpenMobile(false)

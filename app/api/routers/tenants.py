@@ -22,6 +22,7 @@ from ...models.audit import AuditLog
 from ...schemas.tenant import (
     TenantCreate,
     TenantResponse,
+    TenantListResponse,
     TenantOut,
     TenantSuspendRequest,
 )
@@ -145,6 +146,23 @@ def create_tenant(
     tenant_out = TenantOut.model_validate(tenant)
     tenant_out.invitation_token = invitation_token
     return TenantResponse(ok=True, data=tenant_out)
+
+
+@router.get("", response_model=TenantListResponse)
+@router.get("/", response_model=TenantListResponse)
+def list_tenants(
+    platform_owner: User = Depends(require_platform_owner),
+    db: Session = Depends(get_db),
+):
+    """List all tenants in the system.
+    
+    Strictly protected: requires platform owner privileges.
+    """
+    tenants = db.query(Tenant).order_by(Tenant.id.desc()).all()
+    return TenantListResponse(
+        ok=True,
+        data=[TenantOut.model_validate(t) for t in tenants],
+    )
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)

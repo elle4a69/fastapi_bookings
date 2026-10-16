@@ -85,3 +85,9 @@ class TenantOut(TenantInDBBase):
 class TenantResponse(BaseModel):
     ok: bool
     data: TenantOut
+
+
+class TenantListResponse(BaseModel):
+    ok: bool
+    data: List[TenantOut]
+

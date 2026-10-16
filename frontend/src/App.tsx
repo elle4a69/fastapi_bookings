@@ -51,6 +51,7 @@ const BusinessSettings = lazy(() => import("@/pages/admin/settings/business"))
 const TenantModulesPage = lazy(() => import("@/pages/admin/settings/modules"))
 const PlanBillingPage = lazy(() => import("@/pages/admin/plan-billing"))
 const PlatformBillingConsolePage = lazy(() => import("@/pages/admin/platform-billing-console"))
+const TenantsPage = lazy(() => import("@/pages/admin/tenants"))
 const WebhooksSettings = lazy(() => import("@/pages/admin/settings/webhooks"))
 const PluginsSettings = lazy(() => import("@/pages/admin/settings/plugins"))
 const GDPRPage = lazy(() => import("@/pages/admin/compliance/gdpr"))
@@ -64,6 +65,7 @@ const WebsiteBuilderPage = lazy(() => import("@/pages/admin/website"))
 const PublicWebsitePage = lazy(() => import("@/pages/public/website-page"))
 const UmbrellaDirectoryPage = lazy(() => import("@/pages/directory/umbrella-directory-page"))
 const LoginPage = lazy(() => import("@/pages/login"))
+const SignupPage = lazy(() => import("@/pages/public/signup-page"))
 
 // Provider self-service portal pages
 const MySchedulePage = lazy(() => import("@/pages/admin/provider/my-schedule"))
@@ -210,6 +212,7 @@ function App() {
                       route.path === '/admin/settings/modules' ? <TenantModulesPage /> :
                       route.path === '/admin/settings/plan-billing' || route.path === '/admin/plan-billing' ? <PlanBillingPage /> :
                       route.path === '/admin/platform-billing' ? <PlatformBillingConsolePage /> :
+                      route.path === '/admin/tenants' ? <TenantsPage /> :
                       route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
                       route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
                       route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
@@ -237,6 +240,7 @@ function App() {
                 <Route path="/admin/settings/plan-billing" element={<PlanBillingPage />} />
                 <Route path="/admin/plan-billing" element={<PlanBillingPage />} />
                 <Route path="/admin/platform-billing" element={<PlatformBillingConsolePage />} />
+                <Route path="/admin/tenants" element={<TenantsPage />} />
                 <Route path="/admin/onboarding" element={<Navigate to="/admin/settings/business" replace />} />
                 <Route path="/admin/website" element={<WebsiteBuilderPage />} />
                 <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />
@@ -287,6 +291,16 @@ function App() {
             <Route path="/site" element={<PublicWebsitePage />} />
             <Route path="/site/:subdomain" element={<PublicWebsitePage />} />
             <Route path="/directory" element={<UmbrellaDirectoryPage />} />
+
+            {/* Public Self-Service Sign-Up, Invitation Acceptance & Pricing */}
+            <Route path="/join" element={<SignupPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/register" element={<SignupPage />} />
+            <Route path="/pricing" element={<SignupPage defaultTab="pricing" />} />
+            <Route path="/invite" element={<SignupPage />} />
+            <Route path="/invite/accept" element={<SignupPage />} />
+            <Route path="/invitations/accept" element={<SignupPage />} />
+            <Route path="/onboarding" element={<Navigate to="/join" replace />} />
 
             <Route path="/book/*" element={<PublicBookingPage />} />
             <Route path="/book" element={<PublicBookingPage />} />

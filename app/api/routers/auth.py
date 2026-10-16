@@ -5,11 +5,13 @@ administrative and public access. Administrative tokens include the
 user's ID and role, while public tokens encode only the tenant subdomain.
 """
 
+import logging
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..deps import get_db, get_current_admin, get_current_tenant, get_current_user
@@ -503,6 +505,224 @@ def accept_invitation(
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "tenant_id": user.tenant_id,
+                "tenant_subdomain": tenant.subdomain,
+            }
+        }
+    }
+
+
+@router.get("/auth/invitations/{token}", tags=["auth"])
+@router.get("/invitations/{token}", tags=["auth"])
+def get_invitation_details(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """Retrieve public metadata for an invitation token."""
+    invitation = (
+        db.query(TenantInvitation)
+        .filter(TenantInvitation.token == token.strip())
+        .first()
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation token not found."
+        )
+
+    is_expired = _is_expired(invitation.expires_at)
+    tenant = db.query(Tenant).filter(Tenant.id == invitation.tenant_id).first()
+    tenant_name = tenant.name if tenant else "Workspace"
+    tenant_subdomain = tenant.subdomain if tenant else ""
+    is_active = tenant and getattr(tenant, "status", "active") == "active"
+
+    return {
+        "ok": True,
+        "data": {
+            "token": invitation.token,
+            "email": invitation.email,
+            "role": invitation.role,
+            "status": "expired" if is_expired else invitation.status,
+            "is_valid": invitation.status == "pending" and not is_expired and is_active,
+            "tenant_id": invitation.tenant_id,
+            "tenant_name": tenant_name,
+            "tenant_subdomain": tenant_subdomain,
+            "expires_at": invitation.expires_at.isoformat() if invitation.expires_at else None,
+        }
+    }
+
+
+@router.get("/public/check-subdomain", tags=["public"])
+def check_subdomain_availability(
+    subdomain: str = Query(..., min_length=2, max_length=50),
+    db: Session = Depends(get_db),
+):
+    """Check if a tenant subdomain slug is available."""
+    normalized = subdomain.lower().strip()
+    reserved = {"admin", "api", "app", "dashboard", "billing", "portal", "system", "auth", "static", "docs"}
+    if normalized in reserved:
+        return {"ok": True, "data": {"subdomain": normalized, "available": False, "reason": "reserved"}}
+
+    exists = db.query(Tenant).filter(Tenant.subdomain == normalized).first()
+    return {
+        "ok": True,
+        "data": {
+            "subdomain": normalized,
+            "available": exists is None,
+            "reason": "already_taken" if exists else "available"
+        }
+    }
+
+
+class PublicSignupRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100, description="Business or workspace name")
+    subdomain: str = Field(..., min_length=2, max_length=50, description="Unique subdomain slug")
+    email: str = Field(..., description="Owner email address")
+    password: str = Field(..., min_length=6, description="Password for owner account")
+    first_name: Optional[str] = "Owner"
+    last_name: Optional[str] = ""
+    subscription_tier: Optional[str] = "starter"
+    billing_cycle: Optional[str] = "monthly"
+    phone: Optional[str] = None
+
+
+@router.post("/public/signup", response_model=TokenResponse, tags=["public"])
+def public_signup(
+    body: PublicSignupRequest,
+    db: Session = Depends(get_db),
+):
+    """Self-service registration for a new tenant and founding owner account."""
+    subdomain_slug = body.subdomain.lower().strip()
+
+    # 1. Enforce reserved and uniqueness checks
+    reserved = {"admin", "api", "app", "dashboard", "billing", "portal", "system", "auth", "static", "docs"}
+    if subdomain_slug in reserved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Subdomain '{subdomain_slug}' is a reserved system keyword."
+        )
+
+    existing_tenant = db.query(Tenant).filter(Tenant.subdomain == subdomain_slug).first()
+    if existing_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Subdomain '{subdomain_slug}' is already taken. Please choose another."
+        )
+
+    # 2. Determine tier and addon quota
+    tier = body.subscription_tier.lower() if body.subscription_tier in {"starter", "growth", "unlimited"} else "starter"
+    quota_map = {"starter": 0, "growth": 3, "unlimited": 999}
+    addon_quota = quota_map.get(tier, 0)
+
+    # Enabled modules based on tier
+    enabled_modules = ["dashboard", "calendar", "bookings", "website"]
+    if tier in {"growth", "unlimited"}:
+        enabled_modules.extend(["sms_assistant", "locations", "providers", "multiple_providers", "categories"])
+    if tier == "unlimited":
+        enabled_modules.extend(["products", "addons", "packages", "relationship_matrix", "finance_invoicing", "media", "booking_forms", "reviews", "calcom_scheduling"])
+
+    tenant = Tenant(
+        name=body.name.strip(),
+        subdomain=subdomain_slug,
+        status="active",
+        subscription_tier=tier,
+        addon_quota=addon_quota,
+        enabled_modules=enabled_modules,
+        email=body.email.lower().strip(),
+        phone=body.phone,
+    )
+    db.add(tenant)
+    db.flush()
+
+    # 3. Create founding owner user
+    owner_user = User(
+        tenant_id=tenant.id,
+        login=body.email.lower().strip(),
+        email=body.email.lower().strip(),
+        password_hash=get_password_hash(body.password),
+        role="owner",
+        first_name=body.first_name or "Owner",
+        last_name=body.last_name or "",
+        is_active=True,
+    )
+    db.add(owner_user)
+    db.flush()
+
+    # 4. Initialize BillingAccount for tenant
+    try:
+        from ...models.platform_billing import BillingAccount, SubscriptionProjection
+        billing_account = BillingAccount(
+            tenant_id=tenant.id,
+            flexprice_customer_id=f"cust_{tenant.subdomain}_{secrets.token_hex(4)}",
+            billing_state="active",
+        )
+        db.add(billing_account)
+        db.flush()
+
+        # Create trial projection
+        now_utc = datetime.now(timezone.utc)
+        trial_sub = SubscriptionProjection(
+            tenant_id=tenant.id,
+            external_subscription_id=f"sub_{tenant.subdomain}_{secrets.token_hex(4)}",
+            plan_id=tier,
+            plan_version=1,
+            status="trialing",
+            trial_end=now_utc + timedelta(days=14),
+            current_period_start=now_utc,
+            current_period_end=now_utc + timedelta(days=14),
+            last_event_timestamp=now_utc,
+            last_event_sequence=0,
+        )
+        db.add(trial_sub)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Billing account init skipped or deferred: %s", exc)
+
+    # 5. Audit Log
+    try:
+        from ...models.audit import AuditLog
+        audit = AuditLog(
+            tenant_id=tenant.id,
+            user_id=owner_user.id,
+            action="tenant_self_signup",
+            target_type="tenant",
+            target_id=tenant.id,
+            details=f"Self-service tenant created for '{tenant.name}' ({tenant.subdomain}) on tier '{tier}' with owner '{owner_user.email}'.",
+            timestamp=datetime.utcnow(),
+        )
+        db.add(audit)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Audit log write skipped: %s", exc)
+
+    db.commit()
+    db.refresh(tenant)
+    db.refresh(owner_user)
+
+    # 6. Issue access token
+    token = create_access_token({
+        "sub": str(owner_user.id),
+        "role": owner_user.role,
+        "provider_id": owner_user.provider_id,
+        "tenant_id": owner_user.tenant_id,
+    })
+
+    return {
+        "ok": True,
+        "data": {
+            "access_token": token,
+            "token_type": "bearer",
+            "tenant": {
+                "id": tenant.id,
+                "name": tenant.name,
+                "subdomain": tenant.subdomain,
+                "subscription_tier": tenant.subscription_tier,
+            },
+            "user": {
+                "id": owner_user.id,
+                "login": owner_user.login,
+                "email": owner_user.email,
+                "role": owner_user.role,
+                "first_name": owner_user.first_name,
+                "last_name": owner_user.last_name,
+                "tenant_id": owner_user.tenant_id,
                 "tenant_subdomain": tenant.subdomain,
             }
         }

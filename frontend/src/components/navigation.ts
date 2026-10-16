@@ -28,6 +28,7 @@ import {
   UserRoundCogIcon,
   WrenchIcon,
   Code2,
+  Building2,
 } from "lucide-react"
 
 export type NavItem = {
@@ -35,12 +36,14 @@ export type NavItem = {
   url?: string
   icon: LucideIcon
   moduleKey?: string
-  children?: Array<{ title: string; url: string; moduleKey?: string }>
+  platformOnly?: boolean
+  children?: Array<{ title: string; url: string; moduleKey?: string; platformOnly?: boolean }>
 }
 
 export type NavSection = {
   label: string
   moduleKey?: string
+  platformOnly?: boolean
   items: NavItem[]
 }
 
@@ -175,10 +178,17 @@ export const navigation: NavSection[] = [
     ],
   },
   {
+    label: "Platform Control Plane",
+    platformOnly: true,
+    items: [
+      { title: "Tenants", url: "/admin/tenants", icon: Building2, platformOnly: true },
+      { title: "Platform Billing", url: "/admin/platform-billing", icon: LandmarkIcon, platformOnly: true },
+    ],
+  },
+  {
     label: "Compliance & System",
     items: [
       { title: "Engineering Cockpit", url: "/admin/coding-cockpit", icon: Code2 },
-      { title: "Platform Billing", url: "/admin/platform-billing", icon: LandmarkIcon },
       { title: "Telemetry", url: "/admin/telemetry", icon: Activity },
       { title: "GDPR", url: "/admin/compliance/gdpr", icon: ShieldCheckIcon },
       { title: "Audit Log", url: "/admin/audit", icon: ClipboardCheckIcon },

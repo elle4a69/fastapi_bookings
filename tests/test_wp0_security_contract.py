@@ -126,6 +126,16 @@ def test_tenant_creation_restricted_to_platform_owner(client: TestClient, db_ses
     audit = db_session.query(AuditLog).filter(AuditLog.target_id == data["id"], AuditLog.action == "tenant_created").first()
     assert audit is not None
 
+    # 4. List tenants: platform owner -> 200 with list; non-platform owner -> 403
+    res_list_unauth = client.get("/api/tenants")
+    assert res_list_unauth.status_code == 401
+    res_list_tenant = client.get("/api/tenants", headers=tenant_owner_headers)
+    assert res_list_tenant.status_code == 403
+    res_list_platform = client.get("/api/tenants", headers=platform_headers)
+    assert res_list_platform.status_code == 200
+    tenants_list = res_list_platform.json()["data"]
+    assert any(t["subdomain"] == "new-alpha-clinic" for t in tenants_list)
+
 
 # ---------------------------------------------------------------------------
 # 2. Tenant Lifecycle (Suspend & Reactivate)

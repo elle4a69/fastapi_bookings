@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState, useCallback } from "react"
-import { Navigate, useLocation, useNavigate } from "react-router-dom"
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom"
 import { ShieldCheck, MessageSquare, ChevronDown, ChevronUp, KeyRound, Loader2 } from "lucide-react"
 
 import {
@@ -351,16 +351,24 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Quick SSO status info footer */}
-          <div className="pt-2 text-center text-xs text-muted-foreground">
-            <button
-              type="button"
-              onClick={() => setShowTokenTester((prev) => !prev)}
-              className="inline-flex items-center gap-1 hover:underline text-muted-foreground/80"
-            >
-              <span>Single Sign-On (SSO) & Developer Tools</span>
-              {showTokenTester ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            </button>
+          {/* Quick SSO status info and Sign Up footer */}
+          <div className="pt-3 text-center text-xs text-muted-foreground border-t border-border/50 space-y-2">
+            <p>
+              New practice or business?{" "}
+              <Link to="/join" className="font-semibold text-primary hover:underline">
+                Create Workspace (14-Day Free Trial) →
+              </Link>
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTokenTester((prev) => !prev)}
+                className="inline-flex items-center gap-1 hover:underline text-muted-foreground/80 text-[11px]"
+              >
+                <span>Single Sign-On (SSO) & Developer Tools</span>
+                {showTokenTester ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -22,6 +22,8 @@ from playwright.sync_api import sync_playwright, Response, ConsoleMessage
 
 DEFAULT_ROUTES = [
     "/",
+    "/join",
+    "/pricing",
     "/admin/coding-cockpit",
     "/admin/sms-assistant",
     "/admin/onboarding",
@@ -29,6 +31,7 @@ DEFAULT_ROUTES = [
     "/admin/calendar",
     "/admin/plan-billing",
     "/admin/platform-billing",
+    "/admin/tenants",
 ]
 
 # Allowlisted ignorable network requests (e.g. external analytics or 3rd party font 304/404 if any)
