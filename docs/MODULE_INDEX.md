@@ -45,6 +45,7 @@ The Module Index acts as an authoritative directory for engineers and autonomous
 | `frontend/src/pages/admin/assistant-studio/` | Frontend Admin Assistant Studio | `index.tsx`, `types.ts`, `assistant_studio.py` | `.venv\Scripts\python.exe -m pytest tests/test...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/assistant-studio/README.md) |
 | `frontend/src/pages/admin/business-assistant/` | Frontend Admin Business Assistant | `index.tsx`, `conversation.tsx`, `assistant-drawer.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/business-assistant/README.md) |
 | `frontend/src/pages/admin/catalog/` | Frontend Admin Catalog & Services | `services.tsx`, `providers.tsx`, `locations.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/catalog/README.md) |
+| `frontend/src/pages/admin/codex-supervisor/` | Frontend Administration Views | `SupervisorPage.tsx`, `api.ts`, `SupervisorShell.tsx` | `npm test` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/codex-supervisor/README.md) |
 | `frontend/src/pages/admin/coding-cockpit/` | Frontend Administration Views | `index.tsx`, `types.ts`, `CodingCockpitPage.tsx` | `python -c "import subprocess; raise SystemExi...` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/coding-cockpit/README.md) |
 | `frontend/src/pages/admin/finance/` | Frontend Admin Finance & Billing | `invoices.tsx`, `payments.tsx`, `promotions.tsx` | `npm run build` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/finance/README.md) |
 | `frontend/src/pages/admin/gpt-live/` | Frontend Administration Views | `index.tsx`, `use-gpt-live.ts`, `protocol.ts` | `npm test -- --test-name-pattern="GPT-Live"` | **Compliant (Rule 10)** | [README.md](frontend/src/pages/admin/gpt-live/README.md) |
@@ -253,6 +254,12 @@ The Admin Schedule module owns: - Weekly recurring working hours template config
 
 ### 3.21 Frontend Administration Views
 
+#### [Development Supervisor V2 UI](frontend/src/pages/admin/codex-supervisor/README.md) (`frontend/src/pages/admin/codex-supervisor`)
+This is the ground-up, read-only V2 Development Supervisor at `/admin/coding-cockpit-v2`. It reads the native Control Centre V2 planning facade; it does not replace the legacy coding cockpit or execute work....
+- **Key Files**: `SupervisorPage.tsx`, `api.ts`, `SupervisorShell.tsx`, `SupervisorNav.tsx`, `routeState.ts`
+- **Verification**: `npm test`
+- **Known Debt/Issues**: 1 item(s) logged
+
 #### [Codex Engineering Cockpit](frontend/src/pages/admin/coding-cockpit/README.md) (`frontend/src/pages/admin/coding-cockpit`)
 - **Primary Purpose**: Consolidates the previously split and fragmented "Resident Agent" (with its broken 750px iframe on port 5180, static prompt copy cards, and competitor radar) and "Conversational Coding Studio" into a single, cohesive, mobile-fi...
 - **Key Files**: `index.tsx`, `types.ts`, `CodingCockpitPage.tsx`, `CodexWorkbenchTab.tsx`, `HealthSentinels.tsx`, `StressFuzzer.tsx`, `IssuesStudio.tsx`, `SkillsBrowser.tsx`, `PluginManager.tsx`, `EventStream.tsx`, `residentEventStream.ts`, `client.ts`
@@ -396,4 +403,4 @@ Whenever code is modified, agents and developers MUST update the corresponding m
   python scripts/verify_living_docs.py
   ```
 
-*Catalog generated automatically on 2026-10-15 18:03:42Z by `scripts/index_living_docs.py`.*
+*Catalog generated automatically on 2026-10-16 01:54:57Z by `scripts/index_living_docs.py`.*

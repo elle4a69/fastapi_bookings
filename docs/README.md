@@ -6,6 +6,10 @@ is defined by
 Tenant roles never imply platform authority; provisioning is an offline,
 audited operator action.
 
+The parallel, read-only Development Supervisor V2 frontend is documented in
+[frontend/src/pages/admin/codex-supervisor/README.md](../frontend/src/pages/admin/codex-supervisor/README.md).
+It reads only the native V2 planning facade; server cutover remains `v1_only`.
+
 Welcome to the central documentation index for **FastAPI Bookings**, a high-concurrency, multi-tenant appointment scheduling, provider operations, and autonomous SMS/AI dialogue management system built with Python, FastAPI, SQLAlchemy, and Vite/React.
 
 ---
