@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { getAdminAccessToken, apiClient } from '@/lib/api'
 
-export type UserRole = 'owner' | 'manager' | 'provider' | 'admin'
+export type UserRole = 'owner' | 'manager' | 'provider' | 'admin' | 'platform_owner'
 
 export interface AuthUser {
   id: number
@@ -15,6 +15,7 @@ export interface AuthUser {
   last_name?: string
   avatar_url?: string
   chatwoot_sso_url?: string | null
+  is_platform_owner?: boolean
 }
 
 interface AuthContextValue {
@@ -24,6 +25,7 @@ interface AuthContextValue {
   isOwner: boolean
   isManager: boolean
   isProvider: boolean
+  isPlatformOwner: boolean
   isLoading: boolean
   chatwootSsoUrl: string | null
   refreshUser: () => Promise<void>
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isOwner = role === 'owner' || role === 'admin'
   const isManager = role === 'manager'
   const isProvider = role === 'provider'
+  const isPlatformOwner = Boolean(user?.is_platform_owner || role === 'platform_owner')
   const provider_id = user?.provider_id ?? null
 
   const chatwootSsoUrl = user?.chatwoot_sso_url || (typeof window !== 'undefined' ? localStorage.getItem('chatwoot_sso_url') : null)
@@ -112,11 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isOwner,
       isManager,
       isProvider,
+      isPlatformOwner,
       isLoading,
       chatwootSsoUrl,
       refreshUser: fetchCurrentUser,
     }),
-    [user, role, provider_id, isOwner, isManager, isProvider, isLoading, chatwootSsoUrl, fetchCurrentUser]
+    [user, role, provider_id, isOwner, isManager, isProvider, isPlatformOwner, isLoading, chatwootSsoUrl, fetchCurrentUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -133,6 +137,7 @@ export function useAuth(): AuthContextValue {
       isOwner: true,
       isManager: false,
       isProvider: false,
+      isPlatformOwner: false,
       isLoading: false,
       chatwootSsoUrl: null,
       refreshUser: async () => {},

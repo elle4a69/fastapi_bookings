@@ -166,6 +166,7 @@ export const navigation: NavSection[] = [
         icon: SettingsIcon,
         children: [
           { title: "Business Profile", url: "/admin/settings/business" },
+          { title: "Plan & Billing", url: "/admin/settings/plan-billing" },
           { title: "Modules & App Store", url: "/admin/settings/modules" },
           { title: "Webhooks", url: "/admin/settings/webhooks" },
           { title: "Plugins", url: "/admin/settings/plugins" },
@@ -177,6 +178,7 @@ export const navigation: NavSection[] = [
     label: "Compliance & System",
     items: [
       { title: "Engineering Cockpit", url: "/admin/coding-cockpit", icon: Code2 },
+      { title: "Platform Billing", url: "/admin/platform-billing", icon: LandmarkIcon },
       { title: "Telemetry", url: "/admin/telemetry", icon: Activity },
       { title: "GDPR", url: "/admin/compliance/gdpr", icon: ShieldCheckIcon },
       { title: "Audit Log", url: "/admin/audit", icon: ClipboardCheckIcon },

@@ -27,6 +27,8 @@ DEFAULT_ROUTES = [
     "/admin/onboarding",
     "/admin/settings/business",
     "/admin/calendar",
+    "/admin/plan-billing",
+    "/admin/platform-billing",
 ]
 
 # Allowlisted ignorable network requests (e.g. external analytics or 3rd party font 304/404 if any)

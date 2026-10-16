@@ -48,6 +48,8 @@ const TemplatesPage = lazy(() => import("@/pages/admin/notifications/templates")
 const RemindersPage = lazy(() => import("@/pages/admin/notifications/reminders"))
 const BusinessSettings = lazy(() => import("@/pages/admin/settings/business"))
 const TenantModulesPage = lazy(() => import("@/pages/admin/settings/modules"))
+const PlanBillingPage = lazy(() => import("@/pages/admin/plan-billing"))
+const PlatformBillingConsolePage = lazy(() => import("@/pages/admin/platform-billing-console"))
 const WebhooksSettings = lazy(() => import("@/pages/admin/settings/webhooks"))
 const PluginsSettings = lazy(() => import("@/pages/admin/settings/plugins"))
 const GDPRPage = lazy(() => import("@/pages/admin/compliance/gdpr"))
@@ -205,6 +207,8 @@ function App() {
                       route.path === '/admin/notifications/reminders' ? <RemindersPage /> :
                       route.path === '/admin/settings/business' ? <BusinessSettings /> :
                       route.path === '/admin/settings/modules' ? <TenantModulesPage /> :
+                      route.path === '/admin/settings/plan-billing' || route.path === '/admin/plan-billing' ? <PlanBillingPage /> :
+                      route.path === '/admin/platform-billing' ? <PlatformBillingConsolePage /> :
                       route.path === '/admin/settings/webhooks' ? <WebhooksSettings /> :
                       route.path === '/admin/settings/plugins' ? <PluginsSettings /> :
                       route.path === '/admin/compliance/gdpr' ? <GDPRPage /> :
@@ -229,6 +233,9 @@ function App() {
                 <Route path="/admin/resident-agent" element={<Navigate to="/admin/coding-cockpit" replace />} />
                 <Route path="/admin/coding-studio" element={<Navigate to="/admin/coding-cockpit?tab=workbench" replace />} />
                 <Route path="/admin/settings/modules" element={<TenantModulesPage />} />
+                <Route path="/admin/settings/plan-billing" element={<PlanBillingPage />} />
+                <Route path="/admin/plan-billing" element={<PlanBillingPage />} />
+                <Route path="/admin/platform-billing" element={<PlatformBillingConsolePage />} />
                 <Route path="/admin/onboarding" element={<Navigate to="/admin/settings/business" replace />} />
                 <Route path="/admin/website" element={<WebsiteBuilderPage />} />
                 <Route path="/admin/relationships-matrix" element={<RelationshipsMatrixPage />} />

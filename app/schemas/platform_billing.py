@@ -1,7 +1,7 @@
 """Pydantic schemas for Platform Billing, Subscriptions, and Entitlements (WP2)."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -59,6 +59,12 @@ class TenantSubscriptionOverview(BaseModel):
     billing_account: Optional[BillingAccountRead] = None
     subscription: Optional[SubscriptionProjectionRead] = None
     entitlements: List[EntitlementSnapshotRead] = Field(default_factory=list)
+    plan_name: Optional[str] = None
+    status: Optional[str] = "active"
+    billing_cycle: Optional[str] = "monthly"
+    is_past_due: bool = False
+    usage_quotas: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    capabilities: Dict[str, bool] = Field(default_factory=dict)
 
 
 class PortalSessionCreateRequest(BaseModel):
@@ -111,3 +117,93 @@ class WebhookIngestResponse(BaseModel):
     event_id: str
     message: str
     action_taken: str
+
+
+class ProviderEventInboxRead(BaseModel):
+    """Public read schema for provider webhook event inbox records."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider: str
+    external_event_id: str
+    event_type: str
+    payload_digest: str
+    verified_at: Optional[datetime] = None
+    processing_status: str
+    retry_count: int
+    error_message: Optional[str] = None
+    processed_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class PlatformEntitlementGrantRead(BaseModel):
+    """Public read schema for platform-authorized entitlement overrides."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tenant_id: int
+    tenant_name: Optional[str] = None
+    entitlement_key: str
+    value_type: str
+    granted_value: str
+    expires_at: Optional[datetime] = None
+    reason: str
+    granted_by_user_id: Optional[int] = None
+    is_revoked: bool
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlatformEntitlementGrantCreate(BaseModel):
+    """Payload to issue an explicit, expiring, audited platform grant."""
+    tenant_id: int = Field(..., description="Target tenant ID")
+    entitlement_key: str = Field(..., description="Canonical entitlement key")
+    value_type: str = Field("boolean", description="Type: boolean, numeric, string")
+    granted_value: str = Field(..., description="Value to grant (e.g. 'true' or '50')")
+    expires_at: Optional[datetime] = Field(None, description="Optional expiry timestamp")
+    reason: str = Field(..., min_length=3, description="Mandatory operational audit reason")
+
+
+class PlatformGrantRevokeResponse(BaseModel):
+    """Response returned upon revoking a platform grant."""
+    status: str
+    grant_id: int
+    revoked_at: datetime
+
+
+class PlatformTenantBillingSummary(BaseModel):
+    """High-level summary of a tenant's billing health and plan for platform operators."""
+    model_config = ConfigDict(from_attributes=True)
+
+    tenant_id: int
+    tenant_name: str
+    subdomain: str
+    plan_id: str
+    plan_name: str
+    status: str
+    health: str  # 'healthy', 'warning', 'critical'
+    billing_state: str
+    current_period_end: Optional[datetime] = None
+    is_past_due: bool = False
+    created_at: datetime
+
+
+class PlatformTenantDiagnostics(BaseModel):
+    """Detailed diagnostics for a specific tenant in the platform console."""
+    model_config = ConfigDict(from_attributes=True)
+
+    tenant_id: int
+    tenant_name: str
+    subdomain: str
+    billing_account: Optional[BillingAccountRead] = None
+    subscription: Optional[SubscriptionProjectionRead] = None
+    entitlements: List[EntitlementSnapshotRead] = Field(default_factory=list)
+    active_grants: List[PlatformEntitlementGrantRead] = Field(default_factory=list)
+    recent_events: List[ProviderEventInboxRead] = Field(default_factory=list)
+    usage_summary: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ReconciliationTriggerRequest(BaseModel):
+    """Payload for triggering reconciliation."""
+    tenant_id: Optional[int] = Field(None, description="Optional tenant ID to reconcile")
