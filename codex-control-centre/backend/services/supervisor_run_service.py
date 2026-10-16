@@ -25,6 +25,7 @@ from backend.models.codex import (
 from backend.services.actor_scope import ActorScope
 from backend.services.idempotency_service import utc_now
 from backend.services.worker_manager import worker_manager
+from backend.services.evidence_audit_service import capture_baseline, require_execution_contract
 
 
 CAPABILITY_PROFILE = "development_worker_v1"
@@ -139,6 +140,10 @@ def create_intent(
 ) -> dict[str, object]:
     """Atomically create/consume a server-only grant and one dispatch intent."""
     work, brief, audit, project = _resolved_execution_material(connection, work_package_id, actor)
+    # Legacy planning/run rows have no immutable fixed-code contract and are
+    # deliberately ineligible. This also avoids treating free-text audit scope
+    # as executable acceptance criteria.
+    require_execution_contract(connection, work_package_id=work_package_id, actor=actor)
     active = connection.execute(select(SupervisorRun.__table__.c.id).where(
         SupervisorRun.__table__.c.work_package_id == work_package_id,
         SupervisorRun.__table__.c.tenant_id == actor.tenant_id,
@@ -183,6 +188,10 @@ def create_intent(
         id="dpa_" + uuid.uuid4().hex, run_id=run_id, tenant_id=actor.tenant_id,
         owner_user_id=actor.user_id, attempt_number=1, state="intent_persisted", created_at=now,
     ))
+    # Structural Git identity is captured in the same transaction as the
+    # dispatch intent. A failed preflight rolls the entire intent back, so the
+    # external worker is never reached without a durable baseline.
+    capture_baseline(connection, run_id=run_id, project=dict(project), actor=actor)
     return {"run_id": run_id, "brief_content": str(brief["content"]), "project": dict(project)}
 
 

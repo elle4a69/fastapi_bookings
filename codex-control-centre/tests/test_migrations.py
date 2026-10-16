@@ -103,7 +103,7 @@ def test_fresh_child_migration_url_precedes_ambient_settings(
 
     target_engine = create_engine(_url(target_path))
     try:
-        assert _revision(target_engine) == "005"
+        assert _revision(target_engine) == "006"
     finally:
         target_engine.dispose()
     assert not decoy_path.exists()
@@ -114,7 +114,7 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
     _run_alembic(url, "upgrade", "head")
     engine = create_engine(url)
     try:
-        assert _revision(engine) == "005"
+        assert _revision(engine) == "006"
         tables = set(inspect(engine).get_table_names())
         assert {
             "workspace_boundaries", "system_settings", "schema_adoption_metadata",
@@ -151,7 +151,7 @@ def test_empty_database_upgrades_and_guarded_roundtrip(tmp_path: Path):
         _run_alembic(url, "downgrade", "003")
         assert _revision(engine) == "003"
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "005"
+        assert _revision(engine) == "006"
     finally:
         engine.dispose()
 
@@ -288,6 +288,8 @@ def test_populated_planning_ledger_blocks_004_downgrade(tmp_path: Path):
             )
         result = _run_alembic(url, "downgrade", "003", expect_success=False)
         assert "planning_ledger_downgrade_blocked" in result.stdout
+        # 006 is empty and may safely step down; 005 then blocks before the
+        # populated planning ledger can be discarded.
         assert _revision(engine) == "005"
     finally:
         engine.dispose()
@@ -365,7 +367,7 @@ def test_unversioned_exact_legacy_schema_requires_explicit_adoption(tmp_path: Pa
     try:
         assert _revision(engine) == "001"
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "005"
+        assert _revision(engine) == "006"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"
@@ -465,7 +467,7 @@ def test_versioned_001_adopts_matching_ledger_tables_preserves_data_and_downgrad
                 "INSERT INTO system_settings (key,value) VALUES ('mode','synthetic')"
             )
         _run_alembic(url, "upgrade", "head")
-        assert _revision(engine) == "005"
+        assert _revision(engine) == "006"
         with engine.connect() as connection:
             origins = dict(connection.execute(text(
                 "SELECT asset_key, origin FROM schema_adoption_metadata"

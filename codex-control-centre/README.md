@@ -407,3 +407,16 @@ never stored; replay returns only a safe non-replayable issuance receipt. A
 serialized active-grant predicate also rejects retried issuance while an
 unconsumed, unexpired grant exists; a new explicit confirmation is required
 after expiry.
+
+### WP-EVID-01 evidence and independent-audit boundary
+
+Revision `006` adds an immutable, tenant/owner-scoped evidence foundation for
+V2 runs. A run now needs an approved fixed-code acceptance contract and a
+server-derived structural Git baseline before it can cross the dispatch
+boundary. The ledger stores only opaque SHA-256 structural identities and the
+fixed criterion registry; it intentionally stores no paths, commands, prompts,
+worker events, turn/item material, diffs, logs, raw results, credentials, or
+customer data. Independent-audit requests are fail-closed: without a separate
+host-enforced read-only sandbox attestation they are recorded as
+`sandbox_unavailable`, cannot dispatch an auditor, and cannot produce a
+completion verdict. This package does not supply that sandbox.

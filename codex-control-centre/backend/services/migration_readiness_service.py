@@ -14,8 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend import database
 
 
-EXPECTED_REVISION = "005"
-KNOWN_REVISIONS = {"001", "002", "003", "004", "005"}
+EXPECTED_REVISION = "006"
+KNOWN_REVISIONS = {"001", "002", "003", "004", "005", "006"}
 
 # SHA-256 of whitespace-normalized, lower-cased sqlite_master SQL emitted by the
 # accepted 001 -> 002 -> 003 migration chain. Comparing the complete set and
@@ -68,6 +68,21 @@ EXPECTED_RUN_SCHEMA_HASHES = {
     ("trigger", "trg_supervisor_run_transition_only"): "3b3628750062bd4ae31ab9c8a2063cdefa9841883584790f9ee5dbcd67dadeff",
     ("trigger", "trg_dispatch_attempt_no_delete"): "4dd7c216ffbf071f4c9d3bd5ffbc60f68a1832820887c61e595064a247c8ca8f",
     ("trigger", "trg_dispatch_attempt_transition_only"): "4e84f3be8a11b19a95423b79e7b0f84fc889d3edff257ee8a4dbdaca27e1656d",
+}
+
+# Revision 006 seals structural evidence records. These hashes deliberately
+# cover the exact batch-recreated action ledgers too, not merely table names.
+EXPECTED_EVIDENCE_SCHEMA_HASHES = {
+    ("table", "idempotency_records"): "1e545a6ad04bb88b08b60b2921070b2b52fc36aaf195bc2f41731ed05fef5ad0",
+    ("table", "supervisor_events"): "ed88be9f4457ab2ea63e71ba422e4aea923ce462f07a90e7d973db81efb8993e",
+    ("table", "supervisor_acceptance_contracts"): "be032bc95842304c2bf34f23d0c9d6ba14d77aaa1ce1b18bf371c0a663ec6bda",
+    ("table", "supervisor_run_baselines"): "f2e6383114859cdca6dae285179338e86b5ad032b440b13607bb2530216c2444",
+    ("table", "supervisor_sandbox_attestations"): "baa2d2313e90b7413e8bd5ad3a60b84d298155b359c7d6883fedac307baef9b6",
+    ("table", "supervisor_audit_requests"): "540b5c0d5258e92f0a4796ae22c924e0d9c90696c0de51227905d60aaccef319",
+    ("table", "supervisor_audit_criterion_results"): "d225208a2d96e4451c982c168215dd3e01c03550d1aab3fd62acd0c66419cdd6",
+    ("trigger", "trg_acceptance_contract_scope"): "a1d6edaf041b7029b6bf97acc7cf743e370a923f32160baeb7bca0840d5386df",
+    ("trigger", "trg_baseline_run_scope"): "936980eea4561211ff0cefb8580dd5be9380216f7033325268687d1dd23bdf15",
+    ("trigger", "trg_audit_request_scope"): "5638a622bd7ee4df12fc59ee5b22cb7c8d1dc7bcd4737389f15b99cba85aa620",
 }
 
 EXPECTED_ADOPTION_DIGESTS = {
@@ -259,7 +274,7 @@ def inspect_infrastructure(db_engine: Engine | None = None) -> InfrastructureRea
                 )
             revision = str(revisions[0])
             if revision != EXPECTED_REVISION:
-                if revision in {"001", "002", "003", "004"}:
+                if revision in {"001", "002", "003", "004", "005"}:
                     return InfrastructureReadiness(
                         "migration_required", revision, reason_codes=("revision_behind",)
                     )
@@ -274,11 +289,14 @@ def inspect_infrastructure(db_engine: Engine | None = None) -> InfrastructureRea
             hashes = _schema_hashes(connection)
             required_planning = {"planning_missions", "planning_work_packages", "planning_briefs", "planning_context_checkpoints", "planning_audit_scopes"}
             required_run = {"supervisor_runs", "supervisor_run_start_authorization_grants", "supervisor_dispatch_attempts"}
+            required_evidence = {"supervisor_acceptance_contracts", "supervisor_run_baselines", "supervisor_sandbox_attestations", "supervisor_audit_requests", "supervisor_audit_criterion_results"}
             required_baseline = {key: value for key, value in EXPECTED_SCHEMA_HASHES.items() if key not in {("table", "idempotency_records"), ("table", "supervisor_events")}}
             if (not required_planning.issubset({name for (kind, name) in hashes if kind == "table"}) or
                 not required_run.issubset({name for (kind, name) in hashes if kind == "table"}) or
+                not required_evidence.issubset({name for (kind, name) in hashes if kind == "table"}) or
                 any(hashes.get(key) != value for key, value in required_baseline.items()) or
-                any(hashes.get(key) != value for key, value in EXPECTED_RUN_SCHEMA_HASHES.items()) or
+                any(hashes.get(key) != value for key, value in EXPECTED_RUN_SCHEMA_HASHES.items() if key not in {("table", "idempotency_records"), ("table", "supervisor_events")}) or
+                any(hashes.get(key) != value for key, value in EXPECTED_EVIDENCE_SCHEMA_HASHES.items()) or
                 any(hashes.get(key) != value for key, value in EXPECTED_PLANNING_SCHEMA_HASHES.items())):
                 return InfrastructureReadiness(
                     "migration_required", EXPECTED_REVISION, reason_codes=("schema_mismatch",)

@@ -52,7 +52,7 @@ from backend.services.supervisor_repository import (
     planning_parent_version_in_transaction,
 )
 from backend.services.supervisor_event_service import append_planning_event
-from backend.models.codex import IdempotencyRecord, Project
+from backend.models.codex import IdempotencyRecord, Project, SupervisorRun
 from backend import database
 from backend.services.idempotency_service import terminal_values
 from backend.services.supervisor_run_service import (
@@ -62,7 +62,11 @@ from backend.services.supervisor_run_service import (
     public_run,
     record_launch_outcome,
 )
-from backend.services.supervisor_event_service import append_run_intent_event, append_run_authorization_issued_event
+from backend.services.supervisor_event_service import append_planning_event, append_run_intent_event, append_run_authorization_issued_event
+from backend.services.evidence_audit_service import (
+    create_acceptance_contract, public_audit_request, public_contract,
+    request_independent_audit,
+)
 
 
 router = APIRouter(tags=["Codex Supervisor v2"])
@@ -502,6 +506,88 @@ def list_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depend
     data={"audit_scope":None if not scopes else _planning_output(scopes[0])}; return _success(request,data,headers={"ETag":_etag("audit-scope-v1",data)})
 @router.post("/work-packages/{work_package_id}/audit-scope",responses=PLANNING_MUTATION_RESPONSES,openapi_extra={"x-operator-action":True,"x-action-code":"define_audit_scope","x-action-registry-version":"0.2","x-backend-permission":"planning.define_audit_scope"})
 async def create_audit_scope(work_package_id:str,request:Request,actor:ActorScope=Depends(get_actor_scope))->Response:return await _planning_mutation(request,actor,"define_audit_scope",work_package_id)
+
+
+def _parse_evidence_request(request: Request, raw: bytes, action: str) -> tuple[dict[str, object], str, str]:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise SupervisorHTTPError(415, "unsupported_media_type")
+    key, if_match = request.headers.get("Idempotency-Key"), request.headers.get("If-Match")
+    if not key or not if_match:
+        raise SupervisorHTTPError(428, "precondition_required")
+    try:
+        parsed, payload = uuid.UUID(key), json.loads(raw)
+        if parsed.version != 4 or str(parsed) != key.lower():
+            raise ValueError
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise SupervisorHTTPError(422, "validation_failed")
+    if not isinstance(payload, dict) or set(payload) != {"action", "registry_version", "confirmation"}:
+        raise SupervisorHTTPError(422, "validation_failed")
+    if payload.get("action") != action or payload.get("registry_version") != "1" or payload.get("confirmation") is not True:
+        raise SupervisorHTTPError(422, "validation_failed")
+    return payload, key.lower(), if_match
+
+
+async def _evidence_mutation(request: Request, actor: ActorScope, *, action: str, identifier: str, expected_etag: str, recheck, operation) -> Response:
+    payload, key, if_match = _parse_evidence_request(request, await request.body(), action)
+    fingerprint = hashlib.sha256(canonical_json_bytes({"action": action, "actor_tenant_id": actor.tenant_id, "actor_user_id": actor.user_id, "identifier": identifier, "payload": payload, "route": request.url.path})).hexdigest()
+    reservation = reserve(actor=actor, idempotency_key=key, fingerprint=fingerprint, action_code=action)
+    if reservation.mode == "conflict":
+        raise SupervisorHTTPError(409, "idempotency_conflict")
+    request.state.supervisor_request_id = reservation.request_id
+    if reservation.mode == "replay":
+        return _stored_response(reservation, replay=True)
+    if reservation.mode == "in_progress":
+        return _success(request, {"operation": {"action": action, "state": "in_progress", "retry_after_seconds": 1}}, status_code=202, headers={"Retry-After": "1"}, meta_extra={"idempotency_state": "in_progress"})
+    if if_match != expected_etag:
+        result = __import__("backend.services.idempotency_service", fromlist=["terminalize_failure"]).terminalize_failure(reservation=reservation, code="revision_conflict", status_code=412)
+        return _stored_response(result)
+    try:
+        with database.engine.connect() as connection:
+            from backend.services.idempotency_service import _begin_immediate, verify_live_reservation
+            _begin_immediate(connection)
+            verify_live_reservation(connection, record_id=reservation.record_id, raw_lease_token=reservation.raw_lease_token)
+            # The pre-reservation ETag only protects the happy path. Re-read
+            # the authoritative parent under the immediate transaction before
+            # any append-only insert, so a concurrent mutation becomes a
+            # terminal/replayable 412 rather than a stale success.
+            if recheck(connection) != expected_etag:
+                raise SupervisorHTTPError(412, "revision_conflict")
+            data, project = operation(connection)
+            append_planning_event(connection, project_public_id=str(project["public_id"]), actor=actor, action_code=action, project_version=int(project["version"]), request_id=reservation.request_id, idempotency_key=key)
+            body = canonical_json_bytes({"data": data, "meta": {"request_id": reservation.request_id, "schema_version": "1", "resource_version": 1, "idempotency_state": "succeeded"}})
+            headers = {"Content-Type": "application/json", "ETag": _etag(f"{action}-v1", data), "Cache-Control": "no-store", "X-Request-ID": reservation.request_id}
+            connection.execute(IdempotencyRecord.__table__.update().where(IdempotencyRecord.__table__.c.id == reservation.record_id).values(**terminal_values(status="succeeded", response_status=201, response_body=body, response_headers=headers)))
+            connection.commit()
+            return Response(content=body, status_code=201, media_type="application/json", headers=headers)
+    except SupervisorHTTPError as exc:
+        result = __import__("backend.services.idempotency_service", fromlist=["terminalize_failure"]).terminalize_failure(reservation=reservation, code=exc.code, status_code=exc.status_code)
+        return _stored_response(result)
+
+
+@router.post("/work-packages/{work_package_id}/acceptance-contracts", responses=PLANNING_MUTATION_RESPONSES, openapi_extra={"x-operator-action": True, "x-action-code": "create_acceptance_contract", "x-action-registry-version": "1", "x-backend-permission": "supervisor.create_acceptance_contract"})
+async def create_supervisor_acceptance_contract(work_package_id: str, request: Request, actor: ActorScope = Depends(get_actor_scope)) -> Response:
+    if inspect_infrastructure().state != "ready":
+        raise SupervisorHTTPError(503, "database_migration_required")
+    version = planning_parent_version("create_brief", work_package_id, actor)
+    def operation(connection):
+        row = create_acceptance_contract(connection, work_package_id=work_package_id, actor=actor)
+        project = connection.execute(Project.__table__.select().where(Project.__table__.c.id == row["project_id"])).mappings().one()
+        return {"acceptance_contract": public_contract(row)}, project
+    return await _evidence_mutation(request, actor, action="create_acceptance_contract", identifier=work_package_id, expected_etag=f'"work_package-{version}"', recheck=lambda connection: f'"work_package-{planning_parent_version_in_transaction(connection, "create_brief", work_package_id, actor)}"', operation=operation)
+
+
+@router.post("/runs/{run_id}/audit-requests", responses=PLANNING_MUTATION_RESPONSES, openapi_extra={"x-operator-action": True, "x-action-code": "request_independent_audit", "x-action-registry-version": "1", "x-backend-permission": "supervisor.request_independent_audit"})
+async def request_supervisor_independent_audit(run_id: str, request: Request, actor: ActorScope = Depends(get_actor_scope)) -> Response:
+    if inspect_infrastructure().state != "ready":
+        raise SupervisorHTTPError(503, "database_migration_required")
+    with database.engine.connect() as connection:
+        run = public_run(connection, run_id, actor)
+        project_id = connection.execute(Project.__table__.select().join(SupervisorRun.__table__, Project.__table__.c.id == SupervisorRun.__table__.c.project_id).where(SupervisorRun.__table__.c.id == run_id)).mappings().one()["id"]
+    def operation(connection):
+        row = request_independent_audit(connection, run_id=run_id, actor=actor)
+        project = connection.execute(Project.__table__.select().where(Project.__table__.c.id == project_id)).mappings().one()
+        return {"audit_request": public_audit_request(row)}, project
+    return await _evidence_mutation(request, actor, action="request_independent_audit", identifier=run_id, expected_etag=_etag("supervisor-run-v1", {"run": run}), recheck=lambda connection: _etag("supervisor-run-v1", {"run": public_run(connection, run_id, actor)}), operation=operation)
 
 
 # WP-RUN-01 is intentionally a separate V2 lifecycle.  It does not invoke the

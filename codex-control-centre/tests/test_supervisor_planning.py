@@ -13,11 +13,10 @@ from backend.middleware.v2_errors import SupervisorHTTPError
 from backend.services.supervisor_repository import _safe_text
 
 
-def test_planning_has_no_execution_surface():
-    source = (Path(__file__).resolve().parents[1] / "backend" / "routers" / "v2_supervisor.py").read_text(encoding="utf-8")
-    assert '"/runs' not in source
-    assert '"/dispatch' not in source
-    assert '"/worktrees' not in source
+def test_planning_does_not_expose_worker_material_or_audit_execution_surface():
+    from backend.main import app
+    paths = {route.path for route in app.routes}
+    assert not any("dispatch" in path or "worktrees" in path or "audit-execute" in path for path in paths)
 
 
 @pytest.mark.parametrize("unsafe", [

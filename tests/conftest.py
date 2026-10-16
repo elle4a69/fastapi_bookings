@@ -80,7 +80,7 @@ try:
 finally:
     _codex_revision_connection.close()
 del _codex_revision_connection
-if _codex_revisions != [("005",)]:
+if _codex_revisions != [("006",)]:
     raise RuntimeError("isolated_ccc_migration_revision_invalid")
 
 from app.main import app as fastapi_app

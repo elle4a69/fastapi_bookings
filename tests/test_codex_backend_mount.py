@@ -2,6 +2,7 @@
 
 import pytest
 from pathlib import Path
+import subprocess
 import uuid
 from unittest.mock import AsyncMock, patch
 from sqlalchemy.orm import Session
@@ -24,7 +25,7 @@ def _migrate_isolated_codex_database():
         revisions = connection.exec_driver_sql(
             "SELECT version_num FROM alembic_version"
         ).fetchall()
-    assert revisions == [("005",)]
+    assert revisions == [("006",)]
     yield
     import gc
 
@@ -839,7 +840,7 @@ def test_supervisor_v2_cross_scope_exact_root_is_hidden_and_claim_returns_404(
 def _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch):
     from backend.config import settings as cfg
     repository = tmp_path / "planning-repository"
-    repository.mkdir()
+    repository.mkdir(exist_ok=True)
     project_id = "prj_" + uuid.uuid4().hex[:16]
     monkeypatch.setattr(cfg, "codex_supervisor_configured_project_id", project_id)
     monkeypatch.setattr(cfg, "codex_supervisor_configured_project_root", str(repository))
@@ -1071,12 +1072,23 @@ def test_supervisor_run_requires_explicit_hash_only_one_run_authorization(client
     from backend.routers import v2_supervisor
     from backend.database import engine as codex_engine
 
+    repository = tmp_path / "planning-repository"
+    repository.mkdir(exist_ok=True)
+    for command in (("git", "init"), ("git", "config", "user.email", "synthetic@example.test"), ("git", "config", "user.name", "Synthetic Test"), ("git", "commit", "--allow-empty", "-m", "initial")):
+        subprocess.run(command, cwd=repository, check=True, capture_output=True, text=True)
     project_id, headers = _configure_and_claim_planning_project(client, db_session, tmp_path, monkeypatch)
     mission = _planning_post(client, f"/api/admin/codex/v2/projects/{project_id}/missions", headers, "create_mission", '"project-1"', title="Run plan", summary="Bounded run lifecycle").json()["data"]["mission"]
     work = _planning_post(client, f"/api/admin/codex/v2/missions/{mission['id']}/work-packages", headers, "create_work_package", '"mission-1"', title="Run package", scope="Bounded V2 worker dispatch").json()["data"]["work_package"]
     brief = _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/briefs", headers, "create_brief", '"work_package-1"', content="Implement bounded lifecycle", future_execution_authorization_requirement="requires_authorization").json()["data"]["brief"]
     assert _planning_post(client, f"/api/admin/codex/v2/briefs/{brief['id']}/approve", headers, "approve_brief", '"brief-1"').status_code == 200
     assert _planning_post(client, f"/api/admin/codex/v2/work-packages/{work['id']}/audit-scope", headers, "define_audit_scope", '"work_package-2"', criteria="Tenant isolation", exclusions="No production actions").status_code == 200
+    contract_headers = {**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"work_package-2"'}
+    contract_body = {"action": "create_acceptance_contract", "registry_version": "1", "confirmation": True}
+    contract = client.post(f"/api/admin/codex/v2/work-packages/{work['id']}/acceptance-contracts", headers=contract_headers, json=contract_body)
+    assert contract.status_code == 201, contract.text
+    assert contract.json()["data"]["acceptance_contract"]["criterion_codes"] == ["repository_identity_bound", "baseline_captured", "sandbox_attested"]
+    replayed_contract = client.post(f"/api/admin/codex/v2/work-packages/{work['id']}/acceptance-contracts", headers=contract_headers, json=contract_body)
+    assert replayed_contract.status_code == 201 and replayed_contract.headers["idempotency-replayed"] == "true"
     start_path = f"/api/admin/codex/v2/work-packages/{work['id']}/runs"
     missing = client.post(start_path, headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"work_package-2"'}, json={"action":"start_supervisor_run","registry_version":"0.3","confirmation":True,"grant_token":"missing"})
     assert missing.status_code == 409
@@ -1101,6 +1113,14 @@ def test_supervisor_run_requires_explicit_hash_only_one_run_authorization(client
     assert replay.headers["idempotency-replayed"] == "true"
     run_id = started.json()["data"]["run"]["run_id"]
     assert client.get(f"/api/admin/codex/v2/runs/{run_id}", headers=headers).json()["data"]["run"]["status"] == "dispatch_acknowledged"
+    audit_headers = {**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": client.get(f"/api/admin/codex/v2/runs/{run_id}", headers=headers).headers["etag"]}
+    audit_body = {"action": "request_independent_audit", "registry_version": "1", "confirmation": True}
+    audit = client.post(f"/api/admin/codex/v2/runs/{run_id}/audit-requests", headers=audit_headers, json=audit_body)
+    assert audit.status_code == 201, audit.text
+    assert audit.json()["data"]["audit_request"]["state"] == "sandbox_unavailable"
+    with codex_engine.connect() as connection:
+        outcomes = connection.execute(text("SELECT outcome FROM supervisor_audit_criterion_results ORDER BY criterion_code")).scalars().all()
+    assert outcomes == ["not_evaluated", "not_evaluated", "not_evaluated"]
     reused = client.post(start_path, headers={**headers, "Idempotency-Key": str(uuid.uuid4()), "If-Match": '"work_package-2"'}, json=body)
     assert reused.status_code == 409
     with pytest.raises(IntegrityError, match="run_grant_immutable"):

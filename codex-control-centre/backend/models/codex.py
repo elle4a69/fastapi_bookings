@@ -446,3 +446,73 @@ class SupervisorDispatchAttempt(Base):
         CheckConstraint("tenant_id > 0 AND owner_user_id > 0 AND attempt_number = 1", name="ck_dispatch_attempt_scope"),
         CheckConstraint("state IN ('intent_persisted','acknowledged','dispatch_unknown','rejected')", name="ck_dispatch_attempt_state"),
     )
+
+
+class SupervisorAcceptanceContract(Base):
+    """Immutable fixed-code acceptance contract; never arbitrary audit text."""
+
+    __tablename__ = "supervisor_acceptance_contracts"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False)
+    work_package_id = Column(String, ForeignKey("planning_work_packages.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    audit_scope_id = Column(String, ForeignKey("planning_audit_scopes.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    registry_version = Column(String, nullable=False)
+    criterion_codes = Column(String, nullable=False)
+    criterion_digest = Column(String(64), nullable=False)
+    state = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    approved_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class SupervisorRunBaseline(Base):
+    """Server-derived structural Git baseline; no path, diff, command, or content."""
+
+    __tablename__ = "supervisor_run_baselines"
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("supervisor_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    repository_identity_digest = Column(String(64), nullable=False)
+    head_commit_digest = Column(String(64), nullable=False)
+    tree_digest = Column(String(64), nullable=False)
+    captured_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class SupervisorSandboxAttestation(Base):
+    """Opaque host-issued independent-sandbox attestation, not a worker record."""
+
+    __tablename__ = "supervisor_sandbox_attestations"
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("supervisor_runs.id", ondelete="RESTRICT"), nullable=False)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    sandbox_profile = Column(String, nullable=False)
+    attestation_digest = Column(String(64), nullable=False, unique=True)
+    issued_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class SupervisorAuditRequest(Base):
+    """Durable audit request state. Unavailable is explicit and never a pass."""
+
+    __tablename__ = "supervisor_audit_requests"
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("supervisor_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    tenant_id = Column(Integer, nullable=False)
+    owner_user_id = Column(Integer, nullable=False)
+    contract_id = Column(String, ForeignKey("supervisor_acceptance_contracts.id", ondelete="RESTRICT"), nullable=False)
+    baseline_id = Column(String, ForeignKey("supervisor_run_baselines.id", ondelete="RESTRICT"), nullable=False)
+    state = Column(String, nullable=False)
+    requested_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class SupervisorAuditCriterionResult(Base):
+    __tablename__ = "supervisor_audit_criterion_results"
+    id = Column(String, primary_key=True)
+    audit_request_id = Column(String, ForeignKey("supervisor_audit_requests.id", ondelete="RESTRICT"), nullable=False)
+    criterion_code = Column(String, nullable=False)
+    outcome = Column(String, nullable=False)
+    evidence_digest = Column(String(64), nullable=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False)
