@@ -6,20 +6,20 @@ from .tenant import TravelChargeOrigin
 
 
 class BusinessProfileBase(BaseModel):
-    timezone: str = Field("UTC", description="Business primary timezone")
+    timezone: Optional[str] = Field("UTC", description="Business primary timezone")
     country: Optional[str] = Field(None, description="ISO country code")
     email: Optional[str] = Field(None, description="General contact email")
     phone: Optional[str] = Field(None, description="General contact phone")
     website: Optional[str] = Field(None, description="Business website URL")
-    public_address_visibility: str = Field("visible", description="Visibility of address on public portal")
-    max_advance_days: int = Field(60, description="Horizon/limit for advance bookings in days")
+    public_address_visibility: Optional[str] = Field("visible", description="Visibility of address on public portal")
+    max_advance_days: Optional[int] = Field(60, description="Horizon/limit for advance bookings in days")
     address: Optional[str] = Field(None, description="Physical address of the business")
     latitude: Optional[float] = Field(None, description="Latitude coordinate")
     longitude: Optional[float] = Field(None, description="Longitude coordinate")
     logo_url: Optional[str] = Field(None, description="Business logo image URL")
-    allow_in_call: bool = Field(True, description="Whether business allows in-call bookings")
-    allow_out_call: bool = Field(True, description="Whether business allows out-call bookings")
-    travel_charge_origin: TravelChargeOrigin = Field(
+    allow_in_call: Optional[bool] = Field(True, description="Whether business allows in-call bookings")
+    allow_out_call: Optional[bool] = Field(True, description="Whether business allows out-call bookings")
+    travel_charge_origin: Optional[TravelChargeOrigin] = Field(
         TravelChargeOrigin.ALWAYS_FROM_BASE,
         description="Policy for calculating out-call travel charges",
     )

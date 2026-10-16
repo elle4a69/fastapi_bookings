@@ -283,10 +283,11 @@ def _build_modules_response(tenant: Tenant, db: Optional[Session] = None) -> Ten
         unique_addon_keys.add(canon_key)
     used_addons = len(unique_addon_keys)
 
+    addon_quota = tenant.addon_quota if tenant.addon_quota is not None else 0
     if effective_tier in ("unlimited", "enterprise"):
         available_addons = 999
     else:
-        available_addons = max(0, tenant.addon_quota - used_addons)
+        available_addons = max(0, addon_quota - used_addons)
 
     module_infos = [
         TenantModuleInfo(
@@ -303,7 +304,7 @@ def _build_modules_response(tenant: Tenant, db: Optional[Session] = None) -> Ten
 
     return TenantModulesResponse(
         tier=effective_tier,
-        addon_quota=tenant.addon_quota,
+        addon_quota=addon_quota,
         used_addons=used_addons,
         available_addons=available_addons,
         modules=module_infos,

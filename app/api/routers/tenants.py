@@ -206,7 +206,7 @@ def get_tenant(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found.")
 
-    return TenantResponse(ok=True, data=tenant)
+    return TenantResponse(ok=True, data=TenantOut.model_validate(tenant))
 
 
 @router.post("/{tenant_id}/suspend", response_model=TenantResponse)
@@ -239,7 +239,7 @@ def suspend_tenant(
     db.commit()
     db.refresh(tenant)
 
-    return TenantResponse(ok=True, data=tenant)
+    return TenantResponse(ok=True, data=TenantOut.model_validate(tenant))
 
 
 @router.post("/{tenant_id}/reactivate", response_model=TenantResponse)
@@ -271,7 +271,7 @@ def reactivate_tenant(
     db.commit()
     db.refresh(tenant)
 
-    return TenantResponse(ok=True, data=tenant)
+    return TenantResponse(ok=True, data=TenantOut.model_validate(tenant))
 
 
 @router.post("/{tenant_id}/invitations", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)

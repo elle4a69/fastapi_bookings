@@ -179,14 +179,14 @@ class PlatformTenantBillingSummary(BaseModel):
     tenant_id: int
     tenant_name: str
     subdomain: str
-    plan_id: str
-    plan_name: str
-    status: str
-    health: str  # 'healthy', 'warning', 'critical'
-    billing_state: str
+    plan_id: str = "starter"
+    plan_name: str = "Starter"
+    status: str = "active"
+    health: str = "healthy"  # 'healthy', 'warning', 'critical'
+    billing_state: str = "unconfigured"
     current_period_end: Optional[datetime] = None
     is_past_due: bool = False
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
 
 class PlatformTenantDiagnostics(BaseModel):

@@ -16,25 +16,25 @@ class TenantBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     name: str = Field(..., description="Business name")
     subdomain: str = Field(..., description="Subdomain slug")
-    timezone: str = Field("UTC", description="Business timezone")
+    timezone: Optional[str] = Field("UTC", description="Business timezone")
     country: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
-    public_address_visibility: str = Field("visible")
-    max_advance_days: int = Field(60)
+    public_address_visibility: Optional[str] = Field("visible")
+    max_advance_days: Optional[int] = Field(60)
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
-    allow_in_call: bool = Field(True, description="Whether business allows in-call bookings")
-    allow_out_call: bool = Field(True, description="Whether business allows out-call bookings")
-    travel_charge_origin: TravelChargeOrigin = Field(
+    allow_in_call: Optional[bool] = Field(True, description="Whether business allows in-call bookings")
+    allow_out_call: Optional[bool] = Field(True, description="Whether business allows out-call bookings")
+    travel_charge_origin: Optional[TravelChargeOrigin] = Field(
         TravelChargeOrigin.ALWAYS_FROM_BASE,
         description="Policy for calculating out-call travel charges: ALWAYS_FROM_BASE or ACTUAL_ORIGIN",
     )
     chatwoot_account_id: Optional[int] = Field(None, description="Bound Chatwoot account ID")
-    status: str = Field("active", description="Lifecycle state ('active' or 'suspended')")
+    status: Optional[str] = Field("active", description="Lifecycle state ('active' or 'suspended')")
     suspended_at: Optional[datetime] = Field(None, description="Suspension timestamp")
     suspension_reason: Optional[str] = Field(None, description="Reason for suspension")
 
@@ -71,9 +71,9 @@ class TenantSuspendRequest(BaseModel):
 
 class TenantInDBBase(TenantBase):
     id: int
-    subscription_tier: str
-    addon_quota: int
-    created_at: datetime
+    subscription_tier: Optional[str] = "starter"
+    addon_quota: Optional[int] = 0
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

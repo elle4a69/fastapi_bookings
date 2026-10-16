@@ -7,13 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserBase(BaseModel):
-    company: str = Field(..., description="Company name")
+    company: Optional[str] = Field(None, description="Company name")
     login: str = Field(..., description="Login username")
     role: str = Field("owner", description="Role of the user")
     provider_id: Optional[int] = Field(None, description="Linked provider ID for provider role")
 
 
 class UserCreate(UserBase):
+    company: str = Field(..., description="Company name")
     password: str = Field(..., min_length=6, description="User password")
 
 
@@ -26,8 +27,8 @@ class UserUpdate(BaseModel):
 class UserInDBBase(UserBase):
     id: int
     provider_id: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 

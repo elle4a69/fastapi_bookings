@@ -94,9 +94,17 @@ def get_tenant_subscription(
         .all()
     )
 
-    plan_id = sub_proj.plan_id if sub_proj else (tenant.subscription_tier or "starter")
-    plan_name = plan_id.title()
-    sub_status = sub_proj.status if sub_proj else (billing_acct.billing_state if billing_acct and billing_acct.billing_state != "unconfigured" else "active")
+    plan_id = (sub_proj.plan_id if sub_proj and sub_proj.plan_id else (tenant.subscription_tier or "starter"))
+    plan_name = (plan_id or "starter").title()
+    sub_status = (
+        sub_proj.status
+        if sub_proj and sub_proj.status
+        else (
+            billing_acct.billing_state
+            if billing_acct and billing_acct.billing_state and billing_acct.billing_state != "unconfigured"
+            else "active"
+        )
+    )
     is_past_due = (sub_status == "past_due")
     billing_cycle = "monthly"
     if sub_proj and sub_proj.current_period_start and sub_proj.current_period_end:
@@ -326,8 +334,17 @@ def list_platform_tenants_billing(
             .filter(BillingAccount.tenant_id == t.id)
             .first()
         )
-        plan_id = sub_proj.plan_id if sub_proj else (t.subscription_tier or "starter")
-        sub_status = sub_proj.status if sub_proj else (billing_acct.billing_state if billing_acct and billing_acct.billing_state != "unconfigured" else "active")
+        plan_id = (sub_proj.plan_id if sub_proj and sub_proj.plan_id else (t.subscription_tier or "starter"))
+        plan_name = (plan_id or "starter").title()
+        sub_status = (
+            sub_proj.status
+            if sub_proj and sub_proj.status
+            else (
+                billing_acct.billing_state
+                if billing_acct and billing_acct.billing_state and billing_acct.billing_state != "unconfigured"
+                else "active"
+            )
+        )
         is_past_due = (sub_status == "past_due")
         if is_past_due or sub_status == "cancelled":
             health = "critical"
@@ -342,7 +359,7 @@ def list_platform_tenants_billing(
                 tenant_name=t.name,
                 subdomain=t.subdomain,
                 plan_id=plan_id,
-                plan_name=plan_id.title(),
+                plan_name=plan_name,
                 status=sub_status,
                 health=health,
                 billing_state=billing_acct.billing_state if billing_acct else "unconfigured",
