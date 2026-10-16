@@ -495,3 +495,19 @@ test('Codex cockpit exposes real plugin installation and app-server authorizatio
   assert.ok(storeContent.includes("case 'user_input_resolved':"), 'SSE reducer must reconcile resolved requests')
 })
 
+test('useWorkbenchStore hardens createThread and sendUserMessage against optimistic failure', () => {
+  const storePath = fileURLToPath(new URL('./workbench/store/useWorkbenchStore.ts', import.meta.url))
+  const storeContent = readFileSync(storePath, 'utf8')
+
+  // createThread adopts res.id and rethrows error
+  assert.ok(storeContent.includes('const adoptedThread: Thread = { ...newThread, id: res.id }'), 'createThread must adopt res.id from API')
+  assert.ok(storeContent.includes('threads: prev.threads.filter(t => t.id !== newThreadId)'), 'createThread must roll back optimistic thread on failure')
+  assert.ok(storeContent.includes('throw err'), 'createThread must rethrow error on API failure')
+
+  // sendUserMessage handles creation failure and aborts
+  assert.ok(storeContent.includes('Failed to create thread before sending message:'), 'sendUserMessage must catch thread creation failure')
+  assert.ok(storeContent.includes('Aborting sendUserMessage: No valid thread ID available'), 'sendUserMessage must abort on missing thread ID')
+  assert.ok(storeContent.includes('Error: Unable to start thread:'), 'sendUserMessage must notify operator of failure')
+})
+
+

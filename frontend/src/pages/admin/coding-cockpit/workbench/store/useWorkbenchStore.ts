@@ -1413,13 +1413,24 @@ export function useWorkbenchStore() {
       try {
         const res = await codexApi.createThread({ project_id: targetProjId, title: newThread.title })
         if (res && res.id) {
+          const adoptedThread: Thread = { ...newThread, id: res.id }
           updateState(prev => ({
-            threads: prev.threads.map(t => t.id === newThreadId ? { ...t, id: res.id } : t),
+            threads: prev.threads.map(t => t.id === newThreadId ? adoptedThread : t),
             activeThreadId: prev.activeThreadId === newThreadId ? res.id : prev.activeThreadId
           }))
+          return adoptedThread
         }
+        throw new Error('Codex API returned no thread ID from createThread')
       } catch (err) {
         console.error('Failed to create thread via API:', err)
+        updateState(prev => ({
+          threads: prev.threads.filter(t => t.id !== newThreadId),
+          activeThreadId: prev.activeThreadId === newThreadId
+            ? (prev.threads.find(t => t.id !== newThreadId)?.id || null)
+            : prev.activeThreadId,
+          liveAnnouncements: [`Error: Failed to create thread: ${(err as any)?.message || String(err)}`]
+        }))
+        throw err
       }
     }
     return newThread
@@ -1937,8 +1948,30 @@ export function useWorkbenchStore() {
     if (!threadId) {
       const modelToUse = resolveCodexModel(options?.model || getLastUsedCodexModel())
       const title = text.trim().slice(0, 45) || 'New Investigation'
-      const created = await createThread(title, modelToUse, options?.reasoningEffort || 'medium')
-      threadId = created.id
+      try {
+        const created = await createThread(title, modelToUse, options?.reasoningEffort || 'medium')
+        if (!created || !created.id) {
+          throw new Error('Thread creation failed to return a valid thread ID')
+        }
+        threadId = created.id
+      } catch (err: any) {
+        console.error('Failed to create thread before sending message:', err)
+        const errMsg = err?.message || 'Thread creation failed'
+        updateState({
+          currentActionText: undefined,
+          liveAnnouncements: [`Error: Unable to start thread: ${errMsg}`]
+        })
+        return
+      }
+    }
+
+    if (!threadId) {
+      console.error('Aborting sendUserMessage: No valid thread ID available')
+      updateState({
+        currentActionText: undefined,
+        liveAnnouncements: ['Error: No valid thread available to dispatch message']
+      })
+      return
     }
 
     const modelToUse = setLastUsedCodexModel(options?.model || getLastUsedCodexModel())
