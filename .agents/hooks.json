@@ -8,5 +8,30 @@
         "timeout": 15
       }
     ]
+  },
+  "anti-mock-audit-gate": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python scripts/hooks/unconditional_audit_gate.py",
+        "timeout": 30
+      }
+    ]
+  },
+  "pre-commit-guard": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python scripts/hooks/pre_commit_guard.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }
