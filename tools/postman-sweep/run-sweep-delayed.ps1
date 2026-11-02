@@ -1,7 +1,7 @@
 param(
     [int]$StartDelaySeconds = 5,
     [int]$RequestDelayMilliseconds = 100,
-    [string]$BaseUrl = "http://127.0.0.1:8000",
+    [string]$BaseUrl = "http://127.0.0.1:7060",
     [string]$Tenant = "simplydemo"
 )
 

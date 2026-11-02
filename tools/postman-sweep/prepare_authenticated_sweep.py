@@ -29,7 +29,7 @@ TEMP_USER_FILE = TOOL_DIR / ".sweep-temp-user-id"
 TEMP_CLIENT_FILE = TOOL_DIR / ".sweep-temp-client-id"
 
 TENANT = "simplydemo"
-BASE_URL = os.environ.get("POSTMAN_BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = os.environ.get("POSTMAN_BASE_URL", "http://127.0.0.1:7060")
 TEMP_LOGIN = "__postman_sweep_owner__"
 TEMP_ADMIN_PASSWORD = "PostmanAdmin123!"
 TEMP_CLIENT_EMAIL = "__postman_sweep_client__@example.com"

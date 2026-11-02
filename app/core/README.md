@@ -74,16 +74,16 @@ Subdomain resolution rules (in order of priority):
 
 | Host Header | Extracted Subdomain |
 |---|---|
-| `simplydemo.localhost:8000` | `simplydemo` |
+| `simplydemo.localhost:7060` | `simplydemo` |
 | `clinic.localhost:7070` | `clinic` |
 | `clinic.localhost` | `clinic` |
 | `simplydemo.bookopenapi.com` | `simplydemo` |
 | `simplydemo.dev.localhost` | `simplydemo` |
-| `localhost:8000` | *(none — falls back to X-Tenant)* |
+| `localhost:7060` | *(none — falls back to X-Tenant)* |
 | `www.example.com` | *(reserved — excluded)* |
 | `myservice.run.app` | *(Cloud Run — excluded)* |
 
-**RFC 6761 Compliance:** Port numbers are stripped before label parsing. Both `clinic.localhost` and `clinic.localhost:8000` are handled seamlessly without modifying `/etc/hosts`.
+**RFC 6761 Compliance:** Port numbers are stripped before label parsing. Both `clinic.localhost` and `clinic.localhost:7060` are handled seamlessly without modifying `/etc/hosts`.
 
 **Fallback chain:**
 1. Host-header subdomain (from `Host` or `X-Forwarded-Host`).

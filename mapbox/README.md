@@ -62,12 +62,12 @@ mapbox/
 
 ### Prerequisites
 - Node.js 18+ (npm)
-- Active FastAPI Bookings backend running on port 8000 (or as configured in proxy)
+- Active FastAPI Bookings backend running on port 7060 (or as configured in proxy)
 
 ### Environment Variables (`mapbox/.env`)
 | Variable | Description | Default / Example |
 | :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | Base URL for FastAPI backend (leave empty to use Vite local proxy) | `http://localhost:8000` |
+| `VITE_API_BASE_URL` | Base URL for FastAPI backend (leave empty to use Vite local proxy) | `http://localhost:7060` |
 | `VITE_PUBLIC_API_KEY` | Public API key used for public bootstrap token requests | `local-public-key-change-me` |
 | `VITE_TENANT_SUBDOMAIN`| Fallback tenant subdomain on localhost when `?tenant=` query param is absent | `simplydemo` |
 | `VITE_MOCK_API` | Must remain `false` in production and live development | `false` |

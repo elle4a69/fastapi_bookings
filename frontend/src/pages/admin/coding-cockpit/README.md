@@ -104,7 +104,7 @@ frontend/src/pages/admin/coding-cockpit/
 ## 3. Setup, Configuration & Dependencies
 
 - **Vite Reverse Proxy Rule**:
-  - `frontend/vite.config.ts` proxies `/api` directly to `http://localhost:8000`. Native Codex endpoints are mounted directly in FastAPI Bookings under `/api/admin/codex` (eliminating the legacy standalone port 4500 rewrite rule).
+  - `frontend/vite.config.ts` proxies `/api` directly to `http://127.0.0.1:7060`. Native Codex endpoints are mounted directly in FastAPI Bookings under `/api/admin/codex` (eliminating the legacy standalone port 4500 rewrite rule).
 - **Admin Shell Integration**:
   - Mounted inside `AdminLayout.tsx` at `/admin/coding-cockpit`.
   - Registered as an operational route in `admin-layout.tsx` (`min-h-0 flex-1 flex flex-col p-0 overflow-hidden`), giving full height to the workspace without clipping or duplicate outer scrollbars.
@@ -117,7 +117,7 @@ frontend/src/pages/admin/coding-cockpit/
   - The integrated cockpit is platform-owner-only. Mounted Codex ticket minting resolves the native FastAPI Bookings identity, never the standalone `TOKEN_SECRET`; the stream consumes only the returned one-use ticket.
   - `EventStream.tsx` reads the resident SSE response with authenticated request headers and a streaming reader. It never places the admin token in a URL or query string. The transport permits only one active request, retries transient EOF/network failures with bounded exponential backoff, aborts requests/timers on unmount, and presents authorization or exhausted-retry failures as explicit terminal UI state.
 - **Runtime Services**:
-  - FastAPI Bookings backend on `http://127.0.0.1:8000` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
+  - FastAPI Bookings backend on `http://127.0.0.1:7060` with native Codex routers mounted directly under `/api/admin/codex` (including `/health`, `/diagnostics/deep`, `/projects`, `/threads`, `/turns`, `/events`, `/settings`, and `/models`).
 
 ---
 

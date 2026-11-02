@@ -1,5 +1,5 @@
 param(
-    [int]$Port = 8000,
+    [int]$Port = 7060,
     [int]$StartupTimeoutSeconds = 45,
     [int]$StartDelaySeconds = 5,
     [int]$RequestDelayMilliseconds = 100

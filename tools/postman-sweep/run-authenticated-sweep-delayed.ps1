@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force -Path $Reports | Out-Null
 
 function Test-ApiHealth {
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2
+        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:7060/health" -TimeoutSec 2
         return $response.StatusCode -eq 200
     }
     catch {
@@ -30,9 +30,9 @@ function Test-ApiHealth {
 
 try {
     if (-not (Test-ApiHealth)) {
-        Write-Host "API is not running. Starting Uvicorn on port 8000..."
+        Write-Host "API is not running. Starting Uvicorn on port 7060..."
         $serverProcess = Start-Process -FilePath $Python `
-            -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000" `
+            -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "7060" `
             -WorkingDirectory $ProjectRoot `
             -RedirectStandardOutput $ServerOut `
             -RedirectStandardError $ServerErr `

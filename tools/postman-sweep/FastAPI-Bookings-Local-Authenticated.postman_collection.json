@@ -18,12 +18,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/auth",
+              "raw": "http://127.0.0.1:7060/api/admin/auth",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -182,12 +182,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/auth/token",
+              "raw": "http://127.0.0.1:7060/api/public/auth/token",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -349,12 +349,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/users",
+              "raw": "http://127.0.0.1:7060/api/admin/users",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -527,12 +527,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/services?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -678,12 +678,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services",
+              "raw": "http://127.0.0.1:7060/api/admin/services",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -863,12 +863,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1006,12 +1006,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1203,12 +1203,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/providers?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1354,12 +1354,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers",
+              "raw": "http://127.0.0.1:7060/api/admin/providers",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1539,12 +1539,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1682,12 +1682,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -1879,12 +1879,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/clients?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/clients?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2044,12 +2044,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/clients",
+              "raw": "http://127.0.0.1:7060/api/admin/clients",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2229,12 +2229,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/clients/{{clientId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/clients/{{clientId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2386,12 +2386,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/clients/{{clientId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/clients/{{clientId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2583,12 +2583,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/locations?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2748,12 +2748,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations",
+              "raw": "http://127.0.0.1:7060/api/admin/locations",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -2933,12 +2933,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -3090,12 +3090,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -3287,12 +3287,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings?status_filter=pending&client_id=986&provider_id=986&date_from=1979-06-16T22%3A15%3A57.395Z&date_to=1979-06-16T22%3A15%3A57.395Z&page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings?status_filter=pending&client_id=986&provider_id=986&date_from=1979-06-16T22%3A15%3A57.395Z&date_to=1979-06-16T22%3A15%3A57.395Z&page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -3512,12 +3512,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -3697,12 +3697,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/public/bookings",
+              "raw": "http://127.0.0.1:7060/api/admin/public/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -3871,12 +3871,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -4028,12 +4028,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/confirm",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/confirm",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -4188,12 +4188,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/cancel",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/cancel",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -4359,12 +4359,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/availability?service_id=9217&provider_id=1064&date=2021-06-28T08%3A38%3A51.380Z",
+              "raw": "http://127.0.0.1:7060/api/public/availability?service_id=9217&provider_id=1064&date=2021-06-28T08%3A38%3A51.380Z",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -4547,12 +4547,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/dashboard/bootstrap",
+              "raw": "http://127.0.0.1:7060/api/admin/dashboard/bootstrap",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -4699,12 +4699,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/bootstrap",
+              "raw": "http://127.0.0.1:7060/api/public/bootstrap",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -4837,12 +4837,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/services",
+              "raw": "http://127.0.0.1:7060/api/public/services",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -4975,12 +4975,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/providers",
+              "raw": "http://127.0.0.1:7060/api/public/providers",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -5113,12 +5113,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/categories",
+              "raw": "http://127.0.0.1:7060/api/public/categories",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -5251,12 +5251,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/locations",
+              "raw": "http://127.0.0.1:7060/api/public/locations",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -5400,12 +5400,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/bookings",
+              "raw": "http://127.0.0.1:7060/api/public/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -5596,12 +5596,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/audit-log?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/audit-log?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -5761,12 +5761,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/audit-log",
+              "raw": "http://127.0.0.1:7060/api/admin/audit-log",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -5939,12 +5939,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payments?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/payments?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -6104,12 +6104,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payments",
+              "raw": "http://127.0.0.1:7060/api/admin/payments",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -6289,12 +6289,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payments/{{paymentId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/payments/{{paymentId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -6486,12 +6486,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notifications?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/notifications?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -6651,12 +6651,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notifications",
+              "raw": "http://127.0.0.1:7060/api/admin/notifications",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -6836,12 +6836,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notifications/{{notificationId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/notifications/{{notificationId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7033,12 +7033,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notification-templates?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/notification-templates?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7198,12 +7198,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notification-templates",
+              "raw": "http://127.0.0.1:7060/api/admin/notification-templates",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7383,12 +7383,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notification-templates/{{notificationTemplateId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/notification-templates/{{notificationTemplateId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7580,12 +7580,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/reminder-rules?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/reminder-rules?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7745,12 +7745,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/reminder-rules",
+              "raw": "http://127.0.0.1:7060/api/admin/reminder-rules",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -7930,12 +7930,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/reminder-rules/{{reminderRuleId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/reminder-rules/{{reminderRuleId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -8127,12 +8127,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/waitlist",
+              "raw": "http://127.0.0.1:7060/api/public/waitlist",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -8294,12 +8294,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/waitlist?service_id=1437",
+              "raw": "http://127.0.0.1:7060/api/public/waitlist?service_id=1437",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -8458,12 +8458,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/search-availability",
+              "raw": "http://127.0.0.1:7060/api/public/search-availability",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -8636,12 +8636,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/ui-config",
+              "raw": "http://127.0.0.1:7060/api/public/ui-config",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -8774,12 +8774,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/ui-config/admin",
+              "raw": "http://127.0.0.1:7060/api/public/ui-config/admin",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -8926,12 +8926,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/forms/service",
+              "raw": "http://127.0.0.1:7060/api/forms/service",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "forms",
@@ -9003,12 +9003,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/forms/provider",
+              "raw": "http://127.0.0.1:7060/api/forms/provider",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "forms",
@@ -9080,12 +9080,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/forms/booking",
+              "raw": "http://127.0.0.1:7060/api/forms/booking",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "forms",
@@ -9168,12 +9168,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/system/diagnostics",
+              "raw": "http://127.0.0.1:7060/api/admin/system/diagnostics",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -9309,12 +9309,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/plugin-states",
+              "raw": "http://127.0.0.1:7060/api/admin/plugin-states",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -9447,12 +9447,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/plugin-states",
+              "raw": "http://127.0.0.1:7060/api/admin/plugin-states",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -9614,12 +9614,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/gdpr-consents",
+              "raw": "http://127.0.0.1:7060/api/admin/gdpr-consents",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -9752,12 +9752,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/gdpr-consents/{{clientId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/gdpr-consents/{{clientId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -9909,12 +9909,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/health",
+              "raw": "http://127.0.0.1:7060/health",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "health"
               ],
@@ -9982,12 +9982,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/ready",
+              "raw": "http://127.0.0.1:7060/ready",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "ready"
               ],
@@ -10055,12 +10055,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/version",
+              "raw": "http://127.0.0.1:7060/version",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "version"
               ],
@@ -10136,12 +10136,12 @@
             "name": "List Categories",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories",
+              "raw": "http://127.0.0.1:7060/api/admin/categories",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -10220,12 +10220,12 @@
             "name": "Create Category",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories",
+              "raw": "http://127.0.0.1:7060/api/admin/categories",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -10402,12 +10402,12 @@
             "name": "Get Category",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -10542,12 +10542,12 @@
             "name": "Update Category",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -10736,12 +10736,12 @@
             "name": "List Resources",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources",
+              "raw": "http://127.0.0.1:7060/api/admin/resources",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -10820,12 +10820,12 @@
             "name": "Create Resource",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources",
+              "raw": "http://127.0.0.1:7060/api/admin/resources",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11002,12 +11002,12 @@
             "name": "Get Resource",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources/{{resourceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/resources/{{resourceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11142,12 +11142,12 @@
             "name": "Update Resource",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources/{{resourceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/resources/{{resourceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11325,12 +11325,12 @@
             "name": "Create Service Resource Requirement",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources/requirements",
+              "raw": "http://127.0.0.1:7060/api/admin/resources/requirements",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11503,12 +11503,12 @@
             "name": "List Addons",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/add-ons",
+              "raw": "http://127.0.0.1:7060/api/admin/add-ons",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11587,12 +11587,12 @@
             "name": "Create Addon",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/add-ons",
+              "raw": "http://127.0.0.1:7060/api/admin/add-ons",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11769,12 +11769,12 @@
             "name": "Get Addon",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/add-ons/{{addonId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/add-ons/{{addonId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -11909,12 +11909,12 @@
             "name": "Update Addon",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/add-ons/{{addonId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/add-ons/{{addonId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12103,12 +12103,12 @@
             "name": "List Products",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products",
+              "raw": "http://127.0.0.1:7060/api/admin/products",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12187,12 +12187,12 @@
             "name": "Create Product",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products",
+              "raw": "http://127.0.0.1:7060/api/admin/products",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12369,12 +12369,12 @@
             "name": "Get Product",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products/{{productId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/products/{{productId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12509,12 +12509,12 @@
             "name": "Update Product",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products/{{productId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/products/{{productId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12692,12 +12692,12 @@
             "name": "Assign Product To Service",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products/assign",
+              "raw": "http://127.0.0.1:7060/api/admin/products/assign",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12870,12 +12870,12 @@
             "name": "List Packages",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages",
+              "raw": "http://127.0.0.1:7060/api/admin/packages",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -12954,12 +12954,12 @@
             "name": "Create Package",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages",
+              "raw": "http://127.0.0.1:7060/api/admin/packages",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -13136,12 +13136,12 @@
             "name": "Get Package",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/{{packageId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/{{packageId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -13276,12 +13276,12 @@
             "name": "Update Package",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/{{packageId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/{{packageId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -13459,12 +13459,12 @@
             "name": "Add Package Step",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/{{packageId}}/steps",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/{{packageId}}/steps",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -13663,12 +13663,12 @@
             "name": "Update Package Step",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/steps/{{packageStepId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/steps/{{packageStepId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -13863,12 +13863,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/workdays",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/workdays",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14004,12 +14004,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/workdays",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/workdays",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14192,12 +14192,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/workdays/{{workdayId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/workdays/{{workdayId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14381,12 +14381,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/special-days",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/special-days",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14522,12 +14522,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/special-days",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/special-days",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14707,12 +14707,12 @@
             "name": "Update Special Day",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/special-days/{{specialDayId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/special-days/{{specialDayId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -14893,12 +14893,12 @@
             "name": "List Blocked Times",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/blocked-times",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/blocked-times",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15031,12 +15031,12 @@
             "name": "Create Blocked Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/blocked-times",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/blocked-times",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15216,12 +15216,12 @@
             "name": "Update Blocked Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/blocked-times/{{blockedTimeId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/blocked-times/{{blockedTimeId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15402,12 +15402,12 @@
             "name": "List Reserved Times",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/reserved-times",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/reserved-times",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15540,12 +15540,12 @@
             "name": "Create Reserved Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/reserved-times",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/reserved-times",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15725,12 +15725,12 @@
             "name": "Update Reserved Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/reserved-times/{{reservedTimeId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/reserved-times/{{reservedTimeId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -15914,12 +15914,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/workload",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/workload",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -16066,12 +16066,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/additional-fields?scope=test&service_id=986",
+              "raw": "http://127.0.0.1:7060/api/public/additional-fields?scope=test&service_id=986",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -16231,12 +16231,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/services/{{serviceId}}/intake-form",
+              "raw": "http://127.0.0.1:7060/api/public/services/{{serviceId}}/intake-form",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -16388,12 +16388,12 @@
             "name": "List Admin Additional Fields",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/additional-fields?scope=test&service_id=986&active_only=false",
+              "raw": "http://127.0.0.1:7060/api/admin/additional-fields?scope=test&service_id=986&active_only=false",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -16562,12 +16562,12 @@
             "name": "Update Additional Field",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/additional-fields/{{additionalFieldId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/additional-fields/{{additionalFieldId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -16745,12 +16745,12 @@
             "name": "List Admin Field Responses",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/additional-field-responses?booking_id=986&client_id=986",
+              "raw": "http://127.0.0.1:7060/api/admin/additional-field-responses?booking_id=986&client_id=986",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -16921,12 +16921,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/quote",
+              "raw": "http://127.0.0.1:7060/api/public/quote",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17085,12 +17085,12 @@
             "name": "Public Payment Processor Config",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/payment-processor/config",
+              "raw": "http://127.0.0.1:7060/api/public/payment-processor/config",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17223,12 +17223,12 @@
             "name": "Public Payment Methods",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/payment-methods",
+              "raw": "http://127.0.0.1:7060/api/public/payment-methods",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17358,12 +17358,12 @@
             "name": "Public Validate Promotion",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/promotions/TEST/validate?subtotal=0",
+              "raw": "http://127.0.0.1:7060/api/public/promotions/TEST/validate?subtotal=0",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17530,12 +17530,12 @@
             "name": "Create Public Invoice",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/invoices",
+              "raw": "http://127.0.0.1:7060/api/public/invoices",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17712,12 +17712,12 @@
             "name": "Get Public Invoice",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/invoices/{{invoiceId}}",
+              "raw": "http://127.0.0.1:7060/api/public/invoices/{{invoiceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -17866,12 +17866,12 @@
             "name": "Add Public Tip",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/invoices/{{invoiceId}}/tips",
+              "raw": "http://127.0.0.1:7060/api/public/invoices/{{invoiceId}}/tips",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -18052,12 +18052,12 @@
             "name": "List Admin Invoices",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/invoices",
+              "raw": "http://127.0.0.1:7060/api/admin/invoices",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -18187,12 +18187,12 @@
             "name": "Get Admin Invoice",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/invoices/{{invoiceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/invoices/{{invoiceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -18341,12 +18341,12 @@
             "name": "Update Invoice Status",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/invoices/{{invoiceId}}/status",
+              "raw": "http://127.0.0.1:7060/api/admin/invoices/{{invoiceId}}/status",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -18527,12 +18527,12 @@
             "name": "List Promotions",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/promotions",
+              "raw": "http://127.0.0.1:7060/api/admin/promotions",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -18662,12 +18662,12 @@
             "name": "Create Promotion",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/promotions",
+              "raw": "http://127.0.0.1:7060/api/admin/promotions",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -18844,12 +18844,12 @@
             "name": "Update Promotion",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/promotions/{{promotionId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/promotions/{{promotionId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19027,12 +19027,12 @@
             "name": "List Tax Rates",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/tax-rates",
+              "raw": "http://127.0.0.1:7060/api/admin/tax-rates",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19162,12 +19162,12 @@
             "name": "Create Tax Rate",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/tax-rates",
+              "raw": "http://127.0.0.1:7060/api/admin/tax-rates",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19344,12 +19344,12 @@
             "name": "Update Tax Rate",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/tax-rates/{{taxRateId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/tax-rates/{{taxRateId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19527,12 +19527,12 @@
             "name": "List Payment Processor Configs",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payment-processor/configs",
+              "raw": "http://127.0.0.1:7060/api/admin/payment-processor/configs",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19665,12 +19665,12 @@
             "name": "Create Payment Processor Config",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payment-processor/configs",
+              "raw": "http://127.0.0.1:7060/api/admin/payment-processor/configs",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -19832,12 +19832,12 @@
             "name": "Update Payment Processor Config",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/payment-processor/configs/{{paymentConfigId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/payment-processor/configs/{{paymentConfigId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -20018,12 +20018,12 @@
             "name": "Checkout Commit",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/checkout/commit",
+              "raw": "http://127.0.0.1:7060/api/public/checkout/commit",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20199,12 +20199,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients",
+              "raw": "http://127.0.0.1:7060/api/public/clients",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20352,12 +20352,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/identify?phone=test&email=test",
+              "raw": "http://127.0.0.1:7060/api/public/clients/identify?phone=test&email=test",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20506,12 +20506,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/register",
+              "raw": "http://127.0.0.1:7060/api/public/clients/register",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20662,12 +20662,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/login",
+              "raw": "http://127.0.0.1:7060/api/public/clients/login",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20818,12 +20818,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/me",
+              "raw": "http://127.0.0.1:7060/api/public/clients/me",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -20964,12 +20964,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/me",
+              "raw": "http://127.0.0.1:7060/api/public/clients/me",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21139,12 +21139,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/password-reset/request",
+              "raw": "http://127.0.0.1:7060/api/public/clients/password-reset/request",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21298,12 +21298,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/clients/terms",
+              "raw": "http://127.0.0.1:7060/api/public/clients/terms",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21398,12 +21398,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/timeline/schedule/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/public/timeline/schedule/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21544,12 +21544,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/timeline/slots?service_id=1437&provider_id=986&date_from=1952-01-31&date_to=1952-01-31",
+              "raw": "http://127.0.0.1:7060/api/public/timeline/slots?service_id=1437&provider_id=986&date_from=1952-01-31&date_to=1952-01-31",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21722,12 +21722,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/timeline/first-available-day?service_id=1437&provider_id=986",
+              "raw": "http://127.0.0.1:7060/api/public/timeline/first-available-day?service_id=1437&provider_id=986",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -21884,12 +21884,12 @@
             "name": "List Series",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/series",
+              "raw": "http://127.0.0.1:7060/api/admin/series",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -21968,12 +21968,12 @@
             "name": "Create Series",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/series",
+              "raw": "http://127.0.0.1:7060/api/admin/series",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22150,12 +22150,12 @@
             "name": "Get Series",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/series/{{seriesId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/series/{{seriesId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22304,12 +22304,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/providers",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/providers",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22450,12 +22450,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22623,12 +22623,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/categories",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/categories",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22769,12 +22769,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -22953,12 +22953,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23091,12 +23091,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23276,12 +23276,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks/{{webhookId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks/{{webhookId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23462,12 +23462,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks/events",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks/events",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23551,12 +23551,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks/events",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks/events",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23651,12 +23651,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/calendar-notes?provider_id=986&date_from=1952-01-31&date_to=1952-01-31",
+              "raw": "http://127.0.0.1:7060/api/admin/calendar-notes?provider_id=986&date_from=1952-01-31&date_to=1952-01-31",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -23828,12 +23828,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/calendar-notes",
+              "raw": "http://127.0.0.1:7060/api/admin/calendar-notes",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -24013,12 +24013,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/calendar-notes/{{calendarNoteId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/calendar-notes/{{calendarNoteId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -24210,12 +24210,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/gdpr-consent",
+              "raw": "http://127.0.0.1:7060/api/public/gdpr-consent",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -24374,12 +24374,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/v1/checkout/deposit-session?booking_id=1485&amount_cents=100&success_url=https%3A%2F%2Fexample.com%2Fcallback&cancel_url=https%3A%2F%2Fexample.com%2Fcallback",
+              "raw": "http://127.0.0.1:7060/api/v1/checkout/deposit-session?booking_id=1485&amount_cents=100&success_url=https%3A%2F%2Fexample.com%2Fcallback&cancel_url=https%3A%2F%2Fexample.com%2Fcallback",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "v1",
@@ -24542,12 +24542,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/v1/webhooks/stripe",
+              "raw": "http://127.0.0.1:7060/api/v1/webhooks/stripe",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "v1",
@@ -24632,12 +24632,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/v1/devices/register",
+              "raw": "http://127.0.0.1:7060/api/v1/devices/register",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "v1",
@@ -24789,12 +24789,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/management-reviews?page=1&page_size=25",
+              "raw": "http://127.0.0.1:7060/api/admin/management-reviews?page=1&page_size=25",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -24954,12 +24954,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/management-reviews/{{reviewId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/management-reviews/{{reviewId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -25122,12 +25122,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/business-profile",
+              "raw": "http://127.0.0.1:7060/api/admin/business-profile",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -25209,12 +25209,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/business-profile",
+              "raw": "http://127.0.0.1:7060/api/admin/business-profile",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -25376,12 +25376,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/business-profile",
+              "raw": "http://127.0.0.1:7060/api/public/business-profile",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -25514,12 +25514,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/business-profile/geocode",
+              "raw": "http://127.0.0.1:7060/api/admin/business-profile/geocode",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -25666,12 +25666,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -25843,12 +25843,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/providers",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/providers",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26003,12 +26003,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/services/{{serviceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/services/{{serviceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26180,12 +26180,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/services",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/services",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26340,12 +26340,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26517,12 +26517,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/categories",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/categories",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26688,12 +26688,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/system/cleanup?days=365",
+              "raw": "http://127.0.0.1:7060/api/admin/system/cleanup?days=365",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -26844,12 +26844,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/system/clients/{{clientId}}/anonymize",
+              "raw": "http://127.0.0.1:7060/api/admin/system/clients/{{clientId}}/anonymize",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27015,12 +27015,12 @@
             "name": "Get Embed Configuration Catalogue",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/configuration-catalogue",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/configuration-catalogue",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27101,12 +27101,12 @@
             "name": "List Booking Forms",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27185,12 +27185,12 @@
             "name": "Create Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27349,12 +27349,12 @@
             "name": "Get Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27489,12 +27489,12 @@
             "name": "Update Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27672,12 +27672,12 @@
             "name": "Duplicate Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1/duplicate",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1/duplicate",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -27858,12 +27858,12 @@
             "name": "Get Booking Form Design",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1/design",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1/design",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -28001,12 +28001,12 @@
             "name": "Update Booking Form Design",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1/design",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1/design",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -28187,12 +28187,12 @@
             "name": "Preview Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1/preview",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1/preview",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -28330,12 +28330,12 @@
             "name": "Booking Form Embed",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1/embed",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1/embed",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -28484,12 +28484,12 @@
             "name": "Get Widget Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -28638,12 +28638,12 @@
             "name": "Resolve Widget Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test/resolve",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test/resolve",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -28824,12 +28824,12 @@
             "name": "Widget Availability",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test/availability",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test/availability",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -29010,12 +29010,12 @@
             "name": "Create Widget Booking",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test/bookings",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -29196,12 +29196,12 @@
             "name": "Booking Surface Runtime Manifest",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test/runtime-manifest",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test/runtime-manifest",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -29353,12 +29353,12 @@
             "name": "Widget Embed Config",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/booking-forms/test/embed-config",
+              "raw": "http://127.0.0.1:7060/api/public/booking-forms/test/embed-config",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -29521,12 +29521,12 @@
             "name": "List Explicit Relationships",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/relationships/test/1/test",
+              "raw": "http://127.0.0.1:7060/api/admin/relationships/test/1/test",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -29709,12 +29709,12 @@
             "name": "Link Records",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/relationships/test/1/test/1",
+              "raw": "http://127.0.0.1:7060/api/admin/relationships/test/1/test/1",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -29914,12 +29914,12 @@
             "name": "Create And Connect",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/relationships/test/1/test/create-and-connect",
+              "raw": "http://127.0.0.1:7060/api/admin/relationships/test/1/test/create-and-connect",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30134,12 +30134,12 @@
             "name": "Provider Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/providers/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30291,12 +30291,12 @@
             "name": "Service Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/services/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30448,12 +30448,12 @@
             "name": "Location Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30605,12 +30605,12 @@
             "name": "Category Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/categories/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30762,12 +30762,12 @@
             "name": "Product Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/products/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -30919,12 +30919,12 @@
             "name": "Client Editor",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/clients/1/editor",
+              "raw": "http://127.0.0.1:7060/api/admin/clients/1/editor",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -31090,12 +31090,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/discovery/map?service_type=test",
+              "raw": "http://127.0.0.1:7060/api/discovery/map?service_type=test",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "discovery",
@@ -31219,12 +31219,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/discovery/services",
+              "raw": "http://127.0.0.1:7060/api/discovery/services",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "discovery",
@@ -31296,12 +31296,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/business-profile/geocode",
+              "raw": "http://127.0.0.1:7060/api/admin/business-profile/geocode",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -31443,12 +31443,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -31628,12 +31628,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/confirm",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/confirm",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -31788,12 +31788,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/complete",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/complete",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -31948,12 +31948,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32133,12 +32133,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/confirm",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/confirm",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32293,12 +32293,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/noshow",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/noshow",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32453,12 +32453,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32638,12 +32638,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/confirm",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/confirm",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32798,12 +32798,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}/reschedule",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}/reschedule",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -32992,12 +32992,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/plugin-states",
+              "raw": "http://127.0.0.1:7060/api/admin/plugin-states",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -33159,12 +33159,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/plugin-states/test-plugin",
+              "raw": "http://127.0.0.1:7060/api/admin/plugin-states/test-plugin",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -33350,12 +33350,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/bookings/{{bookingId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/bookings/{{bookingId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -33538,12 +33538,12 @@
             "name": "Create Additional Field",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/additional-fields",
+              "raw": "http://127.0.0.1:7060/api/admin/additional-fields",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -33751,12 +33751,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/additional-field-responses",
+              "raw": "http://127.0.0.1:7060/api/public/additional-field-responses",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -33923,12 +33923,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/management-reviews",
+              "raw": "http://127.0.0.1:7060/api/public/management-reviews",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -34108,12 +34108,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/management-reviews/{{reviewId}}/resolve",
+              "raw": "http://127.0.0.1:7060/api/admin/management-reviews/{{reviewId}}/resolve",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -34302,12 +34302,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/holds",
+              "raw": "http://127.0.0.1:7060/api/public/holds",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -34487,12 +34487,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/public/holds/{{holdId}}/confirm",
+              "raw": "http://127.0.0.1:7060/api/public/holds/{{holdId}}/confirm",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "public",
@@ -34681,12 +34681,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -34854,12 +34854,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35027,12 +35027,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35204,12 +35204,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}/services/{{serviceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}/services/{{serviceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35378,12 +35378,12 @@
             "name": "Unlink Records",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/relationships/test/1/test/1",
+              "raw": "http://127.0.0.1:7060/api/admin/relationships/test/1/test/1",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35582,12 +35582,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/notification-templates/{{notificationTemplateId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/notification-templates/{{notificationTemplateId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35746,12 +35746,12 @@
             "name": "Delete Package Step",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/steps/{{packageStepId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/steps/{{packageStepId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -35916,12 +35916,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/reminder-rules/{{reminderRuleId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/reminder-rules/{{reminderRuleId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36080,12 +36080,12 @@
             "name": "Delete Additional Field",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/additional-fields/{{additionalFieldId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/additional-fields/{{additionalFieldId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36240,12 +36240,12 @@
             "name": "Delete Addon",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/add-ons/{{addonId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/add-ons/{{addonId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36404,12 +36404,12 @@
             "name": "Delete Blocked Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/blocked-times/{{blockedTimeId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/blocked-times/{{blockedTimeId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36567,12 +36567,12 @@
             "name": "Delete Booking Form",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/booking-forms/1",
+              "raw": "http://127.0.0.1:7060/api/admin/booking-forms/1",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36720,12 +36720,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/calendar-notes/{{calendarNoteId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/calendar-notes/{{calendarNoteId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -36880,12 +36880,12 @@
             "name": "Delete Category",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/categories/{{categoryId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/categories/{{categoryId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37047,12 +37047,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/locations/{{locationId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/locations/{{locationId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37211,12 +37211,12 @@
             "name": "Delete Package",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/packages/{{packageId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/packages/{{packageId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37375,12 +37375,12 @@
             "name": "Delete Product",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/products/{{productId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/products/{{productId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37539,12 +37539,12 @@
             "name": "Delete Promotion",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/promotions/{{promotionId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/promotions/{{promotionId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37702,12 +37702,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/providers/{{providerId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/providers/{{providerId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -37866,12 +37866,12 @@
             "name": "Delete Reserved Time",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/reserved-times/{{reservedTimeId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/reserved-times/{{reservedTimeId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38029,12 +38029,12 @@
             "name": "Delete Resource",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/resources/{{resourceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/resources/{{resourceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38196,12 +38196,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/services/{{serviceId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/services/{{serviceId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38360,12 +38360,12 @@
             "name": "Delete Special Day",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/special-days/{{specialDayId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/special-days/{{specialDayId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38523,12 +38523,12 @@
             "name": "Delete Tax Rate",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/tax-rates/{{taxRateId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/tax-rates/{{taxRateId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38686,12 +38686,12 @@
               "type": "text/plain"
             },
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/webhooks/{{webhookId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/webhooks/{{webhookId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",
@@ -38846,12 +38846,12 @@
             "name": "Delete Workday",
             "description": {},
             "url": {
-              "raw": "http://127.0.0.1:8000/api/admin/schedule/workdays/{{workdayId}}",
+              "raw": "http://127.0.0.1:7060/api/admin/schedule/workdays/{{workdayId}}",
               "protocol": "http",
               "host": [
                 "127.0.0.1"
               ],
-              "port": "8000",
+              "port": "7060",
               "path": [
                 "api",
                 "admin",

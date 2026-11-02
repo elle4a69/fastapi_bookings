@@ -13,8 +13,8 @@ class StripeService:
         booking_id: int, 
         amount_cents: int, 
         currency: str = "aud", 
-        success_url: str = "http://localhost:8000/success", 
-        cancel_url: str = "http://localhost:8000/cancel",
+        success_url: str = "http://localhost:7060/success",
+        cancel_url: str = "http://localhost:7060/cancel",
         tenant_id: str = None
     ) -> stripe.checkout.Session:
         """Create a Stripe Checkout Session for upfront booking deposit."""

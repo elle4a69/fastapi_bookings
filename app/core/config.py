@@ -256,7 +256,7 @@ class Settings(BaseSettings):
     CHATWOOT_API_ACCESS_TOKEN: str = Field("", description="Chatwoot API access token")
     CHATWOOT_PLATFORM_API_TOKEN: str = Field("", description="Chatwoot Platform API access token for account provisioning")
     CHATWOOT_PLATFORM_ACCESS_TOKEN: str = Field("", description="Chatwoot Platform API access token for account provisioning")
-    AGENT_WEBHOOK_URL: str = Field("http://localhost:8000/api/v1/chatwoot/webhook", description="Agent webhook URL to receive Chatwoot events")
+    AGENT_WEBHOOK_URL: str = Field("http://localhost:7060/api/v1/chatwoot/webhook", description="Agent webhook URL to receive Chatwoot events")
     CHATWOOT_WEBHOOK_SECRET: str = Field("", description="Chatwoot webhook secret")
     CHATWOOT_AUTO_PROVISION: bool = Field(False, description="Automatically provision Chatwoot account/inboxes on tenant creation")
 
