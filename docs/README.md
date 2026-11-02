@@ -166,7 +166,7 @@ alembic upgrade head
 python scripts/seed_clean_numbered_data.py
 
 # Start FastAPI backend
-uvicorn app.main:app --host 0.0.0.0 --port 7060 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Frontend Dev Server

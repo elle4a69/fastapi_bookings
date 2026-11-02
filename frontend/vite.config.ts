@@ -79,7 +79,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:7060',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         ws: true,
       },

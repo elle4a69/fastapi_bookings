@@ -270,12 +270,12 @@ cp .env.example .env.prod
 docker compose -f docker-compose.prod.yml up -d --build
 
 # 3. Check health and readiness
-curl -f http://127.0.0.1:7060/api/v1/diagnostics/readiness
+curl -f http://127.0.0.1:8000/api/v1/diagnostics/readiness
 ```
 
 ### Production Service Roster
 
-- **`fastapi_bookings_web`**: 4-worker Uvicorn ASGI server binding to `127.0.0.1:7060`.
+- **`fastapi_bookings_web`**: 4-worker Uvicorn ASGI server binding to `127.0.0.1:8000`.
 - **`fastapi_bookings_curator_worker`**: Dedicated background daemon processing `LearningEvent` items.
 - **`fastapi_bookings_projection_worker`**: Dedicated background daemon projecting ledger items to Neo4j Graphiti.
 - **`fastapi_bookings_postgres_prod`**: PostgreSQL 16 + pgvector with healthcheck (`pg_isready`).
@@ -305,7 +305,7 @@ curl -f http://127.0.0.1:7060/api/v1/diagnostics/readiness
 
 4. **Start Backend Development Server**:
    ```bash
-   uvicorn app.main:app --reload --port 7060
+   uvicorn app.main:app --reload --port 8000
    ```
 
 5. **Start Frontend Development Server**:

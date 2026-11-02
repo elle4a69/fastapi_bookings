@@ -1,4 +1,4 @@
-const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:7060';
+const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 const ADMIN_TOKEN_STORAGE_KEY = 'token';
 const LOCAL_AUTH_BYPASS_TOKEN = 'local-development-bypass';
 

@@ -8,7 +8,6 @@ Comprehensive development control panel and infrastructure orchestration dashboa
 
 ### What It Owns
 - **Module Lifecycle Management**: Starting, stopping, restarting, and monitoring local ecosystem services (FastAPI Backend, React Admin UI, SMS Assistant UI/API, Bookings AI Agent, Locanto Autoreply, Mapbox UI, etc.).
-- **Backend Port Contract**: Starts and health-checks the FastAPI Bookings backend on port `7060`; the React admin UI proxies `/api` to the same port.
 - **Process Supervision**: Tracking operating system PIDs, port release on shutdown via PowerShell/taskkill, and session log persistence.
 - **Docker Container Fleet Management**: Real-time inspection of container state (running, exited, restarting), health probes, port mappings, and container lifecycle actions (`start`, `stop`, `restart`) using safe CLI execution (`execFile`).
 - **Live Terminal Telemetry**: Streaming module and container stdout/stderr logs directly into dark-mode monospace consoles in the browser.

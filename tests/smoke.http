@@ -1,4 +1,4 @@
-@baseUrl = http://127.0.0.1:7060
+@baseUrl = http://127.0.0.1:8000
 @adminToken = REPLACE_WITH_ADMIN_TOKEN
 @publicToken = REPLACE_WITH_PUBLIC_TOKEN
 

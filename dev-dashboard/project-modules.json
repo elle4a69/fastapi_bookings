@@ -6,13 +6,13 @@
       "description": "Core REST API service — reservations, forms, scheduling, SMS outbox, AI jobs, and knowledge graph. Requires PostgreSQL, Redis, and Neo4j to be running first.",
       "working_dir": "F:\\\\Projects\\\\fastapi_bookings",
       "command": "cmd.exe /c start.bat",
-      "port": 7060,
-      "health_url": "http://127.0.0.1:7060/health"
+      "port": 8000,
+      "health_url": "http://127.0.0.1:8000/health"
     },
     {
       "name": "bookings-frontend",
       "label": "Bookings Admin UI",
-      "description": "Main Vite + React admin dashboard — booking management, SMS assistant workspace, customer arrivals, and provider portals. Proxies /api to port 7060.",
+      "description": "Main Vite + React admin dashboard — booking management, SMS assistant workspace, customer arrivals, and provider portals. Proxies /api to port 8000.",
       "working_dir": "F:\\\\Projects\\\\fastapi_bookings\\\\frontend",
       "command": "npm run dev",
       "port": 7070,

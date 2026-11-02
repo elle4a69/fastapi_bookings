@@ -70,7 +70,7 @@ def _get_chatwoot_config(
     wh_base = (
         webhook_base_url
         or os.getenv("APP_BASE_URL")
-        or "http://localhost:7060"
+        or "http://localhost:8000"
     ).rstrip("/")
 
     return base_url, u_token, p_token, wh_base

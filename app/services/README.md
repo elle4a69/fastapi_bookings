@@ -43,7 +43,7 @@ Ensure the following configuration variables are set in your environment or `app
 - `CHATWOOT_BASE_URL` (default: `http://localhost:4000`)
 - `CHATWOOT_PLATFORM_ACCESS_TOKEN` (or `CHATWOOT_PLATFORM_API_TOKEN`)
 - `CHATWOOT_WEBHOOK_SECRET`
-- `AGENT_WEBHOOK_URL` (default: `http://localhost:7060/api/v1/chatwoot/webhook`)
+- `AGENT_WEBHOOK_URL` (default: `http://localhost:8000/api/v1/chatwoot/webhook`)
 - `MEDIA_UPLOAD_DIR` (default: `uploads/media`)
 
 These require the `httpx` module for making API calls.

@@ -123,7 +123,7 @@ async def send_chatwoot_message(
         raise
 
 def generate_webhook_url(
-    base_url: str = "http://localhost:7060",
+    base_url: str = "http://localhost:8000",
     token: Optional[str] = None,
 ) -> str:
     """Generate public Chatwoot webhook receiver callback URL.
@@ -132,7 +132,7 @@ def generate_webhook_url(
     (X-Chatwoot-Token, X-Chatwoot-Signature, or Authorization) are preferred.
     If token is explicitly provided for legacy backwards-compatibility, query param is appended.
     """
-    clean_base = (base_url or "http://localhost:7060").rstrip("/")
+    clean_base = (base_url or "http://localhost:8000").rstrip("/")
     path = "/api/sms/chatwoot/webhook"
     if token:
         return f"{clean_base}{path}?token={token}"

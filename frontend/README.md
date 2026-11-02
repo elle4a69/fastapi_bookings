@@ -65,7 +65,7 @@ npm install
 ### Environment Configuration
 The frontend uses Vite environment variables defined in `.env` or `.env.local`:
 ```dotenv
-VITE_API_BASE_URL=http://localhost:7060
+VITE_API_BASE_URL=http://localhost:8000
 VITE_ENABLE_ANALYTICS=false
 VITE_MAPBOX_TOKEN=pk.eyJ1I...
 ```

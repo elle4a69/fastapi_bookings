@@ -95,7 +95,6 @@ CHATWOOT_API_ACCESS_TOKEN=4ULEfYYtAJAbPZmZYaVcr9Lb
 CHATWOOT_PLATFORM_API_TOKEN=ReqRYyswSvVB8nVktQrZP1zg
 CHATWOOT_WEBHOOK_SECRET=webhook_secret_123
 CHATWOOT_AUTO_PROVISION=false
-APP_BASE_URL=http://localhost:7060
 
 # Outbox Worker Configuration
 OUTBOX_POLL_INTERVAL=5.0
@@ -149,7 +148,6 @@ Uses tables defined in [app/models/sms_*.py](file:///F:/Projects/fastapi_booking
    - Webhook intake at `/api/sms/chatwoot/webhook` enforces header-based authentication: `X-Chatwoot-Token`, `Authorization` (`Bearer <token>`), or `X-Chatwoot-Signature` (HMAC-SHA256 with 300-second replay window).
    - Passing secret tokens in query parameters (`?token=...`) is deprecated; requests trigger explicit deprecation warnings and are contained.
    - `generate_webhook_url(base_url)` generates canonical webhook callback URLs (`{base_url}/api/sms/chatwoot/webhook`) without embedding raw secrets into query parameters.
-- When no explicit callback base is supplied during local provisioning, `APP_BASE_URL` defaults to the FastAPI backend at `http://localhost:7060`.
 
 ### 4.4 Native Staff Operations & Draft Moderation Contracts
 
